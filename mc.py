@@ -3,7 +3,7 @@ from pyscf import lib, gto, scf
 from slater import PySCFSlaterRHF
 from energy import energy
 
-def vmc(mol,wf,coords,nsteps=10000,tstep=0.1):
+def vmc(mol,wf,coords,nsteps=10000,tstep=0.5):
     nconf=coords.shape[0]
     nelec=np.sum(mol.nelec)
     
@@ -11,16 +11,19 @@ def vmc(mol,wf,coords,nsteps=10000,tstep=0.1):
     wf.value(coords)
     for step in range(nsteps):
         print("step",step)
+        acc=[]
         for e in range(nelec):
             newcoorde=coords[:,e,:]+np.random.normal(scale=tstep,size=(nconf,3))
             ratio=wf.testvalue(e,newcoorde)
             accept=ratio**2 > np.random.rand(nconf)
             coords[accept,e,:]=newcoorde[accept,:]
             wf.updateinternals(e,coords[:,e,:],accept)
+            acc.append(np.mean(accept))
         dat=energy(mol,coords,wf)
         avg={}
         for k in dat:
             avg[k]=np.mean(dat[k])
+        avg['acceptance']=np.mean(acc)
         df.append(avg)
         print(df[-1])
     return df

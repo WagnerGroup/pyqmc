@@ -29,16 +29,20 @@ def vmc(mol,wf,coords,nsteps=10000,tstep=0.5):
     return df
     
 
-mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)
-mf = scf.RHF(mol).run()
-nconf=5000
-nelec=np.sum(mol.nelec)
-wf=PySCFSlaterRHF(nconf,mol,mf)
-coords = np.random.normal(scale=1.,size=(nconf,nelec,3))
+def test():
+    mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)
+    mf = scf.RHF(mol).run()
+    nconf=5000
+    nelec=np.sum(mol.nelec)
+    wf=PySCFSlaterRHF(nconf,mol,mf)
+    coords = np.random.normal(scale=1.,size=(nconf,nelec,3))
 
-df=vmc(mol,wf,coords)
+    df=vmc(mol,wf,coords)
 
 
-import pandas as pd
-df=pd.DataFrame(df)
-df.to_csv("data.csv")
+    import pandas as pd
+    df=pd.DataFrame(df)
+    df.to_csv("data.csv")
+    
+if __name__=="__main__":
+    test()

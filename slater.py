@@ -26,6 +26,7 @@ class PySCFSlaterRHF:
         self.inverse=np.zeros((nconfig,2,self.nup,self.nup))
             
     def value(self,epos):
+        """This computes the value from scratch. Returns the logarithm of the wave function"""
         mycoords=epos.reshape((epos.shape[0]*epos.shape[1],epos.shape[2]))
         ao = self.mol.eval_gto('GTOval_sph', mycoords)
         mo = ao.dot(self.mo_coeff)
@@ -36,7 +37,8 @@ class PySCFSlaterRHF:
 
 
     def updateinternals(self,e,epos,mask=None):
-        """   """
+        """Update any internals given that electron e moved to epos. mask is a Boolean array 
+        which allows us to update only certain walkers"""
         if mask is None:
             mask=[True]*self.inverse.shape[0]
         s=int(e>=self.nup)
@@ -54,12 +56,16 @@ class PySCFSlaterRHF:
         return ratio
         
     def gradient(self,e,epos):
+        """ Compute the gradient of the log wave function 
+        Note that this can be called even if the internals have not been updated for electron e,
+        if epos differs from the current position of electron e."""
         aograd=self.mol.eval_gto('GTOval_ip_sph',epos)
         mograd=aograd.dot(self.mo_coeff)
         ratios=[self.testrow(e,x) for x in mograd]
         return np.asarray(ratios)
 
     def laplacian(self,e,epos):
+        """ Compute the laplacian Psi/ Psi. """
         aograd=self.mol.eval_gto('GTOval_sph_deriv2',epos)
         mograd=aograd.dot(self.mo_coeff)
         ratios=[self.testrow(e,x) for x in mograd]
@@ -67,10 +73,15 @@ class PySCFSlaterRHF:
 
 
     def testvalue(self,e,epos):
-        """ return the ratio between the current and the next """
+        """ return the ratio between the current wave function and the wave function if 
+        electron e's position is replaced by epos"""
         ao=self.mol.eval_gto('GTOval_sph',epos)
         mo=ao.dot(self.mo_coeff)
         return self.testrow(e,mo)
+
+    def parameter_gradient(self):
+        """Compute the parameter gradient of Psi"""
+        pass
         
         
 def test(): 

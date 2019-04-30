@@ -25,7 +25,7 @@ def vmc(mol,wf,coords,nsteps=10000,tstep=0.5):
             avg[k]=np.mean(dat[k])
         avg['acceptance']=np.mean(acc)
         df.append(avg)
-        print(df[-1])
+        #print(df[-1])
     return df
     
 
@@ -37,12 +37,14 @@ def test():
     wf=PySCFSlaterRHF(nconf,mol,mf)
     coords = np.random.normal(scale=1.,size=(nconf,nelec,3))
 
-    df=vmc(mol,wf,coords)
+    df=vmc(mol,wf,coords,nsteps=100)
 
 
     import pandas as pd
     df=pd.DataFrame(df)
     df.to_csv("data.csv")
+    warmup=30
+    print(np.mean(df['total_energy'][warmup:]),np.std(df['total_energy'][warmup:]))
     
 if __name__=="__main__":
     test()

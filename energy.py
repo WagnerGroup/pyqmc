@@ -4,8 +4,11 @@ import scipy.spatial
 
 
 def ee_energy(epos):
-    r=np.asarray([scipy.spatial.distance.pdist(x) for x in epos])
-    ee=np.sum(1./r,axis=1)
+    ne=epos.shape[1]
+    ee=np.zeros(epos.shape[0])
+    for i in range(ne):
+        for j in range(i+1,ne):
+            ee+=1./np.sqrt(np.sum((epos[:,i,:]-epos[:,j,:])**2,axis=1))
     return ee
 
 def ei_energy(mol,epos):
@@ -25,6 +28,9 @@ def ii_energy(mol):
     ii=np.sum((np.outer(c,c)/r)[ind])
     return ii
 
+def ecp(mol,epos,wf):
+    
+    pass
 
 def energy(mol,epos,wf):
     ee=ee_energy(epos)

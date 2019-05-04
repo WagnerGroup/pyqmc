@@ -25,6 +25,8 @@ class PySCFSlaterRHF:
         self.movals=np.zeros((nconfig,2,self.nup,nmo)) # row is electron, column is mo
         self.inverse=np.zeros((nconfig,2,self.nup,self.nup))
             
+    #This should be recompute()
+    #value() should return ln psi 
     def value(self,epos):
         """This computes the value from scratch. Returns the logarithm of the wave function"""
         mycoords=epos.reshape((epos.shape[0]*epos.shape[1],epos.shape[2]))
@@ -47,6 +49,7 @@ class PySCFSlaterRHF:
         mo=ao.dot(self.mo_coeff)
         self.movals[:,s,eeff,:]=mo
         ratio,self.inverse[mask,s,:,:]=sherman_morrison_row(eeff,self.inverse[mask,s,:,:],mo[mask,:])
+        #should update the value of the wave function
 
 
     def testrow(self,e,vec):

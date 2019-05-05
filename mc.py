@@ -8,7 +8,7 @@ def vmc(mol,wf,coords,nsteps=10000,tstep=0.5):
     nelec=np.sum(mol.nelec)
     
     df=[]
-    wf.value(coords)
+    wf.recompute(coords)
     for step in range(nsteps):
         print("step",step)
         acc=[]

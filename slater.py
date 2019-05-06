@@ -54,15 +54,19 @@ class PySCFSlaterRHF:
         self._movals[:,s,eeff,:]=mo
         ratio,self._inverse[mask,s,:,:]=sherman_morrison_row(eeff,self._inverse[mask,s,:,:],mo[mask,:])
         #should update the value of the wave function
-
+        self._updateval(ratio,mask)
 
     ### not state-changing functions
 
     def value(self):
         """Return logarithm of the wave function as noted in recompute()"""
-        print("slater value not implemented")
-        quit()
+        return self.dets[0][:,0]*self.dets[0][:,1],self.dets[1][:,0]+self.dets[1][:,1]
+        
 
+    def _updateval(self,ratio,mask):
+        self.dets[0][mask,:]*=np.sign(ratio) #will not work for complex!
+        self.dets[1][mask,:]+=np.abs(ratio)
+    
     def _testrow(self,e,vec):
         """vec is a nconfig,nmo vector which replaces row e"""
         s=int(e>= self._nup)

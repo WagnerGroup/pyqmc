@@ -1,19 +1,37 @@
 import numpy as np
 
+class GaussianFunction:
+    def __init__(self,exponent):
+        self.parameters={}
+        self.parameters['exponent']=exponent
 
+    def value(self,x): 
+        """Return the value of the function. 
+        x should be a (nconfig,3) vector """
+        r2=np.sum(x**2,axis=1)
+        return np.exp(-self.parameters['exponent']*r2)
+        
+    def gradient(self,x):
+        """ return gradient of the function """
+
+    def laplacian(self,x):
+        """ laplacian """
+
+    def pgradient(self,x):
+        """ parameter gradient """
+        
 
 class Jastrow2B:
     """A simple Jastrow factor that is written as 
-    :math:`\ln \Psi_J  = \sum_{i<j} c(r_{ij}) + \sum_k c_k \sum_{i<j} b(r_{ij})`
-    c is the cusp and b are Gaussians for this implementation
+    :math:`\ln \Psi_J  = \sum_k c_k \sum_{i<j} b(r_{ij})`
+    b are function objects
     """
     def __init__(self,nconfig,mol):
         self.parameters={}
         nexpand=4
         self._nelec=np.sum(mol.nelec)
         self._mol=mol
-        self.parameters['cusp']=np.array([1.,1.])
-        self.parameters['exponents']=np.array([0.2*2**n for n in range(1,nexpand)])
+        self.basis=[Gaussianfunction(0.2*2**n) for n in range(1,nexpand)]
         self.parameters['coeff']=np.zeros(nexpand)
         self._bvalues=np.zeros((nconfig,nexpand))
         self._eposcurrent=np.zeros((nconfig,self._nelec,3))
@@ -22,10 +40,11 @@ class Jastrow2B:
         """ """
         u=0.0
         self._eposcurrent=epos.copy()
-        #Evaluate b's and c's 
         #We will save the b sums over i,j in _bvalues
-
-
+        
+        #package the electron-electron distances into a 1d array
+        for i,b in enumerate(self.basis):
+            self._bvalues[:,i]=np.sum(b.value(x)) #not quite right
 
         return (1,u)
 

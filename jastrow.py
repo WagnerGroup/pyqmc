@@ -13,6 +13,9 @@ class GaussianFunction:
         
     def gradient(self,x):
         """ return gradient of the function """
+        v=self.value(x)
+        r=np.sqrt(np.sum(x**2,axis=1))
+        return 2*self.parameters['exponent']*x*v[:,np.newaxis]/r[:,np.newaxis]
 
     def laplacian(self,x):
         """ laplacian """
@@ -20,18 +23,38 @@ class GaussianFunction:
     def pgradient(self,x):
         """ parameter gradient """
         
+def eedist(epos):
+    """returns a list of electron-electron distances within a collection """
+    ne=epos.shape[1]
+    d=np.zeros((epos.shape[0],int(ne*(ne-1)/2),3))
+    c=0
+    for i in range(ne):
+        for j in range(i+1,ne):
+            d[:,c,:]=epos[:,j,:]-epos[:,i,:]
+            c+=1
+    return d
+    
+
+def eedist_i(epos,vec):
+    """returns a list of electron-electron distances from an electron at position 'vec'
+    epos will most likely be [nconfig,electron,dimension], and vec will be [nconfig,dimension]
+    """
+    ne=epos.shape[1]
+    return vec[:,np.newaxis,:]-epos
+    
+    
 
 class Jastrow2B:
-    """A simple Jastrow factor that is written as 
+    """A simple two-body Jastrow factor that is written as 
     :math:`\ln \Psi_J  = \sum_k c_k \sum_{i<j} b(r_{ij})`
     b are function objects
     """
     def __init__(self,nconfig,mol):
         self.parameters={}
-        nexpand=4
+        nexpand=1
         self._nelec=np.sum(mol.nelec)
         self._mol=mol
-        self.basis=[Gaussianfunction(0.2*2**n) for n in range(1,nexpand)]
+        self.basis=[GaussianFunction(0.2*2**n) for n in range(1,nexpand)]
         self.parameters['coeff']=np.zeros(nexpand)
         self._bvalues=np.zeros((nconfig,nexpand))
         self._eposcurrent=np.zeros((nconfig,self._nelec,3))
@@ -43,9 +66,14 @@ class Jastrow2B:
         #We will save the b sums over i,j in _bvalues
         
         #package the electron-electron distances into a 1d array
-        for i,b in enumerate(self.basis):
-            self._bvalues[:,i]=np.sum(b.value(x)) #not quite right
+        d=eedist(epos)
+        d=d.reshape((-1,3))
 
+        for i,b in enumerate(self.basis):
+            self._bvalues[:,i]=np.sum(b.value(d).reshape( (epos.shape[0],-1) ),axis=1) 
+        print(self._bvalues.shape)
+        u=np.einsum("ij,j->i",self._bvalues,self.parameters['coeff'])
+        print(u)
         return (1,u)
 
     def updateinternals(self,e,epos,mask=None):
@@ -64,6 +92,21 @@ class Jastrow2B:
         So we need to compute the gradient of the b's for these indices. 
         Note that we need to compute distances between electron position given and the current electron distances.
         We will need this for laplacian() as well"""
+        nconf=epos.shape[0]
+        ne=self._eposcurrent.shape[1]
+        dnew=eedist_i(self._eposcurrent,epos)
+        mask=[True]*ne
+        mask[e]=False
+        dnew=dnew[:,mask,:]
+        mask = [True if i < e else False for i in range(ne-1)]
+        dnew[:,mask,:]*=-1
+        dnew=dnew.reshape(-1,3)
+        
+        delta=np.zeros((3,nconf))
+        for c,b in zip(self.parameters['coeff'],self.basis):
+            delta+=c*np.sum(b.gradient(dnew).reshape(nconf,-1,3),axis=1).T
+        return delta
+
 
     def laplacian(self,e,epos):
         """ """
@@ -74,23 +117,34 @@ class Jastrow2B:
         here we will evaluate the b's for a given electron (both the old and new) 
         and work out the updated value. This allows us to save a lot of memory
         """
+        nconf=epos.shape[0]
+        dnew=eedist_i(self._eposcurrent,epos).reshape((-1,3))
+        dold=eedist_i(self._eposcurrent,self._eposcurrent[:,e,:]).reshape((-1,3))
+        delta=np.zeros(nconf)
+        for c,b in zip(self.parameters['coeff'],self.basis):
+            delta+=c*np.sum((b.value(dnew)-b.value(dold)).reshape(nconf,-1),axis=1)
+        return np.exp(delta)
 
     def pgradient(self):
         """Given the b sums, this is pretty trivial for the coefficient derivatives.
         For the exponent derivatives, we will have to compute the derivative of all the b's 
         and redo the sums, similar to recompute() """
+        return {'coeff':self._bvalues}
 
 
 
 def test(): 
     from pyscf import lib, gto, scf
     
-    mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
-    epos=np.random.randn(10,4,3)
+    mol = gto.M(atom='H 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
+    nconf=1
+    epos=np.random.randn(nconf,np.sum(mol.nelec),3)
     
-    jastrow=Jastrow2B(10,mol)
+    jastrow=Jastrow2B(nconf,mol)
+    jastrow.parameters['coeff']=np.random.random(jastrow.parameters['coeff'].shape)
+    print('coefficients',jastrow.parameters['coeff'])
     baseval=jastrow.recompute(epos)
-    e=3
+    e=0
     grad=jastrow.gradient(e,epos[:,e,:])
     print(grad)
 
@@ -101,6 +155,7 @@ def test():
         baseval=jastrow.recompute(epos)
         testval=jastrow.testvalue(e,eposnew[:,e,:])
         valnew=jastrow.recompute(eposnew)
+        print("testval",testval,valnew,baseval)
         print("updated value",testval-np.exp(valnew[1]-baseval[1]))
         print('derivative',d,'analytic',grad[d,:],'numerical',(valnew[1]-baseval[1])/delta)
     

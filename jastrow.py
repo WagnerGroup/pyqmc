@@ -1,188 +1,222 @@
 import numpy as np
-from pyscf import lib, gto, scf
 
+class GaussianFunction:
+    def __init__(self,exponent):
+        self.parameters={}
+        self.parameters['exponent']=exponent
 
-class Jastrow:
+    def value(self,x): 
+        """Return the value of the function. 
+        x should be a (nconfig,3) vector """
+        r2=np.sum(x**2,axis=1)
+        return np.exp(-self.parameters['exponent']*r2)
+        
+    def gradient(self,x):
+        """ return gradient of the function """
+        v=self.value(x)
+        r=np.sqrt(np.sum(x**2,axis=1))
+        return 2*self.parameters['exponent']*x*v[:,np.newaxis]/r[:,np.newaxis]
+
+    def laplacian(self,x):
+        """ laplacian """
+
+    def pgradient(self,x):
+        """ parameter gradient """
+        
+class PadeFunction:
     """
-    I=ion index, i,j=electron index
-    One-body: sum_iI sum_k c_k a_k(r_iI)
-    Two-body: sum_ij sum_k c_k b_k(r_ij)
-    Basis functions:
     a_k(r) = (alpha_k*r/(1+alpha_k*r))^2
-    b_k(r) = (beta_k*r/(1+beta_k*r))^2
     alpha_k = alpha/2^k, k starting at 0
-    beta_k = beta/2^k, k starting at 0
     """
-    def __init__(self,nconfig,mol, eeparms=(0,0,0), ieparms=(0,0,0,0)):
-        self.pade_a = Pade(0.2, len(ieparms))
-        self.pade_b = Pade(0.5, len(eeparms))
-        self.ieparms = ieparms
-        self.eeparms = eeparms
-        self.value = None
-        self.grad = None
-        self.lap = None
-        self.parmDeriv = None
-            
-    def value(self,epos):
-        """This computes the value from scratch. Returns the logarithm of the wave function"""
-        nconf, nelec = epos.shape[0:2]
-        # EE distances
-        eepairs = np.zeros((nconf, nelec*(nelec-1)/2))
-        counter=0
-        for i in range(nelec):
-            for j in range(i):
-                eepairs[:,counter] = np.linalg.norm(epos[:,i,:]-epos[:,j,:], axis=1)
-        eipairs = np.linalg.norm(epos[:,:,np.newaxis,:] - mol.atom_coords()[np.newaxis,np.newaxis,:,:], axis=-1)
-        self.value = np.sum(pade_a.value(self.eiparms, eipairs), axis=(1,2)) \
-                    +np.sum(pade_b.value(self.eeparms, eepairs), axis=1)
+    def __init__(self, alphak):
+        self.parameters={}
+        self.parameters['alphak'] = alphak
 
-    def updateinternals(self,e,epos,mask=None):
-        """Update any internals given that electron e moved to epos. mask is a Boolean array 
-        which allows us to update only certain walkers"""
-        if mask is None:
-            mask=[True]*self.inverse.shape[0]
-        s=int(e>=self.nup)
-        eeff=e-s*self.nup
-        ao=self.mol.eval_gto('GTOval_sph',epos)
-        mo=ao.dot(self.mo_coeff)
-        self.movals[:,s,eeff,:]=mo
-        ratio,self.inverse[mask,s,:,:]=sherman_morrison_row(eeff,self.inverse[mask,s,:,:],mo[mask,:])
-
-
-    def testrow(self,e,vec):
-        """vec is a nconfig,nmo vector which replaces row e"""
-        s=int(e>= self.nup)
-        ratio=np.einsum("ij,ij->i",vec,self.inverse[:,s,:,e-s*self.nup])
-        return ratio
-        
-    def gradient(self,e,epos):
-        """ Compute the gradient of the log wave function 
-        Note that this can be called even if the internals have not been updated for electron e,
-        if epos differs from the current position of electron e."""
-        aograd=self.mol.eval_gto('GTOval_ip_sph',epos)
-        mograd=aograd.dot(self.mo_coeff)
-        ratios=[self.testrow(e,x) for x in mograd]
-        return np.asarray(ratios)
-
-    def laplacian(self,e,epos):
-        """ Compute the laplacian Psi/ Psi. """
-        aograd=self.mol.eval_gto('GTOval_sph_deriv2',epos)
-        mograd=aograd.dot(self.mo_coeff)
-        ratios=[self.testrow(e,x) for x in mograd]
-        return ratios[4]+ratios[7]+ratios[9]
-
-
-    def testvalue(self,e,epos):
-        """ return the ratio between the current wave function and the wave function if 
-        electron e's position is replaced by epos"""
-        ao=self.mol.eval_gto('GTOval_sph',epos)
-        mo=ao.dot(self.mo_coeff)
-        return self.testrow(e,mo)
-
-    def parameter_gradient(self):
-        """Compute the parameter gradient of Psi"""
-        pass
-        
-class Pade:
-    def __init__(self, alpha, nbasis):
-        self.alpha = alpha
-        self.nbasis = nbasis
-        self.ak = 2.**(-np.arange(nbasis))
-
-    def update_alpha(self, alpha):
-        self.alpha = alpha
-        self.ak = 2.**(-np.arange(nbasis))
-        
-    def parameter_gradient(self, parms, r):
+    def value(self, parms, rvec):
         """
         Parameters:
-          r: nconf x npairs, or nconf x nelec x natom
+          rvec: nconf x ... x 3 (number of inner dimensions doesn't matter)
         Return:
-          nbasis x nconf x npairs
-        """
-        a = np.multiply.outer(self.ak, r)
-        funcs = (a/(1+a))**2
-        return funcs
-
-    def basis_gradient(self, r):
-        a = np.multiply.outer(self.ak, r)
-        dfuncs = 2*a**2/(1+a)**3/self.alpha
-        a0deriv = np.tensordot(parms, dfuncs, axes=1)
-        return a0deriv
-
-    def value(self, parms, r):
-        """
-        Parameters:
-          parms: pade coefficients
-          r: nconf x npairs, or nconf x nelec x natom
-        Return:
-          nconf x npairs
-        """
-        a = np.multiply.outer(self.ak, r)
-        funcs = (a/(1+a))**2
-        return np.tensordot(parms, funcs, axes=1)
-
-    def grad(self, parms, rvec):
-        """
-        Parameters:
-          parms: pade coefficients
-          rvec: nconf x npairs x 3, or nconf x nelec x natom x 3, displacement between particles
-        Return:
-          nconf x npairs x 3
+          func: same dimensions as rvec, but the last one removed 
         """
         r = np.linalg.norm(rvec, axis=-1)
-        a = np.multiply.outer(self.ak, r)
-        ak = np.reshape(self.ak, (self.nbasis, *([1]*len(r.shape))))
-        rfuncs = 2* ak**2/(1+a)**3 #/ r[np.newaxis]**2
-        funcs = np.expand_dims(rfuncs,-1)*rvec[np.newaxis]
-        return np.tensordot(parms, funcs, axes=1)
-        
-    def lap(self, parms, r):
+        a = self.parameters['alphak']* r
+        return (a/(1+a))**2
+
+    def gradient(self, rvec):
         """
         Parameters:
-          parms: pade coefficients
-          r: nconf x npairs, or nconf x nelec x natom
+          rvec: nconf x ... x 3, displacement between particles
+            For example, nconf x n_elec_pairs x 3, where n_elec_pairs could be all pairs of electrons or just the pairs that include electron e for the purpose of updating one electron.
+            Or it could be nconf x nelec x natom x 3 for electron-ion displacements
         Return:
-          nconf x npairs
+          grad: same dimensions as rvec
         """
-        a = np.multiply.outer(self.ak, r)
-        ak = np.reshape(self.ak, (self.nbasis, *([1]*len(r.shape))))
-        funcs = 6*ak**2 * (1+a)**(-4)
-        return np.tensordot(parms, funcs, axes=1)
+        r = np.linalg.norm(rvec, axis=-1, keepdims=True)
+        a = self.parameters['alphak']* r
+        grad = 2* self.parameters['alphak']**2/(1+a)**3 *rvec
+        return grad
         
-class Cutoff_Cusp:
-    def __init__(self)
+    def laplacian(self, rvec):
+        """
+        Parameters:
+          rvec: nconf x ... x 3
+        Return:
+          lap: same dimensions as rvec, but the last one removed 
+        """
+        r = np.linalg.norm(rvec, axis=-1)
+        a = self.parameters['alphak']* r
+        lap = 6*self.parameters['alphak']**2 * (1+a)**(-4)
+        return lap
+
+    def pgradient(self, rvec):
+        """ Return gradient of value with respect to parameter alphak
+        Parameters:
+          rvec: nconf x ... x 3
+        Return:
+          akderiv: same dimensions as rvec, but the last one removed 
+        
+        """
+        r = np.linalg.norm(rvec, axis=-1)
+        a = self.parameters['alphak']* r
+        akderiv = 2*a/(1+a)**3 * r
+        return akderiv
+
+
+def eedist(epos):
+    """returns a list of electron-electron distances within a collection """
+    ne=epos.shape[1]
+    d=np.zeros((epos.shape[0],int(ne*(ne-1)/2),3))
+    c=0
+    for i in range(ne):
+        for j in range(i+1,ne):
+            d[:,c,:]=epos[:,j,:]-epos[:,i,:]
+            c+=1
+    return d
+    
+
+def eedist_i(epos,vec):
+    """returns a list of electron-electron distances from an electron at position 'vec'
+    epos will most likely be [nconfig,electron,dimension], and vec will be [nconfig,dimension]
+    """
+    ne=epos.shape[1]
+    return vec[:,np.newaxis,:]-epos
+    
+    
+
+class Jastrow2B:
+    """A simple two-body Jastrow factor that is written as 
+    :math:`\ln \Psi_J  = \sum_k c_k \sum_{i<j} b(r_{ij})`
+    b are function objects
+    """
+    def __init__(self,nconfig,mol):
+        self.parameters={}
+        nexpand=1
+        self._nelec=np.sum(mol.nelec)
+        self._mol=mol
+        self.basis=[GaussianFunction(0.2*2**n) for n in range(1,nexpand)]
+        self.parameters['coeff']=np.zeros(nexpand)
+        self._bvalues=np.zeros((nconfig,nexpand))
+        self._eposcurrent=np.zeros((nconfig,self._nelec,3))
+
+    def recompute(self,epos):
+        """ """
+        u=0.0
+        self._eposcurrent=epos.copy()
+        #We will save the b sums over i,j in _bvalues
+        
+        #package the electron-electron distances into a 1d array
+        d=eedist(epos)
+        d=d.reshape((-1,3))
+
+        for i,b in enumerate(self.basis):
+            self._bvalues[:,i]=np.sum(b.value(d).reshape( (epos.shape[0],-1) ),axis=1) 
+        print(self._bvalues.shape)
+        u=np.einsum("ij,j->i",self._bvalues,self.parameters['coeff'])
+        print(u)
+        return (1,u)
+
+    def updateinternals(self,e,epos,mask=None):
+        """  """
+        #update b and c sums. This overlaps with testvalue()
+        if mask is None:
+            mask=[True]*self._eposcurrent.shape[0]
+        self._eposcurrent[mask,e,:]=epos[mask,e,:]
+
+    def value(self): 
+        """  """
+
+    def gradient(self,e,epos):
+        """We compute the gradient for electron e as 
+        :math:`\grad_e \ln \Psi_J = \sum_k c_k \sum_{j > e} \grad_e b_k(r_{ej})  + \sum_{i < e} \grad_e b_k(r_{ie}) `
+        So we need to compute the gradient of the b's for these indices. 
+        Note that we need to compute distances between electron position given and the current electron distances.
+        We will need this for laplacian() as well"""
+        nconf=epos.shape[0]
+        ne=self._eposcurrent.shape[1]
+        dnew=eedist_i(self._eposcurrent,epos)
+        mask=[True]*ne
+        mask[e]=False
+        dnew=dnew[:,mask,:]
+        mask = [True if i < e else False for i in range(ne-1)]
+        dnew[:,mask,:]*=-1
+        dnew=dnew.reshape(-1,3)
+        
+        delta=np.zeros((3,nconf))
+        for c,b in zip(self.parameters['coeff'],self.basis):
+            delta+=c*np.sum(b.gradient(dnew).reshape(nconf,-1,3),axis=1).T
+        return delta
+
+
+    def laplacian(self,e,epos):
+        """ """
+        
+
+    def testvalue(self,e,epos):
+        """
+        here we will evaluate the b's for a given electron (both the old and new) 
+        and work out the updated value. This allows us to save a lot of memory
+        """
+        nconf=epos.shape[0]
+        dnew=eedist_i(self._eposcurrent,epos).reshape((-1,3))
+        dold=eedist_i(self._eposcurrent,self._eposcurrent[:,e,:]).reshape((-1,3))
+        delta=np.zeros(nconf)
+        for c,b in zip(self.parameters['coeff'],self.basis):
+            delta+=c*np.sum((b.value(dnew)-b.value(dold)).reshape(nconf,-1),axis=1)
+        return np.exp(delta)
+
+    def pgradient(self):
+        """Given the b sums, this is pretty trivial for the coefficient derivatives.
+        For the exponent derivatives, we will have to compute the derivative of all the b's 
+        and redo the sums, similar to recompute() """
+        return {'coeff':self._bvalues}
+
+
 
 def test(): 
-    mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
-    mf = scf.RHF(mol).run()
-    slater=PySCFSlaterRHF(10,mol,mf)
-    epos=np.random.randn(10,4,3)
-    baseval=slater.value(epos)
-    e=3
-    grad=slater.gradient(e,epos[:,e,:])
-    print(grad)
-
+    from pyscf import lib, gto, scf
+    
+    mol = gto.M(atom='H 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
+    nconf=1
+    epos=np.random.randn(nconf,np.sum(mol.nelec),3)
+    
+    jastrow=Jastrow2B(nconf,mol)
+    jastrow.parameters['coeff']=np.random.random(jastrow.parameters['coeff'].shape)
+    print('coefficients',jastrow.parameters['coeff'])
+    baseval=jastrow.recompute(epos)
+    e=0
+    grad=jastrow.gradient(e,epos[:,e,:])
     delta=1e-9
     for d in range(0,3):
         eposnew=epos.copy()
         eposnew[:,e,d]+=delta
-        baseval=slater.value(epos)
-        testval=slater.testvalue(e,eposnew[:,e,:])
-        valnew=slater.value(eposnew)
+        baseval=jastrow.recompute(epos)
+        testval=jastrow.testvalue(e,eposnew[:,e,:])
+        valnew=jastrow.recompute(eposnew)
+        print("testval",testval,valnew,baseval)
         print("updated value",testval-np.exp(valnew[1]-baseval[1]))
         print('derivative',d,'analytic',grad[d,:],'numerical',(valnew[1]-baseval[1])/delta)
-
-    #Test the internal update
-    slater.value(epos)
-    inv=slater.inverse.copy()
-    eposnew=epos.copy()
-    eposnew[:,e,:]+=0.1
-    slater.updateinternals(e,eposnew[:,e,:])
-    inv_update=slater.inverse.copy()
-    slater.value(eposnew)
-    inv_recalc=slater.inverse.copy()
-    print(inv_recalc-inv_update)
+    
 
 def test_pade():
     pade = Pade(0.2, 4)
@@ -214,7 +248,4 @@ def test_pade():
 
 if __name__=="__main__":
     test_pade()
-
-
-
 

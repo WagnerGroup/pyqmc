@@ -8,7 +8,7 @@ def vmc(mol,wf,coords,nsteps=10000,tstep=0.5):
     nelec=np.sum(mol.nelec)
     
     df=[]
-    wf.value(coords)
+    wf.recompute(coords)
     for step in range(nsteps):
         print("step",step)
         acc=[]
@@ -26,7 +26,7 @@ def vmc(mol,wf,coords,nsteps=10000,tstep=0.5):
         avg['acceptance']=np.mean(acc)
         df.append(avg)
         #print(df[-1])
-    return df
+    return df #should return back new coordinates
     
 
 def test():

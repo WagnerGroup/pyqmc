@@ -11,28 +11,34 @@ def sherman_morrison_row(e,inv,vec):
     return ratio,invnew
 
 class PySCFSlaterRHF:
+    """A wave function object has a state defined by a reference configuration of electrons.
+    The functions recompute() and updateinternals() change the state of the object, and 
+    the rest compute and return values from that state. """
     def __init__(self,nconfig,mol,mf):
         self.occ=np.asarray(mf.mo_occ > 1.0)
         nmo=np.sum(self.occ)
         print("nmo",nmo)
-        self.mo_coeff=mf.mo_coeff[:,self.occ]
-        self.nconfig=nconfig
-        self.mol=mol
-        self.nelec=np.sum(mol.nelec)
-        self.nup=int(self.nelec/2)
-        print("nup",self.nup)
-        assert self.nup==nmo
-        self.movals=np.zeros((nconfig,2,self.nup,nmo)) # row is electron, column is mo
-        self.inverse=np.zeros((nconfig,2,self.nup,self.nup))
+        self.parameters={}
+        
+        self.parameters['mo_coeff']=mf.mo_coeff[:,self.occ]
+        self._nconfig=nconfig
+        self._mol=mol
+        self._nelec=np.sum(mol.nelec)
+        self._nup=int(self._nelec/2)
+        print("nup",self._nup)
+        assert self._nup==nmo
+        self._movals=np.zeros((nconfig,2,self._nup,nmo)) # row is electron, column is mo
+        self._inverse=np.zeros((nconfig,2,self._nup,self._nup))
             
-    def value(self,epos):
-        """This computes the value from scratch. Returns the logarithm of the wave function"""
+    def recompute(self,epos):
+        """This computes the value from scratch. Returns the logarithm of the wave function as
+        (phase,logdet). If the wf is real, phase will be +/- 1."""
         mycoords=epos.reshape((epos.shape[0]*epos.shape[1],epos.shape[2]))
-        ao = self.mol.eval_gto('GTOval_sph', mycoords)
-        mo = ao.dot(self.mo_coeff)
-        self.movals=mo.reshape((self.nconfig,2,self.nup,self.nup))
-        self.dets=np.linalg.slogdet(self.movals)
-        self.inverse=np.linalg.inv(self.movals)
+        ao = self._mol.eval_gto('GTOval_sph', mycoords)
+        mo = ao.dot(self.parameters['mo_coeff'])
+        self._movals=mo.reshape((self._nconfig,2,self._nup,self._nup))
+        self.dets=np.linalg.slogdet(self._movals)
+        self._inverse=np.linalg.inv(self._movals)
         return self.dets[0][:,0]*self.dets[0][:,1],self.dets[1][:,0]+self.dets[1][:,1]
 
 
@@ -40,48 +46,71 @@ class PySCFSlaterRHF:
         """Update any internals given that electron e moved to epos. mask is a Boolean array 
         which allows us to update only certain walkers"""
         if mask is None:
-            mask=[True]*self.inverse.shape[0]
-        s=int(e>=self.nup)
-        eeff=e-s*self.nup
-        ao=self.mol.eval_gto('GTOval_sph',epos)
-        mo=ao.dot(self.mo_coeff)
-        self.movals[:,s,eeff,:]=mo
-        ratio,self.inverse[mask,s,:,:]=sherman_morrison_row(eeff,self.inverse[mask,s,:,:],mo[mask,:])
+            mask=[True]*self._inverse.shape[0]
+        s=int(e>=self._nup)
+        eeff=e-s*self._nup
+        ao=self._mol.eval_gto('GTOval_sph',epos)
+        mo=ao.dot(self.parameters['mo_coeff'])
+        self._movals[:,s,eeff,:]=mo
+        ratio,self._inverse[mask,s,:,:]=sherman_morrison_row(eeff,self._inverse[mask,s,:,:],mo[mask,:])
+        #should update the value of the wave function
+        self._updateval(ratio,mask)
 
+    ### not state-changing functions
 
-    def testrow(self,e,vec):
+    def value(self):
+        """Return logarithm of the wave function as noted in recompute()"""
+        return self.dets[0][:,0]*self.dets[0][:,1],self.dets[1][:,0]+self.dets[1][:,1]
+        
+
+    def _updateval(self,ratio,mask):
+        self.dets[0][mask,:]*=np.sign(ratio) #will not work for complex!
+        self.dets[1][mask,:]+=np.abs(ratio)
+    
+    def _testrow(self,e,vec):
         """vec is a nconfig,nmo vector which replaces row e"""
-        s=int(e>= self.nup)
-        ratio=np.einsum("ij,ij->i",vec,self.inverse[:,s,:,e-s*self.nup])
+        s=int(e>= self._nup)
+        ratio=np.einsum("ij,ij->i",vec,self._inverse[:,s,:,e-s*self._nup])
         return ratio
         
+    def _testcol(self,i,s,vec):
+        """vec is a nconfig,nmo vector which replaces column i"""
+        ratio=np.einsum("ij,ij->i",vec,self._inverse[:,s,i,:]) #need to test this!
+        return ratio
+    
     def gradient(self,e,epos):
         """ Compute the gradient of the log wave function 
         Note that this can be called even if the internals have not been updated for electron e,
         if epos differs from the current position of electron e."""
-        aograd=self.mol.eval_gto('GTOval_ip_sph',epos)
-        mograd=aograd.dot(self.mo_coeff)
-        ratios=[self.testrow(e,x) for x in mograd]
+        aograd=self._mol.eval_gto('GTOval_ip_sph',epos)
+        mograd=aograd.dot(self.parameters['mo_coeff'])
+        ratios=[self._testrow(e,x) for x in mograd]
         return np.asarray(ratios)
 
     def laplacian(self,e,epos):
         """ Compute the laplacian Psi/ Psi. """
-        aograd=self.mol.eval_gto('GTOval_sph_deriv2',epos)
-        mograd=aograd.dot(self.mo_coeff)
-        ratios=[self.testrow(e,x) for x in mograd]
+        aograd=self._mol.eval_gto('GTOval_sph_deriv2',epos)
+        mograd=aograd.dot(self.parameters['mo_coeff'])
+        ratios=[self._testrow(e,x) for x in mograd]
         return ratios[4]+ratios[7]+ratios[9]
-
 
     def testvalue(self,e,epos):
         """ return the ratio between the current wave function and the wave function if 
         electron e's position is replaced by epos"""
-        ao=self.mol.eval_gto('GTOval_sph',epos)
-        mo=ao.dot(self.mo_coeff)
-        return self.testrow(e,mo)
+        ao=self._mol.eval_gto('GTOval_sph',epos)
+        mo=ao.dot(self.parameters['mo_coeff'])
+        return self._testrow(e,mo)
 
-    def parameter_gradient(self):
-        """Compute the parameter gradient of Psi"""
-        pass
+    def pgradient(self):
+        """Compute the parameter gradient of Psi. 
+        Returns d_p \Psi/\Psi as a dictionary of numpy arrays,
+        which correspond to the parameter dictionary.
+        """
+        d={}
+        ao = self._mol.eval_gto('GTOval_sph', mycoords)
+        
+        #use testcol() to update determinant values for each mo_coeff
+        return d
         
         
 def test(): 
@@ -89,7 +118,7 @@ def test():
     mf = scf.RHF(mol).run()
     slater=PySCFSlaterRHF(10,mol,mf)
     epos=np.random.randn(10,4,3)
-    baseval=slater.value(epos)
+    baseval=slater.recompute(epos)
     e=3
     grad=slater.gradient(e,epos[:,e,:])
     print(grad)
@@ -98,21 +127,21 @@ def test():
     for d in range(0,3):
         eposnew=epos.copy()
         eposnew[:,e,d]+=delta
-        baseval=slater.value(epos)
+        baseval=slater.recompute(epos)
         testval=slater.testvalue(e,eposnew[:,e,:])
-        valnew=slater.value(eposnew)
+        valnew=slater.recompute(eposnew)
         print("updated value",testval-np.exp(valnew[1]-baseval[1]))
         print('derivative',d,'analytic',grad[d,:],'numerical',(valnew[1]-baseval[1])/delta)
 
     #Test the internal update
-    slater.value(epos)
-    inv=slater.inverse.copy()
+    slater.recompute(epos)
+    inv=slater._inverse.copy()
     eposnew=epos.copy()
     eposnew[:,e,:]+=0.1
     slater.updateinternals(e,eposnew[:,e,:])
-    inv_update=slater.inverse.copy()
-    slater.value(eposnew)
-    inv_recalc=slater.inverse.copy()
+    inv_update=slater._inverse.copy()
+    slater.recompute(eposnew)
+    inv_recalc=slater._inverse.copy()
     print(inv_recalc-inv_update)
 
     

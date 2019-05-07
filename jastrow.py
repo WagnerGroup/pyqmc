@@ -262,5 +262,5 @@ def test_pade():
     print('lap', np.linalg.norm(lap[:,e,:] - testlap[:,e,:]))
 
 if __name__=="__main__":
-    test_pade()
+    test()
 

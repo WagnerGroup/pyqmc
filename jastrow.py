@@ -35,7 +35,7 @@ class PadeFunction:
         self.parameters={}
         self.parameters['alphak'] = alphak
 
-    def value(self, parms, rvec):
+    def value(self, rvec):
         """
         Parameters:
           rvec: nconf x ... x 3 (number of inner dimensions doesn't matter)
@@ -234,26 +234,26 @@ def test():
     
 
 def test_pade():
-    pade = Pade(0.2, 4)
+    pade = PadeFunction(0.2)
     parms = np.random.random(4)*2-1
     epos = np.random.random((1, 8, 3))
     atoms = np.array([[0,0,0],[0,0,1.5],[1,1,0]]) 
     rvec = epos[:,:,np.newaxis,:] - atoms[np.newaxis, np.newaxis,:,:]
     print('rvec', rvec.shape)
-    val = pade.value(parms, np.linalg.norm(rvec, axis=-1))
-    grad = pade.grad(parms, rvec)
-    lap = pade.lap(parms, np.linalg.norm(rvec, axis=-1))
+    val = pade.value(rvec)
+    grad = pade.gradient(rvec)
+    lap = pade.laplacian(rvec)
     delta=1e-5
     e=2
     testlap = 0
     for i in range(3):
       pos = epos.copy()
       pos[:,e,i] += delta
-      plusvec = np.linalg.norm(pos[:,:,np.newaxis,:] - atoms[np.newaxis, np.newaxis,:,:], axis=-1)
-      plusval = pade.value(parms, plusvec)
+      plusvec = pos[:,:,np.newaxis,:] - atoms[np.newaxis, np.newaxis,:,:]
+      plusval = pade.value(plusvec)
       pos[:,e,i] -= 2*delta
-      minuvec = np.linalg.norm(pos[:,:,np.newaxis,:] - atoms[np.newaxis, np.newaxis,:,:], axis=-1)
-      minuval = pade.value(parms, minuvec)
+      minuvec = pos[:,:,np.newaxis,:] - atoms[np.newaxis, np.newaxis,:,:]
+      minuval = pade.value(minuvec)
       deriv = (plusval - minuval)/(2*delta)
       testlap += (plusval + minuval - 2*val)/delta**2
       print(i, np.linalg.norm(grad[:,e,:,i]-deriv[:,e,:]))

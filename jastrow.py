@@ -14,11 +14,14 @@ class GaussianFunction:
     def gradient(self,x):
         """ return gradient of the function """
         v=self.value(x)
-        r=np.sqrt(np.sum(x**2,axis=1))
-        return 2*self.parameters['exponent']*x*v[:,np.newaxis]/r[:,np.newaxis]
+        return -2*self.parameters['exponent']*x*v[:,np.newaxis]
 
     def laplacian(self,x):
         """ laplacian """
+        v=self.value(x)
+        alpha=self.parameters['exponent']
+        return (4*alpha*alpha*x*x-2*alpha)*v[:,np.newaxis]
+
 
     def pgradient(self,x):
         """ parameter gradient """
@@ -111,7 +114,7 @@ class Jastrow2B:
     """
     def __init__(self,nconfig,mol):
         self.parameters={}
-        nexpand=1
+        nexpand=2
         self._nelec=np.sum(mol.nelec)
         self._mol=mol
         self.basis=[GaussianFunction(0.2*2**n) for n in range(1,nexpand)]
@@ -155,11 +158,10 @@ class Jastrow2B:
         nconf=epos.shape[0]
         ne=self._eposcurrent.shape[1]
         dnew=eedist_i(self._eposcurrent,epos)
+
         mask=[True]*ne
         mask[e]=False
         dnew=dnew[:,mask,:]
-        mask = [True if i < e else False for i in range(ne-1)]
-        dnew[:,mask,:]*=-1
         dnew=dnew.reshape(-1,3)
         
         delta=np.zeros((3,nconf))
@@ -170,6 +172,17 @@ class Jastrow2B:
 
     def laplacian(self,e,epos):
         """ """
+        nconf=epos.shape[0]
+        ne=self._eposcurrent.shape[1]
+        dnew=eedist_i(self._eposcurrent,epos)
+        mask=[True]*ne
+        mask[e]=False
+        dnew=dnew[:,mask,:]
+        dnew=dnew.reshape(-1,3)
+        delta=np.zeros((3,nconf))
+        for c,b in zip(self.parameters['coeff'],self.basis):
+            delta+=c*np.sum(b.laplacian(dnew).reshape(nconf,-1),axis=1).T
+        return delta
         
 
     def testvalue(self,e,epos):
@@ -196,7 +209,7 @@ class Jastrow2B:
 def test(): 
     from pyscf import lib, gto, scf
     
-    mol = gto.M(atom='H 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
+    mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
     nconf=1
     epos=np.random.randn(nconf,np.sum(mol.nelec),3)
     
@@ -216,6 +229,8 @@ def test():
         print("testval",testval,valnew,baseval)
         print("updated value",testval-np.exp(valnew[1]-baseval[1]))
         print('derivative',d,'analytic',grad[d,:],'numerical',(valnew[1]-baseval[1])/delta)
+
+    jastrow.laplacian(e,epos[:,e,:])
     
 
 def test_pade():

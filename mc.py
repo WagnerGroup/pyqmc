@@ -3,7 +3,9 @@ from pyscf import lib, gto, scf
 from slater import PySCFSlaterRHF
 from energy import energy
 
-def vmc(mol,wf,coords,nsteps=10000,tstep=0.5):
+def vmc(mol,wf,coords,nsteps=10000,tstep=0.5,accumulators=None):
+    if accumulators is None:
+        accumulators={'energy':energy } 
     nconf=coords.shape[0]
     nelec=np.sum(mol.nelec)
     
@@ -19,10 +21,11 @@ def vmc(mol,wf,coords,nsteps=10000,tstep=0.5):
             coords[accept,e,:]=newcoorde[accept,:]
             wf.updateinternals(e,coords[:,e,:],accept)
             acc.append(np.mean(accept))
-        dat=energy(mol,coords,wf)
         avg={}
-        for k in dat:
-            avg[k]=np.mean(dat[k])
+        for k,accumulator in accumulators.items():
+            dat=accumulator(mol,coords,wf)
+            for m,res in dat.items():
+                avg[k+m]=np.mean(res)
         avg['acceptance']=np.mean(acc)
         df.append(avg)
         #print(df[-1])
@@ -37,14 +40,19 @@ def test():
     wf=PySCFSlaterRHF(nconf,mol,mf)
     coords = np.random.normal(scale=1.,size=(nconf,nelec,3))
 
-    df=vmc(mol,wf,coords,nsteps=100)
+    def dipole(mol,coords,wf):
+        return {'x':np.sum(coords[:,:,0],axis=1)}
+
+    df=vmc(mol,wf,coords,nsteps=100,accumulators={'energy':energy, 'dipole':dipole } )
 
 
     import pandas as pd
     df=pd.DataFrame(df)
     df.to_csv("data.csv")
     warmup=30
-    print(np.mean(df['total_energy'][warmup:]),np.std(df['total_energy'][warmup:]))
+    
+    print(np.mean(df['energytotal'][warmup:]),np.std(df['energytotal'][warmup:]))
+    print('dipole',np.mean(df['dipolex'][warmup:]))
     
 if __name__=="__main__":
     test()

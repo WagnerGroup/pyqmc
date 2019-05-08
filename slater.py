@@ -64,8 +64,8 @@ class PySCFSlaterRHF:
         
 
     def _updateval(self,ratio,s,mask):
-        self.dets[0][mask,s]*=np.sign(ratio[mask]) #will not work for complex!
-        self.dets[1][mask,s]+=np.abs(ratio[mask])
+        self.dets[0][mask,s]*=np.sign(ratio) #will not work for complex!
+        self.dets[1][mask,s]+=np.abs(ratio)
     
     def _testrow(self,e,vec):
         """vec is a nconfig,nmo vector which replaces row e"""

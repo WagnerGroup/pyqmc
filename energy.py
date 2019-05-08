@@ -44,5 +44,5 @@ def energy(mol,epos,wf):
     return {'ke':ke,
             'ee':ee,
             'ei':ei,
-            'total_energy':ke+ee+ei+ii } 
+            'total':ke+ee+ei+ii } 
 

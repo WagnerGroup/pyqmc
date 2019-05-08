@@ -29,7 +29,8 @@ def test_wf_gradient(wf, epos, delta=1e-5):
             minuval=wf.testvalue(e,eposnew[:,e,:])
             numeric[:,e,d] = (plusval - minuval)/(2*delta)
     maxerror = np.amax(np.abs(grad-numeric))
-    normerror = np.linalg.norm(grad-numeric)
+    normerror = np.mean(np.abs(grad-numeric))
+    
     #print('maxerror', maxerror, np.log10(maxerror))
     #print('normerror', normerror, np.log10(normerror))
     return(maxerror,normerror)
@@ -52,19 +53,22 @@ def test_wf_laplacian(wf, epos, delta=1e-5):
     maxerror=0
     lap = np.zeros(epos.shape[:2])
     numeric = np.zeros(epos.shape[:2])
+
     for e in range(nelec):
-#        print('shape of lap', wf.laplacian(e,epos[:,e,:]).shape)
         lap[:,e] = wf.laplacian(e, epos[:,e,:])
         
         for d in range(0,3):
             eposnew=epos.copy()
             eposnew[:,e,d]+=delta
-            plusval=wf.gradient(e,eposnew[:,e,:])[d]
+            plusval=wf.testvalue(e,eposnew[:,e,:])
+            plusgrad=wf.gradient(e,eposnew[:,e,:])[d]*plusval
             eposnew[:,e,d]-=2*delta
-            minuval=wf.gradient(e,eposnew[:,e,:])[d]
-            numeric[:,e] += (plusval - minuval)/(2*delta)
+            minuval=wf.testvalue(e,eposnew[:,e,:])
+            minugrad=wf.gradient(e,eposnew[:,e,:])[d]*minuval
+            numeric[:,e] += (plusgrad - minugrad)/(2*delta)
+    
     maxerror = np.amax(np.abs(lap-numeric))
-    normerror = np.linalg.norm(lap-numeric)
+    normerror = np.mean(np.abs((lap-numeric)/numeric))
     #print('maxerror', maxerror, np.log10(maxerror))
     #print('normerror', normerror, np.log10(normerror))
     return (maxerror,normerror)

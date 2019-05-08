@@ -99,7 +99,7 @@ class Jastrow2B:
         dnew=dnew.reshape(-1,3)
         delta=np.zeros(nconf)
         for c,b in zip(self.parameters['coeff'],self.basis):
-            delta+=c*np.sum(b.laplacian(dnew).reshape(nconf,-1),axis=1).T
+            delta+=c*np.sum(b.laplacian(dnew).reshape(nconf,-1),axis=1)
         return delta
         
 

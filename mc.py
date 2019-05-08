@@ -45,13 +45,12 @@ def test():
 
     df=vmc(mol,wf,coords,nsteps=100,accumulators={'energy':energy, 'dipole':dipole } )
 
-
     import pandas as pd
     df=pd.DataFrame(df)
     df.to_csv("data.csv")
     warmup=30
     
-    print(np.mean(df['energytotal'][warmup:]),np.std(df['energytotal'][warmup:]))
+    print('mean field',mf.energy, np.mean(df['energytotal'][warmup:]),np.std(df['energytotal'][warmup:]))
     print('dipole',np.mean(np.asarray(df['dipolevec'][warmup:]),axis=0))
     
 if __name__=="__main__":

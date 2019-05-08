@@ -85,14 +85,14 @@ class PySCFSlaterRHF:
         aograd=self._mol.eval_gto('GTOval_ip_sph',epos)
         mograd=aograd.dot(self.parameters['mo_coeff'])
         ratios=[self._testrow(e,x) for x in mograd]
-        return np.asarray(ratios)
+        return np.asarray(ratios)/self.testvalue(e,epos)[np.newaxis,:]
 
     def laplacian(self,e,epos):
         """ Compute the laplacian Psi/ Psi. """
         aograd=self._mol.eval_gto('GTOval_sph_deriv2',epos)
         mograd=aograd.dot(self.parameters['mo_coeff'])
         ratios=[self._testrow(e,x) for x in mograd]
-        return ratios[4]+ratios[7]+ratios[9]
+        return (ratios[4]+ratios[7]+ratios[9])/self.testvalue(e,epos)
 
     def testvalue(self,e,epos):
         """ return the ratio between the current wave function and the wave function if 

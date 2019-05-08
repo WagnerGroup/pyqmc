@@ -136,9 +136,9 @@ class Jastrow2B:
 
         for i,b in enumerate(self.basis):
             self._bvalues[:,i]=np.sum(b.value(d).reshape( (epos.shape[0],-1) ),axis=1) 
-        print(self._bvalues.shape)
+        #print(self._bvalues.shape)
         u=np.einsum("ij,j->i",self._bvalues,self.parameters['coeff'])
-        print(u)
+        #print(u)
         return (1,u)
 
     def updateinternals(self,e,epos,mask=None):
@@ -212,27 +212,16 @@ def test():
     from pyscf import lib, gto, scf
     
     mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
-    nconf=1
+    nconf=20
     epos=np.random.randn(nconf,np.sum(mol.nelec),3)
     
     jastrow=Jastrow2B(nconf,mol)
     jastrow.parameters['coeff']=np.random.random(jastrow.parameters['coeff'].shape)
     print('coefficients',jastrow.parameters['coeff'])
-    baseval=jastrow.recompute(epos)
-    e=0
-    grad=jastrow.gradient(e,epos[:,e,:])
-    delta=1e-9
-    for d in range(0,3):
-        eposnew=epos.copy()
-        eposnew[:,e,d]+=delta
-        baseval=jastrow.recompute(epos)
-        testval=jastrow.testvalue(e,eposnew[:,e,:])
-        valnew=jastrow.recompute(eposnew)
-        print("testval",testval,valnew,baseval)
-        print("updated value",testval-np.exp(valnew[1]-baseval[1]))
-        print('derivative',d,'analytic',grad[d,:],'numerical',(valnew[1]-baseval[1])/delta)
-
-    jastrow.laplacian(e,epos[:,e,:])
+    import testwf
+    for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
+        print('delta', delta, "Testing gradient",testwf.test_wf_gradient(jastrow,epos,delta=delta))
+        print('delta', delta, "Testing laplacian", testwf.test_wf_laplacian(jastrow,epos,delta=delta))
     
 
 def test_pade():

@@ -10,10 +10,10 @@ def test_wf_gradient(wf, epos, delta=1e-5):
     For gradient and testvalue:
         e is the electron index
         epos is nconf x 3 positions of electron e
-    wf.testvalue(e,epos) should return a ratio: the wf value at the position where electron e is moved to epos divided by the original value
-    wf.gradient(e,epos) should return a ratio: the wf gradient of moving electron e from position epos divided by the original value of the wave function (which may have a different position of e)
+    wf.testvalue(e,epos) should return a ratio: the wf value at the position where electron e is moved to epos divided by the current value
+    wf.gradient(e,epos) should return grad ln Psi(epos), while keeping all the other electrons at current position. epos may be different from the current position of electron e
+    
     """
-    print('delta={0}'.format(delta))
     nconf, nelec = epos.shape[0:2]
     wf.recompute(epos)
     maxerror=0
@@ -30,8 +30,9 @@ def test_wf_gradient(wf, epos, delta=1e-5):
             numeric[:,e,d] = (plusval - minuval)/(2*delta)
     maxerror = np.amax(np.abs(grad-numeric))
     normerror = np.linalg.norm(grad-numeric)
-    print('maxerror', maxerror, np.log10(maxerror))
-    print('normerror', normerror, np.log10(normerror))
+    #print('maxerror', maxerror, np.log10(maxerror))
+    #print('normerror', normerror, np.log10(normerror))
+    return(maxerror,normerror)
 
 def test_wf_laplacian(wf, epos, delta=1e-5):
     """ 
@@ -43,18 +44,18 @@ def test_wf_laplacian(wf, epos, delta=1e-5):
     For gradient and laplacian:
         e is the electron index
         epos is nconf x 3 positions of electron e
-    wf.gradient(e,epos) should return a ratio: the wf gradient of moving electron e from position epos divided by the original value of the wave function (which may have a different position of e)
-    wf.laplacian(e,epos) should return a ratio: the wf laplacian at the position where electron e is moved to epos divided by the original value
+    wf.gradient(e,epos) should return grad ln Psi(epos), while keeping all the other electrons at current position. epos may be different from the current position of electron e
+    wf.laplacian(e,epos) should behave the same as gradient, except lap(\Psi(epos))/Psi(epos)
     """
-    print('delta={0}'.format(delta))
     nconf, nelec = epos.shape[0:2]
     wf.recompute(epos)
     maxerror=0
     lap = np.zeros(epos.shape[:2])
     numeric = np.zeros(epos.shape[:2])
     for e in range(nelec):
-        print('shape of lap', wf.laplacian(e,epos[:,e,:]).shape); quit()
+#        print('shape of lap', wf.laplacian(e,epos[:,e,:]).shape)
         lap[:,e] = wf.laplacian(e, epos[:,e,:])
+        
         for d in range(0,3):
             eposnew=epos.copy()
             eposnew[:,e,d]+=delta
@@ -64,8 +65,9 @@ def test_wf_laplacian(wf, epos, delta=1e-5):
             numeric[:,e] += (plusval - minuval)/(2*delta)
     maxerror = np.amax(np.abs(lap-numeric))
     normerror = np.linalg.norm(lap-numeric)
-    print('maxerror', maxerror, np.log10(maxerror))
-    print('normerror', normerror, np.log10(normerror))
+    #print('maxerror', maxerror, np.log10(maxerror))
+    #print('normerror', normerror, np.log10(normerror))
+    return (maxerror,normerror)
 
 
 if __name__=='__main__':
@@ -78,7 +80,7 @@ if __name__=='__main__':
     #wf=Jastrow2B(10,mol)
     for i in range(5):
         epos=np.random.randn(10,4,3)
-        test_wf_gradient(wf, epos, delta=1e-5)
+        print("testing gradient: errors", test_wf_gradient(wf, epos, delta=1e-5))
     for i in range(5):
         epos=np.random.randn(10,4,3)
-        test_wf_laplacian(wf, epos, delta=1e-5)
+        print("testing gradient: errors", test_wf_laplacian(wf, epos, delta=1e-5))

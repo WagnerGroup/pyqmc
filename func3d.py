@@ -74,7 +74,7 @@ class PadeFunction:
         a = self.parameters['alphak']* r
         #lap = 6*self.parameters['alphak']**2 * (1+a)**(-4) #scalar formula
         lap = 2*self.parameters['alphak']**2 * (1+a)**(-3) \
-              *(1 - 3*a/(1-a)*(rvec/r)**2)
+              *(1 - 3*a/(1+a)*(rvec/r)**2)
         return lap
 
     def pgradient(self, rvec):
@@ -90,6 +90,17 @@ class PadeFunction:
         akderiv = 2*a/(1+a)**3 * r
         return akderiv
 
+def test(): 
+    import testwf 
+    pade = PadeFunction(0.2)
+    gauss = GaussianFunction(0.4)
+    for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
+        print('Gaussian: delta', delta, "Testing gradient", testwf.test_func3d_gradient(gauss,delta=delta))
+        print('Gaussian: delta', delta, "Testing laplacian", testwf.test_func3d_laplacian(gauss,delta=delta))
+    for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
+        print('Pade: delta', delta, "Testing gradient", testwf.test_func3d_gradient(pade,delta=delta))
+        print('Pade: delta', delta, "Testing laplacian", testwf.test_func3d_laplacian(pade,delta=delta))
+    
 
 def test_pade():
     pade = PadeFunction(0.2)
@@ -120,4 +131,4 @@ def test_pade():
     print('lap', np.linalg.norm(lap[:,e,:] - testlap[:,e,:]))
 
 if __name__=="__main__":
-    test_pade()
+    test()

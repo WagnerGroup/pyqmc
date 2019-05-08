@@ -70,45 +70,13 @@ def test_wf_laplacian(wf, epos, delta=1e-5):
     return (maxerror,normerror)
 
 
-def test_func3d_gradient(bf, delta=1e-5):
-    rvec = np.random.randn(10,3)
-    grad = bf.gradient(rvec)
-    numeric = np.zeros(rvec.shape)
-    for d in range(3):
-      pos = rvec.copy()
-      pos[:,d] += delta
-      plusval = bf.value(pos)
-      pos[:,d] -= 2*delta
-      minuval = bf.value(pos)
-      numeric[:,d] = (plusval - minuval)/(2*delta)
-    maxerror = np.amax(np.abs(grad-numeric))
-    normerror = np.linalg.norm(grad-numeric)
-    return (maxerror,normerror)
-
-def test_func3d_laplacian(bf, delta=1e-5):
-    rvec = np.random.randn(10,3)
-    lap = bf.laplacian(rvec)
-    numeric = np.zeros(rvec.shape)
-    for d in range(3):
-      pos = rvec.copy()
-      pos[:,d] += delta
-      plusval = bf.gradient(pos)[:,d]
-      pos[:,d] -= 2*delta
-      minuval = bf.gradient(pos)[:,d]
-      numeric[:,d] = (plusval - minuval)/(2*delta)
-    maxerror = np.amax(np.abs(lap-numeric))
-    normerror = np.linalg.norm(lap-numeric)
-    return (maxerror,normerror)
-
 if __name__=='__main__':
     from pyscf import lib, gto, scf
     from slater import PySCFSlaterRHF
     from jastrow import Jastrow2B
-    from func3d import GaussianFunction, PadeFunction
     mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
     mf = scf.RHF(mol).run()
     wf=PySCFSlaterRHF(10,mol,mf)
-    bf = GaussianFunction(0.4)
     #wf=Jastrow2B(10,mol)
     for i in range(5):
         epos=np.random.randn(10,4,3)
@@ -116,6 +84,3 @@ if __name__=='__main__':
     for i in range(5):
         epos=np.random.randn(10,4,3)
         print("testing laplacian: errors", test_wf_laplacian(wf, epos, delta=1e-5))
-    for i in range(2):
-        print("testing func3d gradient: errors", test_func3d_gradient(bf, delta=1e-5))
-        print("testing func3d laplacian: errors", test_func3d_gradient(bf, delta=1e-5))

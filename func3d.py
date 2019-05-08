@@ -90,45 +90,42 @@ class PadeFunction:
         akderiv = 2*a/(1+a)**3 * r
         return akderiv
 
+def test_func3d_gradient(bf, delta=1e-5):
+    rvec = np.random.randn(10,3)
+    grad = bf.gradient(rvec)
+    numeric = np.zeros(rvec.shape)
+    for d in range(3):
+      pos = rvec.copy()
+      pos[:,d] += delta
+      plusval = bf.value(pos)
+      pos[:,d] -= 2*delta
+      minuval = bf.value(pos)
+      numeric[:,d] = (plusval - minuval)/(2*delta)
+    maxerror = np.amax(np.abs(grad-numeric))
+    normerror = np.linalg.norm(grad-numeric)
+    return (maxerror,normerror)
+
+def test_func3d_laplacian(bf, delta=1e-5):
+    rvec = np.random.randn(10,3)
+    lap = bf.laplacian(rvec)
+    numeric = np.zeros(rvec.shape)
+    for d in range(3):
+      pos = rvec.copy()
+      pos[:,d] += delta
+      plusval = bf.gradient(pos)[:,d]
+      pos[:,d] -= 2*delta
+      minuval = bf.gradient(pos)[:,d]
+      numeric[:,d] = (plusval - minuval)/(2*delta)
+    maxerror = np.amax(np.abs(lap-numeric))
+    normerror = np.linalg.norm(lap-numeric)
+    return (maxerror,normerror)
+
 def test(): 
-    import testwf 
-    pade = PadeFunction(0.2)
-    gauss = GaussianFunction(0.4)
-    for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
-        print('Gaussian: delta', delta, "Testing gradient", testwf.test_func3d_gradient(gauss,delta=delta))
-        print('Gaussian: delta', delta, "Testing laplacian", testwf.test_func3d_laplacian(gauss,delta=delta))
-    for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
-        print('Pade: delta', delta, "Testing gradient", testwf.test_func3d_gradient(pade,delta=delta))
-        print('Pade: delta', delta, "Testing laplacian", testwf.test_func3d_laplacian(pade,delta=delta))
+    test_functions = {'Pade':PadeFunction(0.2), 'Gaussian':GaussianFunction(0.4)}
+    for name, func in test_functions.items():
+        for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
+            print(name, 'delta', delta, "Testing gradient", test_func3d_gradient(func,delta=delta))
+            print(name, 'delta', delta, "Testing laplacian", test_func3d_laplacian(func,delta=delta))
     
-
-def test_pade():
-    pade = PadeFunction(0.2)
-    parms = np.random.random(4)*2-1
-    epos = np.random.random((1, 8, 3))
-    atoms = np.array([[0,0,0],[0,0,1.5],[1,1,0]]) 
-    rvec = epos[:,:,np.newaxis,:] - atoms[np.newaxis, np.newaxis,:,:]
-    print('rvec', rvec.shape)
-    val = pade.value(rvec)
-    grad = pade.gradient(rvec)
-    lap = pade.laplacian(rvec)
-    delta=1e-5
-    e=2
-    testlap = 0
-    for i in range(3):
-      pos = epos.copy()
-      pos[:,e,i] += delta
-      plusvec = pos[:,:,np.newaxis,:] - atoms[np.newaxis, np.newaxis,:,:]
-      plusval = pade.value(plusvec)
-      pos[:,e,i] -= 2*delta
-      minuvec = pos[:,:,np.newaxis,:] - atoms[np.newaxis, np.newaxis,:,:]
-      minuval = pade.value(minuvec)
-      deriv = (plusval - minuval)/(2*delta)
-      testlap += (plusval + minuval - 2*val)/delta**2
-      print(i, np.linalg.norm(grad[:,e,:,i]-deriv[:,e,:]))
-      print(i, grad[:,e,:,i])
-      print(i, deriv[:,e,:])
-    print('lap', np.linalg.norm(lap[:,e,:] - testlap[:,e,:]))
-
 if __name__=="__main__":
     test()

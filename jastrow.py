@@ -100,7 +100,8 @@ class Jastrow2B:
         delta=np.zeros(nconf)
         for c,b in zip(self.parameters['coeff'],self.basis):
             delta+=c*np.sum(b.laplacian(dnew).reshape(nconf,-1),axis=1)
-        return delta
+        g=self.gradient(e,epos)
+        return delta + np.sum(g**2,axis=0)
         
 
     def testvalue(self,e,epos):

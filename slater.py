@@ -54,7 +54,7 @@ class PySCFSlaterRHF:
         self._movals[:,s,eeff,:]=mo
         ratio,self._inverse[mask,s,:,:]=sherman_morrison_row(eeff,self._inverse[mask,s,:,:],mo[mask,:])
         #should update the value of the wave function
-        self._updateval(ratio,mask)
+        self._updateval(ratio,s,mask)
 
     ### not state-changing functions
 
@@ -63,9 +63,9 @@ class PySCFSlaterRHF:
         return self.dets[0][:,0]*self.dets[0][:,1],self.dets[1][:,0]+self.dets[1][:,1]
         
 
-    def _updateval(self,ratio,mask):
-        self.dets[0][mask,:]*=np.sign(ratio) #will not work for complex!
-        self.dets[1][mask,:]+=np.abs(ratio)
+    def _updateval(self,ratio,s,mask):
+        self.dets[0][mask,s]*=np.sign(ratio[mask]) #will not work for complex!
+        self.dets[1][mask,s]+=np.abs(ratio[mask])
     
     def _testrow(self,e,vec):
         """vec is a nconfig,nmo vector which replaces row e"""
@@ -118,22 +118,14 @@ def test():
     mf = scf.RHF(mol).run()
     slater=PySCFSlaterRHF(10,mol,mf)
     epos=np.random.randn(10,4,3)
-    baseval=slater.recompute(epos)
-    e=3
-    grad=slater.gradient(e,epos[:,e,:])
-    print(grad)
+    import testwf
+    for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
+        print('delta', delta, "Testing gradient",testwf.test_wf_gradient(slater,epos,delta=delta))
+        print('delta', delta, "Testing laplacian", testwf.test_wf_laplacian(slater,epos,delta=delta))
 
-    delta=1e-9
-    for d in range(0,3):
-        eposnew=epos.copy()
-        eposnew[:,e,d]+=delta
-        baseval=slater.recompute(epos)
-        testval=slater.testvalue(e,eposnew[:,e,:])
-        valnew=slater.recompute(eposnew)
-        print("updated value",testval-np.exp(valnew[1]-baseval[1]))
-        print('derivative',d,'analytic',grad[d,:],'numerical',(valnew[1]-baseval[1])/delta)
 
     #Test the internal update
+    e=3
     slater.recompute(epos)
     inv=slater._inverse.copy()
     eposnew=epos.copy()

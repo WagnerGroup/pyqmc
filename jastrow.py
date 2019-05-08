@@ -65,11 +65,13 @@ class PadeFunction:
         Parameters:
           rvec: nconf x ... x 3
         Return:
-          lap: same dimensions as rvec, but the last one removed 
+          lap: same dimensions as rvec, d2/dx2, d2/dy2, d2/dz2 separately
         """
-        r = np.linalg.norm(rvec, axis=-1)
+        r = np.linalg.norm(rvec, axis=-1, keepdims=True)
         a = self.parameters['alphak']* r
-        lap = 6*self.parameters['alphak']**2 * (1+a)**(-4)
+        #lap = 6*self.parameters['alphak']**2 * (1+a)**(-4) #scalar formula
+        lap = 2*self.parameters['alphak']**2 * (1+a)**(-3) \
+              *(1 - 3*a/(1-a)*(rvec/r)**2)
         return lap
 
     def pgradient(self, rvec):

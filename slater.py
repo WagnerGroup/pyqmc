@@ -17,7 +17,6 @@ class PySCFSlaterRHF:
     def __init__(self,nconfig,mol,mf):
         self.occ=np.asarray(mf.mo_occ > 1.0)
         nmo=np.sum(self.occ)
-        print("nmo",nmo)
         self.parameters={}
         
         self.parameters['mo_coeff']=mf.mo_coeff[:,self.occ]
@@ -25,7 +24,6 @@ class PySCFSlaterRHF:
         self._mol=mol
         self._nelec=np.sum(mol.nelec)
         self._nup=int(self._nelec/2)
-        print("nup",self._nup)
         assert self._nup==nmo
         self._movals=np.zeros((nconfig,2,self._nup,nmo)) # row is electron, column is mo
         self._inverse=np.zeros((nconfig,2,self._nup,self._nup))
@@ -116,14 +114,16 @@ class PySCFSlaterRHF:
 def test(): 
     mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
     mf = scf.RHF(mol).run()
-    slater=PySCFSlaterRHF(10,mol,mf)
-    epos=np.random.randn(10,4,3)
+    nconf=10
+    nelec=np.sum(mol.nelec)
+    slater=PySCFSlaterRHF(nconf,mol,mf)
+    epos=np.random.randn(nconf,nelec,3)
     import testwf
     for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
         print('delta', delta, "Testing gradient",testwf.test_wf_gradient(slater,epos,delta=delta))
         print('delta', delta, "Testing laplacian", testwf.test_wf_laplacian(slater,epos,delta=delta))
 
-
+    quit()
     #Test the internal update
     e=3
     slater.recompute(epos)

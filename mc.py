@@ -50,7 +50,7 @@ def test():
     df.to_csv("data.csv")
     warmup=30
     
-    print('mean field',mf.energy, np.mean(df['energytotal'][warmup:]),np.std(df['energytotal'][warmup:]))
+    print('mean field',mf.energy_tot(),'vmc estimation', np.mean(df['energytotal'][warmup:]),np.std(df['energytotal'][warmup:]))
     print('dipole',np.mean(np.asarray(df['dipolevec'][warmup:]),axis=0))
     
 if __name__=="__main__":

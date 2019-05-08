@@ -83,4 +83,4 @@ if __name__=='__main__':
         print("testing gradient: errors", test_wf_gradient(wf, epos, delta=1e-5))
     for i in range(5):
         epos=np.random.randn(10,4,3)
-        print("testing gradient: errors", test_wf_laplacian(wf, epos, delta=1e-5))
+        print("testing laplacian: errors", test_wf_laplacian(wf, epos, delta=1e-5))

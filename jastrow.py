@@ -64,6 +64,8 @@ class Jastrow2B:
 
     def value(self): 
         """  """
+        u=np.einsum("ij,j->i",self._bvalues,self.parameters['coeff'])
+        return (1,u)       
 
     def gradient(self,e,epos):
         """We compute the gradient for electron e as 

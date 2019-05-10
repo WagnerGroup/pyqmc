@@ -50,9 +50,7 @@ class Jastrow2B:
 
         for i,b in enumerate(self.basis):
             self._bvalues[:,i]=np.sum(b.value(d).reshape( (epos.shape[0],-1) ),axis=1) 
-        #print(self._bvalues.shape)
         u=np.einsum("ij,j->i",self._bvalues,self.parameters['coeff'])
-        #print(u)
         return (1,u)
 
     def updateinternals(self,e,epos,mask=None):

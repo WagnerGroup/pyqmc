@@ -13,6 +13,7 @@ class MultiplyWF:
             self.parameters['wf2'+k]=self.wf2.parameters[k]
 
 
+        
     def recompute(self,epos):
         v1=self.wf1.recompute(epos)
         v2=self.wf2.recompute(epos)
@@ -48,6 +49,13 @@ class MultiplyWF:
 
     def pgradient(self):
         """Here we need to combine the results"""
+        g={}
+
+        for k,x in self.wf1.pgradient().items():
+            g['wf1'+k]=x
+        for k,x in self.wf2.pgradient().items():
+            g['wf2'+k]=x
+        return g
 
 
 
@@ -70,6 +78,7 @@ def test():
     for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
         print('delta', delta, "Testing gradient",testwf.test_wf_gradient(wf,epos,delta=delta))
         print('delta', delta, "Testing laplacian", testwf.test_wf_laplacian(wf,epos,delta=delta))
+        print('delta', delta, "Testing pgradient", testwf.test_wf_pgradient(wf,epos,delta=delta))
     
 if __name__=="__main__":
     test()

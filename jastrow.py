@@ -137,6 +137,7 @@ def test():
     for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
         print('delta', delta, "Testing gradient",testwf.test_wf_gradient(jastrow,epos,delta=delta))
         print('delta', delta, "Testing laplacian", testwf.test_wf_laplacian(jastrow,epos,delta=delta))
+        print('delta', delta, "Testing pgradient", testwf.test_wf_pgradient(jastrow,epos,delta=delta))
     
 if __name__=="__main__":
     test()

@@ -105,7 +105,7 @@ class PySCFSlaterRHF:
         which correspond to the parameter dictionary.
         """
         d={}
-        ao = self._mol.eval_gto('GTOval_sph', mycoords)
+#        ao = self._mol.eval_gto('GTOval_sph', mycoords)
         
         #use testcol() to update determinant values for each mo_coeff
         return d
@@ -122,6 +122,7 @@ def test():
     for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
         print('delta', delta, "Testing gradient",testwf.test_wf_gradient(slater,epos,delta=delta))
         print('delta', delta, "Testing laplacian", testwf.test_wf_laplacian(slater,epos,delta=delta))
+        print('delta', delta, "Testing pgradient", testwf.test_wf_pgradient(slater,epos,delta=delta))
 
 
     quit()

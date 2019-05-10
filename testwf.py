@@ -35,6 +35,36 @@ def test_wf_gradient(wf, epos, delta=1e-5):
     #print('normerror', normerror, np.log10(normerror))
     return(maxerror,normerror)
 
+
+
+def test_wf_pgradient(wf,epos,delta=1e-5):
+    pkeys=wf.parameters.keys()
+    baseval=wf.recompute(epos)
+    gradient=wf.pgradient()
+    error={}
+    #This is a little tricky; you cannot assign wf.parameters[k] to a numpy array
+    #because it breaks multiplywf (since wf.parameters are a reference to self.wf1.parameters
+    #and self.wf2.parameters, resetting the reference breaks it.)
+    #
+    for k in gradient.keys(): #We only check the gradients that are exposed.
+        nparms=np.prod(wf.parameters[k].shape)
+        indices=np.unravel_index(range(nparms),wf.parameters[k].shape)
+
+        numgrad=np.zeros((epos.shape[0],nparms))
+        for i,ind in enumerate(indices):
+            wf.parameters[k][ind]+=delta
+            plusval=wf.recompute(epos)
+            wf.parameters[k][ind]-=2*delta
+            minuval=wf.recompute(epos)
+            numgrad[:,i] = (plusval[0]*baseval[0]*np.exp(plusval[1]-baseval[1]) 
+                    - minuval[0]*baseval[0]*np.exp(minuval[1]-baseval[1]))/(2*delta)
+            wf.parameters[k][ind]+=delta
+        #print(gradient[k],numgrad)            
+        error[k]=(np.amax(np.abs(gradient[k]-numgrad)),
+                  np.mean(np.abs(gradient[k]-numgrad)))
+    return error
+            
+        
 def test_wf_laplacian(wf, epos, delta=1e-5):
     """ 
     Parameters:

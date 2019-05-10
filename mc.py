@@ -38,7 +38,6 @@ def vmc(mol,wf,coords,nsteps=10000,tstep=0.5,accumulators=None):
         accumulators={'energy':energy } 
     nconf=coords.shape[0]
     nelec=np.sum(mol.nelec)
-    
     df=[]
     wf.recompute(coords)
     for step in range(nsteps):
@@ -58,7 +57,6 @@ def vmc(mol,wf,coords,nsteps=10000,tstep=0.5,accumulators=None):
                 avg[k+m]=np.mean(res,axis=0)
         avg['acceptance']=np.mean(acc)
         df.append(avg)
-        #print(df[-1])
     return df #should return back new coordinates
     
 
@@ -70,7 +68,6 @@ def test():
     nconf=5000
     wf=PySCFSlaterRHF(nconf,mol,mf)
     coords = initial_guess(mol,nconf) 
-
     def dipole(mol,coords,wf):
         return {'vec':np.sum(coords[:,:,:],axis=1) } 
     df=vmc(mol,wf,coords,nsteps=100,accumulators={'energy':energy, 'dipole':dipole } )
@@ -78,10 +75,19 @@ def test():
     df=pd.DataFrame(df)
     df.to_csv("data.csv")
     warmup=30
-
-    
     print('mean field',mf.energy_tot(),'vmc estimation', np.mean(df['energytotal'][warmup:]),np.std(df['energytotal'][warmup:]))
     print('dipole',np.mean(np.asarray(df['dipolevec'][warmup:]),axis=0))
     
 if __name__=="__main__":
+    import cProfile, pstats, io
+    from pstats import SortKey
+    pr = cProfile.Profile()
+    pr.enable()
     test()
+    pr.disable()
+    s = io.StringIO()
+    sortby = SortKey.CUMULATIVE
+    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+    ps.print_stats()
+    print(s.getvalue())
+    

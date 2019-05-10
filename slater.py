@@ -123,6 +123,7 @@ def test():
         print('delta', delta, "Testing gradient",testwf.test_wf_gradient(slater,epos,delta=delta))
         print('delta', delta, "Testing laplacian", testwf.test_wf_laplacian(slater,epos,delta=delta))
 
+
     quit()
     #Test the internal update
     e=3

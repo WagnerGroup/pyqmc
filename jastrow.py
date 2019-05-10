@@ -119,7 +119,7 @@ class Jastrow2B:
 
     def pgradient(self):
         """Given the b sums, this is pretty trivial for the coefficient derivatives.
-        For the exponent derivatives, we will have to compute the derivative of all the b's 
+        For the derivatives of basis functions, we will have to compute the derivative of all the b's 
         and redo the sums, similar to recompute() """
         return {'coeff':self._bvalues}
 

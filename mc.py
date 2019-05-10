@@ -3,6 +3,36 @@ from pyscf import lib, gto, scf
 from slater import PySCFSlaterRHF
 from energy import energy
 
+
+def initial_guess(mol,nconfig,r=1.0):
+    """ Generate an initial guess by distributing electrons near atoms
+    proportional to their charge."""
+    nelec=np.sum(mol.nelec)
+    epos=np.zeros((nconfig,nelec,3))
+    wts=mol.atom_charges()
+    wts=wts/np.sum(wts)
+
+    ### This is not ideal since we loop over configs 
+    ### Should figure out a way to throw configurations
+    ### more efficiently.
+    for c in range(nconfig):
+        count=0
+        for s in [0,1]:
+            neach=np.floor(mol.nelec[s]*wts)
+            nassigned=np.sum(neach)
+            nleft=mol.nelec[s]*wts-neach
+            tot=int(np.sum(nleft))
+            gets=np.random.choice(len(wts),p=nleft,size=tot,replace=False) 
+            for i in gets:
+                neach[i]+=1
+            for n,coord in zip(neach,mol.atom_coords()):
+                for i in range(int(n)):
+                    epos[c,count,:]=coord+r*np.random.randn(3)
+                    count+=1
+    return epos
+    
+
+
 def vmc(mol,wf,coords,nsteps=10000,tstep=0.5,accumulators=None):
     if accumulators is None:
         accumulators={'energy':energy } 
@@ -33,22 +63,22 @@ def vmc(mol,wf,coords,nsteps=10000,tstep=0.5,accumulators=None):
     
 
 def test():
-    mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)
+    import pandas as pd
+    
+    mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)
     mf = scf.RHF(mol).run()
     nconf=5000
-    nelec=np.sum(mol.nelec)
     wf=PySCFSlaterRHF(nconf,mol,mf)
-    coords = np.random.normal(scale=1.,size=(nconf,nelec,3))
+    coords = initial_guess(mol,nconf) 
 
     def dipole(mol,coords,wf):
         return {'vec':np.sum(coords[:,:,:],axis=1) } 
-
     df=vmc(mol,wf,coords,nsteps=100,accumulators={'energy':energy, 'dipole':dipole } )
 
-    import pandas as pd
     df=pd.DataFrame(df)
     df.to_csv("data.csv")
     warmup=30
+
     
     print('mean field',mf.energy_tot(),'vmc estimation', np.mean(df['energytotal'][warmup:]),np.std(df['energytotal'][warmup:]))
     print('dipole',np.mean(np.asarray(df['dipolevec'][warmup:]),axis=0))

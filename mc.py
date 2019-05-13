@@ -80,14 +80,12 @@ def test():
     
 if __name__=="__main__":
     import cProfile, pstats, io
-    from pstats import SortKey
+    from pstats import Stats
+    #from pstats import SortKey
     pr = cProfile.Profile()
     pr.enable()
     test()
     pr.disable()
-    s = io.StringIO()
-    sortby = SortKey.CUMULATIVE
-    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-    ps.print_stats()
-    print(s.getvalue())
+    p=Stats(pr)
+    print(p.sort_stats('cumulative').print_stats())
     

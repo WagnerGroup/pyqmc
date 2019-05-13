@@ -1,4 +1,6 @@
 import numpy as np
+from collections import ChainMap
+
 
 class MultiplyWF:
     """Multiplies two wave functions """
@@ -6,12 +8,11 @@ class MultiplyWF:
     def __init__(self,nconfig,wf1,wf2):
         self.wf1=wf1
         self.wf2=wf2
-        self.parameters={}
-        for k in wf1.parameters:
-            self.parameters['wf1'+k]=self.wf1.parameters[k]
-        for k in wf2.parameters:
-            self.parameters['wf2'+k]=self.wf2.parameters[k]
-
+        #Using a ChainMap here since it makes things easy.
+        #But there is a possibility that names collide here. 
+        #one option is to use some name-mangling scheme for parameters
+        #within each wave function
+        self.parameters=ChainMap(self.wf1.parameters,self.wf2.parameters)
 
         
     def recompute(self,epos):
@@ -49,13 +50,7 @@ class MultiplyWF:
 
     def pgradient(self):
         """Here we need to combine the results"""
-        g={}
-
-        for k,x in self.wf1.pgradient().items():
-            g['wf1'+k]=x
-        for k,x in self.wf2.pgradient().items():
-            g['wf2'+k]=x
-        return g
+        return ChainMap(self.wf1.pgradient(),self.wf2.pgradient())
 
 
 

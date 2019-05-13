@@ -53,12 +53,12 @@ class Jastrow2B:
         u=np.einsum("ij,j->i",self._bvalues,self.parameters['coeff'])
         return (1,u)
 
-    def updateinternals(self,e,configs,mask=None):
+    def updateinternals(self,e,epos,mask=None):
         """  """
         #update b and c sums. This overlaps with testvalue()
         if mask is None:
-            mask=[True]*self._configscurrent.shape[0]
-        self._configscurrent[mask,e,:]=configs[mask,e,:]
+            mask=[True]*self._eposcurrent.shape[0]
+        self._configscurrent[mask,e,:]=epos[mask,:]
 
     def value(self): 
         """  """

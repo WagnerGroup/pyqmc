@@ -2,24 +2,24 @@ import numpy as np
 from func3d import GaussianFunction
 
 
-def eedist(epos):
+def eedist(configs):
     """returns a list of electron-electron distances within a collection """
-    ne=epos.shape[1]
-    d=np.zeros((epos.shape[0],int(ne*(ne-1)/2),3))
+    ne=configs.shape[1]
+    d=np.zeros((configs.shape[0],int(ne*(ne-1)/2),3))
     c=0
     for i in range(ne):
         for j in range(i+1,ne):
-            d[:,c,:]=epos[:,j,:]-epos[:,i,:]
+            d[:,c,:]=configs[:,j,:]-configs[:,i,:]
             c+=1
     return d
     
 
-def eedist_i(epos,vec):
+def eedist_i(configs,vec):
     """returns a list of electron-electron distances from an electron at position 'vec'
-    epos will most likely be [nconfig,electron,dimension], and vec will be [nconfig,dimension]
+    configs will most likely be [nconfig,electron,dimension], and vec will be [nconfig,dimension]
     """
-    ne=epos.shape[1]
-    return vec[:,np.newaxis,:]-epos
+    ne=configs.shape[1]
+    return vec[:,np.newaxis,:]-configs
     
     
 
@@ -36,29 +36,29 @@ class Jastrow2B:
         self.basis=[GaussianFunction(0.2*2**n) for n in range(1,nexpand)]
         self.parameters['coeff']=np.zeros(nexpand)
         self._bvalues=np.zeros((nconfig,nexpand))
-        self._eposcurrent=np.zeros((nconfig,self._nelec,3))
+        self._configscurrent=np.zeros((nconfig,self._nelec,3))
 
-    def recompute(self,epos):
+    def recompute(self,configs):
         """ """
         u=0.0
-        self._eposcurrent=epos.copy()
+        self._configscurrent=configs.copy()
         #We will save the b sums over i,j in _bvalues
         
         #package the electron-electron distances into a 1d array
-        d=eedist(epos)
+        d=eedist(configs)
         d=d.reshape((-1,3))
 
         for i,b in enumerate(self.basis):
-            self._bvalues[:,i]=np.sum(b.value(d).reshape( (epos.shape[0],-1) ),axis=1) 
+            self._bvalues[:,i]=np.sum(b.value(d).reshape( (configs.shape[0],-1) ),axis=1) 
         u=np.einsum("ij,j->i",self._bvalues,self.parameters['coeff'])
         return (1,u)
 
-    def updateinternals(self,e,epos,mask=None):
+    def updateinternals(self,e,configs,mask=None):
         """  """
         #update b and c sums. This overlaps with testvalue()
         if mask is None:
-            mask=[True]*self._eposcurrent.shape[0]
-        self._eposcurrent[mask,e,:]=epos[mask,e,:]
+            mask=[True]*self._configscurrent.shape[0]
+        self._configscurrent[mask,e,:]=configs[mask,e,:]
 
     def value(self): 
         """  """
@@ -72,8 +72,8 @@ class Jastrow2B:
         Note that we need to compute distances between electron position given and the current electron distances.
         We will need this for laplacian() as well"""
         nconf=epos.shape[0]
-        ne=self._eposcurrent.shape[1]
-        dnew=eedist_i(self._eposcurrent,epos)
+        ne=self._configscurrent.shape[1]
+        dnew=eedist_i(self._configscurrent,epos)
 
         mask=[True]*ne
         mask[e]=False
@@ -89,8 +89,8 @@ class Jastrow2B:
     def laplacian(self,e,epos):
         """ """
         nconf=epos.shape[0]
-        ne=self._eposcurrent.shape[1]
-        dnew=eedist_i(self._eposcurrent,epos)
+        ne=self._configscurrent.shape[1]
+        dnew=eedist_i(self._configscurrent,epos)
         mask=[True]*ne
         mask[e]=False
         dnew=dnew[:,mask,:]
@@ -108,8 +108,8 @@ class Jastrow2B:
         and work out the updated value. This allows us to save a lot of memory
         """
         nconf=epos.shape[0]
-        dnew=eedist_i(self._eposcurrent,epos).reshape((-1,3))
-        dold=eedist_i(self._eposcurrent,self._eposcurrent[:,e,:]).reshape((-1,3))
+        dnew=eedist_i(self._configscurrent,epos).reshape((-1,3))
+        dold=eedist_i(self._configscurrent,self._configscurrent[:,e,:]).reshape((-1,3))
         delta=np.zeros(nconf)
         for c,b in zip(self.parameters['coeff'],self.basis):
             delta+=c*np.sum((b.value(dnew)-b.value(dold)).reshape(nconf,-1),axis=1)
@@ -123,19 +123,20 @@ class Jastrow2B:
 
 def test(): 
     from pyscf import lib, gto, scf
+    np.random.seed(10)
     
     mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
     nconf=20
-    epos=np.random.randn(nconf,np.sum(mol.nelec),3)
+    configs=np.random.randn(nconf,np.sum(mol.nelec),3)
     
     jastrow=Jastrow2B(nconf,mol)
     jastrow.parameters['coeff']=np.random.random(jastrow.parameters['coeff'].shape)
     print('coefficients',jastrow.parameters['coeff'])
     import testwf
     for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
-        print('delta', delta, "Testing gradient",testwf.test_wf_gradient(jastrow,epos,delta=delta))
-        print('delta', delta, "Testing laplacian", testwf.test_wf_laplacian(jastrow,epos,delta=delta))
-        print('delta', delta, "Testing pgradient", testwf.test_wf_pgradient(jastrow,epos,delta=delta))
+        print('delta', delta, "Testing gradient",testwf.test_wf_gradient(jastrow,configs,delta=delta))
+        print('delta', delta, "Testing laplacian", testwf.test_wf_laplacian(jastrow,configs,delta=delta))
+        print('delta', delta, "Testing pgradient", testwf.test_wf_pgradient(jastrow,configs,delta=delta))
     
 if __name__=="__main__":
     test()

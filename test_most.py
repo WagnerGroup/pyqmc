@@ -49,7 +49,7 @@ def test_vmc():
     wf=PySCFSlaterRHF(nconf,mol,mf)
     coords = initial_guess(mol,nconf) 
     nsteps=100
-    df=vmc(mol,wf,coords,nsteps=nsteps,accumulators={'energy':energy} )
+    df,coords=vmc(mol,wf,coords,nsteps=nsteps,accumulators={'energy':energy} )
 
     df=pd.DataFrame(df)
     df.to_csv("data.csv")

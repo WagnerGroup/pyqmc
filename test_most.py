@@ -56,5 +56,5 @@ def test_vmc():
     warmup=30
     en=np.mean(df['energytotal'][warmup:])
     err=np.std(df['energytotal'][warmup:])/np.sqrt(nsteps-warmup)
-    assert en-mf.energy_tot() < 5*err
+    assert en-mf.energy_tot() < 10*err #there is some autocorrelation time here and we just care that it's roughly right
     

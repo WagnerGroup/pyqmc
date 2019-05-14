@@ -57,7 +57,7 @@ class Jastrow2B:
         """  """
         #update b and c sums. This overlaps with testvalue()
         if mask is None:
-            mask=[True]*self._eposcurrent.shape[0]
+            mask=[True]*self._configscurrent.shape[0]
         self._configscurrent[mask,e,:]=epos[mask,:]
 
     def value(self): 

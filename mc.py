@@ -22,7 +22,7 @@ def initial_guess(mol,nconfig,r=1.0):
             nassigned=np.sum(neach)
             nleft=mol.nelec[s]*wts-neach
             tot=int(np.sum(nleft))
-            gets=np.random.choice(len(wts),p=nleft,size=tot,replace=False) 
+            gets=np.random.choice(len(wts),p=nleft/tot,size=tot,replace=False) 
             for i in gets:
                 neach[i]+=1
             for n,coord in zip(neach,mol.atom_coords()):
@@ -49,7 +49,7 @@ def initial_guess_vectorize(mol,nconfig,r=1.0):
         nassigned=np.sum(neach) # number of electrons assigned
         totleft=int(mol.nelec[s]-nassigned) # number of electrons not yet assigned
         bins=np.cumsum(nleft)/totleft
-        inds = np.digitize(np.random.random((nconfig,totleft)), bins)
+        inds = np.argpartition(np.random.random((nconfig,len(wts))), totleft, axis=1)[:,:totleft]
         ind0=s*mol.nelec[0]
         epos[:,ind0:ind0+nassigned,:] = np.repeat(mol.atom_coords(),neach,axis=0)[np.newaxis] # assign core electrons
         epos[:,ind0+nassigned:ind0+mol.nelec[s],:] = mol.atom_coords()[inds] # assign remaining electrons
@@ -101,22 +101,31 @@ def test():
     print('mean field',mf.energy_tot(),'vmc estimation', np.mean(df['energytotal'][warmup:]),np.std(df['energytotal'][warmup:]))
     print('dipole',np.mean(np.asarray(df['dipolevec'][warmup:]),axis=0))
     
-def test_init_guess_timing():
+def test_compare_init_guess():
     import time
-    mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)
-    mf = scf.RHF(mol).run()
-    nconf=5000
-    wf=PySCFSlaterRHF(nconf,mol,mf)
-    for j in range(5):
-        for i,func in enumerate([initial_guess, initial_guess_vectorize]):
-            start = time.time()
-            coords = func(mol,nconf) 
-            assert np.isnan(coords).sum()==0
-            assert np.isinf(coords).sum()==0
-            print(time.time()-start, coords.shape)
+    mol1 = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=2)
+    mol2 = gto.M(atom=';'.join(['H 0. 0. {0}'.format(x) for x in np.arange(10)*3]), basis='cc-pvtz',unit='bohr',verbose=2)
+    for mol in [mol1, mol2]:
+        print(mol.atom)
+        mf = scf.RHF(mol).run()
+        nconf=5000
+        wf=PySCFSlaterRHF(nconf,mol,mf)
+        for i,func in enumerate([initial_guess_vectorize, initial_guess]):
+            for j in range(5):
+                start = time.time()
+                configs = func(mol,nconf) 
+                assert np.isnan(configs).sum()==0
+                assert np.isinf(configs).sum()==0
+                logval = wf.recompute(configs)[1]
+                print(i, 'min', np.amin(logval), 'max', np.amax(logval), 'median', np.median(logval), 'mean', np.mean(logval))
+                hist= np.histogram(logval, range=(-65,-10), bins=14)
+                print('hist', hist[0])
+                #print('bins', np.round(hist[1],1))
+            print(time.time()-start, configs.shape)
     
 
 if __name__=="__main__":
+    test_compare_init_guess(); quit()
     import cProfile, pstats, io
     from pstats import Stats
     pr = cProfile.Profile()

@@ -28,10 +28,10 @@ class PySCFSlaterRHF:
         self._movals=np.zeros((nconfig,2,self._nup,nmo)) # row is electron, column is mo
         self._inverse=np.zeros((nconfig,2,self._nup,self._nup))
             
-    def recompute(self,epos):
+    def recompute(self,configs):
         """This computes the value from scratch. Returns the logarithm of the wave function as
         (phase,logdet). If the wf is real, phase will be +/- 1."""
-        mycoords=epos.reshape((epos.shape[0]*epos.shape[1],epos.shape[2]))
+        mycoords=configs.reshape((configs.shape[0]*configs.shape[1],configs.shape[2]))
         ao = self._mol.eval_gto('GTOval_sph', mycoords)
         mo = ao.dot(self.parameters['mo_coeff'])
         self._movals=mo.reshape((self._nconfig,2,self._nup,self._nup))
@@ -116,25 +116,25 @@ def test():
     nconf=10
     nelec=np.sum(mol.nelec)
     slater=PySCFSlaterRHF(nconf,mol,mf)
-    epos=np.random.randn(nconf,nelec,3)
+    configs=np.random.randn(nconf,nelec,3)
     import testwf
     for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
-        print('delta', delta, "Testing gradient",testwf.test_wf_gradient(slater,epos,delta=delta))
-        print('delta', delta, "Testing laplacian", testwf.test_wf_laplacian(slater,epos,delta=delta))
-        print('delta', delta, "Testing pgradient", testwf.test_wf_pgradient(slater,epos,delta=delta))
+        print('delta', delta, "Testing gradient",testwf.test_wf_gradient(slater,configs,delta=delta))
+        print('delta', delta, "Testing laplacian", testwf.test_wf_laplacian(slater,configs,delta=delta))
+        print('delta', delta, "Testing pgradient", testwf.test_wf_pgradient(slater,configs,delta=delta))
 
 
-    print("testing internals:", testwf.test_updateinternals(slater,epos))
+    print("testing internals:", testwf.test_updateinternals(slater,configs))
     quit()
     #Test the internal update
     e=3
-    slater.recompute(epos)
+    slater.recompute(configs)
     inv=slater._inverse.copy()
-    eposnew=epos.copy()
-    eposnew[:,e,:]+=0.1
-    slater.updateinternals(e,eposnew[:,e,:])
+    configsnew=configs.copy()
+    configsnew[:,e,:]+=0.1
+    slater.updateinternals(e,configsnew[:,e,:])
     inv_update=slater._inverse.copy()
-    slater.recompute(eposnew)
+    slater.recompute(configsnew)
     inv_recalc=slater._inverse.copy()
     print(inv_recalc-inv_update)
 

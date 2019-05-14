@@ -80,7 +80,7 @@ def vmc(mol,wf,coords,nsteps=10000,tstep=0.5,accumulators=None):
                 avg[k+m]=np.mean(res,axis=0)
         avg['acceptance']=np.mean(acc)
         df.append(avg)
-    return df #should return back new coordinates
+    return df, coords 
     
 
 def test():
@@ -93,7 +93,7 @@ def test():
     coords = initial_guess(mol,nconf) 
     def dipole(mol,coords,wf):
         return {'vec':np.sum(coords[:,:,:],axis=1) } 
-    df=vmc(mol,wf,coords,nsteps=100,accumulators={'energy':energy, 'dipole':dipole } )
+    df,coords=vmc(mol,wf,coords,nsteps=100,accumulators={'energy':energy, 'dipole':dipole } )
 
     df=pd.DataFrame(df)
     df.to_csv("data.csv")

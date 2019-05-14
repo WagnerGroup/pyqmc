@@ -52,41 +52,30 @@ def sample_onebody(mol,orb_coeff,epos,tstep=2.0):
   else:
     return 0,configs[0]
 
-def test_sample_onebody(mol,orb_coeff,mf):
+def test_sample_onebody(mol,orb_coeff,mf,nsample=int(1e4)):
   ''' Test the one-body sampling by sampling the integral of f(r).'''
-  # Old grid integration.
-  #ngrid = 200
-  #print(orb_coeff.shape)
-  #print("Generating samples")
-  #lims = (-15,30)
-  #samples = np.array([[i,j,k] for i in np.linspace(lims[0],lims[1],ngrid) for j in np.linspace(lims[0],lims[1],ngrid) for k in np.linspace(lims[0],lims[1],ngrid)])
-  #norm = ((lims[1]-lims[0])/ngrid)**3
 
-  nsample = 80000
-  nwarm = nsample//3
+  nwarm = nsample//4
+  orb_coeff = mf.mo_coeff
   #samples = [sample_onebody(mol,orb_coeff,configs) for sample in range(nsample)]
+
+  print("Generating samples.")
   samples = np.zeros((nsample+nwarm,3))
   accept=0
   for sidx in range(1,nsample+nwarm):
     did_accept,samples[sidx] = sample_onebody(mol,orb_coeff,samples[sidx-1])
-    accept += did_accept
-  print("accept ratio",accept/(nsample+nwarm-1))
+    if sidx > nwarm: accept += did_accept
+  print("accept ratio",accept/(nsample))
   samples = samples[nwarm:]
-  print(samples)
 
-  print("Performing integration")
-  print("samples shape",samples.shape)
+  print("Performing integration.")
   ao = mol.eval_gto('GTOval_sph',samples)
-  print("ao shape",ao.shape)
+  morb = ao.dot(mf.mo_coeff)
   borb = ao.dot(orb_coeff)
-  print("borb shape",borb.shape)
-  #orb_ovlp = borb.T@borb*norm
   denom = (borb**2).sum(axis=1)
-  orb_ovlp = borb.T@(borb*borb.shape[1]/denom[:,np.newaxis])/samples.shape[0]
-  print("overlap shape",orb_ovlp.shape)
-  print("Max error",abs(orb_ovlp - np.eye(*orb_ovlp.shape)).max())
-  print("Trace",orb_ovlp.trace())
-
+  orb_ovlp = morb.T@(morb*borb.shape[1]/denom[:,np.newaxis])/samples.shape[0]
+  print("Mean of error",abs(orb_ovlp - np.eye(*orb_ovlp.shape)).mean())
+  print("trace,norb",orb_ovlp.trace(),orb_coeff.shape[1])
 
 def test():
   from pyscf import gto,scf,lo
@@ -110,7 +99,9 @@ def test():
   #print(mfobdm.diagonal().round(2))
 
   ### VMC obdm run.
-  test_sample_onebody(mol,lowdin,mf)
+  test_sample_onebody(mol,lowdin,mf,nsample=int(1e4))
+  test_sample_onebody(mol,lowdin,mf,nsample=int(4e4))
+  test_sample_onebody(mol,lowdin,mf,nsample=int(1e5))
 
 if __name__=="__main__":
   test()

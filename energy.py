@@ -3,18 +3,18 @@ import scipy
 import scipy.spatial
 
 
-def ee_energy(epos):
-    ne=epos.shape[1]
-    ee=np.zeros(epos.shape[0])
+def ee_energy(configs):
+    ne=configs.shape[1]
+    ee=np.zeros(configs.shape[0])
     for i in range(ne):
         for j in range(i+1,ne):
-            ee+=1./np.sqrt(np.sum((epos[:,i,:]-epos[:,j,:])**2,axis=1))
+            ee+=1./np.sqrt(np.sum((configs[:,i,:]-configs[:,j,:])**2,axis=1))
     return ee
 
-def ei_energy(mol,epos):
+def ei_energy(mol,configs):
     ei=0.0
     for c,coord in zip(mol.atom_charges(),mol.atom_coords()):
-        delta=epos-coord[np.newaxis,np.newaxis,:]
+        delta=configs-coord[np.newaxis,np.newaxis,:]
         deltar=np.sqrt(np.sum(delta**2,axis=2))
         ei+=-c*np.sum(1./deltar,axis=1)
     return ei
@@ -28,21 +28,20 @@ def ii_energy(mol):
     ii=np.sum((np.outer(c,c)/r)[ind])
     return ii
 
-def ecp(mol,epos,wf):
+def ecp(mol,configs,wf):
     
     pass
 
-def energy(mol,epos,wf):
-    ee=ee_energy(epos)
-    ei=ei_energy(mol,epos)
+def energy(mol,configs,wf):
+    ee=ee_energy(configs)
+    ei=ei_energy(mol,configs)
     ii=ii_energy(mol)
-    nconf=epos.shape[0]
+    nconf=configs.shape[0]
     ke=np.zeros(nconf)
-    nelec=epos.shape[1]
+    nelec=configs.shape[1]
     for e in range(nelec):
-        ke+=-0.5*wf.laplacian(e,epos[:,e,:])
+        ke+=-0.5*wf.laplacian(e,configs[:,e,:])
     return {'ke':ke,
             'ee':ee,
             'ei':ei,
             'total':ke+ee+ei+ii } 
-

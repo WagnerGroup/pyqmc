@@ -6,15 +6,18 @@ import pytest
 def test_wfs():
     from pyscf import lib, gto, scf
     from slater import PySCFSlaterRHF
+    from slateruhf import PySCFSlaterUHF
     from jastrow import Jastrow2B
     from multiplywf import MultiplyWF
     mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
     mf = scf.RHF(mol).run()
+    mf_uhf = scf.UHF(mol).run()
     epsilon=1e-5
     nconf=10
     epos=np.random.randn(nconf,4,3)
     for wf in [PySCFSlaterRHF(nconf,mol,mf),Jastrow2B(nconf,mol),
-            MultiplyWF(nconf,PySCFSlaterRHF(nconf,mol,mf),Jastrow2B(nconf,mol)) ]:
+               MultiplyWF(nconf,PySCFSlaterRHF(nconf,mol,mf),Jastrow2B(nconf,mol)), 
+               PySCFSlaterUHF(nconf,mol,mf_uhf) ]:
         assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon 
         assert testwf.test_wf_laplacian(wf, epos, delta=1e-5)[0] < epsilon 
         assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon 
@@ -42,19 +45,26 @@ def test_vmc():
     from energy import energy
     
     from slater import PySCFSlaterRHF
+    from slateruhf import PySCFSlaterUHF
     
-    mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=1)
-    mf = scf.RHF(mol).run()
     nconf=5000
-    wf=PySCFSlaterRHF(nconf,mol,mf)
-    coords = initial_guess(mol,nconf) 
-    nsteps=100
-    df=vmc(mol,wf,coords,nsteps=nsteps,accumulators={'energy':energy} )
+    mol   = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=1)
 
-    df=pd.DataFrame(df)
-    df.to_csv("data.csv")
+    mf    =scf.RHF(mol).run()
+    mf_uhf=scf.UHF(mol).run()
+    nsteps=100
     warmup=30
-    en=np.mean(df['energytotal'][warmup:])
-    err=np.std(df['energytotal'][warmup:])/np.sqrt(nsteps-warmup)
-    assert en-mf.energy_tot() < 5*err
-    
+
+    for wf,mf in [(PySCFSlaterRHF(nconf,mol,scf.RHF(mol).run()), scf.RHF(mol).run()) , 
+                  (PySCFSlaterUHF(nconf,mol,scf.UHF(mol).run()),scf.UHF(mol).run())]:
+       
+        coords = initial_guess(mol,nconf) 
+        df,coords=vmc(mol,wf,coords,nsteps=nsteps,accumulators={'energy':energy} ) 
+
+        df=pd.DataFrame(df)
+        df.to_csv("data.csv")
+        en=np.mean(df['energytotal'][warmup:])
+        err=np.std(df['energytotal'][warmup:])/np.sqrt(nsteps-warmup)
+        assert en-mf.energy_tot() < 10*err
+
+

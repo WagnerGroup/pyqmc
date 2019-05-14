@@ -25,9 +25,9 @@ class GaussianFunction:
         alpha=self.parameters['exponent']
         return (4*alpha*alpha*x*x-2*alpha)*v[:,np.newaxis]
 
-
     def pgradient(self,x):
         """ parameter gradient """
+        
         
 class PadeFunction:
     """
@@ -74,7 +74,7 @@ class PadeFunction:
         a = self.parameters['alphak']* r
         #lap = 6*self.parameters['alphak']**2 * (1+a)**(-4) #scalar formula
         lap = 2*self.parameters['alphak']**2 * (1+a)**(-3) \
-              *(1 - 3*a/(1+a)*(rvec/r)**2)
+              *(1 - 3*a/(1+a)*(rvec/r)**2) # Check! Shouldn't it be rvec**2/r instead of (rvec/r)**2
         return lap
 
     def pgradient(self, rvec):
@@ -90,6 +90,85 @@ class PadeFunction:
         akderiv = 2*a/(1+a)**3 * r
         return akderiv
 
+    
+class ExpCuspFunction:
+    """
+    :math:`b(r) = \frac{c p(r/r_{cut})}{1+\gamma*p(r/r_{cut})}` 
+    where 
+    :math:`p(y) = y - y^2 + y^3/3`
+    """
+    def __init__(self, c, gamma, rcut):
+        self.parameters={}
+        self.parameters['c'] = c
+        self.parameters['gamma'] = gamma
+        self.parameters['rcut'] = rcut
+
+    def value(self, rvec):
+        """
+        Parameters:
+          rvec: (nconf,3) vector
+        Returns:
+          func: c*p(r/rcut)/(1+gamma*p(r/rcut))
+        """
+        r = np.linalg.norm(rvec, axis=-1)
+        y = r/self.parameters['rcut']
+        p = y - y**2 + y**3/3
+        return self.parameters['c'] * p / (1+self.parameters['gamma']*p)
+        
+    def gradient(self, rvec):
+        """
+        Parameters:
+          rvec: (nconf,3) vector
+        Returns:
+          grad: has same dimensions as rvec 
+        """
+        r = np.linalg.norm(rvec, axis=-1, keepdims=True)
+        y = r/self.parameters['rcut']
+        dydr = 1/self.parameters['rcut']
+        p = y - y**2 + y**3/3
+        dpdy = 1 - 2*y + y**2
+        grad = self.parameters['c']/(1+self.parameters['gamma']*p)**2 * dydr * dpdy / r
+        return rvec*grad
+
+    def laplacian(self, rvec):
+        """
+        Parameters:
+          rvec: (nconf,3) vector
+        Returns:
+          lapl: has same dimensions as rvec, because returns components of laplacian d^2/dx_i^2 separately
+        """
+        r = np.linalg.norm(rvec, axis=-1, keepdims=True)
+        y = r/self.parameters['rcut']
+        dydr = 1/self.parameters['rcut']
+        p = y - y**2 + y**3/3
+        dpdy = 1 - 2*y + y**2
+        dbdp = self.parameters['c']/(1+self.parameters['gamma']*p)**2
+        dpdy2 = -2/self.parameters['rcut'] + 2 * r / self.parameters['rcut']**2
+        dbdp2 = - 2 * self.parameters['c'] * self.parameters['gamma'] / (1 + self.parameters['gamma']*p)**3
+        lap0 = dbdp * dydr * dpdy / r
+        lap1 = ( dydr * ( dpdy2/r**2  - dpdy/r**3 ) ) * dbdp + dydr**2 * dpdy**2 * dbdp2 / r**2
+        return lap0 + lap1*(rvec**2)
+
+    def pgradient(self, rvec):
+        """ Returns gradient of self.value with respect all parameters
+        Parameters:
+          rvec: (nconf,3) vector
+        Returns:
+          paramderivs: d/dc, d/drcut, d/dgamma
+        """
+        r = np.linalg.norm(rvec, axis=-1)
+        y = r/self.parameters['rcut']
+        p = y - y**2 + y**3/3
+        dydrc = -r/self.parameters['rcut']**2
+        dpdy = 1 - 2*y + y**2
+        dbdp = c/(1+self.parameters['gamma']*p)**2
+        c_deriv = p / (1+self.parameters['gamma']*p)
+        rcut_deriv = dydrc * dpdy * dbdp
+        gamma_deriv = - self.parameters['c'] * p**2 / (1+self.parameters['gamma']*p)**2
+        return c_deriv, rcut_deriv, gamma_deriv
+
+
+    
 def test_func3d_gradient(bf, delta=1e-5):
     rvec = np.random.randn(10,3)
     grad = bf.gradient(rvec)
@@ -121,7 +200,7 @@ def test_func3d_laplacian(bf, delta=1e-5):
     return (maxerror,normerror)
 
 def test(): 
-    test_functions = {'Pade':PadeFunction(0.2), 'Gaussian':GaussianFunction(0.4)}
+    test_functions = {'Pade':PadeFunction(0.2), 'Gaussian':GaussianFunction(0.4), 'ExpCusp':ExpCuspFunction(0.3,0.4,0.6)}
     for name, func in test_functions.items():
         for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
             print(name, 'delta', delta, "Testing gradient", test_func3d_gradient(func,delta=delta))

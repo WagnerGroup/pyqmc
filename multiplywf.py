@@ -20,9 +20,9 @@ class MultiplyWF:
         v2=self.wf2.recompute(configs)
         return v1[0]*v2[0],v1[1]+v2[1]
 
-    def updateinternals(self,e,configs,mask=None):
-        self.wf1.updateinternals(e,configs,mask)
-        self.wf2.updateinternals(e,configs,mask)
+    def updateinternals(self,e,epos,mask=None):
+        self.wf1.updateinternals(e,epos,mask)
+        self.wf2.updateinternals(e,epos,mask)
 
 
     def value(self):

@@ -15,9 +15,9 @@ class MultiplyWF:
         self.parameters=ChainMap(self.wf1.parameters,self.wf2.parameters)
 
         
-    def recompute(self,epos):
-        v1=self.wf1.recompute(epos)
-        v2=self.wf2.recompute(epos)
+    def recompute(self,configs):
+        v1=self.wf1.recompute(configs)
+        v2=self.wf2.recompute(configs)
         return v1[0]*v2[0],v1[1]+v2[1]
 
     def updateinternals(self,e,epos,mask=None):
@@ -67,13 +67,13 @@ def test():
     slater=PySCFSlaterRHF(nconf,mol,mf)
     jastrow=Jastrow2B(nconf,mol)
     jastrow.parameters['coeff']=np.random.random(jastrow.parameters['coeff'].shape)
-    epos=np.random.randn(nconf,4,3)
+    configs=np.random.randn(nconf,4,3)
     wf=MultiplyWF(nconf,slater,jastrow)
     import testwf
     for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
-        print('delta', delta, "Testing gradient",testwf.test_wf_gradient(wf,epos,delta=delta))
-        print('delta', delta, "Testing laplacian", testwf.test_wf_laplacian(wf,epos,delta=delta))
-        print('delta', delta, "Testing pgradient", testwf.test_wf_pgradient(wf,epos,delta=delta))
+        print('delta', delta, "Testing gradient",testwf.test_wf_gradient(wf,configs,delta=delta))
+        print('delta', delta, "Testing laplacian", testwf.test_wf_laplacian(wf,configs,delta=delta))
+        print('delta', delta, "Testing pgradient", testwf.test_wf_pgradient(wf,configs,delta=delta))
     
 if __name__=="__main__":
     test()

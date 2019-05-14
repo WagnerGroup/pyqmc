@@ -8,7 +8,7 @@ def initial_guess(mol,nconfig,r=1.0):
     """ Generate an initial guess by distributing electrons near atoms
     proportional to their charge."""
     nelec=np.sum(mol.nelec)
-    epos=np.zeros((nconfig,nelec,3))
+    configs=np.zeros((nconfig,nelec,3))
     wts=mol.atom_charges()
     wts=wts/np.sum(wts)
 
@@ -27,9 +27,9 @@ def initial_guess(mol,nconfig,r=1.0):
                 neach[i]+=1
             for n,coord in zip(neach,mol.atom_coords()):
                 for i in range(int(n)):
-                    epos[c,count,:]=coord+r*np.random.randn(3)
+                    configs[c,count,:]=coord+r*np.random.randn(3)
                     count+=1
-    return epos
+    return configs
     
 def initial_guess_vectorize(mol,nconfig,r=1.0):
     """ Generate an initial guess by distributing electrons near atoms

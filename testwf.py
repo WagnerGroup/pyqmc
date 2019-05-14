@@ -1,5 +1,39 @@
 import numpy as np
 
+def test_updateinternals(wf,configs):
+    """
+    Parameters:
+    wf: a wave function object to be tested
+    configs: nconf x nelec x 3 position array
+
+    Returns: 
+    tuple which 
+
+    """
+
+    ne=configs.shape[1]
+    delta=1e-2
+    updatevstest=np.zeros((ne,configs.shape[0]))
+    recomputevstest=np.zeros((ne,configs.shape[0]))
+    recomputevsupdate=np.zeros((ne,configs.shape[0]))
+    for e in range(ne):
+        val1=wf.recompute(configs)
+        configs[:,e,:]+=delta
+        ratio=wf.testvalue(e,configs[:,e,:])
+        wf.updateinternals(e,configs[:,e,:])
+        update=wf.value()
+        recompute=wf.recompute(configs)
+        updatevstest[e,:]=update[0]/val1[0]*np.exp(update[1]-val1[1])-ratio
+        recomputevsupdate[e,:]=update[0]/val1[0]*np.exp(update[1]-val1[1])\
+                               -recompute[0]/val1[0]*np.exp(recompute[1]-val1[1])
+        recomputevstest[e,:]=recompute[0]/val1[0]*np.exp(recompute[1]-val1[1])-ratio
+
+        
+    return {'updatevstest':np.max(updatevstest),
+            'recomputevstest':np.max(recomputevstest),
+            'recomputevsupdate':np.max(recomputevsupdate)} 
+
+
 def test_wf_gradient(wf, epos, delta=1e-5):
     """ 
     Parameters:

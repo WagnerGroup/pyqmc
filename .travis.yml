@@ -1,0 +1,7 @@
+language: python
+matrix:
+  - python: 3.7
+before_install: 
+  - sudo apt-get install -y git cmake make build-essential g++ liblapack-dev liblapack-pic liblapack3  gfortran 
+  - pip install numpy scipy matplotlib pandas h5py pytest pyscf
+script: pytest

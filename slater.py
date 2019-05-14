@@ -51,7 +51,6 @@ class PySCFSlaterRHF:
         mo=ao.dot(self.parameters['mo_coeff'])
         self._movals[:,s,eeff,:]=mo
         ratio,self._inverse[mask,s,:,:]=sherman_morrison_row(eeff,self._inverse[mask,s,:,:],mo[mask,:])
-        #should update the value of the wave function
         self._updateval(ratio,s,mask)
 
     ### not state-changing functions
@@ -63,7 +62,7 @@ class PySCFSlaterRHF:
 
     def _updateval(self,ratio,s,mask):
         self.dets[0][mask,s]*=np.sign(ratio) #will not work for complex!
-        self.dets[1][mask,s]+=np.abs(ratio)
+        self.dets[1][mask,s]+=np.log(np.abs(ratio))
     
     def _testrow(self,e,vec):
         """vec is a nconfig,nmo vector which replaces row e"""
@@ -125,6 +124,7 @@ def test():
         print('delta', delta, "Testing pgradient", testwf.test_wf_pgradient(slater,epos,delta=delta))
 
 
+    print("testing internals:", testwf.test_updateinternals(slater,epos))
     quit()
     #Test the internal update
     e=3

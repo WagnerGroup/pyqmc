@@ -111,7 +111,9 @@ def test_init_guess_timing():
         for i,func in enumerate([initial_guess, initial_guess_vectorize]):
             start = time.time()
             coords = func(mol,nconf) 
-            print(time.time()-start)
+            assert np.isnan(coords).sum()==0
+            assert np.isinf(coords).sum()==0
+            print(time.time()-start, coords.shape)
     
 
 if __name__=="__main__":

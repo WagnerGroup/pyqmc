@@ -1,6 +1,19 @@
 import numpy as np
 """ 
-Collection of 3d functions
+Collection of 3d function objects. Each has a dictionary parameters, which corresponds
+to any variational parameters the funtion has.
+
+They should implement the following functions, all of which take input value x.
+x should be of dimension (nconf,3).
+
+value(x):
+    returns f(x)
+gradient(x)
+    returns grad f(x) (nconf,3)
+laplacian(x)
+    returns diagonals of Hessian (nconf,3)
+pgradient(x)
+    returns dp f(x) as a dictionary corresponding to the keys of self.parameters
 """
 
 class GaussianFunction:

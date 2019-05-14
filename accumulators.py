@@ -15,8 +15,8 @@ class PGradAccumulator:
     self.EnergyAccumulator = EnergyAccumulator
 
   def __call__(configs,wf):
-    d = {}
-    energy = EnergyAccumulator(configs,wf)['total']
+    d=EnergyAccumulator(configs,wf)
+    energy = d['total']
     pgrad = wf.pgradient()
     for k,grad in pgrad.items():
         d['dpH_'+k] = energy*grad

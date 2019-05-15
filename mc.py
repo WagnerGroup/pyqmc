@@ -96,7 +96,11 @@ def test():
     def dipole(mol,coords,wf):
         return {'vec':np.sum(coords[:,:,:],axis=1) } 
 
+    import time
+    tstart=time.process_time()
     df,coords=vmc(mol,wf,coords,nsteps=100,accumulators={'energy':energy, 'dipole':dipole } )
+    tend=time.process_time()
+    print("VMC took",tend-tstart,"seconds")
 
     df=pd.DataFrame(df)
     df.to_csv("data.csv")
@@ -131,12 +135,12 @@ def test_compare_init_guess():
 
 if __name__=="__main__":
     #test_compare_init_guess();
-    import cProfile, pstats, io
-    from pstats import Stats
-    pr = cProfile.Profile()
-    pr.enable()
+    #import cProfile, pstats, io
+    #from pstats import Stats
+    #pr = cProfile.Profile()
+    #pr.enable()
     test()
-    pr.disable()
-    p=Stats(pr)
-    print(p.sort_stats('cumulative').print_stats())
+    #pr.disable()
+    #p=Stats(pr)
+    #print(p.sort_stats('cumulative').print_stats())
     

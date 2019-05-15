@@ -45,4 +45,3 @@ def energy(mol,configs,wf):
             'ee':ee,
             'ei':ei,
             'total':ke+ee+ei+ii } 
-

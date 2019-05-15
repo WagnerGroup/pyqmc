@@ -25,15 +25,19 @@ def eedist_i(configs,vec):
 
 class Jastrow2B:
     """A simple two-body Jastrow factor that is written as 
-    :math:`\ln \Psi_J  = \sum_k c_k \sum_{i<j} b(r_{ij})`
+    :math:`\ln \Psi_J  = \sum_k c_k \sum_{i<j} b_k(r_{ij})`
     b are function objects
     """
-    def __init__(self,nconfig,mol):
+    def __init__(self,nconfig,mol,basis=None):
+        if basis is None:
+            nexpand=4
+            self.basis=[GaussianFunction(0.2*2**n) for n in range(1,nexpand+1)]
+        else:
+            nexpand=len(basis)
+            self.basis=basis
         self.parameters={}
-        nexpand=2
         self._nelec=np.sum(mol.nelec)
         self._mol=mol
-        self.basis=[GaussianFunction(0.2*2**n) for n in range(1,nexpand)]
         self.parameters['coeff']=np.zeros(nexpand)
         self._bvalues=np.zeros((nconfig,nexpand))
         self._configscurrent=np.zeros((nconfig,self._nelec,3))
@@ -47,9 +51,9 @@ class Jastrow2B:
         #package the electron-electron distances into a 1d array
         d=eedist(configs)
         d=d.reshape((-1,3))
-
+        
         for i,b in enumerate(self.basis):
-            self._bvalues[:,i]=np.sum(b.value(d).reshape( (configs.shape[0],-1) ),axis=1) 
+            self._bvalues[:,i]=np.sum(b.value(d).reshape( (configs.shape[0],-1) ),axis=1)
         u=np.einsum("ij,j->i",self._bvalues,self.parameters['coeff'])
         return (1,u)
 

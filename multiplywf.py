@@ -25,10 +25,17 @@ class WFmerger(collections.abc.MutableMapping):
 
 
     def __iter__(self):
-        raise NotImplementedError
+        for k1 in ['wf1','wf2']:
+            for k2 in self.data[k1].keys():
+                yield k1+k2
 
     def __len__(self):
         return len(self.d1)+len(self.d2)
+
+    def items(self):
+        for k1 in ['wf1','wf2']:
+            for k2 in self.data[k1].keys():
+                yield k1+k2,self.data[k1][k2]
 
     def keys(self):
         for k1 in ['wf1','wf2']:
@@ -121,6 +128,9 @@ def test_WFmerger():
     d=WFmerger(d1,d2)
     for k in d.keys():
         print(k)
+
+    for k,v in d.items():
+        print(k,v)
         
 if __name__=="__main__":
     test()

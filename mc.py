@@ -58,6 +58,13 @@ def initial_guess_vectorize(mol,nconfig,r=1.0):
     return epos
 
 
+def limdrift(g,cutoff=1):
+    tot=np.linalg.norm(g,axis=1)
+    mask=tot > cutoff
+    g[mask,:]=g[mask,:]/tot[mask,np.newaxis]
+    return g
+    
+
 def vmc(mol,wf,coords,nsteps=10000,tstep=0.5,accumulators=None):
     if accumulators is None:
         accumulators={'energy':energy } 
@@ -70,29 +77,24 @@ def vmc(mol,wf,coords,nsteps=10000,tstep=0.5,accumulators=None):
         acc=[]
         for e in range(nelec):
 
-            # Create current value of wavefunction
-            current_val=np.exp(wf.value()[0][:,np.newaxis]) * \
-                        np.exp(wf.value()[1][:,np.newaxis])
-
             # Calculate gradient
-            grad=wf.gradient(e, coords[:,e,:]).T * current_val
+            grad=limdrift(wf.gradient(e, coords[:,e,:]).T)
 
             # Calculate new coordinates
             newcoorde=coords[:,e,:]+np.random.normal(scale=np.sqrt(tstep),size=(nconf,3))\
-                      - grad*tstep
+                      + grad*tstep
 
             # Calculate new gradient
-            new_grad=wf.gradient(e, newcoorde).T * wf.testvalue(e, newcoorde)[:,np.newaxis]\
-                     * current_val
+            new_grad=limdrift(wf.gradient(e, newcoorde).T) 
 
             # PDF for forward transition
-            forward=np.linalg.norm((coords[:,e,:]+tstep*grad-newcoorde),2,axis=1)**2
+            forward=np.sum((coords[:,e,:]+tstep*grad-newcoorde)**2,axis=1)
 
             # PDF for backward transition
-            backward=np.linalg.norm((newcoorde+tstep*new_grad-coords[:,e,:]),2,axis=1)**2
+            backward=np.sum((newcoorde+tstep*new_grad-coords[:,e,:])**2,axis=1)
 
             # Transition probability from distribution
-            t_prob = np.exp(1/(2*tstep**2)*(forward-backward))
+            t_prob = np.exp(1/(2*tstep)*(forward-backward))
 
             # Compute transition probabilities and which moves to accept
             ratio=np.multiply(wf.testvalue(e,newcoorde)**2, t_prob)

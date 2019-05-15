@@ -1,15 +1,14 @@
 ''' Evaluate the OBDM for a wave function object. '''
 import numpy as np
-from mc import initial_guess
 from copy import deepcopy
 
 # Implementation TODO:
 # - [x] Set up test calculation RHF Li calculation.
-# - [ ] Evaluate orbital ratios and normalizations.
-# - [ ] Sample from orbitals distribution.
-# - [ ] Evaluate observable for each electron update and save in array.
+# - [x] Evaluate orbital ratios and normalizations.
+# - [x] Sample from orbitals distribution.
 # - [ ] Run in VMC sampling routine on Slater Det for RHF Li and check if it matches in MO and AO basis.
 # - [ ] Run in VMC with Jastrow etc. to check if it makes sense in MO and AO basis.
+# - [ ] Figure out good defaults for parameters.
 
 # Notes
 # - Might gain some performance by vectorizing extra samples.
@@ -25,17 +24,65 @@ class OBDMAccumulator:
     tstep (float): width of the Gaussian to update a walker position for the 
       extra coordinate.
   '''
-  def __init__(self,mol,orb_coeff,tstep=0.5):
-    assert len(orb_coeff.shape)>2, "orb_coeff should be a list of orbital coefficients."
+  def __init__(self,mol,orb_coeff,nstep=10,tstep=0.5,warmup=100):
+    assert len(orb_coeff.shape)==2, "orb_coeff should be a list of orbital coefficients."
 
     self._orb_coeff = orb_coeff
     self._tstep = tstep
     self._mol = mol
-    self._extra_config = np.array((0.0,0.0,0.0))
+    self._extra_config = np.zeros(3)
+    self._nstep = nstep
 
-    ao = mol.eval_gto('GTOval_sph',self._extra_config)
-    borb = ao.dot(orb_coeff)
-    self._extra_config_prob = (borb**2).sum() 
+    # Maybe shouldn't do this here?
+    for i in range(warmup):
+      accept,self._extra_config = sample_onebody(mol,orb_coeff,self._extra_config,tstep)
+
+  # NOTE plan is to remove mol from this, but mc.py hasn't been updated.
+  def __call__(self,mol,configs,wf):
+    ''' Returns expectations of numerator, denomenator, and their errors in equation (9) of DOI:10.1063/1.4793531'''
+
+    esel = 0 # TODO Later should iterate over all electrons.
+    results = {
+        'value':np.zeros((configs.shape[0],self._orb_coeff.shape[0],self._orb_coeff.shape[1])),
+        'norm':np.zeros(self._orb_coeff.shape[0])
+      }
+    acceptance = 0
+
+    # TODO Will need to sample borb[0] and average self._nstep times.
+    for step in range(self._nstep):
+      print("OBDM step")
+      points = np.concatenate((self._extra_config.reshape(1,3),configs[:,esel,:]))
+      ao = self._mol.eval_gto('GTOval_sph',points)
+      borb = ao.dot(self._orb_coeff) 
+
+      extra_configs = configs.copy()
+      extra_configs[:,esel,:] = self._extra_config[np.newaxis,:]
+
+      phi_prim_sq = borb[0]**2
+      fsum = phi_prim_sq.sum()
+      norm = (phi_prim_sq/fsum)**0.5
+
+      wfratio = wf.testvalue(esel,extra_configs)
+      #old_orbratio = np.einsum('k,ci->kci',(borb[0]/fsum),borb[1:]).swapaxes(0,1)
+      orbratio = (borb[0]/fsum)[np.newaxis,:,np.newaxis]*borb[1:][:,np.newaxis,:]
+      #assert np.allclose(old_orbratio,orbratio) # Hard to believe this works!
+
+      # Accumulate results for old extra coord.
+      results['value'] += wfratio[:,np.newaxis,np.newaxis]*orbratio
+      results['norm'] += norm
+
+      # Update extra coord.
+      accept,self._extra_config = sample_onebody(self._mol,self._orb_coeff,self._extra_config)
+      
+      # Keep track of internal acceptance.
+      acceptance += accept
+
+    print("OBDM sample acceptance ratio",acceptance/self._nstep)
+
+    results['value'] /= self._nstep
+    results['norm'] = results['norm'][np.newaxis,:]/self._nstep
+
+    return results
 
 def sample_onebody(mol,orb_coeff,epos,tstep=2.0):
   ''' For a set of orbitals defined by orb_coeff, return samples from f(r) = \sum_i phi_i(r)^2. '''
@@ -81,10 +128,13 @@ def test():
   from pyscf import gto,scf,lo
   from numpy.linalg import solve
   from slater import PySCFSlaterRHF
-  from mc import initial_guess
+  from mc import initial_guess_vectorize,vmc
+  from energy import energy
+  from pandas import DataFrame
 
+  ### Generate some basic objects.
   # Simple Li2 run.
-  mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvdz',unit='bohr',verbose=0)
+  mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='sto-3g',unit='bohr',verbose=0)
   mf = scf.RHF(mol).run()
 
   # Lowdin orthogonalized AO basis.
@@ -98,10 +148,27 @@ def test():
 
   #print(mfobdm.diagonal().round(2))
 
-  ### VMC obdm run.
-  test_sample_onebody(mol,lowdin,mf,nsample=int(1e4))
-  test_sample_onebody(mol,lowdin,mf,nsample=int(4e4))
-  test_sample_onebody(mol,lowdin,mf,nsample=int(1e5))
+  ### Test one-body sampler.
+  #test_sample_onebody(mol,lowdin,mf,nsample=int(1e4))
+  #test_sample_onebody(mol,lowdin,mf,nsample=int(4e4))
+  #test_sample_onebody(mol,lowdin,mf,nsample=int(1e5))
+
+  ### Test OBDM calculation.
+  nconf = 5000
+  nsteps = 50
+  obdm_steps = 50
+  wf = PySCFSlaterRHF(nconf,mol,mf)
+  configs = initial_guess_vectorize(mol,nconf) 
+  obdm = OBDMAccumulator(mol=mol,orb_coeff=lowdin,nstep=obdm_steps)
+  df,coords = vmc(mol,wf,configs,nsteps=nsteps,accumulators={'energy':energy,'obdm':obdm})
+  df = DataFrame(df)
+  df['obdm'] = df[['obdmvalue','obdmnorm']]\
+      .apply(lambda x:normalize_obdm(x['obdmvalue'],x['obdmnorm']),axis=1)
+  print(df.loc[range(nsteps-10,nsteps),['obdmvalue','obdmnorm','obdm']].applymap(lambda x:x.ravel()[0]))
+  print("correct",mfobdm[0,0])
+
+def normalize_obdm(obdm,norm):
+  return obdm/(norm[np.newaxis,:]*norm[:,np.newaxis])
 
 if __name__=="__main__":
   test()

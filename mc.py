@@ -88,11 +88,14 @@ def test():
     
     mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)
     mf = scf.RHF(mol).run()
+    import pyscf2qwalk
+    pyscf2qwalk.print_qwalk(mol,mf)
     nconf=5000
     wf=PySCFSlaterRHF(nconf,mol,mf)
-    coords = initial_guess(mol,nconf) 
+    coords = initial_guess_vectorize(mol,nconf) 
     def dipole(mol,coords,wf):
         return {'vec':np.sum(coords[:,:,:],axis=1) } 
+
     df,coords=vmc(mol,wf,coords,nsteps=100,accumulators={'energy':energy, 'dipole':dipole } )
 
     df=pd.DataFrame(df)
@@ -100,6 +103,8 @@ def test():
     warmup=30
     print('mean field',mf.energy_tot(),'vmc estimation', np.mean(df['energytotal'][warmup:]),np.std(df['energytotal'][warmup:]))
     print('dipole',np.mean(np.asarray(df['dipolevec'][warmup:]),axis=0))
+    
+
     
 def test_compare_init_guess():
     import time
@@ -125,7 +130,7 @@ def test_compare_init_guess():
     
 
 if __name__=="__main__":
-    test_compare_init_guess(); quit()
+    #test_compare_init_guess();
     import cProfile, pstats, io
     from pstats import Stats
     pr = cProfile.Profile()

@@ -1,5 +1,38 @@
 import numpy as np
-from collections import ChainMap
+import collections
+import collections.abc
+
+class WFmerger(collections.abc.MutableMapping):
+    def __init__(self,d1,d2):
+        self.data={}
+        self.data['wf1']=d1
+        self.data['wf2']=d2
+
+    def __setitem__(self,idx,value):
+        k1=idx[0:3]
+        k2=idx[3:]
+        self.data[k1][k2]=value
+
+    def __getitem__(self,idx):
+        k1=idx[0:3]
+        k2=idx[3:]
+        return self.data[k1][k2]
+
+    def __delitem__(self,idx):
+        k1=idx[0:3]
+        k2=idx[3:]
+        del self.data[k1][k2]
+
+
+    def __iter__(self):
+        raise NotImplementedError
+
+    def __len__(self):
+        return len(self.d1)+len(self.d2)
+
+    def keys(self):
+        return self.data['wf1'].keys()+self.data['wf2'].keys()
+
 
 
 class MultiplyWF:
@@ -12,7 +45,7 @@ class MultiplyWF:
         #But there is a possibility that names collide here. 
         #one option is to use some name-mangling scheme for parameters
         #within each wave function
-        self.parameters=ChainMap(self.wf1.parameters,self.wf2.parameters)
+        self.parameters=WFmerger(self.wf1.parameters,self.wf2.parameters)
 
         
     def recompute(self,configs):
@@ -69,11 +102,15 @@ def test():
     jastrow.parameters['coeff']=np.random.random(jastrow.parameters['coeff'].shape)
     configs=np.random.randn(nconf,4,3)
     wf=MultiplyWF(nconf,slater,jastrow)
+    wf.parameters['coeff']=np.ones(len(wf.parameters['coeff']))
+    print(wf.wf2.parameters['coeff'])
+    
     import testwf
     for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
         print('delta', delta, "Testing gradient",testwf.test_wf_gradient(wf,configs,delta=delta))
         print('delta', delta, "Testing laplacian", testwf.test_wf_laplacian(wf,configs,delta=delta))
         print('delta', delta, "Testing pgradient", testwf.test_wf_pgradient(wf,configs,delta=delta))
+    
     
 if __name__=="__main__":
     test()

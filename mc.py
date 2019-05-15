@@ -69,9 +69,36 @@ def vmc(mol,wf,coords,nsteps=10000,tstep=0.5,accumulators=None):
         print("step",step)
         acc=[]
         for e in range(nelec):
-            newcoorde=coords[:,e,:]+np.random.normal(scale=tstep,size=(nconf,3))
-            ratio=wf.testvalue(e,newcoorde)
-            accept=ratio**2 > np.random.rand(nconf)
+
+            # Create current value of wavefunction
+            current_val=np.exp(wf.value()[0][:,np.newaxis]) * \
+                        np.exp(wf.value()[1][:,np.newaxis])
+
+            # Calculate gradient
+            grad=wf.gradient(e, coords[:,e,:]).T * current_val
+
+            # Calculate new coordinates
+            newcoorde=coords[:,e,:]+np.random.normal(scale=np.sqrt(tstep),size=(nconf,3))\
+                      - grad*tstep
+
+            # Calculate new gradient
+            new_grad=wf.gradient(e, newcoorde).T * wf.testvalue(e, newcoorde)[:,np.newaxis]\
+                     * current_val
+
+            # PDF for forward transition
+            forward=np.linalg.norm((coords[:,e,:]+tstep*grad-newcoorde),2,axis=1)**2
+
+            # PDF for backward transition
+            backward=np.linalg.norm((newcoorde+tstep*new_grad-coords[:,e,:]),2,axis=1)**2
+
+            # Transition probability from distribution
+            t_prob = np.exp(1/(2*tstep**2)*(forward-backward))
+
+            # Compute transition probabilities and which moves to accept
+            ratio=np.multiply(wf.testvalue(e,newcoorde)**2, t_prob)
+            accept=ratio > np.random.rand(nconf)
+            
+            # Original MC code
             coords[accept,e,:]=newcoorde[accept,:]
             wf.updateinternals(e,coords[:,e,:],accept)
             acc.append(np.mean(accept))

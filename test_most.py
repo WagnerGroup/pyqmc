@@ -17,7 +17,7 @@ def test_wfs():
     epos=np.random.randn(nconf,4,3)
     for wf in [PySCFSlaterRHF(nconf,mol,mf),Jastrow2B(nconf,mol),
                MultiplyWF(nconf,PySCFSlaterRHF(nconf,mol,mf),Jastrow2B(nconf,mol)), 
-               PySCFSlaterUHF(nconf,mol,mf_uhf) ]:
+               PySCFSlaterUHF(nconf,mol,mf_uhf),PySCFSlaterUHF(nconf,mol,mf) ]:
         assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon 
         assert testwf.test_wf_laplacian(wf, epos, delta=1e-5)[0] < epsilon 
         assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon 

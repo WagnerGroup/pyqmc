@@ -121,6 +121,7 @@ def test_WFmerger():
     d=WFmerger(d1,d2)
     for k in d.keys():
         print(k)
+        
 if __name__=="__main__":
     test()
     test_WFmerger()

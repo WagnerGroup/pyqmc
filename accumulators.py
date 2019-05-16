@@ -1,15 +1,16 @@
 import numpy as np 
 from energy import * 
-"""returns energy of each configuration in a dictionary"""
+
 class EnergyAccumulator:
+"""returns energy of each configuration in a dictionary"""
   def __init__(self, mol):
     self.mol = mol
 
   def __call__(self,configs, wf):
     return energy(self.mol, configs, wf)
 
-"""returns parameter derivatives of energy for each configuration"""
 class PGradAccumulator:
+"""returns parameter derivatives of energy for each configuration"""
   def __init__ (self,EnergyAccumulator):
     self.EnergyAccumulator = EnergyAccumulator
 

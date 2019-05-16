@@ -59,7 +59,7 @@ def get_v_l(mol,configs,e,at):
     # returns a nconf x nl array
     nconf = configs.shape[0]
     at_name = mol._atom[at][0]
-    r_ea = np.linalg.norm(get_r_ea(mol,configs,e,at),axis = 1)  # returns a nconf array of the electron-atom dist
+    r_ea = np.linalg.norm(get_r_ea(mol,configs,e,at),axis = 1)  # returns a nconf array of the electron-atom dist 
     vl = generate_ecp_functors(mol._ecp[at_name][1])
     Lmax = len(vl)
     v_l = np.zeros([nconf,Lmax])
@@ -111,8 +111,9 @@ def ecp_ea(mol,configs,wf,e,at):
     return ecp_val   
 
 def ecp(mol,configs,wf):
-    nconf,nelec = configs.shape[0:2]
-    ecp_tot = np.zeros(nconf)
+    if mol._ecp != {}:
+        nconf,nelec = configs.shape[0:2]
+        ecp_tot = np.zeros(nconf)
     for e in range(nelec):
         for at in range(np.shape(mol._atom)[0]):
             ecp_tot += ecp_ea(mol,configs,wf,e,at)

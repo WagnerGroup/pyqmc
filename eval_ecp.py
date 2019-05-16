@@ -17,6 +17,10 @@ def generate_ecp_functors(coeffs):
     """
     Returns a functor, with keys as the angular momenta:
     -1 stands for the nonlocal part, 0,1,2,... are the s,p,d channels, etc.
+    Parameters: 
+      mol._ecp[atom_name][1] (coefficients of the ECP)
+    Returns:
+      v_l function, with key = angular momentum
     """
     d={}
     for c in coeffs:
@@ -39,6 +43,10 @@ def P_l(x,l):
     """
     Legendre functions,
     returns a nconf x naip array for a given l, x=r_ea(i)
+    Parameters:
+      x: nconf array, l: integer
+    Returns:
+      P_l values: nconf x naip array
     """
     if l == 0:  return np.ones(x.shape)
     elif l == 1: return x
@@ -50,6 +58,11 @@ def P_l(x,l):
 def get_r_ea(mol,configs,e,at):
     """
     Returns a nconf x 3 array, distances between electron e and atom at
+    Parameters:
+      e,at: integers, eletron and atom indices
+      configs: nconf x nelec x 3 array
+    Returns:
+      epos-apos, electron-atom distances
     """
     epos = configs[:,e,:]
     nconf = configs.shape[0]
@@ -59,6 +72,10 @@ def get_r_ea(mol,configs,e,at):
 def get_r_ea_i(mol,epos_rot,e,at):
     """
     Returns a nconf x naip x 3 array, distances between the rotated electron (e) and the atom at
+    Parameters:
+      epos_rot: rotated positions of electron e, nconf x naip x 3
+    Returns:
+      epos_rot-apos, (rotated) electron-atom distances
     """
     nconf,naip = epos_rot.shape[0:2]
     apos = np.zeros([nconf,naip,3]) # position of the atom, broadcasted into nconf x naip x 3
@@ -96,6 +113,11 @@ def get_P_l(mol,configs,weights,epos_rot,l_list,e,at):
     """
     Returns a nconf x naip x nl array, which is the legendre function values for each l channel.
     The factor (2l+1) and the quadrature weights are included.
+    Parameters:
+      l_list: [-1,0,1,...] list of given angular momenta
+      weights: integration weights
+    Return:
+      P_l values: nconf x naip x nl array  
     """
     at_name = mol._atom[at][0]
     nconf,naip = epos_rot.shape[0:2]
@@ -120,7 +142,7 @@ def get_P_l(mol,configs,weights,epos_rot,l_list,e,at):
 
 def ecp_ea(mol,configs,wf,e,at):
     """ 
-    Returns the ECP value between electron e and atom at.
+    Returns the ECP value between electron e and atom at, local+nonlocal.
     """
     weights,epos_rot = get_rot(mol,configs,e,at,naip=6)
     l_list,v_l = get_v_l(mol,configs,e,at)
@@ -133,11 +155,14 @@ def ecp_ea(mol,configs,wf,e,at):
     return ecp_val   
 
 def ecp(mol,configs,wf):
+    """
+    Returns the ECP value, summed over all the electrons and atoms.
+    """
     nconf,nelec = configs.shape[0:2]
     ecp_tot = np.zeros(nconf)
     if mol._ecp != {}:
         for e in range(nelec):
-            for at in range(np.shape(mol._atom)[0]):
+            for at in range(len(mol._atom)):
                 ecp_tot += ecp_ea(mol,configs,wf,e,at)
     return ecp_tot
 
@@ -148,6 +173,10 @@ def get_angles(nconf,naip=6):
     other points according to the quadrature rule. 
     Currently only naip = 6 is supported. Use with caution. 
     For details of the quadrature rules, see qwalk/src/system/gesqua.cpp.
+    Parameters: 
+      nconf = number of configurations
+    Returns:
+      theta,phi: angular positions of the rotated electrons, nconf x naip array.
     """
     # t and p are sampled randomly over a sphere around the atom 
     t = np.random.uniform(low=0.,high=np.pi,size=nconf)
@@ -171,6 +200,11 @@ def get_angles(nconf,naip=6):
 def get_rot(mol,configs,e,at,naip=6):
     """
     Returns the integration weights (naip), and the positions of the rotated electron e (nconf x naip x 3)
+    Parameters: 
+      configs[:,e,:]: epos of the electron e to be rotated
+    Returns:
+      weights: naip array
+      epos_rot: positions of the rotated electron, nconf x naip x 3
     """
     nconf,nelec = configs.shape[0:2]
     apos = np.outer(np.ones(nconf),np.array(mol._atom[at][1]))

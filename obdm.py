@@ -24,13 +24,13 @@ class OBDMAccumulator:
     tstep (float): width of the Gaussian to update a walker position for the 
       extra coordinate.
   '''
-  def __init__(self,mol,orb_coeff,nstep=10,tstep=0.05,warmup=100):
+  def __init__(self,mol,orb_coeff,nstep=10,tstep=0.10,warmup=100):
     assert len(orb_coeff.shape)==2, "orb_coeff should be a list of orbital coefficients."
 
     self._orb_coeff = orb_coeff
     self._tstep = tstep
     self._mol = mol
-    self._extra_config = np.zeros(3)
+    self._extra_config = np.random.normal(scale=tstep,size=3) # not zero to avoid sitting on top of atom.
     self._nstep = nstep
 
     # Maybe shouldn't do this here?
@@ -155,7 +155,7 @@ def test():
   ### Test OBDM calculation.
   nconf = 5000
   nsteps = 50
-  obdm_steps = 50
+  obdm_steps = 10
   warmup = 15
   wf = PySCFSlaterRHF(nconf,mol,mf)
   configs = initial_guess_vectorize(mol,nconf) 

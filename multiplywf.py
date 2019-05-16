@@ -25,13 +25,22 @@ class WFmerger(collections.abc.MutableMapping):
 
 
     def __iter__(self):
-        raise NotImplementedError
+        for k1 in ['wf1','wf2']:
+            for k2 in self.data[k1].keys():
+                yield k1+k2
 
     def __len__(self):
         return len(self.d1)+len(self.d2)
 
+    def items(self):
+        for k1 in ['wf1','wf2']:
+            for k2 in self.data[k1].keys():
+                yield k1+k2,self.data[k1][k2]
+
     def keys(self):
-        return self.data['wf1'].keys()+self.data['wf2'].keys()
+        for k1 in ['wf1','wf2']:
+            for k2 in self.data[k1].keys():
+                yield k1+k2
 
 
 
@@ -83,7 +92,7 @@ class MultiplyWF:
 
     def pgradient(self):
         """Here we need to combine the results"""
-        return ChainMap(self.wf1.pgradient(),self.wf2.pgradient())
+        return WFmerger(self.wf1.pgradient(),self.wf2.pgradient())
 
 
 
@@ -102,7 +111,7 @@ def test():
     jastrow.parameters['coeff']=np.random.random(jastrow.parameters['coeff'].shape)
     configs=np.random.randn(nconf,4,3)
     wf=MultiplyWF(nconf,slater,jastrow)
-    wf.parameters['coeff']=np.ones(len(wf.parameters['coeff']))
+    wf.parameters['wf2coeff']=np.ones(len(wf.parameters['wf2coeff']))
     print(wf.wf2.parameters['coeff'])
     
     import testwf
@@ -112,5 +121,17 @@ def test():
         print('delta', delta, "Testing pgradient", testwf.test_wf_pgradient(wf,configs,delta=delta))
     
     
+
+def test_WFmerger():
+    d1={'A':2,'B':3}
+    d2={'C':6}
+    d=WFmerger(d1,d2)
+    for k in d.keys():
+        print(k)
+
+    for k,v in d.items():
+        print(k,v)
+        
 if __name__=="__main__":
     test()
+    test_WFmerger()

@@ -47,8 +47,6 @@ def get_r_ea(mol,configs,e,at):
 
 def get_r_ea_i(mol,configs_rot,e,at):
     # configs_rot is the rotated electron positions: nconf x naip x nelec x 3
-    ''' returns the distance vector between electron e and atom at '''
-    ''' eidist_val is an array of dimension nconfig x naip x 3 '''
     nconf,naip = configs_rot.shape[0:2]
     apos = np.zeros([nconf,naip,3]) # position of the atom, broadcasted into nconf x naip x 3
     for aip in range(naip):

@@ -154,7 +154,6 @@ def get_rot(mol,configs,e,at,naip=6):
         epos_rot[:,aip,1] = apos[:,1]+r_ea*np.sin(t[:,aip])*np.sin(p[:,aip])
         epos_rot[:,aip,2] = apos[:,2]+r_ea*np.cos(t[:,aip])
     weights = 1./naip*np.ones(naip)
-    #print(epos_rot)
     return weights,epos_rot
 
 from slateruhf import PySCFSlaterUHF

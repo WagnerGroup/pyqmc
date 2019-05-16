@@ -24,7 +24,7 @@ class OBDMAccumulator:
     tstep (float): width of the Gaussian to update a walker position for the 
       extra coordinate.
   '''
-  def __init__(self,mol,orb_coeff,nstep=10,tstep=0.1,warmup=100):
+  def __init__(self,mol,orb_coeff,nstep=10,tstep=0.05,warmup=100):
     assert len(orb_coeff.shape)==2, "orb_coeff should be a list of orbital coefficients."
 
     self._orb_coeff = orb_coeff
@@ -47,30 +47,27 @@ class OBDMAccumulator:
       }
     acceptance = 0
 
-    # TODO Will need to sample borb[0] and average self._nstep times.
     for step in range(self._nstep):
-      print("OBDM step")
-      points = np.concatenate((self._extra_config.reshape(1,3),configs[:,esel,:]))
+      points = np.concatenate((self._extra_config.reshape(1,3),configs.reshape(configs.shape[0]*configs.shape[1],configs.shape[2])))
       ao = self._mol.eval_gto('GTOval_sph',points)
       borb = ao.dot(self._orb_coeff) 
 
-      #extra_configs = configs.copy()
-      #extra_configs[:,esel,:] = self._extra_config[np.newaxis,:]
-      #print(extra_configs.shape)
-      #assert 0
-
-      phi_prim_sq = borb[0]**2
+      # Orbital evaluations at extra coordinate.
+      borb_prim = borb[0]
+      phi_prim_sq = borb_prim**2
       fsum = phi_prim_sq.sum()
       norm = (phi_prim_sq/fsum)**0.5
 
-      wfratio = wf.testvalue(esel,self._extra_config[np.newaxis,:])
-      orbratio = (borb[0]/fsum)[np.newaxis,:,np.newaxis]*borb[1:][:,np.newaxis,:]
-      #print('wfratio',wfratio.mean(axis=0),wfratio.std(axis=0))
-      #print('orbratio',orbratio[:,0,0].mean(axis=0),orbratio[:,0,0].std(axis=0))
-      #print('norm',norm.mean(axis=0),norm.std(axis=0))
+      # Orbital evaluations at all electrons and configs.
+      borb = borb[1:].reshape(configs.shape[0],configs.shape[1],borb.shape[1])
+
+      # Numerator of obervable, given all these quantities.
+      # TODO loop necessary for wfratio?
+      wfratio = np.array([wf.testvalue(esel,self._extra_config[np.newaxis,:]) for esel in range(configs.shape[1])]).T
+      orbratio = (borb_prim/fsum)[np.newaxis,:,np.newaxis,np.newaxis]*borb[:,np.newaxis,:,:]
 
       # Accumulate results for old extra coord.
-      results['value'] += wfratio[:,np.newaxis,np.newaxis]*orbratio
+      results['value'] += ( wfratio[:,np.newaxis,:,np.newaxis]*orbratio ).mean(axis=2) # average over electron symmetry.
       results['norm'] += norm
 
       # Update extra coord.
@@ -157,7 +154,7 @@ def test():
 
   ### Test OBDM calculation.
   nconf = 5000
-  nsteps = 100
+  nsteps = 50
   obdm_steps = 50
   warmup = 15
   wf = PySCFSlaterRHF(nconf,mol,mf)
@@ -171,8 +168,8 @@ def test():
   print(df[['obdmvalue','obdmnorm','obdm']].applymap(lambda x:x.ravel()[0]))
   avg_obdm = np.array(df.loc[warmup:,'obdm'].values.tolist()).mean(axis=0)
   std_obdm = np.array(df.loc[warmup:,'obdm'].values.tolist()).std(axis=0)/nsteps**0.5
-  print(avg_obdm[0,0])
-  print(std_obdm[0,0])
+  print(avg_obdm.diagonal().round(3))
+  print(std_obdm.diagonal().round(3)) # Note this needs reblocking to be accurate.
   print("AO occupation",mfobdm[0,0])
   print('mean field',mf.energy_tot(),'vmc estimation', np.mean(df['energytotal'][warmup:]),np.std(df['energytotal'][warmup:]))
 

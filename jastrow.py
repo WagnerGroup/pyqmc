@@ -74,7 +74,6 @@ class Jastrow2B:
         if mask is None:
             mask=[True]*self._configscurrent.shape[0]
         self._configscurrent[mask,e,:]=epos[mask,:]
-        self._bvalues[mask,:]+=self._get_deltab(e,epos)[mask,:]
 
     def value(self): 
         """  """
@@ -91,7 +90,7 @@ class Jastrow2B:
         ne=self._configscurrent.shape[1]
         dnew=eedist_i(self._configscurrent,epos)
 
-        mask=[True]*ne
+        mask=[True]*ne 
         mask[e]=False
         dnew=dnew[:,mask,:]
         dnew=dnew.reshape(-1,3)
@@ -117,26 +116,19 @@ class Jastrow2B:
         g=self.gradient(e,epos)
         return delta + np.sum(g**2,axis=0)
         
-    def _get_deltab(self,e,epos):
+
+    def testvalue(self,e,epos):
         """
         here we will evaluate the b's for a given electron (both the old and new) 
         and work out the updated value. This allows us to save a lot of memory
         """
         nconf=epos.shape[0]
-        ne=self._configscurrent.shape[1]
-        mask=[True]*ne
-        mask[e]=False
-        
-        dnew=eedist_i(self._configscurrent,epos)[:,mask,:].reshape((-1,3))
-        dold=eedist_i(self._configscurrent,self._configscurrent[:,e,:])[:,mask,:].reshape((-1,3))
-        delta=np.zeros((nconf,len(self.basis)))
-        
-        for i,b in enumerate(self.basis):
-            delta[:,i]+=np.sum((b.value(dnew)-b.value(dold)).reshape(nconf,-1),axis=1)
-        return delta    
-
-    def testvalue(self,e,epos):
-        return np.exp(np.einsum('j,ij->i',self.parameters['coeff'],self._get_deltab(e,epos)))
+        dnew=eedist_i(self._configscurrent,epos).reshape((-1,3))
+        dold=eedist_i(self._configscurrent,self._configscurrent[:,e,:]).reshape((-1,3))
+        delta=np.zeros(nconf)
+        for c,b in zip(self.parameters['coeff'],self.basis):
+            delta+=c*np.sum((b.value(dnew)-b.value(dold)).reshape(nconf,-1),axis=1)
+        return np.exp(delta)
 
     def pgradient(self):
         """Given the b sums, this is pretty trivial for the coefficient derivatives.
@@ -199,11 +191,78 @@ class Jastrow:
         return (1,u)
 
 
+    def updateinternals(self,e,epos,mask=None):
+        """  """
+        #update b and c sums. This overlaps with testvalue()
+        if mask is None:
+            mask=[True]*self._configscurrent.shape[0]
+        self._configscurrent[mask,e,:]=epos[mask,:]
+
+
+    def value(self): 
+        """  """
+        u=np.einsum("ij,j->i",self._bvalues,self.parameters['bcoeff'])+\
+          np.sum(self._avalues*self.parameters['acoeff'], axis=(2,1))
+        return (1,u)       
+
+
+    def gradient(self,e,epos):
+        """We compute the gradient for electron e as 
+        :math:`\grad_e \ln \Psi_J = \sum_k c_k \sum_{j > e} \grad_e b_k(r_{ej})  + \sum_{i < e} \grad_e b_k(r_{ie}) `
+        So we need to compute the gradient of the b's for these indices. 
+        Note that we need to compute distances between electron position given and the current electron distances.
+        We will need this for laplacian() as well"""
+        nconf=epos.shape[0]
+        ne=self._configscurrent.shape[1]
+        dnew=eedist_i(self._configscurrent,epos)
+
+        mask=[True]*ne
+        mask[e]=False
+        dnew=dnew[:,mask,:]
+        dnew=dnew.reshape(-1,3)
+        
+        delta=np.zeros((3,nconf))
+        for c,b in zip(self.parameters['bcoeff'],self.b_basis):
+            delta+=c*np.sum(b.gradient(dnew).reshape(nconf,-1,3),axis=1).T
+        return delta
+
+
+    def laplacian(self,e,epos):
+        """ """
+        nconf=epos.shape[0]
+        ne=self._configscurrent.shape[1]
+        dnew=eedist_i(self._configscurrent,epos)
+        mask=[True]*ne
+        mask[e]=False
+        dnew=dnew[:,mask,:]
+        dnew=dnew.reshape(-1,3)
+        delta=np.zeros(nconf)
+        for c,b in zip(self.parameters['bcoeff'],self.b_basis):
+            delta+=c*np.sum(b.laplacian(dnew).reshape(nconf,-1),axis=1)
+        g=self.gradient(e,epos)
+        return delta + np.sum(g**2,axis=0)
+        
+
+    def testvalue(self,e,epos):
+        """
+        here we will evaluate the b's for a given electron (both the old and new) 
+        and work out the updated value. This allows us to save a lot of memory
+        """
+        nconf=epos.shape[0]
+        dnew=eedist_i(self._configscurrent,epos).reshape((-1,3))
+        dold=eedist_i(self._configscurrent,self._configscurrent[:,e,:]).reshape((-1,3))
+        delta=np.zeros(nconf)
+        for c,b in zip(self.parameters['bcoeff'],self.b_basis):
+            delta+=c*np.sum((b.value(dnew)-b.value(dold)).reshape(nconf,-1),axis=1)
+        return np.exp(delta)
+
+
     def pgradient(self):
         """Given the b sums, this is pretty trivial for the coefficient derivatives.
         For the derivatives of basis functions, we will have to compute the derivative
         of all the b's and redo the sums, similar to recompute() """
-        return {'coeff':self._bvalues}
+        return {'bcoeff':self._bvalues, 'acoeff':self._avalues}
+
 
 def test(): 
     from pyscf import lib, gto, scf
@@ -213,6 +272,8 @@ def test():
     nconf=20
     configs=np.random.randn(nconf,np.sum(mol.nelec),3)
     
+    #jastrow=Jastrow2B(nconf,mol)
+    #jastrow.parameters['coeff']=np.random.random(jastrow.parameters['coeff'].shape)
     jastrow=Jastrow(nconf,mol)
     jastrow.parameters['bcoeff']=np.random.random(jastrow.parameters['bcoeff'].shape)
     jastrow.parameters['acoeff']=np.random.random(jastrow.parameters['acoeff'].shape)

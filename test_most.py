@@ -18,13 +18,15 @@ def test_wfs():
     from multiplywf import MultiplyWF
     mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
     mf = scf.RHF(mol).run()
+    mf_rohf = scf.ROHF(mol).run()
     mf_uhf = scf.UHF(mol).run()
     epsilon=1e-5
     nconf=10
     epos=np.random.randn(nconf,4,3)
     for wf in [PySCFSlaterRHF(nconf,mol,mf),Jastrow2B(nconf,mol),
                MultiplyWF(nconf,PySCFSlaterRHF(nconf,mol,mf),Jastrow2B(nconf,mol)), 
-               PySCFSlaterUHF(nconf,mol,mf_uhf) ]:
+               PySCFSlaterUHF(nconf,mol,mf_uhf),PySCFSlaterUHF(nconf,mol,mf), 
+               PySCFSlaterUHF(nconf,mol,mf_rohf)]:
         assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon 
         assert testwf.test_wf_laplacian(wf, epos, delta=1e-5)[0] < epsilon 
         assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon 

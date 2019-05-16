@@ -156,7 +156,6 @@ def get_rot(mol,configs,e,at,naip=6):
     weights = 1./naip*np.ones(naip)
     return weights,configs_rot
 
-from pyscf import lib, gto, scf
 from slateruhf import PySCFSlaterUHF
 def test():
     mol = gto.M(atom='C 0. 0. 0.',ecp='bfd',basis = 'bfd_vtz')

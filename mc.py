@@ -171,12 +171,12 @@ def test_compare_init_guess():
 
 if __name__=="__main__":
     #test_compare_init_guess();
-    #import cProfile, pstats, io
-    #from pstats import Stats
-    #pr = cProfile.Profile()
-    #pr.enable()
+    import cProfile, pstats, io
+    from pstats import Stats
+    pr = cProfile.Profile()
+    pr.enable()
     test()
-    #pr.disable()
-    #p=Stats(pr)
-    #print(p.sort_stats('cumulative').print_stats())
+    pr.disable()
+    p=Stats(pr)
+    print(p.sort_stats('cumulative').print_stats())
     

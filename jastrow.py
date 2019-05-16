@@ -72,8 +72,8 @@ class Jastrow2B:
         #update b and c sums. This overlaps with testvalue()
         if mask is None:
             mask=[True]*self._configscurrent.shape[0]
-        self._configscurrent[mask,e,:]=epos[mask,:]
         self._bvalues[mask,:]+=self._get_deltab(e,epos)[mask,:]
+        self._configscurrent[mask,e,:]=epos[mask,:] #order matters here!
 
     def value(self):
         """  """
@@ -181,7 +181,6 @@ class Jastrow:
 
         # Package the electron-ion distances into a 1d array
         di = eidist(configs, self._mol.atom_coords())
-        di = di.reshape((-1, self._mol.natm, 3))
         di = di.reshape((-1, 3))
         
         for i,b in enumerate(self.b_basis):
@@ -308,7 +307,7 @@ class Jastrow:
         For the derivatives of basis functions, we will have to compute the derivative
         of all the b's and redo the sums, similar to recompute() """
         #return {'bcoeff':self._bvalues, 'acoeff':self._avalues}
-        return {'bcoeff':self._bvalues}#, 'acoeff':self._avalues}
+        return {'bcoeff':self._bvalues, 'acoeff':np.sum(self._avalues,axis=1)}
 
 
 def test(): 
@@ -325,6 +324,7 @@ def test():
     jastrow.parameters['bcoeff']=np.random.random(jastrow.parameters['bcoeff'].shape)
     jastrow.parameters['acoeff']=np.random.random(jastrow.parameters['acoeff'].shape)
     import testwf
+    print(testwf.test_updateinternals(jastrow,configs))
     for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
         print('delta', delta, "Testing gradient",
               testwf.test_wf_gradient(jastrow,configs,delta=delta))

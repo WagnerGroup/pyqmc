@@ -20,7 +20,7 @@ def generate_ecp_functors(coeffs):
         for n,expand in enumerate(c[1]):
            #print("r",n-2,"coeff",expand)
            for line in expand:
-               rn.append(n)
+               rn.append(n-2)
                exponent.append(line[0])
                coefficient.append(line[1])
         d[el]=rnExp(rn,exponent,coefficient)
@@ -45,13 +45,12 @@ def get_r_ea(mol,configs,e,at):
     apos = np.outer(np.ones(nconf),np.array(mol._atom[at][1])) # nconf x 3 array, position of atom at
     return epos-apos
 
-def get_r_ea_i(mol,configs_rot,e,at):
-    # configs_rot is the rotated electron positions: nconf x naip x nelec x 3
-    nconf,naip = configs_rot.shape[0:2]
+def get_r_ea_i(mol,epos_rot,e,at):
+    # epos_rot is the rotated electron positions: nconf x naip x nelec x 3
+    nconf,naip = epos_rot.shape[0:2]
     apos = np.zeros([nconf,naip,3]) # position of the atom, broadcasted into nconf x naip x 3
     for aip in range(naip):
         apos[:,aip,:] = np.outer(np.ones(nconf),np.array(mol._atom[at][1]))
-    epos_rot = configs_rot[:,:,e,:]
     return epos_rot-apos
 
 
@@ -68,22 +67,21 @@ def get_v_l(mol,configs,e,at):
     return vl.keys(),v_l   # nconf x nl
 
 
-def get_wf_ratio(wf,configs_rot,e):
+def get_wf_ratio(wf,epos_rot,e):
     # returns the Psi(r_e(i))/Psi(r_e) value, which is a nconf x naip array
-    nconf,naip = configs_rot.shape[0:2]
+    nconf,naip = epos_rot.shape[0:2]
     wf_ratio = np.zeros([nconf,naip])
     for aip in range(naip):
-        epos = configs_rot[:,aip,e,:].reshape([nconf,3])
-        wf_ratio[:,aip] = wf.testvalue(e,epos)
+        wf_ratio[:,aip] = wf.testvalue(e,epos_rot[:,aip,:])
     return wf_ratio
 
-def get_P_l(mol,configs,weights,configs_rot,l_list,e,at):
+def get_P_l(mol,configs,weights,epos_rot,l_list,e,at):
     at_name = mol._atom[at][0]
-    nconf,naip = configs_rot.shape[0:2]
+    nconf,naip = epos_rot.shape[0:2]
     
     P_l_val = np.zeros([nconf,naip,len(l_list)])
     r_ea = get_r_ea(mol,configs,e,at)  # nconf x 3
-    r_ea_i = get_r_ea_i(mol,configs_rot,e,at) # nconf x naip x 3
+    r_ea_i = get_r_ea_i(mol,epos_rot,e,at) # nconf x naip x 3
     rdotR = np.zeros(r_ea_i.shape[0:2])  # nconf x naip
 
     # get the cosine values
@@ -100,41 +98,45 @@ def get_P_l(mol,configs,weights,configs_rot,l_list,e,at):
 #########################################################################
 
 def ecp_ea(mol,configs,wf,e,at):
-    weights,configs_rot = get_rot(mol,configs,e,at,naip=6)
+    weights,epos_rot = get_rot(mol,configs,e,at,naip=6)
     l_list,v_l = get_v_l(mol,configs,e,at)
-    P_l = get_P_l(mol,configs,weights,configs_rot,l_list,e,at)
-    ratio = get_wf_ratio(wf,configs_rot,e)
+    P_l = get_P_l(mol,configs,weights,epos_rot,l_list,e,at)
+    ratio = get_wf_ratio(wf,epos_rot,e)
     ecp_val = np.einsum("ij,ik,ijk->i", ratio, v_l, P_l)
     # compute the local part
     local_l = -1
     ecp_val += v_l[:,local_l]
+    #ecp_val += np.zeros(configs.shape[0])
     return ecp_val   
 
 def ecp(mol,configs,wf):
+    nconf,nelec = configs.shape[0:2]
+    ecp_tot = np.zeros(nconf)
     if mol._ecp != {}:
-        nconf,nelec = configs.shape[0:2]
-        ecp_tot = np.zeros(nconf)
-    for e in range(nelec):
-        for at in range(np.shape(mol._atom)[0]):
-            ecp_tot += ecp_ea(mol,configs,wf,e,at)
+        for e in range(nelec):
+            for at in range(np.shape(mol._atom)[0]):
+                ecp_tot += ecp_ea(mol,configs,wf,e,at)
     return ecp_tot
 
 #################### Quadrature Rules ############################
-def get_angles(t,p,naip=6):  # currently only naip = 6 is supported
-    d1 = {}
-    d1[0] = t
-    d1[1] = np.pi*np.ones(t.shape)-t
-    d1[2] = 0.5*np.pi*np.ones(t.shape)
-    d1[3] = 0.5*np.pi*np.ones(t.shape)
-    d1[4] = 0.5*np.pi*np.ones(t.shape)+t
-    d1[5] = 0.5*np.pi*np.ones(t.shape)-t
-    d2 = {}
-    d2[0] = p
-    d2[1] = np.pi*np.ones(t.shape)+p
-    d2[2] = -0.5*np.pi*np.ones(t.shape)+p
-    d2[3] = 0.5*np.pi*np.ones(t.shape)+p
-    d2[4] = p
-    d2[5] = np.pi*np.ones(t.shape)+p
+def get_angles(nconf,naip=6):  # currently only naip = 6 is supported
+    # t and p are sampled randomly over a sphere around the atom 
+    t = np.random.uniform(low=0.,high=np.pi,size=nconf)
+    p = np.random.uniform(low=0.,high=2*np.pi,size=nconf)
+
+    d1,d2 = np.zeros([nconf,naip]),np.zeros([nconf,naip])
+    d1[:,0] = t
+    d1[:,1] = np.pi*np.ones(t.shape)-t
+    d1[:,2] = 0.5*np.pi*np.ones(t.shape)
+    d1[:,3] = 0.5*np.pi*np.ones(t.shape)
+    d1[:,4] = 0.5*np.pi*np.ones(t.shape)+t
+    d1[:,5] = 0.5*np.pi*np.ones(t.shape)-t
+    d2[:,0] = p
+    d2[:,1] = np.pi*np.ones(t.shape)+p
+    d2[:,2] = -0.5*np.pi*np.ones(t.shape)+p
+    d2[:,3] = 0.5*np.pi*np.ones(t.shape)+p
+    d2[:,4] = p
+    d2[:,5] = np.pi*np.ones(t.shape)+p
     return d1,d2
 
 def get_rot(mol,configs,e,at,naip=6):
@@ -144,26 +146,23 @@ def get_rot(mol,configs,e,at,naip=6):
     r_ea_vec = get_r_ea(mol,configs,e,at)
     r_ea = np.linalg.norm(r_ea_vec,axis = 1)
 
-    theta = np.arccos(r_ea_vec[:,2]/r_ea)
-    phi = np.arctan(r_ea_vec[:,1]/r_ea_vec[:,0])
+    t,p = get_angles(nconf,naip)
 
-    t,p = get_angles(theta,phi,naip)
-
-    configs_rot = np.zeros([nconf,naip,nelec,3])
+    epos_rot = np.zeros([nconf,naip,3])
     for aip in range(naip):
-        configs_rot[:,aip,:,:] = configs # init
-        configs_rot[:,aip,e,0] = -apos[:,0]+r_ea*np.sin(t[aip])*np.cos(p[aip])
-        configs_rot[:,aip,e,1] = -apos[:,1]+r_ea*np.sin(t[aip])*np.sin(p[aip])
-        configs_rot[:,aip,e,2] = -apos[:,2]+r_ea*np.cos(t[aip])
+        epos_rot[:,aip,0] = apos[:,0]+r_ea*np.sin(t[:,aip])*np.cos(p[:,aip])
+        epos_rot[:,aip,1] = apos[:,1]+r_ea*np.sin(t[:,aip])*np.sin(p[:,aip])
+        epos_rot[:,aip,2] = apos[:,2]+r_ea*np.cos(t[:,aip])
     weights = 1./naip*np.ones(naip)
-    return weights,configs_rot
+    #print(epos_rot)
+    return weights,epos_rot
 
 from slateruhf import PySCFSlaterUHF
 def test():
     mol = gto.M(atom='C 0. 0. 0.',ecp='bfd',basis = 'bfd_vtz')
     mf = scf.UHF(mol).run()
 
-    nconf=10
+    nconf=2
     nelec=np.sum(mol.nelec)
 
     slater=PySCFSlaterUHF(nconf,mol,mf)
@@ -174,7 +173,7 @@ def test():
     print("testing internals:", testwf.test_updateinternals(slater,configs))
 
     ecp_val = ecp(mol,configs,slater)
-    print("ecp nonlocal values:", ecp_val)
+    print("ecp values:", ecp_val)
 
 if __name__=="__main__":
     test()

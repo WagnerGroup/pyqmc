@@ -82,6 +82,7 @@ def test_wf_pgradient(wf,configs,delta=1e-5):
     #
     for k in gradient.keys(): #We only check the gradients that are exposed.
         flt=wf.parameters[k].ravel()
+        #print(flt.shape,wf.parameters[k].shape,gradient[k].shape)
         nparms=len(flt)
         numgrad=np.zeros((configs.shape[0],nparms))
         for i,c in enumerate(flt):
@@ -93,8 +94,8 @@ def test_wf_pgradient(wf,configs,delta=1e-5):
                     - minuval[0]*baseval[0]*np.exp(minuval[1]-baseval[1]))/(2*delta)
             flt[i]+=delta
         #print(gradient[k],numgrad)            
-        error[k]=(np.amax(np.abs(gradient[k]-numgrad)),
-                  np.mean(np.abs(gradient[k]-numgrad)))
+        error[k]=(np.amax(np.abs(gradient[k].reshape((-1,nparms))-numgrad)),
+                  np.mean(np.abs(gradient[k].reshape((-1,nparms))-numgrad)))
     return error
             
         

@@ -308,7 +308,7 @@ class Jastrow:
         For the derivatives of basis functions, we will have to compute the derivative
         of all the b's and redo the sums, similar to recompute() """
         #return {'bcoeff':self._bvalues, 'acoeff':self._avalues}
-        return {'bcoeff':self._bvalues}#, 'acoeff':self._avalues}
+        return {'bcoeff':self._bvalues, 'acoeff':np.sum(self._avalues,axis=1)}
 
 
 def test(): 

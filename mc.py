@@ -1,3 +1,10 @@
+# This must be done BEFORE importing numpy or anything else. 
+# Therefore it must be in your main script.
+import os
+os.environ["MKL_NUM_THREADS"] = "1" 
+os.environ["NUMEXPR_NUM_THREADS"] = "1" 
+os.environ["OMP_NUM_THREADS"] = "1" 
+
 import numpy as np
 from pyscf import lib, gto, scf
 from slater import PySCFSlaterRHF

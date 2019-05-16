@@ -28,13 +28,15 @@ def ii_energy(mol):
     ii=np.sum((np.outer(c,c)/r)[ind])
     return ii
 
-def ecp(mol,configs,wf):
+def get_ecp(mol,configs,wf):
+    import eval_ecp  # this needs to be fixed later...
+    return eval_ecp.ecp(mol, configs, wf)
     
-    pass
 
 def energy(mol,configs,wf):
     ee=ee_energy(configs)
     ei=ei_energy(mol,configs)
+    ecp_val = get_ecp(mol,configs,wf)
     ii=ii_energy(mol)
     nconf=configs.shape[0]
     ke=np.zeros(nconf)
@@ -43,5 +45,5 @@ def energy(mol,configs,wf):
         ke+=-0.5*wf.laplacian(e,configs[:,e,:])
     return {'ke':ke,
             'ee':ee,
-            'ei':ei,
-            'total':ke+ee+ei+ii } 
+            'ei':ei+ecp_val,
+            'total':ke+ee+ei+ecp_val+ii }

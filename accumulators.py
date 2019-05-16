@@ -2,7 +2,7 @@ import numpy as np
 from energy import * 
 
 class EnergyAccumulator:
-"""returns energy of each configuration in a dictionary"""
+  """returns energy of each configuration in a dictionary"""
   def __init__(self, mol):
     self.mol = mol
 
@@ -10,7 +10,7 @@ class EnergyAccumulator:
     return energy(self.mol, configs, wf)
 
 class PGradAccumulator:
-"""returns parameter derivatives of energy for each configuration"""
+  """returns parameter derivatives of energy for each configuration"""
   def __init__ (self,EnergyAccumulator):
     self.EnergyAccumulator = EnergyAccumulator
 

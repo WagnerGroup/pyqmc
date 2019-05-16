@@ -11,11 +11,11 @@ class EnergyAccumulator:
 
 class PGradAccumulator:
   """returns parameter derivatives of energy for each configuration"""
-  def __init__ (self,EnergyAccumulator):
-    self.EnergyAccumulator = EnergyAccumulator
+  def __init__ (self,enacc):
+    self.enacc = enacc
 
   def __call__(self,configs,wf):
-    d=self.EnergyAccumulator(configs,wf)
+    d=self.enacc(configs,wf)
     energy = d['total']
     pgrad = wf.pgradient()
     for k,grad in pgrad.items():

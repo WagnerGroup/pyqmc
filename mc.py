@@ -124,6 +124,7 @@ def test():
     import pandas as pd
     
     mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)
+    #mol = gto.M(atom='C 0. 0. 0.', ecp='bfd', basis='bfd_vtz')
     mf = scf.RHF(mol).run()
     import pyscf2qwalk
     pyscf2qwalk.print_qwalk(mol,mf)

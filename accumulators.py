@@ -8,7 +8,6 @@ class EnergyAccumulator:
   def __call__(self,configs, wf):
     return energy(self.mol, configs, wf)
 
-
 """returns parameter derivatives of energy for each configuration"""
 class PGradAccumulator:
   def __init__ (self,EnergyAccumulator):

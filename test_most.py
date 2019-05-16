@@ -89,13 +89,14 @@ def test_accumulator_rhf():
     wf=PySCFSlaterRHF(nconf,mol,mf)
     coords = initial_guess_vectorize(mol,nconf) 
 
-    df,coords=vmc(mol,wf,coords,nsteps=30,accumulators={'energy':energy} )
+    df,coords=vmc(mol,wf,coords,nsteps=30,accumulators={'energy':EnergyAccumulator(mol)} )
     df=pd.DataFrame(df)
     eaccum=EnergyAccumulator(mol)
     eaccum_energy=eaccum(coords,wf)
     pgrad=PGradAccumulator(eaccum)
     pgrad_dat=pgrad(coords,wf)
     df=pd.DataFrame(df)
+    print(df['energytotal'][29] == np.average(eaccum_energy['total']))
 
     assert df['energytotal'][29] == np.average(eaccum_energy['total'])
  

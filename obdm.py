@@ -78,7 +78,7 @@ class OBDMAccumulator:
     print("OBDM sample acceptance ratio",acceptance/self._nstep)
 
     results['value'] /= self._nstep
-    results['norm'] = (results['norm'][np.newaxis,:]/self._nstep)**0.5
+    results['norm'] = results['norm'][np.newaxis,:]/self._nstep
 
     return results
 
@@ -175,7 +175,7 @@ def test():
   print('mean field',mf.energy_tot(),'vmc estimation', np.mean(df['energytotal'][warmup:]),np.std(df['energytotal'][warmup:]))
 
 def normalize_obdm(obdm,norm):
-  return obdm/(norm[np.newaxis,:]*norm[:,np.newaxis])
+  return obdm/(norm[np.newaxis,:]*norm[:,np.newaxis])**0.5
 
 if __name__=="__main__":
   test()

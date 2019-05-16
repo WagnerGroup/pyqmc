@@ -17,9 +17,15 @@ class PySCFSlaterUHF:
     def __init__(self,nconfig,mol,mf):
         self.occ=np.asarray(mf.mo_occ > 0.9)
         self.parameters={}
-        
-        self.parameters['mo_coeff_alpha']=mf.mo_coeff[0][:,self.occ[0]]
-        self.parameters['mo_coeff_beta']=mf.mo_coeff[1][:,self.occ[1]]
+
+        #Determine if we're initializing from an RHF or UHF object...
+        if len(mf.mo_occ.shape)==2:        
+          self.parameters['mo_coeff_alpha']=mf.mo_coeff[0][:,self.occ[0]]
+          self.parameters['mo_coeff_beta'] =mf.mo_coeff[1][:,self.occ[1]]
+        else:
+          self.parameters['mo_coeff_alpha']=mf.mo_coeff[:,np.asarray(mf.mo_occ > 0.9)]
+          self.parameters['mo_coeff_beta'] =mf.mo_coeff[:,np.asarray(mf.mo_occ > 1.1)]
+
         self._coefflookup=('mo_coeff_alpha','mo_coeff_beta')
         self._nconfig=nconfig
         self._mol=mol
@@ -120,20 +126,20 @@ class PySCFSlaterUHF:
         return d
         
         
-def test(): 
-    mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
-    mf = scf.UHF(mol).run()
-    nconf=10
-    nelec=np.sum(mol.nelec)
-    slater=PySCFSlaterUHF(nconf,mol,mf)
-    configs=np.random.randn(nconf,nelec,3)
-    import testwf
-    print("testing internals:", testwf.test_updateinternals(slater,configs))
-    for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
-        
-        print('delta', delta, "Testing gradient",testwf.test_wf_gradient(slater,configs,delta=delta))
-        print('delta', delta, "Testing laplacian", testwf.test_wf_laplacian(slater,configs,delta=delta))
-        print('delta', delta, "Testing pgradient", testwf.test_wf_pgradient(slater,configs,delta=delta))
+def test():  
+    mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr', spin=0)
+    for mf in [scf.RHF(mol).run(), scf.ROHF(mol).run(), scf.UHF(mol).run()]:
+        print('')
+        nconf=10
+        nelec=np.sum(mol.nelec)
+        slater=PySCFSlaterUHF(nconf,mol,mf)
+        configs=np.random.randn(nconf,nelec,3)
+        import testwf
+        print("testing internals:", testwf.test_updateinternals(slater,configs))
+        for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
+            print('delta', delta, "Testing gradient",testwf.test_wf_gradient(slater,configs,delta=delta))
+            print('delta', delta, "Testing laplacian", testwf.test_wf_laplacian(slater,configs,delta=delta))
+            print('delta', delta, "Testing pgradient", testwf.test_wf_pgradient(slater,configs,delta=delta))
 
     
 

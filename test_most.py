@@ -107,18 +107,18 @@ def test_ecp():
     from slater import PySCFSlaterRHF
     from accumulators import EnergyAccumulator
 
-    mol1 = gto.M(atom='C 0. 0. 0.', ecp='bfd', basis='bfd_vtz')
-    mol2 = gto.M(atom='O 0. 0. 0.', ecp='bfd', basis='bfd_vtz')
-    for mol in [mol1,mol2]:
-        mf = scf.RHF(mol).run()
-        nconf=5000
-        wf=PySCFSlaterRHF(nconf,mol,mf)
-        coords = initial_guess_vectorize(mol,nconf)
-        df,coords=vmc(mol,wf,coords,nsteps=100,accumulators={'energy':EnergyAccumulator(mol)} )
-        df=pd.DataFrame(df)
-        df.to_csv("data.csv")
-        warmup=30
-        print('mean field',mf.energy_tot(),'vmc estimation', np.mean(df['energytotal'][warmup:]),np.std(df['energytotal'][warmup:]))
+    mol = gto.M(atom='C 0. 0. 0.', ecp='bfd', basis='bfd_vtz')
+    mf = scf.RHF(mol).run()
+    nconf=5000
+    wf=PySCFSlaterRHF(nconf,mol,mf)
+    coords = initial_guess_vectorize(mol,nconf)
+    df,coords=vmc(mol,wf,coords,nsteps=100,accumulators={'energy':EnergyAccumulator(mol)} )
+    df=pd.DataFrame(df)
+    df.to_csv("data.csv")
+    warmup=30
+    print('mean field',mf.energy_tot(),'vmc estimation', np.mean(df['energytotal'][warmup:]),np.std(df['energytotal'][warmup:]))
     
+    assert abs(mf.energy_tot()-np.mean(df['energytotal'][warmup:])) <= np.std(df['energytotal'][warmup:])
+
 
  

@@ -12,6 +12,17 @@ def eedist(configs):
             d[:,c,:]=configs[:,j,:]-configs[:,i,:]
             c+=1
     return d
+
+
+def eidist(configs, coords):
+    """returns a list of electron-ion distances"""
+    ne=configs.shape[1]
+    ni=len(coords)
+    d=np.zeros((configs.shape[0],ne,ni,3))
+    for i in range(ne):
+        for j in range(ni):
+            d[:,i,j,:]=configs[:,i,:]-coords[j]
+    return d
     
 
 def eedist_i(configs,vec):
@@ -125,6 +136,67 @@ class Jastrow2B:
         and redo the sums, similar to recompute() """
         return {'coeff':self._bvalues}
 
+
+
+class Jastrow:
+    '''
+    1 body and 2 body jastrow factor
+    '''
+    def __init__(self,nconfig,mol,basis=None):
+        if basis is None:
+            nexpand=4
+            aexpand=5
+            self.b_basis=[GaussianFunction(0.2*2**n) for n in range(1,nexpand+1)]
+            self.a_basis=[GaussianFunction(0.2*2**n) for n in range(1,aexpand+1)]
+        else:
+            nexpand=len(basis)
+            self.basis=basis
+        self.parameters={}
+        self._nelec=np.sum(mol.nelec)
+        self._mol=mol
+        self.parameters['bcoeff']=np.zeros(nexpand)
+        self.parameters['acoeff']=np.zeros(aexpand)
+        self._bvalues=np.zeros((nconfig,nexpand))
+        self._configscurrent=np.zeros((nconfig,self._nelec,3))
+        
+        # First using gaussian, later change to obey cusp condition
+        self._avalues=np.zeros((nconfig,mol.natm,aexpand))
+        
+
+    def recompute(self,configs):
+        """ """
+        u=0.0
+        self._configscurrent=configs.copy()
+        #We will save the b sums over i,j in _bvalues
+        
+        #package the electron-electron distances into a 1d array
+        d=eedist(configs)
+        d=d.reshape((-1,3))
+
+        # Package the electron-ion distances into a 1d array
+        di = eidist(configs, self._mol.atom_coords())
+        di = di.reshape((-1, self._mol.natm, 3))
+        di = di.reshape((-1, 3))
+        
+        for i,b in enumerate(self.b_basis):
+            self._bvalues[:,i]=np.sum(b.value(d).reshape( (configs.shape[0],-1) ),axis=1)
+
+        for i,a in enumerate(self.a_basis):
+            self._avalues[:,:,i] = np.sum(a.value(di).reshape((configs.shape[0],
+                                                               self._mol.natm, -1)), axis=2)
+
+        u=np.einsum("ij,j->i",self._bvalues,self.parameters['bcoeff']) +\
+          np.sum(self._avalues*self.parameters['acoeff'], axis=(2,1))
+
+        return (1,u)
+
+
+    def pgradient(self):
+        """Given the b sums, this is pretty trivial for the coefficient derivatives.
+        For the derivatives of basis functions, we will have to compute the derivative
+        of all the b's and redo the sums, similar to recompute() """
+        return {'coeff':self._bvalues}
+
 def test(): 
     from pyscf import lib, gto, scf
     np.random.seed(10)
@@ -133,14 +205,17 @@ def test():
     nconf=20
     configs=np.random.randn(nconf,np.sum(mol.nelec),3)
     
-    jastrow=Jastrow2B(nconf,mol)
-    jastrow.parameters['coeff']=np.random.random(jastrow.parameters['coeff'].shape)
-    print('coefficients',jastrow.parameters['coeff'])
+    jastrow=Jastrow(nconf,mol)
+    jastrow.parameters['bcoeff']=np.random.random(jastrow.parameters['bcoeff'].shape)
+    jastrow.parameters['acoeff']=np.random.random(jastrow.parameters['acoeff'].shape)
     import testwf
     for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
-        print('delta', delta, "Testing gradient",testwf.test_wf_gradient(jastrow,configs,delta=delta))
-        print('delta', delta, "Testing laplacian", testwf.test_wf_laplacian(jastrow,configs,delta=delta))
-        print('delta', delta, "Testing pgradient", testwf.test_wf_pgradient(jastrow,configs,delta=delta))
+        print('delta', delta, "Testing gradient",
+              testwf.test_wf_gradient(jastrow,configs,delta=delta))
+        print('delta', delta, "Testing laplacian",
+              testwf.test_wf_laplacian(jastrow,configs,delta=delta))
+        print('delta', delta, "Testing pgradient",
+              testwf.test_wf_pgradient(jastrow,configs,delta=delta))
     
 if __name__=="__main__":
     test()

@@ -24,7 +24,7 @@ class OBDMAccumulator:
     tstep (float): width of the Gaussian to update a walker position for the 
       extra coordinate.
   '''
-  def __init__(self,mol,orb_coeff,nstep=10,tstep=0.5,warmup=100):
+  def __init__(self,mol,orb_coeff,nstep=10,tstep=0.1,warmup=100):
     assert len(orb_coeff.shape)==2, "orb_coeff should be a list of orbital coefficients."
 
     self._orb_coeff = orb_coeff
@@ -55,17 +55,20 @@ class OBDMAccumulator:
       ao = self._mol.eval_gto('GTOval_sph',points)
       borb = ao.dot(self._orb_coeff) 
 
-      extra_configs = configs.copy()
-      extra_configs[:,esel,:] = self._extra_config[np.newaxis,:]
+      #extra_configs = configs.copy()
+      #extra_configs[:,esel,:] = self._extra_config[np.newaxis,:]
+      #print(extra_configs.shape)
+      #assert 0
 
       phi_prim_sq = borb[0]**2
       fsum = phi_prim_sq.sum()
       norm = (phi_prim_sq/fsum)**0.5
 
-      wfratio = wf.testvalue(esel,extra_configs)
-      #old_orbratio = np.einsum('k,ci->kci',(borb[0]/fsum),borb[1:]).swapaxes(0,1)
+      wfratio = wf.testvalue(esel,self._extra_config[np.newaxis,:])
       orbratio = (borb[0]/fsum)[np.newaxis,:,np.newaxis]*borb[1:][:,np.newaxis,:]
-      #assert np.allclose(old_orbratio,orbratio) # Hard to believe this works!
+      #print('wfratio',wfratio.mean(axis=0),wfratio.std(axis=0))
+      #print('orbratio',orbratio[:,0,0].mean(axis=0),orbratio[:,0,0].std(axis=0))
+      #print('norm',norm.mean(axis=0),norm.std(axis=0))
 
       # Accumulate results for old extra coord.
       results['value'] += wfratio[:,np.newaxis,np.newaxis]*orbratio
@@ -155,17 +158,23 @@ def test():
 
   ### Test OBDM calculation.
   nconf = 5000
-  nsteps = 50
+  nsteps = 100
   obdm_steps = 50
+  warmup = 15
   wf = PySCFSlaterRHF(nconf,mol,mf)
   configs = initial_guess_vectorize(mol,nconf) 
-  obdm = OBDMAccumulator(mol=mol,orb_coeff=lowdin,nstep=obdm_steps)
+  obdm = OBDMAccumulator(mol=mol,orb_coeff=mf.mo_coeff,nstep=obdm_steps)
   df,coords = vmc(mol,wf,configs,nsteps=nsteps,accumulators={'energy':energy,'obdm':obdm})
   df = DataFrame(df)
   df['obdm'] = df[['obdmvalue','obdmnorm']]\
       .apply(lambda x:normalize_obdm(x['obdmvalue'],x['obdmnorm']),axis=1)
-  print(df.loc[range(nsteps-10,nsteps),['obdmvalue','obdmnorm','obdm']].applymap(lambda x:x.ravel()[0]))
-  print("correct",mfobdm[0,0])
+  print(df[['obdmvalue','obdmnorm','obdm']].applymap(lambda x:x.ravel()[0]))
+  avg_obdm = np.array(df.loc[warmup:,'obdm'].values.tolist()).mean(axis=0)
+  std_obdm = np.array(df.loc[warmup:,'obdm'].values.tolist()).std(axis=0)
+  print(avg_obdm[0,0])
+  print(std_obdm[0,0])
+  print("AO occupation",mfobdm[0,0])
+  print('mean field',mf.energy_tot(),'vmc estimation', np.mean(df['energytotal'][warmup:]),np.std(df['energytotal'][warmup:]))
 
 def normalize_obdm(obdm,norm):
   return obdm/(norm[np.newaxis,:]*norm[:,np.newaxis])

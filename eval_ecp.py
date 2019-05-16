@@ -107,6 +107,9 @@ def ecp_ea(mol,configs,wf,e,at):
     P_l = get_P_l(mol,configs,weights,configs_rot,l_list,e,at)
     ratio = get_wf_ratio(wf,configs_rot,e)
     ecp_val = np.einsum("ij,ik,ijk->i", ratio, v_l, P_l)
+    # compute the local part
+    local_l = -1
+    ecp_val += v_l[:,local_l]
     return ecp_val   
 
 def ecp(mol,configs,wf):
@@ -172,7 +175,7 @@ def test():
     print("testing internals:", testwf.test_updateinternals(slater,configs))
 
     ecp_val = ecp(mol,configs,slater)
-    print(ecp_val)
+    print("ecp nonlocal values:", ecp_val)
 
 if __name__=="__main__":
     test()

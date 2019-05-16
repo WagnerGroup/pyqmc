@@ -74,6 +74,7 @@ class Jastrow2B:
         if mask is None:
             mask=[True]*self._configscurrent.shape[0]
         self._configscurrent[mask,e,:]=epos[mask,:]
+        self._bvalues[mask,:]+=self._get_deltab(e,epos)[mask,:]
 
     def value(self): 
         """  """
@@ -116,19 +117,26 @@ class Jastrow2B:
         g=self.gradient(e,epos)
         return delta + np.sum(g**2,axis=0)
         
-
-    def testvalue(self,e,epos):
+    def _get_deltab(self,e,epos):
         """
         here we will evaluate the b's for a given electron (both the old and new) 
         and work out the updated value. This allows us to save a lot of memory
         """
         nconf=epos.shape[0]
-        dnew=eedist_i(self._configscurrent,epos).reshape((-1,3))
-        dold=eedist_i(self._configscurrent,self._configscurrent[:,e,:]).reshape((-1,3))
-        delta=np.zeros(nconf)
-        for c,b in zip(self.parameters['coeff'],self.basis):
-            delta+=c*np.sum((b.value(dnew)-b.value(dold)).reshape(nconf,-1),axis=1)
-        return np.exp(delta)
+        ne=self._configscurrent.shape[1]
+        mask=[True]*ne
+        mask[e]=False
+        
+        dnew=eedist_i(self._configscurrent,epos)[:,mask,:].reshape((-1,3))
+        dold=eedist_i(self._configscurrent,self._configscurrent[:,e,:])[:,mask,:].reshape((-1,3))
+        delta=np.zeros((nconf,len(self.basis)))
+        
+        for i,b in enumerate(self.basis):
+            delta[:,i]+=np.sum((b.value(dnew)-b.value(dold)).reshape(nconf,-1),axis=1)
+        return delta    
+
+    def testvalue(self,e,epos):
+        return np.exp(np.einsum('j,ij->i',self.parameters['coeff'],self._get_deltab(e,epos)))
 
     def pgradient(self):
         """Given the b sums, this is pretty trivial for the coefficient derivatives.

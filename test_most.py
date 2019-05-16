@@ -1,3 +1,10 @@
+# This must be done BEFORE importing numpy or anything else. 
+# Therefore it must be in your main script.
+import os
+os.environ["MKL_NUM_THREADS"] = "1" 
+os.environ["NUMEXPR_NUM_THREADS"] = "1" 
+os.environ["OMP_NUM_THREADS"] = "1" 
+
 import numpy as np
 import testwf
 import pytest
@@ -11,13 +18,15 @@ def test_wfs():
     from multiplywf import MultiplyWF
     mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
     mf = scf.RHF(mol).run()
+    mf_rohf = scf.ROHF(mol).run()
     mf_uhf = scf.UHF(mol).run()
     epsilon=1e-5
     nconf=10
     epos=np.random.randn(nconf,4,3)
     for wf in [PySCFSlaterRHF(nconf,mol,mf),Jastrow2B(nconf,mol),
                MultiplyWF(nconf,PySCFSlaterRHF(nconf,mol,mf),Jastrow2B(nconf,mol)), 
-               PySCFSlaterUHF(nconf,mol,mf_uhf) ]:
+               PySCFSlaterUHF(nconf,mol,mf_uhf),PySCFSlaterUHF(nconf,mol,mf), 
+               PySCFSlaterUHF(nconf,mol,mf_rohf)]:
         assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon 
         assert testwf.test_wf_laplacian(wf, epos, delta=1e-5)[0] < epsilon 
         assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon 
@@ -42,7 +51,6 @@ def test_vmc():
     import pandas as pd
     from mc import vmc,initial_guess
     from pyscf import lib, gto, scf
-    from energy import energy
     
     from slater import PySCFSlaterRHF
     from slateruhf import PySCFSlaterUHF
@@ -59,7 +67,7 @@ def test_vmc():
                   (PySCFSlaterUHF(nconf,mol,scf.UHF(mol).run()),scf.UHF(mol).run())]:
        
         coords = initial_guess(mol,nconf) 
-        df,coords=vmc(mol,wf,coords,nsteps=nsteps,accumulators={'energy':energy} ) 
+        df,coords=vmc(mol,wf,coords,nsteps=nsteps)
 
         df=pd.DataFrame(df)
         df.to_csv("data.csv")

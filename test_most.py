@@ -67,4 +67,27 @@ def test_vmc():
         err=np.std(df['energytotal'][warmup:])/np.sqrt(nsteps-warmup)
         assert en-mf.energy_tot() < 10*err
 
+def test_accumulator_rhf():
+    import pandas as pd
+    from mc import vmc,initial_guess_vectorize
+    from pyscf import gto,scf
+    from energy import energy
+    from slater import PySCFSlaterRHF
+    from accumulators import EnergyAccumulator,PGradAccumulator
 
+    mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)
+    mf = scf.RHF(mol).run()
+    nconf=5000
+    wf=PySCFSlaterRHF(nconf,mol,mf)
+    coords = initial_guess_vectorize(mol,nconf) 
+
+    df,coords=vmc(mol,wf,coords,nsteps=30,accumulators={'energy':energy} )
+    df=pd.DataFrame(df)
+    eaccum=EnergyAccumulator(mol)
+    eaccum_energy=eaccum(coords,wf)
+    pgrad=PGradAccumulator(eaccum)
+    pgrad_dat=pgrad(coords,wf)
+    df=pd.DataFrame(df)
+
+    assert df['energytotal'][29] == np.average(eaccum_energy['total'])
+ 

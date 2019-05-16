@@ -6,7 +6,7 @@ from copy import deepcopy
 # - [x] Set up test calculation RHF Li calculation.
 # - [x] Evaluate orbital ratios and normalizations.
 # - [x] Sample from orbitals distribution.
-# - [ ] Run in VMC sampling routine on Slater Det for RHF Li and check if it matches in MO and AO basis.
+# - [x] Run in VMC sampling routine on Slater Det for RHF Li and check if it matches in MO and AO basis.
 # - [ ] Run in VMC with Jastrow etc. to check if it makes sense in MO and AO basis.
 # - [ ] Figure out good defaults for parameters.
 
@@ -37,8 +37,7 @@ class OBDMAccumulator:
     for i in range(warmup):
       accept,self._extra_config = sample_onebody(mol,orb_coeff,self._extra_config,tstep)
 
-  # NOTE plan is to remove mol from this, but mc.py hasn't been updated.
-  def __call__(self,mol,configs,wf):
+  def __call__(self,configs,wf):
     ''' Returns expectations of numerator, denomenator, and their errors in equation (9) of DOI:10.1063/1.4793531'''
 
     esel = 0 # TODO Later should iterate over all electrons.
@@ -132,7 +131,7 @@ def test():
   from numpy.linalg import solve
   from slater import PySCFSlaterRHF
   from mc import initial_guess_vectorize,vmc
-  from energy import energy
+  from accumulators import EnergyAccumulator
   from pandas import DataFrame
 
   ### Generate some basic objects.
@@ -163,6 +162,7 @@ def test():
   warmup = 15
   wf = PySCFSlaterRHF(nconf,mol,mf)
   configs = initial_guess_vectorize(mol,nconf) 
+  energy = EnergyAccumulator(mol)
   obdm = OBDMAccumulator(mol=mol,orb_coeff=mf.mo_coeff,nstep=obdm_steps)
   df,coords = vmc(mol,wf,configs,nsteps=nsteps,accumulators={'energy':energy,'obdm':obdm})
   df = DataFrame(df)
@@ -170,7 +170,7 @@ def test():
       .apply(lambda x:normalize_obdm(x['obdmvalue'],x['obdmnorm']),axis=1)
   print(df[['obdmvalue','obdmnorm','obdm']].applymap(lambda x:x.ravel()[0]))
   avg_obdm = np.array(df.loc[warmup:,'obdm'].values.tolist()).mean(axis=0)
-  std_obdm = np.array(df.loc[warmup:,'obdm'].values.tolist()).std(axis=0)
+  std_obdm = np.array(df.loc[warmup:,'obdm'].values.tolist()).std(axis=0)/nsteps**0.5
   print(avg_obdm[0,0])
   print(std_obdm[0,0])
   print("AO occupation",mfobdm[0,0])

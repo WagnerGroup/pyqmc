@@ -101,10 +101,11 @@ class PySCFSlaterUHF:
     def laplacian(self,e,epos):
         """ Compute the laplacian Psi/ Psi. """
         s=int(e>= self._nelec[0])        
-        aograd=self._mol.eval_gto('GTOval_sph_deriv2',epos)
-        mograd=aograd.dot(self.parameters[self._coefflookup[s]])
-        ratios=[self._testrow(e,x) for x in mograd]
-        return (ratios[4]+ratios[7]+ratios[9])/self.testvalue(e,epos)
+        #aograd=self._mol.eval_gto('GTOval_sph_deriv2',epos)
+        aolap=np.sum(self._mol.eval_gto('GTOval_sph_deriv2',epos)[[4,7,9]], axis=0)
+        molap=aolap.dot(self.parameters[self._coefflookup[s]])
+        ratios=self._testrow(e,molap) 
+        return ratios/self.testvalue(e,epos)
 
     def testvalue(self,e,epos):
         """ return the ratio between the current wave function and the wave function if 

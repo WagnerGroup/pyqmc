@@ -51,7 +51,6 @@ def test_vmc():
     import pandas as pd
     from mc import vmc,initial_guess
     from pyscf import lib, gto, scf
-    from energy import energy
     
     from slater import PySCFSlaterRHF
     from slateruhf import PySCFSlaterUHF
@@ -68,7 +67,7 @@ def test_vmc():
                   (PySCFSlaterUHF(nconf,mol,scf.UHF(mol).run()),scf.UHF(mol).run())]:
        
         coords = initial_guess(mol,nconf) 
-        df,coords=vmc(mol,wf,coords,nsteps=nsteps,accumulators={'energy':energy} ) 
+        df,coords=vmc(mol,wf,coords,nsteps=nsteps)
 
         df=pd.DataFrame(df)
         df.to_csv("data.csv")

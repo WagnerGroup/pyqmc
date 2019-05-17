@@ -1,5 +1,4 @@
 import numpy as np
-from pyscf import lib, gto, scf
 """
 v_l object. c*r^{n-2}*exp{-e*r^2} 
 """
@@ -205,6 +204,7 @@ def get_rot(mol,configs,e,at,naip=6):
     Returns:
       weights: naip array
       epos_rot: positions of the rotated electron, nconf x naip x 3
+      
     """
     nconf,nelec = configs.shape[0:2]
     apos = np.outer(np.ones(nconf),np.array(mol._atom[at][1]))
@@ -225,8 +225,10 @@ def get_rot(mol,configs,e,at,naip=6):
 
 
 
-from slateruhf import PySCFSlaterUHF
 def test():
+    from slateruhf import PySCFSlaterUHF
+    from pyscf import lib, gto, scf
+    
     mol = gto.M(atom='C 0. 0. 0.',ecp='bfd',basis = 'bfd_vtz')
     mf = scf.UHF(mol).run()
 
@@ -234,12 +236,7 @@ def test():
     nelec=np.sum(mol.nelec)
 
     slater=PySCFSlaterUHF(nconf,mol,mf)
-
     configs=np.random.randn(nconf,nelec,3)
-
-    import testwf
-    print("testing internals:", testwf.test_updateinternals(slater,configs))
-
     ecp_val = ecp(mol,configs,slater)
     print("ecp values:", ecp_val)
 

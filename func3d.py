@@ -17,6 +17,11 @@ pgradient(x)
 """
 
 class GaussianFunction:
+    r"""A representation of a Gaussian: 
+    :math: `\exp(-\alpha r^2)`
+    where :math: `\alpha` can be accessed through parameters['exponent']
+
+    """
     def __init__(self,exponent):
         self.parameters={}
         self.parameters['exponent']=exponent

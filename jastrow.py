@@ -29,8 +29,14 @@ def eedist_i(configs,vec):
     """returns a list of electron-electron distances from an electron at position 'vec'
     configs will most likely be [nconfig,electron,dimension], and vec will be [nconfig,dimension]
     """
-    ne=configs.shape[1]
     return vec[:,np.newaxis,:]-configs
+
+
+def eidist_i(coords,vec):
+    """returns a list of electron-electron distances from an electron at position 'vec'
+    configs will most likely be [nconfig,electron,dimension], and vec will be [nconfig,dimension]
+    """
+    return vec[:,np.newaxis,:]-coords
     
 
 class Jastrow2B:
@@ -150,8 +156,8 @@ class Jastrow:
     '''
     def __init__(self,nconfig,mol,basis=None):
         if basis is None:
-            nexpand=4
-            aexpand=2
+            nexpand=5
+            aexpand=8
             self.b_basis=[GaussianFunction(0.2*2**n) for n in range(1,nexpand+1)]
             self.a_basis=[GaussianFunction(0.2*2**n) for n in range(1,aexpand+1)]
         else:
@@ -201,8 +207,9 @@ class Jastrow:
         #update b and c sums. This overlaps with testvalue()
         if mask is None:
             mask=[True]*self._configscurrent.shape[0]
-        self._configscurrent[mask,e,:]=epos[mask,:]
         self._bvalues[mask,:]+=self._get_deltab(e,epos)[mask,:]
+        self._avalues[mask,:]+=self._get_deltaa(e,epos)[mask,:]
+        self._configscurrent[mask,e,:]=epos[mask,:]
 
 
     def value(self): 
@@ -222,6 +229,9 @@ class Jastrow:
         ne=self._configscurrent.shape[1]
         dnew=eedist_i(self._configscurrent,epos)
 
+        dinew=eidist_i(self._mol.atom_coords(),epos)
+        dinew=dinew.reshape(-1,3)
+
         mask=[True]*ne
         mask[e]=False
         dnew=dnew[:,mask,:]
@@ -233,7 +243,7 @@ class Jastrow:
             delta+=c*np.sum(b.gradient(dnew).reshape(nconf,-1,3),axis=1).T
 
         for c,a in zip(self.parameters['acoeff'],self.a_basis):
-            delta+=c*np.sum(a.gradient(dnew).reshape(nconf,-1,3),axis=1).T
+            delta+=c*np.sum(a.gradient(dinew).reshape(nconf,-1,3),axis=1).T
 
         return delta
 
@@ -243,17 +253,23 @@ class Jastrow:
         nconf=epos.shape[0]
         ne=self._configscurrent.shape[1]
         dnew=eedist_i(self._configscurrent,epos)
+
         mask=[True]*ne
         mask[e]=False
         dnew=dnew[:,mask,:]
         dnew=dnew.reshape(-1,3)
+
+        dinew=eidist_i(self._mol.atom_coords(),epos)
+        dinew=dinew.reshape(-1,3)
+
+
         delta=np.zeros(nconf)
 
         for c,b in zip(self.parameters['bcoeff'],self.b_basis):
             delta+=c*np.sum(b.laplacian(dnew).reshape(nconf,-1),axis=1)
 
         for c,a in zip(self.parameters['acoeff'],self.a_basis):
-            delta+=c*np.sum(a.laplacian(dnew).reshape(nconf,-1),axis=1)
+            delta+=c*np.sum(a.laplacian(dinew).reshape(nconf,-1),axis=1)
 
         g=self.gradient(e,epos)
         return delta + np.sum(g**2,axis=0)
@@ -269,6 +285,7 @@ class Jastrow:
         mask=[True]*ne
         mask[e]=False
 
+        dnew=eedist_i(self._configscurrent,epos)[:,mask,:]
         dnew=eedist_i(self._configscurrent,epos)[:,mask,:].reshape((-1,3))
         dold=eedist_i(self._configscurrent,self._configscurrent[:,e,:])[:,mask,:].reshape((-1,3))
         delta=np.zeros((nconf,len(self.b_basis)))
@@ -277,36 +294,45 @@ class Jastrow:
             delta[:,i]+=np.sum((b.value(dnew)-b.value(dold)).reshape(nconf,-1),axis=1)
         return delta
 
+    # I THINK THE BUG IS IN HERE
     def _get_deltaa(self,e,epos):
         """
-        here we will evaluate the b's for a given electron (both the old and new)
+        here we will evaluate the a's for a given electron (both the old and new)
         and work out the updated value. This allows us to save a lot of memory
         """
+        # Gets number of configurations
         nconf=epos.shape[0]
-        ne=self._configscurrent.shape[1]
-        mask=[True]*ne
-        mask[e]=False
 
-        dnew=eedist_i(self._configscurrent,epos)[:,mask,:].reshape((-1,3))
-        dold=eedist_i(self._configscurrent,self._configscurrent[:,e,:])[:,mask,:].reshape((-1,3))
-        delta=np.zeros((nconf,len(self.a_basis)))
+        # Gets number of ions
+        ni=self._mol.natm
 
-        for i,b in enumerate(self.a_basis):
-            delta[:,i]+=np.sum((b.value(dnew)-b.value(dold)).reshape(nconf,-1),axis=1)
+        # Gets new e-i distance
+        #dnew=eidist_i(self._mol.atom_coords(),epos)
+        dnew=eidist_i(self._mol.atom_coords(),epos).reshape((-1,3))
+
+        # Gets old e-i distance
+        dold=eidist_i(self._mol.atom_coords(),self._configscurrent[:,e,:]).reshape((-1,3))
+
+        # Change
+        delta=np.zeros((nconf,ni,len(self.a_basis)))
+
+        for i,a in enumerate(self.a_basis):
+            #delta[:,j,i]+=np.sum((a.value(dnew)-a.value(dold)).reshape(nconf, -1),axis=1)
+            delta[:,:,i]+=(a.value(dnew)-a.value(dold)).reshape((nconf, -1))
         return delta
 
 
     def testvalue(self,e,epos):
         b_val = np.einsum('j,ij->i',self.parameters['bcoeff'],self._get_deltab(e,epos))
-        a_val = np.einsum('j,ij->i',self.parameters['acoeff'],self._get_deltaa(e,epos))
+        #a_val = np.einsum('j,ij->i',self.parameters['acoeff'],self._get_deltaa(e,epos))
+        a_val = np.sum(self.parameters['acoeff']*self._get_deltaa(e,epos), axis=(2,1))
         return np.exp(b_val + a_val)
-        #return np.exp(np.einsum('j,ij->i',self.parameters['coeff'],self._get_deltab(e,epos)))
+
 
     def pgradient(self):
         """Given the b sums, this is pretty trivial for the coefficient derivatives.
         For the derivatives of basis functions, we will have to compute the derivative
         of all the b's and redo the sums, similar to recompute() """
-        #return {'bcoeff':self._bvalues, 'acoeff':self._avalues}
         return {'bcoeff':self._bvalues, 'acoeff':np.sum(self._avalues,axis=1)}
 
 
@@ -324,7 +350,11 @@ def test():
     jastrow.parameters['bcoeff']=np.random.random(jastrow.parameters['bcoeff'].shape)
     jastrow.parameters['acoeff']=np.random.random(jastrow.parameters['acoeff'].shape)
     import testwf
-    print(testwf.test_updateinternals(jastrow,configs))
+    #print(testwf.test_updateinternals(jastrow,configs))
+    for key, val in testwf.test_updateinternals(jastrow, configs).items():
+        print(key, val)
+
+    print()
     for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
         print('delta', delta, "Testing gradient",
               testwf.test_wf_gradient(jastrow,configs,delta=delta))

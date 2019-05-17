@@ -1,20 +1,44 @@
 import numpy as np
 from func3d import GaussianFunction
 
+def eedist_old(configs):
+     """returns a list of electron-electron distances within a collection """
+     ne=configs.shape[1]
+     d=np.zeros((configs.shape[0],int(ne*(ne-1)/2),3))
+     c=0
+     for i in range(ne):
+         for j in range(i+1,ne):
+             d[:,c,:]=configs[:,j,:]-configs[:,i,:]
+             c+=1
+     return d
 
-def eedist(configs):
+
+def eedist(configs, nup, ndown):
     """returns a list of electron-electron distances within a collection """
     ne=configs.shape[1]
-    d=np.zeros((configs.shape[0],int(ne*(ne-1)/2),3))
-    c=0
+    d1=np.zeros((configs.shape[0],int(nup*(nup-1)/2),3))      # up-up case
+    d2=np.zeros((configs.shape[0],int(nup*ndown),3))          # up-down case
+    d3=np.zeros((configs.shape[0],int(ndown*(ndown-1)/2),3))  # down-down case
+    c1=0
+    c2=0
+    c3=0
+
+    # First electrons are spin up by convenction
     for i in range(ne):
         for j in range(i+1,ne):
-            d[:,c,:]=configs[:,j,:]-configs[:,i,:]
-            c+=1
-    return d
+            if((i<nup) and (j<nup)):
+                d1[:,c1,:]=configs[:,j,:]-configs[:,i,:]
+                c1+=1
+            elif((i>=nup) and (j>=nup)):
+                d3[:,c3,:]=configs[:,j,:]-configs[:,i,:]
+                c3+=1
+            else:
+                d2[:,c2,:]=configs[:,j,:]-configs[:,i,:]
+                c2+=1
+    return d1, d2, d3
 
 
-def eidist(configs, coords):
+def eidist_old(configs, coords):
     """returns a list of electron-ion distances"""
     ne=configs.shape[1]
     ni=len(coords)
@@ -24,6 +48,27 @@ def eidist(configs, coords):
             d[:,i,j,:]=configs[:,i,:]-coords[j]
     return d
     
+
+def eidist(configs, coords, nup, ndown):
+    """returns a list of electron-ion distances"""
+    ne=configs.shape[1]
+    ni=len(coords)
+    d1=np.zeros((configs.shape[0],nup,ni,3))   # up case
+    d2=np.zeros((configs.shape[0],ndown,ni,3)) # down case
+
+    # First electrons are spin up by convenction
+    c1 = 0
+    c2 = 0
+    for i in range(ne):
+        if(i<nup):
+            d1[:,c1,:]=configs[:,i,:][::,np.newaxis]-coords
+            c1 += 1
+        else:
+            d2[:,c2,:]=configs[:,i,:][::,np.newaxis]-coords
+            c2 += 1
+
+    return d1, d2
+
 
 def eedist_i(configs,vec):
     """returns a list of electron-electron distances from an electron at position 'vec'
@@ -166,38 +211,51 @@ class Jastrow:
         self.parameters={}
         self._nelec=np.sum(mol.nelec)
         self._mol=mol
-        self.parameters['bcoeff']=np.zeros(nexpand)
-        self.parameters['acoeff']=np.zeros(aexpand)
-        self._bvalues=np.zeros((nconfig,nexpand))
+        self.parameters['bcoeff']=np.zeros((nexpand, 3))
+        self.parameters['acoeff']=np.zeros((aexpand, 2))
+        self._bvalues=np.zeros((nconfig,nexpand, 3))
         self._configscurrent=np.zeros((nconfig,self._nelec,3))
         
         # First using gaussian, later change to obey cusp condition
-        self._avalues=np.zeros((nconfig,mol.natm,aexpand))
+        self._avalues=np.zeros((nconfig,mol.natm,aexpand, 2))
         
 
     def recompute(self,configs):
         """ """
         u=0.0
         self._configscurrent=configs.copy()
+        elec = self._mol.nelec
         #We will save the b sums over i,j in _bvalues
         
         #package the electron-electron distances into a 1d array
-        d=eedist(configs)
-        d=d.reshape((-1,3))
+        d1, d2, d3 =eedist(configs, elec[0], elec[1])
+        d1=d1.reshape((-1,3))
+        d2=d2.reshape((-1,3))
+        d3=d3.reshape((-1,3))
 
         # Package the electron-ion distances into a 1d array
-        di = eidist(configs, self._mol.atom_coords())
-        di = di.reshape((-1, 3))
+        di1, di2 = eidist(configs, self._mol.atom_coords(), elec[0], elec[1])
+        di1 = di1.reshape((-1, 3))
+        di2 = di2.reshape((-1, 3))
         
         for i,b in enumerate(self.b_basis):
-            self._bvalues[:,i]=np.sum(b.value(d).reshape( (configs.shape[0],-1) ),axis=1)
+            #self._bvalues[:,i]=np.sum(b.value(d).reshape( (configs.shape[0],-1) ),axis=1)
+            self._bvalues[:,i,0]=np.sum(b.value(d1).reshape( (configs.shape[0], -1) ),axis=1)
+            self._bvalues[:,i,1]=np.sum(b.value(d2).reshape( (configs.shape[0], -1) ),axis=1)
+            self._bvalues[:,i,2]=np.sum(b.value(d3).reshape( (configs.shape[0], -1) ),axis=1)
 
         for i,a in enumerate(self.a_basis):
-            self._avalues[:,:,i] = np.sum(a.value(di).reshape((configs.shape[0],
+            #self._avalues[:,:,i] = np.sum(a.value(di).reshape((configs.shape[0],
+            #                                                   self._mol.natm, -1)), axis=2)
+            self._avalues[:,:,i,0] = np.sum(a.value(di1).reshape((configs.shape[0],
+                                                               self._mol.natm, -1)), axis=2)
+            self._avalues[:,:,i,1] = np.sum(a.value(di2).reshape((configs.shape[0],
                                                                self._mol.natm, -1)), axis=2)
 
-        u=np.einsum("ij,j->i",self._bvalues,self.parameters['bcoeff']) +\
-          np.sum(self._avalues*self.parameters['acoeff'], axis=(2,1))
+        #u=np.einsum("ij,j->i",self._bvalues,self.parameters['bcoeff']) +\
+        #  np.sum(self._avalues*self.parameters['acoeff'], axis=(2,1))
+        u=np.sum(np.multiply(self._bvalues, self.parameters['bcoeff'])) +\
+          np.sum(np.multiply(self._avalues, self.parameters['acoeff']))
 
         return (1,u)
 
@@ -286,15 +344,17 @@ class Jastrow:
         mask[e]=False
 
         dnew=eedist_i(self._configscurrent,epos)[:,mask,:]
+        #print(eedist_i(self._configscurrent,epos)[:,mask,:].shape)
         dnew=eedist_i(self._configscurrent,epos)[:,mask,:].reshape((-1,3))
         dold=eedist_i(self._configscurrent,self._configscurrent[:,e,:])[:,mask,:].reshape((-1,3))
-        delta=np.zeros((nconf,len(self.b_basis)))
+        delta=np.zeros((nconf,len(self.b_basis), 3))
 
         for i,b in enumerate(self.b_basis):
+            #print("DELTA SHAPE: {}".format(delta[:,i].shape))
+            #print(b.value(dnew).shape)
             delta[:,i]+=np.sum((b.value(dnew)-b.value(dold)).reshape(nconf,-1),axis=1)
         return delta
 
-    # I THINK THE BUG IS IN HERE
     def _get_deltaa(self,e,epos):
         """
         here we will evaluate the a's for a given electron (both the old and new)
@@ -307,24 +367,24 @@ class Jastrow:
         ni=self._mol.natm
 
         # Gets new e-i distance
-        #dnew=eidist_i(self._mol.atom_coords(),epos)
         dnew=eidist_i(self._mol.atom_coords(),epos).reshape((-1,3))
 
         # Gets old e-i distance
         dold=eidist_i(self._mol.atom_coords(),self._configscurrent[:,e,:]).reshape((-1,3))
 
         # Change
-        delta=np.zeros((nconf,ni,len(self.a_basis)))
+        delta=np.zeros((nconf,ni,len(self.a_basis), 2))
 
         for i,a in enumerate(self.a_basis):
-            #delta[:,j,i]+=np.sum((a.value(dnew)-a.value(dold)).reshape(nconf, -1),axis=1)
             delta[:,:,i]+=(a.value(dnew)-a.value(dold)).reshape((nconf, -1))
         return delta
 
 
     def testvalue(self,e,epos):
-        b_val = np.einsum('j,ij->i',self.parameters['bcoeff'],self._get_deltab(e,epos))
-        #a_val = np.einsum('j,ij->i',self.parameters['acoeff'],self._get_deltaa(e,epos))
+        #b_val = np.einsum('j,ij->i',self.parameters['bcoeff'],self._get_deltab(e,epos))
+        print(self.parameters['bcoeff'].shape)
+        print(self._get_deltab(e,epos).shape)
+        b_val = np.sum(np.multiply(self.parameters['bcoeff'],self._get_deltab(e,epos)))
         a_val = np.sum(self.parameters['acoeff']*self._get_deltaa(e,epos), axis=(2,1))
         return np.exp(b_val + a_val)
 
@@ -341,6 +401,7 @@ def test():
     np.random.seed(10)
     
     mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
+    l = dir(mol)
     nconf=20
     configs=np.random.randn(nconf,np.sum(mol.nelec),3)
     

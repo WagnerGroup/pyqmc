@@ -60,12 +60,13 @@ def eidist(configs, coords, nup, ndown):
     c1 = 0
     c2 = 0
     for i in range(ne):
-        if(i<nup):
-            d1[:,c1,:]=configs[:,i,:][::,np.newaxis]-coords
-            c1 += 1
-        else:
-            d2[:,c2,:]=configs[:,i,:][::,np.newaxis]-coords
-            c2 += 1
+        for j in range(ni):
+            if(i<nup):
+                d1[:,i,j,:]=configs[:,i,:]-coords[j]
+                c1 += 1
+            else:
+                d2[:,i-nup,j,:]=configs[:,i,:]-coords[j]
+                c2 += 1
 
     return d1, d2
 
@@ -228,7 +229,7 @@ class Jastrow:
         #We will save the b sums over i,j in _bvalues
         
         #package the electron-electron distances into a 1d array
-        d1, d2, d3 =eedist(configs, elec[0], elec[1])
+        d1, d2, d3 = eedist(configs, elec[0], elec[1])
         d1=d1.reshape((-1,3))
         d2=d2.reshape((-1,3))
         d3=d3.reshape((-1,3))
@@ -239,23 +240,19 @@ class Jastrow:
         di2 = di2.reshape((-1, 3))
         
         for i,b in enumerate(self.b_basis):
-            #self._bvalues[:,i]=np.sum(b.value(d).reshape( (configs.shape[0],-1) ),axis=1)
             self._bvalues[:,i,0]=np.sum(b.value(d1).reshape( (configs.shape[0], -1) ),axis=1)
             self._bvalues[:,i,1]=np.sum(b.value(d2).reshape( (configs.shape[0], -1) ),axis=1)
             self._bvalues[:,i,2]=np.sum(b.value(d3).reshape( (configs.shape[0], -1) ),axis=1)
 
+        # Maybe bug is in here? Can't really tell since old Jastrow doesn't have spin
         for i,a in enumerate(self.a_basis):
-            #self._avalues[:,:,i] = np.sum(a.value(di).reshape((configs.shape[0],
-            #                                                   self._mol.natm, -1)), axis=2)
             self._avalues[:,:,i,0] = np.sum(a.value(di1).reshape((configs.shape[0],
                                                                self._mol.natm, -1)), axis=2)
             self._avalues[:,:,i,1] = np.sum(a.value(di2).reshape((configs.shape[0],
                                                                self._mol.natm, -1)), axis=2)
 
-        #u=np.einsum("ij,j->i",self._bvalues,self.parameters['bcoeff']) +\
-        #  np.sum(self._avalues*self.parameters['acoeff'], axis=(2,1))
-        u=np.sum(np.multiply(self._bvalues, self.parameters['bcoeff'])) +\
-          np.sum(np.multiply(self._avalues, self.parameters['acoeff']))
+        u=np.sum(self._bvalues*self.parameters['bcoeff'][np.newaxis,:,:], axis=(2,1)) +\
+          np.sum(self._avalues*self.parameters['acoeff'][np.newaxis,:,:], axis=(3,2,1))
 
         return (1,u)
 
@@ -272,10 +269,8 @@ class Jastrow:
 
     def value(self): 
         """  """
-        #u=np.einsum("ij,j->i",self._bvalues,self.parameters['bcoeff'])+\
-        #  np.sum(self._avalues*self.parameters['acoeff'], axis=(2,1))
-        u=np.sum(np.multiply(self._bvalues, self.parameters['bcoeff'])) +\
-          np.sum(np.multiply(self._avalues, self.parameters['acoeff']))
+        u=np.sum(self._bvalues*self.parameters['bcoeff'][np.newaxis,:,:], axis=(2,1)) +\
+          np.sum(self._avalues*self.parameters['acoeff'][np.newaxis,:,:], axis=(3,2,1))
         return (1,u)       
 
 
@@ -322,7 +317,6 @@ class Jastrow:
         dinew=eidist_i(self._mol.atom_coords(),epos)
         dinew=dinew.reshape(-1,3)
 
-
         delta=np.zeros(nconf)
 
         for c,b in zip(self.parameters['bcoeff'],self.b_basis):
@@ -335,7 +329,6 @@ class Jastrow:
         return delta + np.sum(g**2,axis=0)
         
 
-    # NEEDS FIXING TO ADD SPIN
     def _get_deltab(self,e,epos):
         """
         here we will evaluate the b's for a given electron (both the old and new)
@@ -350,19 +343,19 @@ class Jastrow:
         dnew=eedist_i(self._configscurrent,epos)[:,mask,:]
         dold=eedist_i(self._configscurrent,self._configscurrent[:,e,:])[:,mask,:]
         if(e < nup): # Spin up electron selected
-            d1new= dnew[:,:nup-1,:].reshape(nconf,-1)
-            d2new= dnew[:,nup-1:,:].reshape(nconf,-1)
-            d3new= np.zeros((nconf,3)).reshape(nconf,-1)
-            d1old= dold[:,:nup-1,:].reshape(nconf,-1)
-            d2old= dold[:,nup-1:,:].reshape(nconf,-1)
-            d3old= np.zeros((nconf,3)).reshape(nconf,-1)
+            d1new= dnew[:,:nup-1,:]
+            d2new= dnew[:,nup-1:,:]
+            d3new= np.zeros((nconf,3))
+            d1old= dold[:,:nup-1,:]
+            d2old= dold[:,nup-1:,:]
+            d3old= np.zeros((nconf,3))
         else:        # Spin down electron selected
-            d1new= np.zeros((nconf,3)).reshape(nconf,-1)
-            d2new= dnew[:,:nup,:].reshape(nconf,-1)
-            d3new= dnew[:,nup:,].reshape(nconf,-1)
-            d1old= np.zeros((nconf,3)).reshape(nconf,-1)
-            d2old= dold[:,:nup,:].reshape(nconf,-1)
-            d3old= dold[:,nup:,].reshape(nconf,-1)
+            d1new= np.zeros((nconf,3))
+            d2new= dnew[:,:nup,:]
+            d3new= dnew[:,nup:,]
+            d1old= np.zeros((nconf,3))
+            d2old= dold[:,:nup,:]
+            d3old= dold[:,nup:,]
 
         delta=np.zeros((nconf,len(self.b_basis), 3))
 
@@ -372,7 +365,7 @@ class Jastrow:
             delta[:,i,2]+=np.sum((b.value(d3new)-b.value(d3old)).reshape(nconf,-1),axis=1)
         return delta
 
-    # NEEDS FIXING TO ADD SPIN
+
     def _get_deltaa(self,e,epos):
         """
         here we will evaluate the a's for a given electron (both the old and new)
@@ -401,13 +394,14 @@ class Jastrow:
 
         for i,a in enumerate(self.a_basis):
             delta[:,:,i,spin_idx]+=(a.value(dnew)-a.value(dold)).reshape((nconf, -1))
-            delta[:,:,i,spin_idx]+=(a.value(dnew)-a.value(dold)).reshape((nconf, -1))
         return delta
 
 
     def testvalue(self,e,epos):
-        b_val = np.sum(self.parameters['bcoeff']*self._get_deltab(e,epos), axis=(2,1))
-        a_val = np.sum(self.parameters['acoeff']*self._get_deltaa(e,epos), axis=(3,2,1))
+        b_val = np.sum(self._get_deltab(e,epos)*self.parameters['bcoeff'][np.newaxis,:,:],
+                       axis=(2,1))
+        a_val = np.sum(self._get_deltaa(e,epos)*self.parameters['acoeff'][np.newaxis,:,:],
+                       axis=(3,2,1))
         return np.exp(b_val + a_val)
 
 
@@ -424,7 +418,7 @@ def test():
     
     mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
     l = dir(mol)
-    nconf=2
+    nconf=20
     configs=np.random.randn(nconf,np.sum(mol.nelec),3)
     
     #jastrow=Jastrow2B(nconf,mol)

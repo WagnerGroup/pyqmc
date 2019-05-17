@@ -1,7 +1,4 @@
 import numpy as np
-from pyscf import lib, gto, scf
-
-
 
 def sherman_morrison_row(e,inv,vec):
     ratio=np.einsum("ij,ij->i",vec,inv[:,:,e])
@@ -128,6 +125,8 @@ class PySCFSlaterUHF:
         
         
 def test():  
+    from pyscf import lib, gto, scf
+    
     mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr', spin=0)
     for mf in [scf.RHF(mol).run(), scf.ROHF(mol).run(), scf.UHF(mol).run()]:
         print('')

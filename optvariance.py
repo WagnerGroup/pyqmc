@@ -52,9 +52,6 @@ def optvariance(mol,wf,coords,params=None,method='Powell',method_options=None):
     return res.fun
 
 
-
-
-
 def test_single_opt():
     import pandas as pd
     from multiplywf import MultiplyWF
@@ -89,41 +86,6 @@ def test_single_opt():
 
 
 
-def test_multiple_opt():
-    import pandas as pd
-    from multiplywf import MultiplyWF
-    from jastrow import Jastrow2B
-    from mc import initial_guess,vmc
-    
-    
-    mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)
-    mf = scf.RHF(mol).run()
-    nconf=5000
-    nsteps=30
-
-    coords = initial_guess(mol,nconf)
-    basis={'wf2coeff':[GaussianFunction(0.1),GaussianFunction(0.32)]}
-    wf=MultiplyWF(nconf,PySCFSlaterRHF(nconf,mol,mf),Jastrow2B(nconf,mol,basis['wf2coeff']))
-    params0={'wf2coeff':np.random.normal(loc=0.,scale=.1,size=len(wf.parameters['wf2coeff']))}
-    for k,p in wf.parameters.items():
-        if k in params0:
-            wf.parameters[k]=params0[k]
-
-    # Cycle of VMC followed by variance optimization
-    for j in range(4):
-        print('--> Iteration %d <--'%j)
-        vmc(mol,wf,coords,nsteps=nsteps)
-        En=energy(mol,coords,wf)['total']
-
-        print('Initial parameters:\n',params0)
-        print('Initial variance:',np.std(En)**2)
-        opt_var=optvariance(mol,wf,coords,params0)
-        print('Optimized parameters:\n',params0)
-        print('Final variance:',opt_var)
-    
-    return 0
-
     
 if __name__=="__main__":
     test_single_opt()
-    #test_multiple_opt()

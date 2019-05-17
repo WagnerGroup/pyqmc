@@ -9,36 +9,9 @@ import numpy as np
 from pyscf import lib, gto, scf
 from slater import PySCFSlaterRHF
 from accumulators import EnergyAccumulator
-
-def initial_guess(mol,nconfig,r=1.0):
-    """ Generate an initial guess by distributing electrons near atoms
-    proportional to their charge."""
-    nelec=np.sum(mol.nelec)
-    configs=np.zeros((nconfig,nelec,3))
-    wts=mol.atom_charges()
-    wts=wts/np.sum(wts)
-
-    ### This is not ideal since we loop over configs 
-    ### Should figure out a way to throw configurations
-    ### more efficiently.
-    for c in range(nconfig):
-        count=0
-        for s in [0,1]:
-            neach=np.floor(mol.nelec[s]*wts)
-            nassigned=np.sum(neach)
-            nleft=mol.nelec[s]*wts-neach
-            tot=int(np.sum(nleft))
-            gets=np.random.choice(len(wts),p=nleft/tot,size=tot,replace=False) 
-            for i in gets:
-                neach[i]+=1
-            for n,coord in zip(neach,mol.atom_coords()):
-                for i in range(int(n)):
-                    configs[c,count,:]=coord+r*np.random.randn(3)
-                    count+=1
-    return configs
     
 
-def initial_guess_vectorize(mol,nconfig,r=1.0):
+def initial_guess(mol,nconfig,r=1.0):
     """ Generate an initial guess by distributing electrons near atoms
     proportional to their charge."""
     nelec=np.sum(mol.nelec)
@@ -127,11 +100,11 @@ def test():
     mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)
     #mol = gto.M(atom='C 0. 0. 0.', ecp='bfd', basis='bfd_vtz')
     mf = scf.RHF(mol).run()
-    import pyscf2qwalk
-    pyscf2qwalk.print_qwalk(mol,mf)
+    #import pyscf2qwalk
+    #pyscf2qwalk.print_qwalk(mol,mf)
     nconf=5000
     wf=PySCFSlaterRHF(nconf,mol,mf)
-    coords = initial_guess_vectorize(mol,nconf) 
+    coords = initial_guess(mol,nconf) 
     def dipole(coords,wf):
         return {'vec':np.sum(coords[:,:,:],axis=1) } 
 
@@ -157,7 +130,7 @@ def test_compare_init_guess():
         mf = scf.RHF(mol).run()
         nconf=5000
         wf=PySCFSlaterRHF(nconf,mol,mf)
-        for i,func in enumerate([initial_guess_vectorize, initial_guess]):
+        for i,func in enumerate([initial_guess]):
             for j in range(5):
                 start = time.time()
                 configs = func(mol,nconf) 

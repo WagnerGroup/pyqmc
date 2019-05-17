@@ -77,7 +77,7 @@ def test_vmc():
 
 def test_accumulator_rhf():
     import pandas as pd
-    from mc import vmc,initial_guess_vectorize
+    from mc import vmc,initial_guess
     from pyscf import gto,scf
     from energy import energy
     from slater import PySCFSlaterRHF
@@ -87,7 +87,7 @@ def test_accumulator_rhf():
     mf = scf.RHF(mol).run()
     nconf=5000
     wf=PySCFSlaterRHF(nconf,mol,mf)
-    coords = initial_guess_vectorize(mol,nconf) 
+    coords = initial_guess(mol,nconf) 
 
     df,coords=vmc(mol,wf,coords,nsteps=30,accumulators={'energy':EnergyAccumulator(mol)} )
     df=pd.DataFrame(df)
@@ -102,7 +102,7 @@ def test_accumulator_rhf():
 
 def test_ecp():
     import pandas as pd
-    from mc import vmc,initial_guess_vectorize
+    from mc import vmc,initial_guess
     from pyscf import lib,gto,scf
     from slater import PySCFSlaterRHF
     from accumulators import EnergyAccumulator
@@ -111,7 +111,7 @@ def test_ecp():
     mf = scf.RHF(mol).run()
     nconf=5000
     wf=PySCFSlaterRHF(nconf,mol,mf)
-    coords = initial_guess_vectorize(mol,nconf)
+    coords = initial_guess(mol,nconf)
     df,coords=vmc(mol,wf,coords,nsteps=100,accumulators={'energy':EnergyAccumulator(mol)} )
     df=pd.DataFrame(df)
     df.to_csv("data.csv")

@@ -4,11 +4,11 @@ from pyscf import lib, gto, scf
 from slater import PySCFSlaterRHF
 from multiplywf import MultiplyWF
 from jastrow import Jastrow2B
-from energy import energy
+from energy import energy,kinetic
 from mc import initial_guess_vectorize,vmc
 from func3d import GaussianFunction
 
-def optvariance(mol,wf,coords,params=None,method='Nelder-Mead',method_options=None):
+def optvariance(mol,wf,coords,params=None,method='Powell',method_options=None):
     """Optimizes variance of wave function against parameters indicated by params.
     Need to implement variance gradient with respect to parameters.
     Args:
@@ -22,19 +22,24 @@ def optvariance(mol,wf,coords,params=None,method='Nelder-Mead',method_options=No
         params={}
         for k,p in wf.parameters.items():
             params[k]=p
-    print(params)
+    #print(params)
     
     # scipy.minimize() needs 1d argument 
     x0=np.concatenate([ params[k].flatten() for k in params ])
     shapes=np.array([ params[k].shape for k in params ])
     slices=np.array([ np.prod(s) for s in shapes ])
+    Enref=energy(mol,coords,wf)
 
     def variance_cost_function(x):
         x_sliced=np.split(x,slices)
         for i,k in enumerate(params):
             wf.parameters[k]=x_sliced[i]
         wf.recompute(coords)
-        En=energy(mol,coords,wf)['total']
+        ke=kinetic(coords,wf)
+        #Here we assume the ecp is fixed and only recompute
+        #kinetic energy
+        En=Enref['total']-Enref['ke']+ke
+        #En=energy(mol,coords,wf)['total']
         return np.std(En)**2
 
 

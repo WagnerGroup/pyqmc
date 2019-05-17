@@ -127,8 +127,8 @@ def test():
     mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)
     #mol = gto.M(atom='C 0. 0. 0.', ecp='bfd', basis='bfd_vtz')
     mf = scf.RHF(mol).run()
-    import pyscf2qwalk
-    pyscf2qwalk.print_qwalk(mol,mf)
+    #import pyscf2qwalk
+    #pyscf2qwalk.print_qwalk(mol,mf)
     nconf=5000
     wf=PySCFSlaterRHF(nconf,mol,mf)
     coords = initial_guess_vectorize(mol,nconf) 

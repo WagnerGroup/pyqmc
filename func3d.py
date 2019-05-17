@@ -126,9 +126,11 @@ class PadeFunction:
     
 class ExpCuspFunction:
     """
-    :math:`b(r) = \frac{p(r/r_{cut})}{1+\gamma*p(r/r_{cut})}` 
+    :math:`b(r) = -\frac{p(r/r_{cut})}{1+\gamma*p(r/r_{cut})} + \frac{1}{3+\gamma}` 
     where 
     :math:`p(y) = y - y^2 + y^3/3`
+    This function is positive at small r, decreasing to zero at r=rcut, being cutoff to 
+    zero for r>rcut.
     """
     def __init__(self, gamma, rcut):
         self.parameters={}
@@ -144,7 +146,10 @@ class ExpCuspFunction:
         """
         r = np.linalg.norm(rvec, axis=-1)
         y = r/self.parameters['rcut']
-        return (y-y**2+y**3/3) / ( 1 + self.parameters['gamma'] * (y-y**2+y**3/3) )
+        mask=y<=1
+        func=np.zeros(r.shape)
+        func[mask]=( - (y-y**2+y**3/3) / ( 1 + self.parameters['gamma'] * (y-y**2+y**3/3) ) + 1/(3+self.parameters['gamma']) )[mask]
+        return func
         
     def gradient(self, rvec):
         """
@@ -155,7 +160,10 @@ class ExpCuspFunction:
         """
         r = np.linalg.norm(rvec, axis=-1, keepdims=True)
         y = r/self.parameters['rcut']
-        return rvec * (1-2*y+y**2) / ( 1 + self.parameters['gamma'] * (y-y**2+y**3/3) )**2 / (self.parameters['rcut'] * r) 
+        mask=(y<=1)*np.ones(rvec.shape).astype(bool)
+        func=np.zeros(rvec.shape)
+        func[mask]=(- rvec * ( (1-2*y+y**2) / ( 1 + self.parameters['gamma'] * (y-y**2+y**3/3) )**2 / (self.parameters['rcut'] * r) ) )[mask]
+        return func
 
     def laplacian(self, rvec):
         """
@@ -167,8 +175,11 @@ class ExpCuspFunction:
         r = np.linalg.norm(rvec, axis=-1, keepdims=True)
         y = r/self.parameters['rcut']
         dydr = 1/self.parameters['rcut']
-        return ((1-2*y+y**2) / r / (1+self.parameters['gamma']*(y-y**2+y**3/3))**2 / self.parameters['rcut']) + (( (-2/self.parameters['rcut']+2*r/self.parameters['rcut']**2)/r**2 - (1-2*y+y**2)/r**3 ) / self.parameters['rcut'] / (1+self.parameters['gamma']*(y-y**2+y**3/3))**2 + ((1-2*y+y**2)/self.parameters['rcut'])**2 * (-2*self.parameters['gamma']/(1+self.parameters['gamma']*(y-y**2+y**3/3))**3) / r**2) * (rvec**2)
-
+        mask=(y<=1)*np.ones(rvec.shape).astype(bool)
+        func=np.zeros(rvec.shape)
+        func[mask]=-( ((1-2*y+y**2) / r / (1+self.parameters['gamma']*(y-y**2+y**3/3))**2 / self.parameters['rcut']) + (( (-2/self.parameters['rcut']+2*r/self.parameters['rcut']**2)/r**2 - (1-2*y+y**2)/r**3 ) / self.parameters['rcut'] / (1+self.parameters['gamma']*(y-y**2+y**3/3))**2 + ((1-2*y+y**2)/self.parameters['rcut'])**2 * (-2*self.parameters['gamma']/(1+self.parameters['gamma']*(y-y**2+y**3/3))**3) / r**2) * (rvec**2) )[mask]
+        return func
+    
     def pgradient(self, rvec):
         """ Returns gradient of self.value with respect all parameters
         Parameters:
@@ -178,12 +189,16 @@ class ExpCuspFunction:
         """
         r = np.linalg.norm(rvec, axis=-1)
         y = r/self.parameters['rcut']
-        return {'rcut':-r/self.parameters['rcut']**2 * (1-2*y+y**2) / (1+self.parameters['gamma']*(y-y**2+y**3/3))**2,'gamma':-(y-y**2+y**3/3)**2/(1+self.parameters['gamma']*(y-y**2+y**3/3))**2}
+        mask=y<=1
+        func={'rcut':np.zeros(r.shape),'gamma':np.zeros(r.shape)}
+        func['rcut'][mask]=-( -r/self.parameters['rcut']**2 * (1-2*y+y**2) / (1+self.parameters['gamma']*(y-y**2+y**3/3))**2 )[mask]
+        func['gamma'][mask]=-( -(y-y**2+y**3/3)**2/(1+self.parameters['gamma']*(y-y**2+y**3/3))**2 - 1/(3+self.parameters['gamma'])**2 )[mask]
+        return func
 
 
     
 def test_func3d_gradient(bf, delta=1e-5):
-    rvec = np.random.randn(10,3)
+    rvec = np.random.randn(150,3)
     grad = bf.gradient(rvec)
     numeric = np.zeros(rvec.shape)
     for d in range(3):
@@ -198,7 +213,7 @@ def test_func3d_gradient(bf, delta=1e-5):
     return (maxerror,normerror)
 
 def test_func3d_laplacian(bf, delta=1e-5):
-    rvec = np.random.randn(10,3)
+    rvec = np.random.randn(150,3)
     lap = bf.laplacian(rvec)
     numeric = np.zeros(rvec.shape)
     for d in range(3):
@@ -218,6 +233,8 @@ def test():
         for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
             print(name, 'delta', delta, "Testing gradient", test_func3d_gradient(func,delta=delta))
             print(name, 'delta', delta, "Testing laplacian", test_func3d_laplacian(func,delta=delta))
-    
+
+            
 if __name__=="__main__":
     test()
+

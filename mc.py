@@ -6,7 +6,6 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1" 
 
 import numpy as np
-from pyscf import lib, gto, scf
 from slater import PySCFSlaterRHF
 from accumulators import EnergyAccumulator
     
@@ -44,7 +43,27 @@ def limdrift(g,cutoff=1):
     return g
     
 
-def vmc(mol,wf,coords,nsteps=10000,tstep=0.5,accumulators=None,verbose=False):
+def vmc(mol,wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False):
+    """Run a Monte Carlo sample of a given wave function.
+
+    Args:
+      mol: A pyscf molecule-like class. Used to generate an energy accumulator if none is given
+
+      wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as 
+      anything (such as laplacian() ) used by accumulators
+
+      tstep: Time step for move proposals. Only affects efficiency.
+
+      accumulators: A list of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
+
+      verbose: Print out step information 
+
+    Returns: (df,coords)
+       df: A list of dictionaries nstep long that contains all results from the accumulators.
+
+       coords: The final coordinates from this calculation.
+       
+    """
     if accumulators is None:
         accumulators={'energy':EnergyAccumulator(mol) } 
     nconf=coords.shape[0]
@@ -95,6 +114,8 @@ def vmc(mol,wf,coords,nsteps=10000,tstep=0.5,accumulators=None,verbose=False):
     
 
 def test():
+    from pyscf import lib, gto, scf
+    
     import pandas as pd
     
     mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)

@@ -1,21 +1,24 @@
 import numpy as np
 from scipy.optimize import minimize
-from pyscf import lib, gto, scf
-from slater import PySCFSlaterRHF
-from multiplywf import MultiplyWF
-from jastrow import Jastrow2B
-from energy import energy,kinetic
-from func3d import GaussianFunction
+from energy import kinetic
 
-def optvariance(mol,wf,coords,params=None,method='Powell',method_options=None):
+def optvariance(energy,wf,coords,params=None,method='Powell',method_options=None):
     """Optimizes variance of wave function against parameters indicated by params.
-    Need to implement variance gradient with respect to parameters.
+    
+    Does not use gradient information, and assumes that only the kinetic energy changes.
+    
     Args:
-      mol: Mole object.
-      coords: (nconfig,nelec,3).
-      params: dictionary with parameters to optimize.
+      energy: An Accumulator object that returns total energy in 'total' and kinetic energy in 'ke'
+
+      coords: (nconfig,nelec,3)
+
+      params: dictionary with parameters to optimize
+
+      method: An optimization method usable by scipy.optimize
+      
     Returns:
       opt_variance, modifying params into optimized values.
+      
     """
     if params is None:
         params={}
@@ -27,7 +30,7 @@ def optvariance(mol,wf,coords,params=None,method='Powell',method_options=None):
     x0=np.concatenate([ params[k].flatten() for k in params ])
     shapes=np.array([ params[k].shape for k in params ])
     slices=np.array([ np.prod(s) for s in shapes ])
-    Enref=energy(mol,coords,wf)
+    Enref=energy(coords,wf)
 
     def variance_cost_function(x):
         x_sliced=np.split(x,slices)
@@ -38,7 +41,6 @@ def optvariance(mol,wf,coords,params=None,method='Powell',method_options=None):
         #Here we assume the ecp is fixed and only recompute
         #kinetic energy
         En=Enref['total']-Enref['ke']+ke
-        #En=energy(mol,coords,wf)['total']
         return np.std(En)**2
 
 
@@ -53,13 +55,20 @@ def optvariance(mol,wf,coords,params=None,method='Powell',method_options=None):
 
 
 def test_single_opt():
+    from accumulators import EnergyAccumulator
+    from pyscf import lib, gto, scf
+    
     import pandas as pd
+    from multiplywf import MultiplyWF
+    from jastrow import Jastrow2B
+    from func3d import GaussianFunction
+    from slater import PySCFSlaterRHF
     from multiplywf import MultiplyWF
     from jastrow import Jastrow2B
     
     from mc import initial_guess,vmc
     
-    mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)
+    mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='bfd_vtz',ecp='bfd',unit='bohr',verbose=5)
     mf = scf.RHF(mol).run()
     nconf=1000
     nsteps=10
@@ -74,11 +83,8 @@ def test_single_opt():
     #params0=None
     
     vmc(mol,wf,coords,nsteps=nsteps)
-    En=energy(mol,coords,wf)['total']
 
-    print('Initial parameters:\n',params0)
-    print('Initial variance:',np.std(En)**2)
-    opt_var=optvariance(mol,wf,coords,params0)
+    opt_var=optvariance(EnergyAccumulator(mol),wf,coords,params0)
     print('Optimized parameters:\n',params0)
     print('Final variance:',opt_var)
     

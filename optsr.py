@@ -1,21 +1,28 @@
 import numpy as np
 from scipy.optimize import minimize
+from energy import kinetic
+from mc import vmc
 
-from slater import PySCFSlaterRHF
-from multiplywf import MultiplyWF
-from jastrow import Jastrow2B
-from energy import energy
-from mc import initial_guess,vmc
-from func3d import GaussianFunction
+def optenergy(mol,energy,wf,coords,params=None,method='Powell',method_options=None,vmcsteps=50):
+    """Optimizes energy (not yet using parameter gradients) against parameters indicated by params.
+    
+    It doesn't yet use parameter gradients.
 
-def optenergy(mol,wf,coords,params=None,method='Powell',method_options=None,vmcsteps=50):
-    """Optimizes energy (not yet using parameter gradients) doing stochastic reconfiguration.
     Args:
-      mol: Mole object.
-      coords: (nconfig,nelec,3).
-      params: dictionary with parameters to optimize.
+      mol: 
+
+      energy: An Accumulator object that returns total energy in 'total' and kinetic energy in 'ke'
+
+      coords: (nconfig,nelec,3)
+
+      params: dictionary with parameters to optimize
+
+      method: An optimization method usable by scipy.optimize
+
+      vmcsteps: steps for the vmc
     Returns:
       opt_variance, modifying params into optimized values.
+
     """
     if params is None:
         params={}
@@ -31,8 +38,8 @@ def optenergy(mol,wf,coords,params=None,method='Powell',method_options=None,vmcs
     def energy_cost_function(x):
         wf.wf2.parameters['coeff']=x
         wf.recompute(coords)
-        vmc(mol,wf,coords,nsteps=vmcsteps) # Stochastic reconfiguration
-        En=energy(mol,coords,wf)['total']
+        vmc(mol,wf,coords,nsteps=vmcsteps) # Stochastic reconfig
+        En=energy(coords,wf)['total']
         print('E =',np.mean(En),'pars =',x)
         return np.mean(En)
 
@@ -50,9 +57,19 @@ def optenergy(mol,wf,coords,params=None,method='Powell',method_options=None,vmcs
 
 
 def test():
-    import pandas as pd
+    from accumulators import EnergyAccumulator
     from pyscf import lib, gto, scf
+    
+    import pandas as pd
+    from multiplywf import MultiplyWF
+    from jastrow import Jastrow2B
+    from func3d import GaussianFunction
+    from slater import PySCFSlaterRHF
+    from multiplywf import MultiplyWF
+    from jastrow import Jastrow2B
 
+    from mc import initial_guess
+    
     mol = gto.M(atom='H 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)
     mf = scf.RHF(mol).run()
     nconf=300
@@ -68,11 +85,14 @@ def test():
     #params0=None
     
     vmc(mol,wf,coords,nsteps=nsteps)
-    En=energy(mol,coords,wf)['total']
 
+    #ee=EnergyAccumulator(mol)
+    #print(ee(coords,wf))
+    #exit()
+    
     print('Initial parameters:\n',params0)
-    print('Initial energy:',np.mean(En))
-    opt_en=optenergy(mol,wf,coords,params0,vmcsteps=nsteps)
+    #print('Initial energy:',np.mean(En))
+    opt_en=optenergy(mol,EnergyAccumulator(mol),wf,coords,params0,vmcsteps=nsteps)
     print('Optimized parameters:\n',params0)
     print('Final energy:',opt_en)
 

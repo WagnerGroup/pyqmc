@@ -5,7 +5,6 @@ from slater import PySCFSlaterRHF
 from multiplywf import MultiplyWF
 from jastrow import Jastrow2B
 from energy import energy,kinetic
-from mc import initial_guess_vectorize,vmc
 from func3d import GaussianFunction
 
 def optvariance(mol,wf,coords,params=None,method='Powell',method_options=None):
@@ -61,12 +60,14 @@ def test_single_opt():
     from multiplywf import MultiplyWF
     from jastrow import Jastrow2B
     
+    from mc import initial_guess,vmc
+    
     mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)
     mf = scf.RHF(mol).run()
     nconf=1000
     nsteps=10
 
-    coords = initial_guess_vectorize(mol,nconf)
+    coords = initial_guess(mol,nconf)
     basis={'wf2coeff':[GaussianFunction(1.0),GaussianFunction(2.0)]}
     wf=MultiplyWF(nconf,PySCFSlaterRHF(nconf,mol,mf),Jastrow2B(nconf,mol,basis['wf2coeff']))
     params0={'wf2coeff':np.random.normal(loc=0.,scale=.1,size=len(wf.parameters['wf2coeff']))}
@@ -92,13 +93,15 @@ def test_multiple_opt():
     import pandas as pd
     from multiplywf import MultiplyWF
     from jastrow import Jastrow2B
+    from mc import initial_guess,vmc
+    
     
     mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)
     mf = scf.RHF(mol).run()
     nconf=5000
     nsteps=30
 
-    coords = initial_guess_vectorize(mol,nconf)
+    coords = initial_guess(mol,nconf)
     basis={'wf2coeff':[GaussianFunction(0.1),GaussianFunction(0.32)]}
     wf=MultiplyWF(nconf,PySCFSlaterRHF(nconf,mol,mf),Jastrow2B(nconf,mol,basis['wf2coeff']))
     params0={'wf2coeff':np.random.normal(loc=0.,scale=.1,size=len(wf.parameters['wf2coeff']))}

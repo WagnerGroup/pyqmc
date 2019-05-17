@@ -333,6 +333,7 @@ class Jastrow:
         return delta + np.sum(g**2,axis=0)
         
 
+    # NEEDS FIXING TO ADD SPIN
     def _get_deltab(self,e,epos):
         """
         here we will evaluate the b's for a given electron (both the old and new)
@@ -355,6 +356,7 @@ class Jastrow:
             delta[:,i]+=np.sum((b.value(dnew)-b.value(dold)).reshape(nconf,-1),axis=1)
         return delta
 
+    # NEEDS FIXING TO ADD SPIN
     def _get_deltaa(self,e,epos):
         """
         here we will evaluate the a's for a given electron (both the old and new)

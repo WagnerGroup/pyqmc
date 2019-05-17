@@ -272,8 +272,10 @@ class Jastrow:
 
     def value(self): 
         """  """
-        u=np.einsum("ij,j->i",self._bvalues,self.parameters['bcoeff'])+\
-          np.sum(self._avalues*self.parameters['acoeff'], axis=(2,1))
+        #u=np.einsum("ij,j->i",self._bvalues,self.parameters['bcoeff'])+\
+        #  np.sum(self._avalues*self.parameters['acoeff'], axis=(2,1))
+        u=np.sum(np.multiply(self._bvalues, self.parameters['bcoeff'])) +\
+          np.sum(np.multiply(self._avalues, self.parameters['acoeff']))
         return (1,u)       
 
 
@@ -341,19 +343,33 @@ class Jastrow:
         """
         nconf=epos.shape[0]
         ne=self._configscurrent.shape[1]
+        nup = self._mol.nelec[0]
         mask=[True]*ne
         mask[e]=False
 
         dnew=eedist_i(self._configscurrent,epos)[:,mask,:]
-        #print(eedist_i(self._configscurrent,epos)[:,mask,:].shape)
-        dnew=eedist_i(self._configscurrent,epos)[:,mask,:].reshape((-1,3))
-        dold=eedist_i(self._configscurrent,self._configscurrent[:,e,:])[:,mask,:].reshape((-1,3))
+        dold=eedist_i(self._configscurrent,self._configscurrent[:,e,:])[:,mask,:]
+        if(e < nup): # Spin up electron selected
+            d1new= dnew[:,:nup-1,:].reshape(nconf,-1)
+            d2new= dnew[:,nup-1:,:].reshape(nconf,-1)
+            d3new= np.zeros((nconf,3)).reshape(nconf,-1)
+            d1old= dold[:,:nup-1,:].reshape(nconf,-1)
+            d2old= dold[:,nup-1:,:].reshape(nconf,-1)
+            d3old= np.zeros((nconf,3)).reshape(nconf,-1)
+        else:        # Spin down electron selected
+            d1new= np.zeros((nconf,3)).reshape(nconf,-1)
+            d2new= dnew[:,:nup,:].reshape(nconf,-1)
+            d3new= dnew[:,nup:,].reshape(nconf,-1)
+            d1old= np.zeros((nconf,3)).reshape(nconf,-1)
+            d2old= dold[:,:nup,:].reshape(nconf,-1)
+            d3old= dold[:,nup:,].reshape(nconf,-1)
+
         delta=np.zeros((nconf,len(self.b_basis), 3))
 
         for i,b in enumerate(self.b_basis):
-            #print("DELTA SHAPE: {}".format(delta[:,i].shape))
-            #print(b.value(dnew).shape)
-            delta[:,i]+=np.sum((b.value(dnew)-b.value(dold)).reshape(nconf,-1),axis=1)
+            delta[:,i,0]+=np.sum((b.value(d1new)-b.value(d1old)).reshape(nconf,-1),axis=1)
+            delta[:,i,1]+=np.sum((b.value(d2new)-b.value(d2old)).reshape(nconf,-1),axis=1)
+            delta[:,i,2]+=np.sum((b.value(d3new)-b.value(d3old)).reshape(nconf,-1),axis=1)
         return delta
 
     # NEEDS FIXING TO ADD SPIN
@@ -368,6 +384,9 @@ class Jastrow:
         # Gets number of ions
         ni=self._mol.natm
 
+        # Get number of up electrons
+        nup = self._mol.nelec[0]
+
         # Gets new e-i distance
         dnew=eidist_i(self._mol.atom_coords(),epos).reshape((-1,3))
 
@@ -377,17 +396,18 @@ class Jastrow:
         # Change
         delta=np.zeros((nconf,ni,len(self.a_basis), 2))
 
+        # Spin index
+        spin_idx = int(e>=nup)
+
         for i,a in enumerate(self.a_basis):
-            delta[:,:,i]+=(a.value(dnew)-a.value(dold)).reshape((nconf, -1))
+            delta[:,:,i,spin_idx]+=(a.value(dnew)-a.value(dold)).reshape((nconf, -1))
+            delta[:,:,i,spin_idx]+=(a.value(dnew)-a.value(dold)).reshape((nconf, -1))
         return delta
 
 
     def testvalue(self,e,epos):
-        #b_val = np.einsum('j,ij->i',self.parameters['bcoeff'],self._get_deltab(e,epos))
-        print(self.parameters['bcoeff'].shape)
-        print(self._get_deltab(e,epos).shape)
-        b_val = np.sum(np.multiply(self.parameters['bcoeff'],self._get_deltab(e,epos)))
-        a_val = np.sum(self.parameters['acoeff']*self._get_deltaa(e,epos), axis=(2,1))
+        b_val = np.sum(self.parameters['bcoeff']*self._get_deltab(e,epos), axis=(2,1))
+        a_val = np.sum(self.parameters['acoeff']*self._get_deltaa(e,epos), axis=(3,2,1))
         return np.exp(b_val + a_val)
 
 
@@ -404,7 +424,7 @@ def test():
     
     mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
     l = dir(mol)
-    nconf=20
+    nconf=2
     configs=np.random.randn(nconf,np.sum(mol.nelec),3)
     
     #jastrow=Jastrow2B(nconf,mol)

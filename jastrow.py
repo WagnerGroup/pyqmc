@@ -275,13 +275,14 @@ class Jastrow:
 
 
     def gradient(self,e,epos):
-        """We compute the gradient for electron e as 
+        """We compute the gradient for electron e as
         :math:`\grad_e \ln \Psi_J = \sum_k c_k \sum_{j > e} \grad_e b_k(r_{ej})  + \sum_{i < e} \grad_e b_k(r_{ie}) `
-        So we need to compute the gradient of the b's for these indices. 
+        So we need to compute the gradient of the b's for these indices.
         Note that we need to compute distances between electron position given and the current electron distances.
         We will need this for laplacian() as well"""
         nconf=epos.shape[0]
         ne=self._configscurrent.shape[1]
+        nup = self._mol.nelec[0]
         dnew=eedist_i(self._configscurrent,epos)
 
         dinew=eidist_i(self._mol.atom_coords(),epos)
@@ -290,15 +291,33 @@ class Jastrow:
         mask=[True]*ne
         mask[e]=False
         dnew=dnew[:,mask,:]
-        dnew=dnew.reshape(-1,3)
-        
+
         delta=np.zeros((3,nconf))
+        if(e < nup): # Spin up electron selected
+            dnew1= dnew[:,:nup-1,:].reshape(nconf,-1)
+            dnew2= dnew[:,nup-1:,:].reshape(nconf,-1)
+            dnew3= np.zeros((nconf,3)).reshape(nconf,-1)
+        #     d1old= dold[:,:nup-1,:].reshape(nconf,-1)
+        #     d2old= dold[:,nup-1:,:].reshape(nconf,-1)
+        #     d3old= np.zeros((nconf,3)).reshape(nconf,-1)
+        else:        # Spin down electron selected
+            dnew1= np.zeros((nconf,3)).reshape(nconf,-1)
+            dnew2= dnew[:,:nup,:].reshape(nconf,-1)
+            dnew3= dnew[:,nup:,].reshape(nconf,-1)
+        #     d1old= np.zeros((nconf,3)).reshape(nconf,-1)
+        #     d2old= dold[:,:nup,:].reshape(nconf,-1)
+        #     d3old= dold[:,nup:,].reshape(nconf,-1)
 
         for c,b in zip(self.parameters['bcoeff'],self.b_basis):
-            delta+=c*np.sum(b.gradient(dnew).reshape(nconf,-1,3),axis=1).T
+            delta+=c[0]*np.sum(b.gradient(dnew1).reshape(nconf,-1,3),axis=1).T
+            delta+=c[1]*np.sum(b.gradient(dnew2).reshape(nconf,-1,3),axis=1).T
+            delta+=c[2]*np.sum(b.gradient(dnew3).reshape(nconf,-1,3),axis=1).T
 
         for c,a in zip(self.parameters['acoeff'],self.a_basis):
-            delta+=c*np.sum(a.gradient(dinew).reshape(nconf,-1,3),axis=1).T
+            if e < nup:
+                delta+=c[0]*np.sum(a.gradient(dinew).reshape(nconf,-1,3),axis=1).T
+            else:
+                delta+=c[1]*np.sum(a.gradient(dinew).reshape(nconf,-1,3),axis=1).T
 
         return delta
 
@@ -306,28 +325,47 @@ class Jastrow:
     def laplacian(self,e,epos):
         """ """
         nconf=epos.shape[0]
+        nup = self._mol.nelec[0]
         ne=self._configscurrent.shape[1]
         dnew=eedist_i(self._configscurrent,epos)
 
         mask=[True]*ne
         mask[e]=False
         dnew=dnew[:,mask,:]
-        dnew=dnew.reshape(-1,3)
+        # dnew=dnew.reshape(-1,3)
 
         dinew=eidist_i(self._mol.atom_coords(),epos)
         dinew=dinew.reshape(-1,3)
 
         delta=np.zeros(nconf)
 
+        if(e < nup): # Spin up electron selected
+            dnew1= dnew[:,:nup-1,:].reshape(nconf,-1)
+            dnew2= dnew[:,nup-1:,:].reshape(nconf,-1)
+            dnew3= np.zeros((nconf,3)).reshape(nconf,-1)
+        else:        # Spin down electron selected
+            dnew1= np.zeros((nconf,3)).reshape(nconf,-1)
+            dnew2= dnew[:,:nup,:].reshape(nconf,-1)
+            dnew3= dnew[:,nup:,].reshape(nconf,-1)
+
         for c,b in zip(self.parameters['bcoeff'],self.b_basis):
-            delta+=c*np.sum(b.laplacian(dnew).reshape(nconf,-1),axis=1)
+            delta+=c[0]*np.sum(b.laplacian(dnew1).reshape(nconf,-1),axis=1)
+            delta+=c[1]*np.sum(b.laplacian(dnew2).reshape(nconf,-1),axis=1)
+            delta+=c[2]*np.sum(b.laplacian(dnew3).reshape(nconf,-1),axis=1)
+            # delta+=c*np.sum(b.laplacian(dnew).reshape(nconf,-1),axis=1)
 
         for c,a in zip(self.parameters['acoeff'],self.a_basis):
-            delta+=c*np.sum(a.laplacian(dinew).reshape(nconf,-1),axis=1)
+            if e < nup:
+                #print(np.sum(a.laplacian(dinew).reshape(nconf,-1),axis=1))
+                delta += c[0]*np.sum(a.laplacian(dinew).reshape(nconf,-1),axis=1)
+            else:
+                delta += c[1]*np.sum(a.laplacian(dinew).reshape(nconf,-1),axis=1)
+            # delta+=c*np.sum(a.laplacian(dinew).reshape(nconf,-1),axis=1)
 
         g=self.gradient(e,epos)
-        return delta + np.sum(g**2,axis=0)
-        
+        #print('SHAPE: ', g.shape)
+        return delta + np.sum(g**2,axis=0) # 20 x 1
+
 
     def _get_deltab(self,e,epos):
         """

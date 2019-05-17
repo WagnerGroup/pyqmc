@@ -37,6 +37,9 @@ class WFmerger(collections.abc.MutableMapping):
             for k2 in self.data[k1].keys():
                 yield k1+k2,self.data[k1][k2]
 
+    def __repr__(self):
+        return 'WFmerger: ' + self.data.__repr__()
+
     def keys(self):
         for k1 in ['wf1','wf2']:
             for k2 in self.data[k1].keys():
@@ -113,7 +116,7 @@ def test():
     wf=MultiplyWF(nconf,slater,jastrow)
     wf.parameters['wf2coeff']=np.ones(len(wf.parameters['wf2coeff']))
     print(wf.wf2.parameters['coeff'])
-    
+    print(wf.parameters)
     import testwf
     for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
         print('delta', delta, "Testing gradient",testwf.test_wf_gradient(wf,configs,delta=delta))

@@ -8,7 +8,7 @@ from energy import energy
 from mc import initial_guess_vectorize,vmc
 from func3d import GaussianFunction
 
-def optvariance(mol,wf,coords,params=None):
+def optvariance(mol,wf,coords,params=None,method='Nelder-Mead',method_options=None):
     """Optimizes variance of wave function against parameters indicated by params.
     Need to implement variance gradient with respect to parameters.
     Args:
@@ -37,7 +37,8 @@ def optvariance(mol,wf,coords,params=None):
         En=energy(mol,coords,wf)['total']
         return np.std(En)**2
 
-    res=minimize(variance_cost_function, x0=x0, method='BFGS', options={'gtol': 1e-7, 'disp': True, 'maxiter':100})
+
+    res=minimize(variance_cost_function, x0=x0, method=method, options=method_options)
 
     # Modfies params dictionary with optimized parameters (preserving original shape)
     opt_pars=np.split(res.x,slices[:-1])
@@ -57,11 +58,11 @@ def test_single_opt():
     
     mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)
     mf = scf.RHF(mol).run()
-    nconf=50
+    nconf=1000
     nsteps=10
 
     coords = initial_guess_vectorize(mol,nconf)
-    basis={'wf2coeff':[GaussianFunction(0.1),GaussianFunction(0.32)]}
+    basis={'wf2coeff':[GaussianFunction(1.0),GaussianFunction(2.0)]}
     wf=MultiplyWF(nconf,PySCFSlaterRHF(nconf,mol,mf),Jastrow2B(nconf,mol,basis['wf2coeff']))
     params0={'wf2coeff':np.random.normal(loc=0.,scale=.1,size=len(wf.parameters['wf2coeff']))}
     for k,p in wf.parameters.items():

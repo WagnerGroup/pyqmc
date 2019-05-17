@@ -11,6 +11,7 @@ Welcome to pyQMC's documentation!
    :caption: Contents:
 
    slater
+   jastrow
    ecp
    energy
    accumulators

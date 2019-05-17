@@ -2,7 +2,8 @@ import numpy as np
 from energy import * 
 
 class EnergyAccumulator:
-  """returns energy of each configuration in a dictionary"""
+  """returns energy of each configuration in a dictionary. 
+  Keys and their meanings can be found in energy.energy """
   def __init__(self, mol):
     self.mol = mol
 

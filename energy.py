@@ -33,16 +33,21 @@ def get_ecp(mol,configs,wf):
     return eval_ecp.ecp(mol, configs, wf)
     
 
+def kinetic(configs,wf):
+    nconf=configs.shape[0]
+    ke=np.zeros(nconf)
+    nelec=configs.shape[1]
+    for e in range(nelec):
+        ke+=-0.5*wf.laplacian(e,configs[:,e,:])
+    return ke
+
 def energy(mol,configs,wf):
     ee=ee_energy(configs)
     ei=ei_energy(mol,configs)
     ecp_val = get_ecp(mol,configs,wf)
     ii=ii_energy(mol)
     nconf=configs.shape[0]
-    ke=np.zeros(nconf)
-    nelec=configs.shape[1]
-    for e in range(nelec):
-        ke+=-0.5*wf.laplacian(e,configs[:,e,:])
+    ke=kinetic(configs,wf)
     return {'ke':ke,
             'ee':ee,
             'ei':ei+ecp_val,

@@ -71,7 +71,7 @@ def limdrift(g,cutoff=1):
     return g
     
 
-def vmc(mol,wf,coords,nsteps=10000,tstep=0.5,accumulators=None):
+def vmc(mol,wf,coords,nsteps=10000,tstep=0.5,accumulators=None,verbose=False):
     if accumulators is None:
         accumulators={'energy':EnergyAccumulator(mol) } 
     nconf=coords.shape[0]
@@ -79,7 +79,8 @@ def vmc(mol,wf,coords,nsteps=10000,tstep=0.5,accumulators=None):
     df=[]
     wf.recompute(coords)
     for step in range(nsteps):
-        print("step",step)
+        if verbose:
+            print("step",step)
         acc=[]
         for e in range(nelec):
 

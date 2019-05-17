@@ -1,5 +1,8 @@
 import numpy as np
 from pyscf import lib, gto, scf
+"""
+v_l object. c*r^{n-2}*exp{-e*r^2} 
+"""
 
 class rnExp():
     def __init__(self,n,e,c):
@@ -11,6 +14,14 @@ class rnExp():
         return np.sum(r[:,np.newaxis]**self.n * self.c*np.exp(-self.e*r[:,np.newaxis]**2),axis=1)
 
 def generate_ecp_functors(coeffs):
+    """
+    Returns a functor, with keys as the angular momenta:
+    -1 stands for the nonlocal part, 0,1,2,... are the s,p,d channels, etc.
+    Parameters: 
+      mol._ecp[atom_name][1] (coefficients of the ECP)
+    Returns:
+      v_l function, with key = angular momentum
+    """
     d={}
     for c in coeffs:
         el=c[0]
@@ -28,9 +39,15 @@ def generate_ecp_functors(coeffs):
 
 
 #########################################################################
-
-def P_l(x,l): # legendre polynomial, x=r_ea(i)
-    # returns a nconf x naip array for a given l
+def P_l(x,l): 
+    """
+    Legendre functions,
+    returns a nconf x naip array for a given l, x=r_ea(i)
+    Parameters:
+      x: nconf array, l: integer
+    Returns:
+      P_l values: nconf x naip array
+    """
     if l == 0:  return np.ones(x.shape)
     elif l == 1: return x
     elif l == 2: return 0.5*(3*x*x-np.ones(x.shape))
@@ -39,14 +56,27 @@ def P_l(x,l): # legendre polynomial, x=r_ea(i)
     else: return np.zeros(x.shape)
 
 def get_r_ea(mol,configs,e,at):
-    # returns a nconf x 3 array, distance between electron e and atom at
+    """
+    Returns a nconf x 3 array, distances between electron e and atom at
+    Parameters:
+      e,at: integers, eletron and atom indices
+      configs: nconf x nelec x 3 array
+    Returns:
+      epos-apos, electron-atom distances
+    """
     epos = configs[:,e,:]
     nconf = configs.shape[0]
     apos = np.outer(np.ones(nconf),np.array(mol._atom[at][1])) # nconf x 3 array, position of atom at
     return epos-apos
 
 def get_r_ea_i(mol,epos_rot,e,at):
-    # epos_rot is the rotated electron positions: nconf x naip x nelec x 3
+    """
+    Returns a nconf x naip x 3 array, distances between the rotated electron (e) and the atom at
+    Parameters:
+      epos_rot: rotated positions of electron e, nconf x naip x 3
+    Returns:
+      epos_rot-apos, (rotated) electron-atom distances
+    """
     nconf,naip = epos_rot.shape[0:2]
     apos = np.zeros([nconf,naip,3]) # position of the atom, broadcasted into nconf x naip x 3
     for aip in range(naip):
@@ -55,20 +85,24 @@ def get_r_ea_i(mol,epos_rot,e,at):
 
 
 def get_v_l(mol,configs,e,at):
-    # returns a nconf x nl array
+    """
+    Returns list of the l's, and a nconf x nl array, v_l values for each l: l= 0,1,2,...,-1
+    """
     nconf = configs.shape[0]
     at_name = mol._atom[at][0]
-    r_ea = np.linalg.norm(get_r_ea(mol,configs,e,at),axis = 1)  # returns a nconf array of the electron-atom dist 
+    r_ea = np.linalg.norm(get_r_ea(mol,configs,e,at),axis = 1) 
     vl = generate_ecp_functors(mol._ecp[at_name][1])
     Lmax = len(vl)
     v_l = np.zeros([nconf,Lmax])
     for l in vl.keys(): # -1,0,1,...
         v_l[:,l] = vl[l](r_ea)
-    return vl.keys(),v_l   # nconf x nl
+    return vl.keys(),v_l  
 
 
 def get_wf_ratio(wf,epos_rot,e):
-    # returns the Psi(r_e(i))/Psi(r_e) value, which is a nconf x naip array
+    """
+    Returns a nconf x naip array, which is the Psi(r_e(i))/Psi(r_e) values
+    """
     nconf,naip = epos_rot.shape[0:2]
     wf_ratio = np.zeros([nconf,naip])
     for aip in range(naip):
@@ -76,6 +110,15 @@ def get_wf_ratio(wf,epos_rot,e):
     return wf_ratio
 
 def get_P_l(mol,configs,weights,epos_rot,l_list,e,at):
+    """
+    Returns a nconf x naip x nl array, which is the legendre function values for each l channel.
+    The factor (2l+1) and the quadrature weights are included.
+    Parameters:
+      l_list: [-1,0,1,...] list of given angular momenta
+      weights: integration weights
+    Return:
+      P_l values: nconf x naip x nl array  
+    """
     at_name = mol._atom[at][0]
     nconf,naip = epos_rot.shape[0:2]
     
@@ -90,14 +133,17 @@ def get_P_l(mol,configs,weights,epos_rot,l_list,e,at):
         rdotR[:,aip] /= np.linalg.norm(r_ea,axis=1)*np.linalg.norm(r_ea_i[:,aip,:],axis=1)
     #print('cosine values',rdotR)
 
-    # already included the factor (2l+1), and the quadrature weights here
+    # already included the factor (2l+1), and the integration weights here
     for l in l_list:
         P_l_val[:,:,l] = (2*l+1)*P_l(rdotR,l)*np.outer(np.ones(nconf),weights) 
-    return P_l_val  # nconf x naip x nl
+    return P_l_val 
 
 #########################################################################
 
 def ecp_ea(mol,configs,wf,e,at):
+    """ 
+    Returns the ECP value between electron e and atom at, local+nonlocal.
+    """
     weights,epos_rot = get_rot(mol,configs,e,at,naip=6)
     l_list,v_l = get_v_l(mol,configs,e,at)
     P_l = get_P_l(mol,configs,weights,epos_rot,l_list,e,at)
@@ -106,20 +152,32 @@ def ecp_ea(mol,configs,wf,e,at):
     # compute the local part
     local_l = -1
     ecp_val += v_l[:,local_l]
-    #ecp_val += np.zeros(configs.shape[0])
     return ecp_val   
 
 def ecp(mol,configs,wf):
+    """
+    Returns the ECP value, summed over all the electrons and atoms.
+    """
     nconf,nelec = configs.shape[0:2]
     ecp_tot = np.zeros(nconf)
     if mol._ecp != {}:
         for e in range(nelec):
-            for at in range(np.shape(mol._atom)[0]):
+            for at in range(len(mol._atom)):
                 ecp_tot += ecp_ea(mol,configs,wf,e,at)
     return ecp_tot
 
 #################### Quadrature Rules ############################
-def get_angles(nconf,naip=6):  # currently only naip = 6 is supported
+def get_angles(nconf,naip=6): 
+    """
+    Generates a random point on a sphere, then returns the angular positions (theta,phi) of
+    other points according to the quadrature rule. 
+    Currently only naip = 6 is supported. Use with caution. 
+    For details of the quadrature rules, see qwalk/src/system/gesqua.cpp.
+    Parameters: 
+      nconf = number of configurations
+    Returns:
+      theta,phi: angular positions of the rotated electrons, nconf x naip array.
+    """
     # t and p are sampled randomly over a sphere around the atom 
     t = np.random.uniform(low=0.,high=np.pi,size=nconf)
     p = np.random.uniform(low=0.,high=2*np.pi,size=nconf)
@@ -140,6 +198,14 @@ def get_angles(nconf,naip=6):  # currently only naip = 6 is supported
     return d1,d2
 
 def get_rot(mol,configs,e,at,naip=6):
+    """
+    Returns the integration weights (naip), and the positions of the rotated electron e (nconf x naip x 3)
+    Parameters: 
+      configs[:,e,:]: epos of the electron e to be rotated
+    Returns:
+      weights: naip array
+      epos_rot: positions of the rotated electron, nconf x naip x 3
+    """
     nconf,nelec = configs.shape[0:2]
     apos = np.outer(np.ones(nconf),np.array(mol._atom[at][1]))
 
@@ -155,6 +221,9 @@ def get_rot(mol,configs,e,at,naip=6):
         epos_rot[:,aip,2] = apos[:,2]+r_ea*np.cos(t[:,aip])
     weights = 1./naip*np.ones(naip)
     return weights,epos_rot
+
+
+
 
 from slateruhf import PySCFSlaterUHF
 def test():

@@ -24,13 +24,13 @@ class OBDMAccumulator:
     tstep (float): width of the Gaussian to update a walker position for the 
       extra coordinate.
   '''
-  def __init__(self,mol,orb_coeff,nstep=10,tstep=0.05,warmup=100):
+  def __init__(self,mol,orb_coeff,nstep=10,tstep=0.50,warmup=100):
     assert len(orb_coeff.shape)==2, "orb_coeff should be a list of orbital coefficients."
 
     self._orb_coeff = orb_coeff
     self._tstep = tstep
     self._mol = mol
-    self._extra_config = np.zeros(3)
+    self._extra_config = np.random.normal(scale=tstep,size=3) # not zero to avoid sitting on top of atom.
     self._nstep = nstep
 
     # Maybe shouldn't do this here?
@@ -38,9 +38,8 @@ class OBDMAccumulator:
       accept,self._extra_config = sample_onebody(mol,orb_coeff,self._extra_config,tstep)
 
   def __call__(self,configs,wf):
-    ''' Returns expectations of numerator, denomenator, and their errors in equation (9) of DOI:10.1063/1.4793531'''
+    ''' Returns numerator and denomenator and their errors in equation (9) of DOI:10.1063/1.4793531'''
 
-    esel = 0 # TODO Later should iterate over all electrons.
     results = {
         'value':np.zeros((configs.shape[0],self._orb_coeff.shape[0],self._orb_coeff.shape[1])),
         'norm':np.zeros(self._orb_coeff.shape[0])
@@ -54,9 +53,9 @@ class OBDMAccumulator:
 
       # Orbital evaluations at extra coordinate.
       borb_prim = borb[0]
-      phi_prim_sq = borb_prim**2
-      fsum = phi_prim_sq.sum()
-      norm = (phi_prim_sq/fsum)**0.5
+      borb_prim_sq = borb_prim**2
+      fsum = borb_prim_sq.sum()
+      norm = borb_prim_sq/fsum
 
       # Orbital evaluations at all electrons and configs.
       borb = borb[1:].reshape(configs.shape[0],configs.shape[1],borb.shape[1])
@@ -64,14 +63,14 @@ class OBDMAccumulator:
       # Numerator of obervable, given all these quantities.
       # TODO loop necessary for wfratio?
       wfratio = np.array([wf.testvalue(esel,self._extra_config[np.newaxis,:]) for esel in range(configs.shape[1])]).T
-      orbratio = (borb_prim/fsum)[np.newaxis,:,np.newaxis,np.newaxis]*borb[:,np.newaxis,:,:]
+      orbratio = (borb_prim/fsum)[np.newaxis,np.newaxis,:,np.newaxis]*borb[:,:,np.newaxis,:]
 
       # Accumulate results for old extra coord.
-      results['value'] += ( wfratio[:,np.newaxis,:,np.newaxis]*orbratio ).mean(axis=2) # average over electron symmetry.
+      results['value'] += ( wfratio[:,:,np.newaxis,np.newaxis]*orbratio ).sum(axis=1)
       results['norm'] += norm
 
       # Update extra coord.
-      accept,self._extra_config = sample_onebody(self._mol,self._orb_coeff,self._extra_config)
+      accept,self._extra_config = sample_onebody(self._mol,self._orb_coeff,self._extra_config,tstep=self._tstep)
       
       # Keep track of internal acceptance.
       acceptance += accept
@@ -155,7 +154,7 @@ def test():
   ### Test OBDM calculation.
   nconf = 5000
   nsteps = 50
-  obdm_steps = 50
+  obdm_steps = 20
   warmup = 15
   wf = PySCFSlaterRHF(nconf,mol,mf)
   configs = initial_guess_vectorize(mol,nconf) 
@@ -166,15 +165,17 @@ def test():
   df['obdm'] = df[['obdmvalue','obdmnorm']]\
       .apply(lambda x:normalize_obdm(x['obdmvalue'],x['obdmnorm']),axis=1)
   print(df[['obdmvalue','obdmnorm','obdm']].applymap(lambda x:x.ravel()[0]))
+  avg_norm = np.array(df.loc[warmup:,'obdmnorm'].values.tolist()).mean(axis=0)
   avg_obdm = np.array(df.loc[warmup:,'obdm'].values.tolist()).mean(axis=0)
   std_obdm = np.array(df.loc[warmup:,'obdm'].values.tolist()).std(axis=0)/nsteps**0.5
-  print(avg_obdm.diagonal().round(3))
-  print(std_obdm.diagonal().round(3)) # Note this needs reblocking to be accurate.
+  print("Average norm(orb)",avg_norm)
+  print("Average OBDM(orb,orb)",avg_obdm.diagonal().round(3))
+  print("OBDM error (orb,orb)",std_obdm.diagonal().round(3)) # Note this needs reblocking to be accurate.
   print("AO occupation",mfobdm[0,0])
   print('mean field',mf.energy_tot(),'vmc estimation', np.mean(df['energytotal'][warmup:]),np.std(df['energytotal'][warmup:]))
 
 def normalize_obdm(obdm,norm):
-  return obdm/(norm[np.newaxis,:]*norm[:,np.newaxis])
+  return obdm/(norm[np.newaxis,:]*norm[:,np.newaxis])**0.5
 
 if __name__=="__main__":
   test()

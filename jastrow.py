@@ -1,5 +1,5 @@
 import numpy as np
-from func3d import GaussianFunction
+from func3d import GaussianFunction, ExpCuspFunction
 
 
 def eedist(configs):
@@ -148,15 +148,19 @@ class Jastrow:
     '''
     1 body and 2 body jastrow factor
     '''
-    def __init__(self,nconfig,mol,basis=None):
-        if basis is None:
-            nexpand=4
+    def __init__(self,nconfig,mol,a_basis=None,b_basis=None):
+        if a_basis is None:
             aexpand=2
-            self.b_basis=[GaussianFunction(0.2*2**n) for n in range(1,nexpand+1)]
             self.a_basis=[GaussianFunction(0.2*2**n) for n in range(1,aexpand+1)]
         else:
-            nexpand=len(basis)
-            self.basis=basis
+            aexpand=len(a_basis)
+            self.a_basis=a_basis
+        if b_basis is None:
+            nexpand=4
+            self.b_basis=[GaussianFunction(0.2*2**n) for n in range(1,nexpand+1)]
+        else:
+            nexpand=len(b_basis)
+            self.b_basis=b_basis
         self.parameters={}
         self._nelec=np.sum(mol.nelec)
         self._mol=mol
@@ -320,7 +324,8 @@ def test():
     
     #jastrow=Jastrow2B(nconf,mol)
     #jastrow.parameters['coeff']=np.random.random(jastrow.parameters['coeff'].shape)
-    jastrow=Jastrow(nconf,mol)
+    jastrow=Jastrow(nconf,mol,b_basis=[GaussianFunction(0.2*2**n) for n in range(1,4+1)]+
+                                       [ExpCuspFunction(2,7)])
     jastrow.parameters['bcoeff']=np.random.random(jastrow.parameters['bcoeff'].shape)
     jastrow.parameters['acoeff']=np.random.random(jastrow.parameters['acoeff'].shape)
     import testwf

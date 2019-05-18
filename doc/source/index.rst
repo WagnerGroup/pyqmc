@@ -10,7 +10,9 @@ Welcome to pyQMC's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   mc
    slater
+   jastrow
    ecp
    energy
    accumulators

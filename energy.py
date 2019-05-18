@@ -42,6 +42,18 @@ def kinetic(configs,wf):
     return ke
 
 def energy(mol,configs,wf):
+    """Compute the local energy of a set of configurations.
+    
+    Args:
+      mol: A pyscf-like 'Mole' object. nelec, atom_charges(), atom_coords(), and ._ecp are used.
+
+      configs: a nconfiguration x nelectron x 3 numpy array
+       
+      wf: A Wavefunction-like object. Functions used include recompute(), lapacian(), and testvalue()
+
+    Returns: 
+      a dictionary with energy components ke, ee, ei, and total
+      """
     ee=ee_energy(configs)
     ei=ei_energy(mol,configs)
     ecp_val = get_ecp(mol,configs,wf)

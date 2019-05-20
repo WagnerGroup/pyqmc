@@ -290,19 +290,13 @@ class Jastrow:
 
         delta=np.zeros((3,nconf))
         if(e < nup): # Spin up electron selected
-            dnew1= dnew[:,:nup-1,:].reshape(nconf,-1)
-            dnew2= dnew[:,nup-1:,:].reshape(nconf,-1)
-            dnew3= np.zeros((nconf,3)).reshape(nconf,-1)
-        #     d1old= dold[:,:nup-1,:].reshape(nconf,-1)
-        #     d2old= dold[:,nup-1:,:].reshape(nconf,-1)
-        #     d3old= np.zeros((nconf,3)).reshape(nconf,-1)
+            dnew1= dnew[:,:nup-1,:].reshape(-1,3)
+            dnew2= dnew[:,nup-1:,:].reshape(-1,3)
+            dnew3= np.zeros((nconf,3))
         else:        # Spin down electron selected
-            dnew1= np.zeros((nconf,3)).reshape(nconf,-1)
-            dnew2= dnew[:,:nup,:].reshape(nconf,-1)
-            dnew3= dnew[:,nup:,].reshape(nconf,-1)
-        #     d1old= np.zeros((nconf,3)).reshape(nconf,-1)
-        #     d2old= dold[:,:nup,:].reshape(nconf,-1)
-        #     d3old= dold[:,nup:,].reshape(nconf,-1)
+            dnew1= np.zeros((nconf,3))
+            dnew2= dnew[:,:nup,:].reshape(-1,3)
+            dnew3= dnew[:,nup:,].reshape(-1,3)
 
         for c,b in zip(self.parameters['bcoeff'],self.b_basis):
             delta+=c[0]*np.sum(b.gradient(dnew1).reshape(nconf,-1,3),axis=1).T
@@ -323,40 +317,40 @@ class Jastrow:
         nconf=epos.shape[0]
         nup = self._mol.nelec[0]
         ne=self._configscurrent.shape[1]
+        
+        # Get and break up eedist_i
         dnew=eedist_i(self._configscurrent,epos)
-
         mask=[True]*ne
         mask[e]=False
         dnew=dnew[:,mask,:]
-        # dnew=dnew.reshape(-1,3)
+        if(e < nup): # Spin up electron selected
+            dnew1= dnew[:,:nup-1,:].reshape(-1,3)
+            dnew2= dnew[:,nup-1:,:].reshape(-1,3)
+            dnew3= np.zeros((nconf,3))
+        else:        # Spin down electron selected
+            dnew1= np.zeros((nconf,3))
+            dnew2= dnew[:,:nup,:].reshape(-1,3)
+            dnew3= dnew[:,nup:,].reshape(-1,3)
 
+        # Get and reshape eidist_i
         dinew=eidist_i(self._mol.atom_coords(),epos)
         dinew=dinew.reshape(-1,3)
 
+        # Calculate delta
         delta=np.zeros(nconf)
 
-        if(e < nup): # Spin up electron selected
-            dnew1= dnew[:,:nup-1,:].reshape(nconf,-1)
-            dnew2= dnew[:,nup-1:,:].reshape(nconf,-1)
-            dnew3= np.zeros((nconf,3))#.reshape((nconf,-1))
-        else:        # Spin down electron selected
-            dnew1= np.zeros((nconf,3))#.reshape((nconf,-1))
-            dnew2= dnew[:,:nup,:].reshape(nconf,-1)
-            dnew3= dnew[:,nup:,].reshape(nconf,-1)
-
+        # b-value component
         for c,b in zip(self.parameters['bcoeff'],self.b_basis):
             delta+=c[0]*np.sum(b.laplacian(dnew1).reshape(nconf,-1),axis=1)
             delta+=c[1]*np.sum(b.laplacian(dnew2).reshape(nconf,-1),axis=1)
             delta+=c[2]*np.sum(b.laplacian(dnew3).reshape(nconf,-1),axis=1)
-            # delta+=c*np.sum(b.laplacian(dnew).reshape(nconf,-1),axis=1)
 
+        # a-value component
         for c,a in zip(self.parameters['acoeff'],self.a_basis):
             if e < nup:
-                #print(np.sum(a.laplacian(dinew).reshape(nconf,-1),axis=1))
-                delta += c[0]*np.sum(a.laplacian(dinew).reshape((nconf,-1)),axis=1)
+                delta += c[0]*np.sum(a.laplacian(dinew).reshape(nconf,-1),axis=1)
             else:
-                delta += c[1]*np.sum(a.laplacian(dinew).reshape((nconf,-1)),axis=1)
-            # delta+=c*np.sum(a.laplacian(dinew).reshape(nconf,-1),axis=1)
+                delta += c[1]*np.sum(a.laplacian(dinew).reshape(nconf,-1),axis=1)
 
         g=self.gradient(e,epos)
         #print('SHAPE: ', g.shape)

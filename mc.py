@@ -6,39 +6,11 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1" 
 
 import numpy as np
-from pyscf import lib, gto, scf
 from slater import PySCFSlaterRHF
 from accumulators import EnergyAccumulator
-
-def initial_guess(mol,nconfig,r=1.0):
-    """ Generate an initial guess by distributing electrons near atoms
-    proportional to their charge."""
-    nelec=np.sum(mol.nelec)
-    configs=np.zeros((nconfig,nelec,3))
-    wts=mol.atom_charges()
-    wts=wts/np.sum(wts)
-
-    ### This is not ideal since we loop over configs 
-    ### Should figure out a way to throw configurations
-    ### more efficiently.
-    for c in range(nconfig):
-        count=0
-        for s in [0,1]:
-            neach=np.floor(mol.nelec[s]*wts)
-            nassigned=np.sum(neach)
-            nleft=mol.nelec[s]*wts-neach
-            tot=int(np.sum(nleft))
-            gets=np.random.choice(len(wts),p=nleft/tot,size=tot,replace=False) 
-            for i in gets:
-                neach[i]+=1
-            for n,coord in zip(neach,mol.atom_coords()):
-                for i in range(int(n)):
-                    configs[c,count,:]=coord+r*np.random.randn(3)
-                    count+=1
-    return configs
     
 
-def initial_guess_vectorize(mol,nconfig,r=1.0):
+def initial_guess(mol,nconfig,r=1.0):
     """ Generate an initial guess by distributing electrons near atoms
     proportional to their charge."""
     nelec=np.sum(mol.nelec)
@@ -71,7 +43,27 @@ def limdrift(g,cutoff=1):
     return g
     
 
-def vmc(mol,wf,coords,nsteps=10000,tstep=0.5,accumulators=None,verbose=False):
+def vmc(mol,wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False):
+    """Run a Monte Carlo sample of a given wave function.
+
+    Args:
+      mol: A pyscf molecule-like class. Used to generate an energy accumulator if none is given
+
+      wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as 
+      anything (such as laplacian() ) used by accumulators
+
+      tstep: Time step for move proposals. Only affects efficiency.
+
+      accumulators: A list of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
+
+      verbose: Print out step information 
+
+    Returns: (df,coords)
+       df: A list of dictionaries nstep long that contains all results from the accumulators.
+
+       coords: The final coordinates from this calculation.
+       
+    """
     if accumulators is None:
         accumulators={'energy':EnergyAccumulator(mol) } 
     nconf=coords.shape[0]
@@ -122,16 +114,18 @@ def vmc(mol,wf,coords,nsteps=10000,tstep=0.5,accumulators=None,verbose=False):
     
 
 def test():
+    from pyscf import lib, gto, scf
+    
     import pandas as pd
     
     mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)
     #mol = gto.M(atom='C 0. 0. 0.', ecp='bfd', basis='bfd_vtz')
     mf = scf.RHF(mol).run()
-    import pyscf2qwalk
-    pyscf2qwalk.print_qwalk(mol,mf)
+    #import pyscf2qwalk
+    #pyscf2qwalk.print_qwalk(mol,mf)
     nconf=5000
     wf=PySCFSlaterRHF(nconf,mol,mf)
-    coords = initial_guess_vectorize(mol,nconf) 
+    coords = initial_guess(mol,nconf) 
     def dipole(coords,wf):
         return {'vec':np.sum(coords[:,:,:],axis=1) } 
 
@@ -157,7 +151,7 @@ def test_compare_init_guess():
         mf = scf.RHF(mol).run()
         nconf=5000
         wf=PySCFSlaterRHF(nconf,mol,mf)
-        for i,func in enumerate([initial_guess_vectorize, initial_guess]):
+        for i,func in enumerate([initial_guess]):
             for j in range(5):
                 start = time.time()
                 configs = func(mol,nconf) 

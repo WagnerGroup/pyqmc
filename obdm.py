@@ -126,7 +126,7 @@ def test():
   from pyscf import gto,scf,lo
   from numpy.linalg import solve
   from slater import PySCFSlaterRHF
-  from mc import initial_guess_vectorize,vmc
+  from mc import initial_guess,vmc
   from accumulators import EnergyAccumulator
   from pandas import DataFrame
 
@@ -157,7 +157,7 @@ def test():
   obdm_steps = 20
   warmup = 15
   wf = PySCFSlaterRHF(nconf,mol,mf)
-  configs = initial_guess_vectorize(mol,nconf) 
+  configs = initial_guess(mol,nconf) 
   energy = EnergyAccumulator(mol)
   obdm = OBDMAccumulator(mol=mol,orb_coeff=mf.mo_coeff,nstep=obdm_steps)
   df,coords = vmc(mol,wf,configs,nsteps=nsteps,accumulators={'energy':energy,'obdm':obdm})

@@ -57,16 +57,12 @@ def eidist(configs, coords, nup, ndown):
     d2=np.zeros((configs.shape[0],ndown,ni,3)) # down case
 
     # First electrons are spin up by convenction
-    c1 = 0
-    c2 = 0
     for i in range(ne):
         for j in range(ni):
-            if(i<nup):
+            if(i<nup): #Spin up case
                 d1[:,i,j,:]=configs[:,i,:]-coords[j]
-                c1 += 1
-            else:
+            else: # Spin down case
                 d2[:,i-nup,j,:]=configs[:,i,:]-coords[j]
-                c2 += 1
 
     return d1, d2
 
@@ -251,8 +247,8 @@ class Jastrow:
             self._avalues[:,:,i,1] = np.sum(a.value(di2).reshape((configs.shape[0],
                                                                self._mol.natm, -1)), axis=2)
 
-        u=np.sum(self._bvalues*self.parameters['bcoeff'][np.newaxis,:,:], axis=(2,1)) +\
-          np.sum(self._avalues*self.parameters['acoeff'][np.newaxis,:,:], axis=(3,2,1))
+        u=np.sum(self._bvalues*self.parameters['bcoeff'], axis=(2,1)) +\
+          np.sum(self._avalues*self.parameters['acoeff'], axis=(3,2,1))
 
         return (1,u)
 
@@ -262,15 +258,15 @@ class Jastrow:
         #update b and c sums. This overlaps with testvalue()
         if mask is None:
             mask=[True]*self._configscurrent.shape[0]
-        self._bvalues[mask,:]+=self._get_deltab(e,epos)[mask,:]
-        self._avalues[mask,:]+=self._get_deltaa(e,epos)[mask,:]
+        self._bvalues[mask,:,:]+=self._get_deltab(e,epos)[mask,:,:]
+        self._avalues[mask,:,:,:]+=self._get_deltaa(e,epos)[mask,:,:,:]
         self._configscurrent[mask,e,:]=epos[mask,:]
 
 
     def value(self): 
         """  """
-        u=np.sum(self._bvalues*self.parameters['bcoeff'][np.newaxis,:,:], axis=(2,1)) +\
-          np.sum(self._avalues*self.parameters['acoeff'][np.newaxis,:,:], axis=(3,2,1))
+        u=np.sum(self._bvalues*self.parameters['bcoeff'], axis=(2,1)) +\
+          np.sum(self._avalues*self.parameters['acoeff'], axis=(3,2,1))
         return (1,u)       
 
 
@@ -342,9 +338,9 @@ class Jastrow:
         if(e < nup): # Spin up electron selected
             dnew1= dnew[:,:nup-1,:].reshape(nconf,-1)
             dnew2= dnew[:,nup-1:,:].reshape(nconf,-1)
-            dnew3= np.zeros((nconf,3)).reshape(nconf,-1)
+            dnew3= np.zeros((nconf,3))#.reshape((nconf,-1))
         else:        # Spin down electron selected
-            dnew1= np.zeros((nconf,3)).reshape(nconf,-1)
+            dnew1= np.zeros((nconf,3))#.reshape((nconf,-1))
             dnew2= dnew[:,:nup,:].reshape(nconf,-1)
             dnew3= dnew[:,nup:,].reshape(nconf,-1)
 
@@ -357,9 +353,9 @@ class Jastrow:
         for c,a in zip(self.parameters['acoeff'],self.a_basis):
             if e < nup:
                 #print(np.sum(a.laplacian(dinew).reshape(nconf,-1),axis=1))
-                delta += c[0]*np.sum(a.laplacian(dinew).reshape(nconf,-1),axis=1)
+                delta += c[0]*np.sum(a.laplacian(dinew).reshape((nconf,-1)),axis=1)
             else:
-                delta += c[1]*np.sum(a.laplacian(dinew).reshape(nconf,-1),axis=1)
+                delta += c[1]*np.sum(a.laplacian(dinew).reshape((nconf,-1)),axis=1)
             # delta+=c*np.sum(a.laplacian(dinew).reshape(nconf,-1),axis=1)
 
         g=self.gradient(e,epos)
@@ -380,20 +376,23 @@ class Jastrow:
 
         dnew=eedist_i(self._configscurrent,epos)[:,mask,:]
         dold=eedist_i(self._configscurrent,self._configscurrent[:,e,:])[:,mask,:]
+
         if(e < nup): # Spin up electron selected
-            d1new= dnew[:,:nup-1,:]
-            d2new= dnew[:,nup-1:,:]
+            d1new= dnew[:,:nup-1,:].reshape((-1, 3))
+            d2new= dnew[:,nup-1:,:].reshape((-1, 3))
             d3new= np.zeros((nconf,3))
-            d1old= dold[:,:nup-1,:]
-            d2old= dold[:,nup-1:,:]
+
+            d1old= dold[:,:nup-1,:].reshape((-1, 3))
+            d2old= dold[:,nup-1:,:].reshape((-1, 3))
             d3old= np.zeros((nconf,3))
         else:        # Spin down electron selected
             d1new= np.zeros((nconf,3))
-            d2new= dnew[:,:nup,:]
-            d3new= dnew[:,nup:,]
+            d2new= dnew[:,:nup,:].reshape((-1, 3))
+            d3new= dnew[:,nup:,].reshape((-1, 3))
+
             d1old= np.zeros((nconf,3))
-            d2old= dold[:,:nup,:]
-            d3old= dold[:,nup:,]
+            d2old= dold[:,:nup,:].reshape((-1, 3))
+            d3old= dold[:,nup:,].reshape((-1, 3))
 
         delta=np.zeros((nconf,len(self.b_basis), 3))
 
@@ -436,9 +435,9 @@ class Jastrow:
 
 
     def testvalue(self,e,epos):
-        b_val = np.sum(self._get_deltab(e,epos)*self.parameters['bcoeff'][np.newaxis,:,:],
+        b_val = np.sum(self._get_deltab(e,epos)*self.parameters['bcoeff'],#[np.newaxis,:,:],
                        axis=(2,1))
-        a_val = np.sum(self._get_deltaa(e,epos)*self.parameters['acoeff'][np.newaxis,:,:],
+        a_val = np.sum(self._get_deltaa(e,epos)*self.parameters['acoeff'],#[np.newaxis,:,:],
                        axis=(3,2,1))
         return np.exp(b_val + a_val)
 

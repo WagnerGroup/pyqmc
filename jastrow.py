@@ -304,10 +304,7 @@ class Jastrow:
             delta+=c[2]*np.sum(b.gradient(dnew3).reshape(nconf,-1,3),axis=1).T
 
         for c,a in zip(self.parameters['acoeff'],self.a_basis):
-            if e < nup:
-                delta+=c[0]*np.sum(a.gradient(dinew).reshape(nconf,-1,3),axis=1).T
-            else:
-                delta+=c[1]*np.sum(a.gradient(dinew).reshape(nconf,-1,3),axis=1).T
+            delta+=c[int(e>=nup)]*np.sum(a.gradient(dinew).reshape(nconf,-1,3),axis=1).T
 
         return delta
 
@@ -324,33 +321,30 @@ class Jastrow:
         mask[e]=False
         dnew=dnew[:,mask,:]
         if(e < nup): # Spin up electron selected
-            dnew1= dnew[:,:nup-1,:].reshape(-1,3)
-            dnew2= dnew[:,nup-1:,:].reshape(-1,3)
-            dnew3= np.zeros((nconf,3))
-        else:        # Spin down electron selected
-            dnew1= np.zeros((nconf,3))
-            dnew2= dnew[:,:nup,:].reshape(-1,3)
-            dnew3= dnew[:,nup:,].reshape(-1,3)
+            dnew1 = dnew[:,:nup-1,:].reshape(-1,3)
+            dnew2 = dnew[:,nup-1:,:].reshape(-1,3)
+        else:         # Spin down electron selected
+            dnew2 = dnew[:,:nup,:].reshape(-1,3)
+            dnew3 = dnew[:,nup:,].reshape(-1,3)
 
         # Get and reshape eidist_i
-        dinew=eidist_i(self._mol.atom_coords(),epos)
-        dinew=dinew.reshape(-1,3)
+        dinew = eidist_i(self._mol.atom_coords(),epos)
+        dinew = dinew.reshape(-1,3)
 
         # Calculate delta
         delta=np.zeros(nconf)
 
         # b-value component
         for c,b in zip(self.parameters['bcoeff'],self.b_basis):
-            delta+=c[0]*np.sum(b.laplacian(dnew1).reshape(nconf,-1),axis=1)
-            delta+=c[1]*np.sum(b.laplacian(dnew2).reshape(nconf,-1),axis=1)
-            delta+=c[2]*np.sum(b.laplacian(dnew3).reshape(nconf,-1),axis=1)
+            delta += c[1]*np.sum(b.laplacian(dnew2).reshape(nconf,-1),axis=1)
+            if(e < nup):
+                delta += c[0]*np.sum(b.laplacian(dnew1).reshape(nconf,-1),axis=1)
+            else:
+                delta += c[2]*np.sum(b.laplacian(dnew3).reshape(nconf,-1),axis=1)
 
         # a-value component
         for c,a in zip(self.parameters['acoeff'],self.a_basis):
-            if e < nup:
-                delta += c[0]*np.sum(a.laplacian(dinew).reshape(nconf,-1),axis=1)
-            else:
-                delta += c[1]*np.sum(a.laplacian(dinew).reshape(nconf,-1),axis=1)
+            delta += c[int(e>=nup)]*np.sum(a.laplacian(dinew).reshape(nconf,-1),axis=1)
 
         g=self.gradient(e,epos)
         #print('SHAPE: ', g.shape)
@@ -420,11 +414,9 @@ class Jastrow:
         # Change
         delta=np.zeros((nconf,ni,len(self.a_basis), 2))
 
-        # Spin index
-        spin_idx = int(e>=nup)
-
         for i,a in enumerate(self.a_basis):
-            delta[:,:,i,spin_idx]+=(a.value(dnew)-a.value(dold)).reshape((nconf, -1))
+            delta[:,:,i,int(e>=nup)]+=(a.value(dnew)-a.value(dold)).reshape((nconf, -1))
+
         return delta
 
 

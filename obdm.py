@@ -160,7 +160,7 @@ def test():
   configs = initial_guess(mol,nconf) 
   energy = EnergyAccumulator(mol)
   obdm = OBDMAccumulator(mol=mol,orb_coeff=mf.mo_coeff,nstep=obdm_steps)
-  df,coords = vmc(mol,wf,configs,nsteps=nsteps,accumulators={'energy':energy,'obdm':obdm})
+  df,coords = vmc(wf,configs,nsteps=nsteps,accumulators={'energy':energy,'obdm':obdm})
   df = DataFrame(df)
   df['obdm'] = df[['obdmvalue','obdmnorm']]\
       .apply(lambda x:normalize_obdm(x['obdmvalue'],x['obdmnorm']),axis=1)

@@ -292,16 +292,18 @@ class Jastrow:
         if(e < nup): # Spin up electron selected
             dnew1= dnew[:,:nup-1,:].reshape(-1,3)
             dnew2= dnew[:,nup-1:,:].reshape(-1,3)
-            dnew3= np.zeros((nconf,3))
+            #dnew3= np.zeros((nconf,3))
         else:        # Spin down electron selected
-            dnew1= np.zeros((nconf,3))
+            #dnew1= np.zeros((nconf,3))
             dnew2= dnew[:,:nup,:].reshape(-1,3)
             dnew3= dnew[:,nup:,].reshape(-1,3)
 
         for c,b in zip(self.parameters['bcoeff'],self.b_basis):
-            delta+=c[0]*np.sum(b.gradient(dnew1).reshape(nconf,-1,3),axis=1).T
             delta+=c[1]*np.sum(b.gradient(dnew2).reshape(nconf,-1,3),axis=1).T
-            delta+=c[2]*np.sum(b.gradient(dnew3).reshape(nconf,-1,3),axis=1).T
+            if(e < nup):
+                delta+=c[0]*np.sum(b.gradient(dnew1).reshape(nconf,-1,3),axis=1).T
+            else:
+                delta+=c[2]*np.sum(b.gradient(dnew3).reshape(nconf,-1,3),axis=1).T
 
         for c,a in zip(self.parameters['acoeff'],self.a_basis):
             delta+=c[int(e>=nup)]*np.sum(a.gradient(dinew).reshape(nconf,-1,3),axis=1).T

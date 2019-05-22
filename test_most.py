@@ -54,6 +54,8 @@ def test_vmc():
     
     from slater import PySCFSlaterRHF
     from slateruhf import PySCFSlaterUHF
+    from accumulators import EnergyAccumulator
+    
     
     nconf=5000
     mol   = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=1)
@@ -67,7 +69,8 @@ def test_vmc():
                   (PySCFSlaterUHF(nconf,mol,scf.UHF(mol).run()),scf.UHF(mol).run())]:
        
         coords = initial_guess(mol,nconf) 
-        df,coords=vmc(mol,wf,coords,nsteps=nsteps)
+        df,coords=vmc(wf,coords,nsteps=nsteps,
+                accumulators={'energy':EnergyAccumulator(mol)})
 
         df=pd.DataFrame(df)
         df.to_csv("data.csv")
@@ -89,7 +92,7 @@ def test_accumulator_rhf():
     wf=PySCFSlaterRHF(nconf,mol,mf)
     coords = initial_guess(mol,nconf) 
 
-    df,coords=vmc(mol,wf,coords,nsteps=30,accumulators={'energy':EnergyAccumulator(mol)} )
+    df,coords=vmc(wf,coords,nsteps=30,accumulators={'energy':EnergyAccumulator(mol)} )
     df=pd.DataFrame(df)
     eaccum=EnergyAccumulator(mol)
     eaccum_energy=eaccum(coords,wf)
@@ -112,7 +115,7 @@ def test_ecp():
     nconf=5000
     wf=PySCFSlaterRHF(nconf,mol,mf)
     coords = initial_guess(mol,nconf)
-    df,coords=vmc(mol,wf,coords,nsteps=100,accumulators={'energy':EnergyAccumulator(mol)} )
+    df,coords=vmc(wf,coords,nsteps=100,accumulators={'energy':EnergyAccumulator(mol)} )
     df=pd.DataFrame(df)
     df.to_csv("data.csv")
     warmup=30

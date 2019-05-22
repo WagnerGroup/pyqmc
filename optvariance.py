@@ -82,7 +82,8 @@ def test_single_opt():
             wf.parameters[k]=params0[k]
     #params0=None
     
-    vmc(mol,wf,coords,nsteps=nsteps)
+    vmc(wf,coords,nsteps=nsteps,
+            accumulators={'energy':EnergyAccumulator(mol)})
 
     opt_var=optvariance(EnergyAccumulator(mol),wf,coords,params0)
     print('Optimized parameters:\n',params0)

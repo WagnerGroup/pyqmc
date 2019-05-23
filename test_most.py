@@ -14,7 +14,8 @@ def test_wfs():
     from pyscf import lib, gto, scf
     from slater import PySCFSlaterRHF
     from slateruhf import PySCFSlaterUHF
-    from jastrow import Jastrow
+    from jastrow import Jastrow2B
+    from jastrowspin import JastrowSpin
     from multiplywf import MultiplyWF
     mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
     mf = scf.RHF(mol).run()
@@ -23,8 +24,9 @@ def test_wfs():
     epsilon=1e-5
     nconf=10
     epos=np.random.randn(nconf,4,3)
-    for wf in [PySCFSlaterRHF(nconf,mol,mf),Jastrow(nconf,mol),
-               MultiplyWF(nconf,PySCFSlaterRHF(nconf,mol,mf),Jastrow(nconf,mol)), 
+    for wf in [PySCFSlaterRHF(nconf,mol,mf),JastrowSpin(nconf,mol),Jastrow2B(nconf,mol),
+               MultiplyWF(nconf,PySCFSlaterRHF(nconf,mol,mf),JastrowSpin(nconf,mol)), 
+               MultiplyWF(nconf,PySCFSlaterRHF(nconf,mol,mf),Jastrow2B(nconf,mol)), 
                PySCFSlaterUHF(nconf,mol,mf_uhf),PySCFSlaterUHF(nconf,mol,mf), 
                PySCFSlaterUHF(nconf,mol,mf_rohf)]:
         assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon 

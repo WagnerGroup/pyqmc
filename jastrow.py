@@ -1,7 +1,7 @@
 import numpy as np
 from func3d import GaussianFunction
 
-def eedist_old(configs):
+def eedist(configs):
      """returns a list of electron-electron distances within a collection """
      ne=configs.shape[1]
      d=np.zeros((configs.shape[0],int(ne*(ne-1)/2),3))
@@ -13,32 +13,32 @@ def eedist_old(configs):
      return d
 
 
-def eedist(configs, nup, ndown):
-    """returns a list of electron-electron distances within a collection """
+def eedist_spin(configs, nup, ndown):
+    """returns a separate list of electron-electron distances within a collection 
+    according to the spin state of the electron pair, assumes forst nup electrons are spin up
+    and the remaining ndown electrons are spin down"""
     ne=configs.shape[1]
     d1=np.zeros((configs.shape[0],int(nup*(nup-1)/2),3))      # up-up case
     d2=np.zeros((configs.shape[0],int(nup*ndown),3))          # up-down case
     d3=np.zeros((configs.shape[0],int(ndown*(ndown-1)/2),3))  # down-down case
-    c1=0
-    c2=0
-    c3=0
 
     # First electrons are spin up by convenction
-    for i in range(ne):
-        for j in range(i+1,ne):
-            if((i<nup) and (j<nup)):
-                d1[:,c1,:]=configs[:,j,:]-configs[:,i,:]
-                c1+=1
-            elif((i>=nup) and (j>=nup)):
-                d3[:,c3,:]=configs[:,j,:]-configs[:,i,:]
-                c3+=1
-            else:
-                d2[:,c2,:]=configs[:,j,:]-configs[:,i,:]
-                c2+=1
+    for i in range(int(nup*(nup-1)/2)): # Both spins up
+        for j in range(i+1, nup):
+            d1[:,i,:] = configs[:,j,:]-configs[:,i,:]
+
+    for i in range(nup): # One spin up, one spin down
+        for j in range(ndown):
+            d2[:,i*ndown+j,:] = configs[:,j+nup,:]-configs[:,i,:]
+
+    for i in range(int(ndown*(ndown-1)/2)): # Both spins down
+        for j in range(j+1, ndown):
+            d3[:,i,:] = configs[:,nup+j,:]-configs[:,nup+i,:]
+
     return d1, d2, d3
 
 
-def eidist_old(configs, coords):
+def eidist(configs, coords):
     """returns a list of electron-ion distances"""
     ne=configs.shape[1]
     ni=len(coords)
@@ -49,20 +49,23 @@ def eidist_old(configs, coords):
     return d
     
 
-def eidist(configs, coords, nup, ndown):
-    """returns a list of electron-ion distances"""
+def eidist_spin(configs, coords, nup, ndown):
+    """returns a separate list of electron-ion distances according to the spin
+    of each electron assumes the first nup electrons are spin up and the remaining spin
+    down electrons are spin down"""
     ne=configs.shape[1]
     ni=len(coords)
     d1=np.zeros((configs.shape[0],nup,ni,3))   # up case
     d2=np.zeros((configs.shape[0],ndown,ni,3)) # down case
 
     # First electrons are spin up by convenction
-    for i in range(ne):
+    for i in range(nup): # spin up case
         for j in range(ni):
-            if(i<nup): #Spin up case
-                d1[:,i,j,:]=configs[:,i,:]-coords[j]
-            else: # Spin down case
-                d2[:,i-nup,j,:]=configs[:,i,:]-coords[j]
+            d1[:,i,j,:] = configs[:,i,:]-coords[j]
+            
+    for i in range(ndown): # spin down case
+        for j in range(ni):
+            d2[:,i,j,:] = configs[:,i+nup,:]-coords[j]
 
     return d1, d2
 
@@ -83,9 +86,8 @@ def eidist_i(coords,vec):
 
 class Jastrow2B:
     """A simple two-body Jastrow factor that is written as
-    :math:`\ln \Psi_J  = \sum_k c_k \sum_{i<j} b_k(r_{ij})`
-    b are function objects
-    """
+    :math:`ln Psi_J  = sum_k c_k sum_{i<j} b_k(r_{ij})`
+    b are function objects"""
     def __init__(self,nconfig,mol,basis=None):
         if basis is None:
             nexpand=4
@@ -116,8 +118,7 @@ class Jastrow2B:
         return (1,u)
 
     def updateinternals(self,e,epos,mask=None):
-        """  """
-        #update b and c sums. This overlaps with testvalue()
+        """ Update b and c sums. """
         if mask is None:
             mask=[True]*self._configscurrent.shape[0]
         self._bvalues[mask,:]+=self._get_deltab(e,epos)[mask,:]
@@ -130,7 +131,7 @@ class Jastrow2B:
 
     def gradient(self,e,epos):
         """We compute the gradient for electron e as
-        :math:`\grad_e \ln \Psi_J = \sum_k c_k \sum_{j > e} \grad_e b_k(r_{ej})  + \sum_{i < e} \grad_e b_k(r_{ie}) `
+        :math:`grad_e ln Psi_J = sum_k c_k sum_{j > e} grad_e b_k(r_{ej}) + sum_{i < e} grad_e b_k(r_{ie}) `
         So we need to compute the gradient of the b's for these indices.
         Note that we need to compute distances between electron position given and the current electron distances.
         We will need this for laplacian() as well"""
@@ -147,7 +148,6 @@ class Jastrow2B:
         for c,b in zip(self.parameters['coeff'],self.basis):
             delta+=c*np.sum(b.gradient(dnew).reshape(nconf,-1,3),axis=1).T
         return delta
-
 
     def laplacian(self,e,epos):
         """ """
@@ -212,8 +212,6 @@ class Jastrow:
         self.parameters['acoeff']=np.zeros((aexpand, 2))
         self._bvalues=np.zeros((nconfig,nexpand, 3))
         self._configscurrent=np.zeros((nconfig,self._nelec,3))
-        
-        # First using gaussian, later change to obey cusp condition
         self._avalues=np.zeros((nconfig,mol.natm,aexpand, 2))
         
 
@@ -225,22 +223,23 @@ class Jastrow:
         #We will save the b sums over i,j in _bvalues
         
         #package the electron-electron distances into a 1d array
-        d1, d2, d3 = eedist(configs, elec[0], elec[1])
+        d1, d2, d3 = eedist_spin(configs, elec[0], elec[1])
         d1=d1.reshape((-1,3))
         d2=d2.reshape((-1,3))
         d3=d3.reshape((-1,3))
 
         # Package the electron-ion distances into a 1d array
-        di1, di2 = eidist(configs, self._mol.atom_coords(), elec[0], elec[1])
+        di1, di2 = eidist_spin(configs, self._mol.atom_coords(), elec[0], elec[1])
         di1 = di1.reshape((-1, 3))
         di2 = di2.reshape((-1, 3))
         
+        # Update bvalues according to spin case
         for i,b in enumerate(self.b_basis):
             self._bvalues[:,i,0]=np.sum(b.value(d1).reshape( (configs.shape[0], -1) ),axis=1)
             self._bvalues[:,i,1]=np.sum(b.value(d2).reshape( (configs.shape[0], -1) ),axis=1)
             self._bvalues[:,i,2]=np.sum(b.value(d3).reshape( (configs.shape[0], -1) ),axis=1)
 
-        # Maybe bug is in here? Can't really tell since old Jastrow doesn't have spin
+        # Update avalues according to spin case
         for i,a in enumerate(self.a_basis):
             self._avalues[:,:,i,0] = np.sum(a.value(di1).reshape((configs.shape[0],
                                                                self._mol.natm, -1)), axis=2)
@@ -254,8 +253,7 @@ class Jastrow:
 
 
     def updateinternals(self,e,epos,mask=None):
-        """  """
-        #update b and c sums. This overlaps with testvalue()
+        """ Update a, b, and c sums. """
         if mask is None:
             mask=[True]*self._configscurrent.shape[0]
         self._bvalues[mask,:,:]+=self._get_deltab(e,epos)[mask,:,:]
@@ -264,7 +262,7 @@ class Jastrow:
 
 
     def value(self): 
-        """  """
+        """Compute the current log value of the wavefunction"""
         u=np.sum(self._bvalues*self.parameters['bcoeff'], axis=(2,1)) +\
           np.sum(self._avalues*self.parameters['acoeff'], axis=(3,2,1))
         return (1,u)       
@@ -272,7 +270,7 @@ class Jastrow:
 
     def gradient(self,e,epos):
         """We compute the gradient for electron e as
-        :math:`\grad_e \ln \Psi_J = \sum_k c_k \sum_{j > e} \grad_e b_k(r_{ej})  + \sum_{i < e} \grad_e b_k(r_{ie}) `
+        :math:`grad_e ln Psi_J = sum_k c_k sum_{j > e} grad_e b_k(r_{ej}) + sum_{i < e} grad_e b_k(r_{ie}) `
         So we need to compute the gradient of the b's for these indices.
         Note that we need to compute distances between electron position given and the current electron distances.
         We will need this for laplacian() as well"""
@@ -289,24 +287,20 @@ class Jastrow:
         dnew=dnew[:,mask,:]
 
         delta=np.zeros((3,nconf))
-        if(e < nup): # Spin up electron selected
-            dnew1= dnew[:,:nup-1,:].reshape(-1,3)
-            dnew2= dnew[:,nup-1:,:].reshape(-1,3)
-            #dnew3= np.zeros((nconf,3))
-        else:        # Spin down electron selected
-            #dnew1= np.zeros((nconf,3))
-            dnew2= dnew[:,:nup,:].reshape(-1,3)
-            dnew3= dnew[:,nup:,].reshape(-1,3)
+
+        # Check if selected electron is spin up or down
+        eup = int(e<nup)
+        edown = int(e>=nup)
+
+        dnewup= dnew[:,:nup-eup,:].reshape(-1,3) # Other electron is spin up
+        dnewdown= dnew[:,nup-eup:,:].reshape(-1,3) # Other electron is spin down
 
         for c,b in zip(self.parameters['bcoeff'],self.b_basis):
-            delta+=c[1]*np.sum(b.gradient(dnew2).reshape(nconf,-1,3),axis=1).T
-            if(e < nup):
-                delta+=c[0]*np.sum(b.gradient(dnew1).reshape(nconf,-1,3),axis=1).T
-            else:
-                delta+=c[2]*np.sum(b.gradient(dnew3).reshape(nconf,-1,3),axis=1).T
+            delta += c[edown]*np.sum(b.gradient(dnewup).reshape(nconf,-1,3),axis=1).T
+            delta += c[1+edown]*np.sum(b.gradient(dnewdown).reshape(nconf,-1,3),axis=1).T
 
         for c,a in zip(self.parameters['acoeff'],self.a_basis):
-            delta+=c[int(e>=nup)]*np.sum(a.gradient(dinew).reshape(nconf,-1,3),axis=1).T
+            delta+=c[edown]*np.sum(a.gradient(dinew).reshape(nconf,-1,3),axis=1).T
 
         return delta
 
@@ -322,12 +316,11 @@ class Jastrow:
         mask=[True]*ne
         mask[e]=False
         dnew=dnew[:,mask,:]
-        if(e < nup): # Spin up electron selected
-            dnew1 = dnew[:,:nup-1,:].reshape(-1,3)
-            dnew2 = dnew[:,nup-1:,:].reshape(-1,3)
-        else:         # Spin down electron selected
-            dnew2 = dnew[:,:nup,:].reshape(-1,3)
-            dnew3 = dnew[:,nup:,].reshape(-1,3)
+
+        eup = int(e<nup)
+        edown = int(e>=nup)
+        dnewup = dnew[:,:nup-eup,:].reshape(-1,3) # Other electron is spin up
+        dnewdown = dnew[:,nup-eup:,:].reshape(-1,3) # Other electron is spin down
 
         # Get and reshape eidist_i
         dinew = eidist_i(self._mol.atom_coords(),epos)
@@ -338,15 +331,12 @@ class Jastrow:
 
         # b-value component
         for c,b in zip(self.parameters['bcoeff'],self.b_basis):
-            delta += c[1]*np.sum(b.laplacian(dnew2).reshape(nconf,-1),axis=1)
-            if(e < nup):
-                delta += c[0]*np.sum(b.laplacian(dnew1).reshape(nconf,-1),axis=1)
-            else:
-                delta += c[2]*np.sum(b.laplacian(dnew3).reshape(nconf,-1),axis=1)
+            delta += c[edown]*np.sum(b.laplacian(dnewup).reshape(nconf,-1),axis=1)
+            delta += c[1+edown]*np.sum(b.laplacian(dnewdown).reshape(nconf,-1),axis=1)
 
         # a-value component
         for c,a in zip(self.parameters['acoeff'],self.a_basis):
-            delta += c[int(e>=nup)]*np.sum(a.laplacian(dinew).reshape(nconf,-1),axis=1)
+            delta += c[edown]*np.sum(a.laplacian(dinew).reshape(nconf,-1),axis=1)
 
         g=self.gradient(e,epos)
         #print('SHAPE: ', g.shape)
@@ -367,29 +357,21 @@ class Jastrow:
         dnew=eedist_i(self._configscurrent,epos)[:,mask,:]
         dold=eedist_i(self._configscurrent,self._configscurrent[:,e,:])[:,mask,:]
 
-        if(e < nup): # Spin up electron selected
-            d1new= dnew[:,:nup-1,:].reshape((-1, 3))
-            d2new= dnew[:,nup-1:,:].reshape((-1, 3))
-            d3new= np.zeros((nconf,3))
+        eup = int(e<nup)
+        edown = int(e>=nup)
 
-            d1old= dold[:,:nup-1,:].reshape((-1, 3))
-            d2old= dold[:,nup-1:,:].reshape((-1, 3))
-            d3old= np.zeros((nconf,3))
-        else:        # Spin down electron selected
-            d1new= np.zeros((nconf,3))
-            d2new= dnew[:,:nup,:].reshape((-1, 3))
-            d3new= dnew[:,nup:,].reshape((-1, 3))
-
-            d1old= np.zeros((nconf,3))
-            d2old= dold[:,:nup,:].reshape((-1, 3))
-            d3old= dold[:,nup:,].reshape((-1, 3))
+        dnewup = dnew[:,:nup-eup,:].reshape((-1,3)) # Other electron is spin up
+        dnewdown = dnew[:,nup-eup:,:].reshape((-1,3)) # Other electron is spin down
+        doldup = dold[:,:nup-eup,:].reshape((-1,3)) # Other electron is spin up
+        dolddown = dold[:,nup-eup:,:].reshape((-1,3)) # Other electron is spin down
 
         delta=np.zeros((nconf,len(self.b_basis), 3))
 
         for i,b in enumerate(self.b_basis):
-            delta[:,i,0]+=np.sum((b.value(d1new)-b.value(d1old)).reshape(nconf,-1),axis=1)
-            delta[:,i,1]+=np.sum((b.value(d2new)-b.value(d2old)).reshape(nconf,-1),axis=1)
-            delta[:,i,2]+=np.sum((b.value(d3new)-b.value(d3old)).reshape(nconf,-1),axis=1)
+            delta[:,i,edown]+=np.sum((b.value(dnewup)-b.value(doldup)).reshape(nconf,-1),
+                                     axis=1)
+            delta[:,i,1+edown]+=np.sum((b.value(dnewdown)-b.value(dolddown)).reshape(nconf,-1),
+                                       axis=1)
         return delta
 
 

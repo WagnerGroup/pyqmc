@@ -4,10 +4,7 @@ import os
 os.environ["MKL_NUM_THREADS"] = "1" 
 os.environ["NUMEXPR_NUM_THREADS"] = "1" 
 os.environ["OMP_NUM_THREADS"] = "1" 
-
 import numpy as np
-from slater import PySCFSlaterRHF
-from accumulators import EnergyAccumulator
     
 
 def initial_guess(mol,nconfig,r=1.0):
@@ -37,13 +34,24 @@ def initial_guess(mol,nconfig,r=1.0):
 
 
 def limdrift(g,cutoff=1):
+    """
+    Limit a vector to have a maximum magnitude of cutoff while maintaining direction
+
+    Args:
+      g: a [nconf,ndim] vector
+      
+      cutoff: the maximum magnitude
+
+    Returns: 
+      The vector with the cut off applied.
+    """
     tot=np.linalg.norm(g,axis=1)
     mask=tot > cutoff
     g[mask,:]=g[mask,:]/tot[mask,np.newaxis]
     return g
     
 
-def vmc(mol,wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False):
+def vmc(wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False):
     """Run a Monte Carlo sample of a given wave function.
 
     Args:
@@ -54,7 +62,7 @@ def vmc(mol,wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False):
 
       tstep: Time step for move proposals. Only affects efficiency.
 
-      accumulators: A list of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
+      accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
 
       verbose: Print out step information 
 
@@ -64,10 +72,11 @@ def vmc(mol,wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False):
        coords: The final coordinates from this calculation.
        
     """
-    if accumulators is None:
-        accumulators={'energy':EnergyAccumulator(mol) } 
+    if accumulators is None and verbose:
+        print("WARNING: running VMC with no accumulators")
+         
     nconf=coords.shape[0]
-    nelec=np.sum(mol.nelec)
+    nelec=coords.shape[1]
     df=[]
     wf.recompute(coords)
     for step in range(nsteps):
@@ -75,31 +84,22 @@ def vmc(mol,wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False):
             print("step",step)
         acc=[]
         for e in range(nelec):
-
-            # Calculate gradient
+            #Propose move
             grad=limdrift(wf.gradient(e, coords[:,e,:]).T)
-
-            # Calculate new coordinates
             newcoorde=coords[:,e,:]+np.random.normal(scale=np.sqrt(tstep),size=(nconf,3))\
                       + grad*tstep
 
-            # Calculate new gradient
+            #Compute reverse move
             new_grad=limdrift(wf.gradient(e, newcoorde).T) 
-
-            # PDF for forward transition
             forward=np.sum((coords[:,e,:]+tstep*grad-newcoorde)**2,axis=1)
-
-            # PDF for backward transition
             backward=np.sum((newcoorde+tstep*new_grad-coords[:,e,:])**2,axis=1)
 
-            # Transition probability from distribution
+            #Acceptance
             t_prob = np.exp(1/(2*tstep)*(forward-backward))
-
-            # Compute transition probabilities and which moves to accept
             ratio=np.multiply(wf.testvalue(e,newcoorde)**2, t_prob)
             accept=ratio > np.random.rand(nconf)
             
-            # Original MC code
+            # Update wave function
             coords[accept,e,:]=newcoorde[accept,:]
             wf.updateinternals(e,coords[:,e,:],accept)
             acc.append(np.mean(accept))
@@ -115,7 +115,8 @@ def vmc(mol,wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False):
 
 def test():
     from pyscf import lib, gto, scf
-    
+    from slater import PySCFSlaterRHF
+    from accumulators import EnergyAccumulator
     import pandas as pd
     
     mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)
@@ -131,7 +132,7 @@ def test():
 
     import time
     tstart=time.process_time()
-    df,coords=vmc(mol,wf,coords,nsteps=100,accumulators={'energy':EnergyAccumulator(mol), 'dipole':dipole } )
+    df,coords=vmc(wf,coords,nsteps=100,accumulators={'energy':EnergyAccumulator(mol), 'dipole':dipole } )
     tend=time.process_time()
     print("VMC took",tend-tstart,"seconds")
 

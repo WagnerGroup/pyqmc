@@ -20,7 +20,7 @@ class PGradAccumulator:
     energy = d['total']
     pgrad = wf.pgradient()
     for k,grad in pgrad.items():
-        d['dpH_'+k] = energy[:,np.newaxis,np.newaxis]*grad
+        d['dpH_'+k] = np.einsum('i,ij->ij',energy,grad)
         d['dppsi_'+k] = grad
     return d
 

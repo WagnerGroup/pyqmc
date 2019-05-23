@@ -105,6 +105,7 @@ def test():
     import seaborn as sns
     
     mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', ecp='bfd',basis='bfd_vtz',unit='bohr',verbose=5)
+    #mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5',basis='cc-pvtz',unit='bohr',verbose=5)
     mf = scf.RHF(mol).run()
     nconf=1000
     wf1=PySCFSlaterRHF(nconf,mol,mf)
@@ -125,7 +126,7 @@ def test():
     df1,configs = vmc(wf,configs,nsteps=100,accumulators={}) 
     df1=pd.DataFrame(df1)
     df1['method']=['op0']*len(df1)
-    print('vmc ({0} steps) finished, {1}'.format(nvmcsteps*2,time.process_time()-tstart))
+    print('vmc ({0} steps) finished, {1}'.format(100,time.process_time()-tstart))
     #opt_var=optvariance(EnergyAccumulator(mol),wf,configs,params0)
     #print(params0)
     #print('optimization 1: {0}, {1}'.format(opt_var,time.process_time()-tstart))
@@ -190,5 +191,5 @@ if __name__=="__main__":
     test()
     pr.disable()
     p=Stats(pr)
-    print(p.sort_stats('cumulative').print_stats())
+    #print(p.sort_stats('cumulative').print_stats())
     

@@ -20,9 +20,11 @@ def eedist_spin(configs, nup, ndown):
         for j in range(ndown):
             d2[:,i*ndown+j,:] = configs[:,j+nup,:]-configs[:,i,:]
 
-    for i in range(int(ndown*(ndown-1)/2)): # Both spins down
-        for j in range(j+1, ndown):
-            d3[:,i,:] = configs[:,nup+j,:]-configs[:,nup+i,:]
+    c=0
+    for i in range(nup,ne):
+        for j in range(i+1,ne):
+            d3[:,c,:]=configs[:,j,:]-configs[:,i,:]
+            c+=1
 
     return d1, d2, d3
 
@@ -93,7 +95,6 @@ class JastrowSpin:
         u=0.0
         self._configscurrent=configs.copy()
         elec = self._mol.nelec
-        #We will save the b sums over i,j in _bvalues
         
         #package the electron-electron distances into a 1d array
         d1, d2, d3 = eedist_spin(configs, elec[0], elec[1])
@@ -199,7 +200,6 @@ class JastrowSpin:
         dinew = eidist_i(self._mol.atom_coords(),epos)
         dinew = dinew.reshape(-1,3)
 
-        # Calculate delta
         delta=np.zeros(nconf)
 
         # b-value component
@@ -212,8 +212,7 @@ class JastrowSpin:
             delta += c[edown]*np.sum(a.laplacian(dinew).reshape(nconf,-1),axis=1)
 
         g=self.gradient(e,epos)
-        #print('SHAPE: ', g.shape)
-        return delta + np.sum(g**2,axis=0) # 20 x 1
+        return delta + np.sum(g**2,axis=0) 
 
 
     def _get_deltab(self,e,epos):
@@ -232,14 +231,15 @@ class JastrowSpin:
 
         eup = int(e<nup)
         edown = int(e>=nup)
-
-        dnewup = dnew[:,:nup-eup,:].reshape((-1,3)) # Other electron is spin up
-        dnewdown = dnew[:,nup-eup:,:].reshape((-1,3)) # Other electron is spin down
-        doldup = dold[:,:nup-eup,:].reshape((-1,3)) # Other electron is spin up
-        dolddown = dold[:,nup-eup:,:].reshape((-1,3)) # Other electron is spin down
+        # This is the point at which we switch between up and down
+        # We subtract eup because we have removed e from the set
+        sep= nup-eup         
+        dnewup = dnew[:,:sep,:].reshape((-1,3)) 
+        dnewdown = dnew[:,sep:,:].reshape((-1,3)) 
+        doldup = dold[:,:sep,:].reshape((-1,3)) 
+        dolddown = dold[:,sep:,:].reshape((-1,3)) 
 
         delta=np.zeros((nconf,len(self.b_basis), 3))
-
         for i,b in enumerate(self.b_basis):
             delta[:,i,edown]+=np.sum((b.value(dnewup)-b.value(doldup)).reshape(nconf,-1),
                                      axis=1)
@@ -267,9 +267,9 @@ class JastrowSpin:
 
 
     def testvalue(self,e,epos):
-        b_val = np.sum(self._get_deltab(e,epos)*self.parameters['bcoeff'],#[np.newaxis,:,:],
+        b_val = np.sum(self._get_deltab(e,epos)*self.parameters['bcoeff'],
                        axis=(2,1))
-        a_val = np.sum(self._get_deltaa(e,epos)*self.parameters['acoeff'],#[np.newaxis,:,:],
+        a_val = np.sum(self._get_deltaa(e,epos)*self.parameters['acoeff'],
                        axis=(3,2,1))
         return np.exp(b_val + a_val)
 
@@ -296,7 +296,6 @@ def test():
     jastrow.parameters['bcoeff']=np.random.random(jastrow.parameters['bcoeff'].shape)
     jastrow.parameters['acoeff']=np.random.random(jastrow.parameters['acoeff'].shape)
     import testwf
-    #print(testwf.test_updateinternals(jastrow,configs))
     for key, val in testwf.test_updateinternals(jastrow, configs).items():
         print(key, val)
 

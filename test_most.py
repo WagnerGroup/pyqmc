@@ -29,6 +29,8 @@ def test_wfs():
                MultiplyWF(nconf,PySCFSlaterRHF(nconf,mol,mf),Jastrow2B(nconf,mol)), 
                PySCFSlaterUHF(nconf,mol,mf_uhf),PySCFSlaterUHF(nconf,mol,mf), 
                PySCFSlaterUHF(nconf,mol,mf_rohf)]:
+        for k in wf.parameters:
+            wf.parameters[k]=np.random.rand(*wf.parameters[k].shape)
         assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon 
         assert testwf.test_wf_laplacian(wf, epos, delta=1e-5)[0] < epsilon 
         assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon 

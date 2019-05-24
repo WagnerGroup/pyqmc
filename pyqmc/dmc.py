@@ -7,13 +7,8 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 import numpy as np
 from pyscf import lib, gto, scf
-from slater import PySCFSlaterRHF
-from jastrow import Jastrow2B
-from multiplywf import MultiplyWF
-from accumulators import EnergyAccumulator
-from mc import initial_guess, limdrift, vmc
-from func3d import ExpCuspFunction, GaussianFunction
-from optvariance import optvariance
+
+from pyqmc.mc import limdrift
 
 def dmc(mol,wf,configs,nsteps=1000,tstep=0.02,branchtime=5,accumulators=None,verbose=False):
     if accumulators is None:
@@ -103,6 +98,7 @@ def test():
     import time
     import matplotlib.pyplot as plt
     import seaborn as sns
+    from pyqmc import PySCFSlaterRHF,Jastrow2B,MultiplyWF, EnergyAccumulator, initial_guess, vmc,ExpCuspFunction, GaussianFunction, optvariance
     
     mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', ecp='bfd',basis='bfd_vtz',unit='bohr',verbose=5)
     #mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5',basis='cc-pvtz',unit='bohr',verbose=5)

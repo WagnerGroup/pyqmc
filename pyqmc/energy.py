@@ -1,6 +1,7 @@
 import numpy as np
 import scipy
 import scipy.spatial
+import pyqmc.eval_ecp  as eval_ecp
 
 
 def ee_energy(configs):
@@ -29,7 +30,6 @@ def ii_energy(mol):
     return ii
 
 def get_ecp(mol,configs,wf):
-    import eval_ecp  # this needs to be fixed later...
     return eval_ecp.ecp(mol, configs, wf)
     
 

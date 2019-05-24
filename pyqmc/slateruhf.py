@@ -11,7 +11,7 @@ class PySCFSlaterUHF:
     """A wave function object has a state defined by a reference configuration of electrons.
     The functions recompute() and updateinternals() change the state of the object, and 
     the rest compute and return values from that state. """
-    def __init__(self,nconfig,mol,mf):
+    def __init__(self,mol,mf):
         self.occ=np.asarray(mf.mo_occ > 0.9)
         self.parameters={}
 
@@ -24,7 +24,6 @@ class PySCFSlaterUHF:
           self.parameters['mo_coeff_beta'] =mf.mo_coeff[:,np.asarray(mf.mo_occ > 1.1)]
 
         self._coefflookup=('mo_coeff_alpha','mo_coeff_beta')
-        self._nconfig=nconfig
         self._mol=mol
         self._nelec=mol.nelec
         #self._inverse=(np.zeros((nconfig,self._nelec[0],self._nelec[0])),
@@ -133,7 +132,7 @@ def test():
         print('')
         nconf=10
         nelec=np.sum(mol.nelec)
-        slater=PySCFSlaterUHF(nconf,mol,mf)
+        slater=PySCFSlaterUHF(mol,mf)
         configs=np.random.randn(nconf,nelec,3)
         print("testing internals:", testwf.test_updateinternals(slater,configs))
         for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:

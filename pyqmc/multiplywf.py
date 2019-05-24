@@ -50,13 +50,9 @@ class WFmerger(collections.abc.MutableMapping):
 class MultiplyWF:
     """Multiplies two wave functions """
 
-    def __init__(self,nconfig,wf1,wf2):
+    def __init__(self,wf1,wf2):
         self.wf1=wf1
         self.wf2=wf2
-        #Using a ChainMap here since it makes things easy.
-        #But there is a possibility that names collide here. 
-        #one option is to use some name-mangling scheme for parameters
-        #within each wave function
         self.parameters=WFmerger(self.wf1.parameters,self.wf2.parameters)
 
         

@@ -1,5 +1,5 @@
 import numpy as np
-from func3d import GaussianFunction
+from pyqmc.func3d import GaussianFunction
 
 def eedist(configs):
      """returns a list of electron-electron distances within a collection """
@@ -157,7 +157,7 @@ def test():
     
     jastrow=Jastrow2B(nconf,mol)
     jastrow.parameters['coeff']=np.random.random(jastrow.parameters['coeff'].shape)
-    import testwf
+    import pyqmc.testwf as testwf
     #print(testwf.test_updateinternals(jastrow,configs))
     for key, val in testwf.test_updateinternals(jastrow, configs).items():
         print(key, val)

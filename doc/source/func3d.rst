@@ -1,6 +1,6 @@
 func3d.py
 **********************************
 
-.. automodule:: func3d
+.. automodule:: pyqmc.func3d
    :members:
    

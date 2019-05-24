@@ -103,8 +103,8 @@ class MultiplyWF:
 
 def test():
     from pyscf import lib,gto,scf
-    from jastrow import Jastrow2B
-    from slater import PySCFSlaterRHF
+    from pyqmc.jastrow import Jastrow2B
+    from pyqmc.slater import PySCFSlaterRHF
     nconf=10
     
     mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
@@ -117,7 +117,7 @@ def test():
     wf.parameters['wf2coeff']=np.ones(len(wf.parameters['wf2coeff']))
     print(wf.wf2.parameters['coeff'])
     print(wf.parameters)
-    import testwf
+    import pyqmc.testwf as testwf
     for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
         print('delta', delta, "Testing gradient",testwf.test_wf_gradient(wf,configs,delta=delta))
         print('delta', delta, "Testing laplacian", testwf.test_wf_laplacian(wf,configs,delta=delta))

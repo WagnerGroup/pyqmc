@@ -1,7 +1,7 @@
 Slater determinant
 **********************************
 
-.. automodule:: slater
+.. automodule:: pyqmc.slater
    :members:
  
 

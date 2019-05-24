@@ -115,8 +115,8 @@ def vmc(wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False):
 
 def test():
     from pyscf import lib, gto, scf
-    from slater import PySCFSlaterRHF
-    from accumulators import EnergyAccumulator
+    from pyqmc.slater import PySCFSlaterRHF
+    from pyqmc.accumulators import EnergyAccumulator
     import pandas as pd
     
     mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)

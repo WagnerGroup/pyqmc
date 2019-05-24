@@ -1,7 +1,7 @@
 Effective core potentials
 **********************************
 
-.. automodule:: eval_ecp
+.. automodule:: pyqmc.eval_ecp
    :members:
  
 

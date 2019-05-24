@@ -1,5 +1,5 @@
 import numpy as np
-from func3d import GaussianFunction
+from pyqmc.func3d import GaussianFunction
 
 
 def eedist_spin(configs, nup, ndown):
@@ -301,7 +301,7 @@ def test():
     jastrow=JastrowSpin(nconf,mol,a_basis=abasis,b_basis=bbasis)
     jastrow.parameters['bcoeff']=np.random.random(jastrow.parameters['bcoeff'].shape)
     jastrow.parameters['acoeff']=np.random.random(jastrow.parameters['acoeff'].shape)
-    import testwf
+    import pyqmc.testwf as testwf
     for key, val in testwf.test_updateinternals(jastrow, configs).items():
         print(key, val)
 

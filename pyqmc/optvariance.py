@@ -76,13 +76,12 @@ def test_single_opt():
     nsteps=10
 
     coords = initial_guess(mol,nconf)
-    wf=MultiplyWF(nconf,PySCFSlaterRHF(nconf,mol,mf),Jastrow2B(nconf,mol,
+    wf=MultiplyWF(PySCFSlaterRHF(mol,mf),Jastrow2B(mol,
         basis=[GaussianFunction(1.0),GaussianFunction(2.0)]))
     
     vmc(wf,coords,nsteps=nsteps)
 
     opt_var,wf=optvariance(EnergyAccumulator(mol),wf,coords,['wf2coeff'])
-    print('Optimized parameters:\n',params0)
     print('Final variance:',opt_var)
     
     

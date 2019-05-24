@@ -71,7 +71,7 @@ class JastrowSpin:
     '''
     1 body and 2 body jastrow factor
     '''
-    def __init__(self,nconfig,mol,a_basis=None,b_basis=None):
+    def __init__(self,mol,a_basis=None,b_basis=None):
         if b_basis is None:
             nexpand=5
             self.b_basis=[GaussianFunction(0.2*2**n) for n in range(1,nexpand+1)]
@@ -91,9 +91,6 @@ class JastrowSpin:
         self._mol=mol
         self.parameters['bcoeff']=np.zeros((nexpand, 3))
         self.parameters['acoeff']=np.zeros((aexpand, 2))
-        self._bvalues=np.zeros((nconfig,nexpand, 3))
-        self._configscurrent=np.zeros((nconfig,self._nelec,3))
-        self._avalues=np.zeros((nconfig,mol.natm,aexpand, 2))
         
 
     def recompute(self,configs):
@@ -101,6 +98,11 @@ class JastrowSpin:
         u=0.0
         self._configscurrent=configs.copy()
         elec = self._mol.nelec
+        nconfig=configs.shape[0]
+        nexpand=len(self.b_basis)
+        aexpand=len(self.a_basis)
+        self._bvalues=np.zeros((nconfig,nexpand, 3))
+        self._avalues=np.zeros((nconfig,self._mol.natm,aexpand, 2))
         
         #package the electron-electron distances into a 1d array
         d1, d2, d3 = eedist_spin(configs, elec[0], elec[1])
@@ -298,7 +300,7 @@ def test():
     
     abasis=[GaussianFunction(0.2),GaussianFunction(0.4)]
     bbasis=[GaussianFunction(0.2),GaussianFunction(0.4)]
-    jastrow=JastrowSpin(nconf,mol,a_basis=abasis,b_basis=bbasis)
+    jastrow=JastrowSpin(mol,a_basis=abasis,b_basis=bbasis)
     jastrow.parameters['bcoeff']=np.random.random(jastrow.parameters['bcoeff'].shape)
     jastrow.parameters['acoeff']=np.random.random(jastrow.parameters['acoeff'].shape)
     import pyqmc.testwf as testwf

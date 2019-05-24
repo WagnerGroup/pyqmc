@@ -128,7 +128,7 @@ def test():
     #import pyscf2qwalk
     #pyscf2qwalk.print_qwalk(mol,mf)
     nconf=5000
-    wf=PySCFSlaterRHF(nconf,mol,mf)
+    wf=PySCFSlaterRHF(mol,mf)
     coords = initial_guess(mol,nconf) 
     def dipole(coords,wf):
         return {'vec':np.sum(coords[:,:,:],axis=1) } 

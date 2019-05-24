@@ -1,6 +1,4 @@
 import numpy as np
-#from pyscf import lib, gto, scf
-
 
 
 def sherman_morrison_row(e,inv,vec):
@@ -117,7 +115,7 @@ def test():
     nelec=np.sum(mol.nelec)
     slater=PySCFSlaterRHF(nconf,mol,mf)
     configs=np.random.randn(nconf,nelec,3)
-    import testwf
+    import pyqmc.testwf as testwf
     for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
         print('delta', delta, "Testing gradient",testwf.test_wf_gradient(slater,configs,delta=delta))
         print('delta', delta, "Testing laplacian", testwf.test_wf_laplacian(slater,configs,delta=delta))

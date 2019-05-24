@@ -1,7 +1,7 @@
 Jastrow factor
 **********************************
 
-.. automodule:: jastrow
+.. automodule:: pyqmc.jastrow
    :members:
  
 

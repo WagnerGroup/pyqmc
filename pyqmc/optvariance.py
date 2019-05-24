@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.optimize import minimize
-from energy import kinetic
+from pyqmc.energy import kinetic
 
 def optvariance(energy,wf,coords,params=None,method='Powell',method_options=None):
     """Optimizes variance of wave function against parameters indicated by params.
@@ -55,18 +55,18 @@ def optvariance(energy,wf,coords,params=None,method='Powell',method_options=None
 
 
 def test_single_opt():
-    from accumulators import EnergyAccumulator
+    from pyqmc.accumulators import EnergyAccumulator
     from pyscf import lib, gto, scf
     
     import pandas as pd
-    from multiplywf import MultiplyWF
-    from jastrow import Jastrow2B
-    from func3d import GaussianFunction
-    from slater import PySCFSlaterRHF
-    from multiplywf import MultiplyWF
-    from jastrow import Jastrow2B
+    from pyqmc.multiplywf import MultiplyWF
+    from pyqmc.jastrow import Jastrow2B
+    from pyqmc.func3d import GaussianFunction
+    from pyqmc.slater import PySCFSlaterRHF
+    from pyqmc.multiplywf import MultiplyWF
+    from pyqmc.jastrow import Jastrow2B
     
-    from mc import initial_guess,vmc
+    from pyqmc.mc import initial_guess,vmc
     
     mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='bfd_vtz',ecp='bfd',unit='bohr',verbose=5)
     mf = scf.RHF(mol).run()

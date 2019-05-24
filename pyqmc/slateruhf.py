@@ -126,6 +126,7 @@ class PySCFSlaterUHF:
         
 def test():  
     from pyscf import lib, gto, scf
+    import pyqmc.testwf as testwf
     
     mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr', spin=0)
     for mf in [scf.RHF(mol).run(), scf.ROHF(mol).run(), scf.UHF(mol).run()]:
@@ -134,7 +135,6 @@ def test():
         nelec=np.sum(mol.nelec)
         slater=PySCFSlaterUHF(nconf,mol,mf)
         configs=np.random.randn(nconf,nelec,3)
-        import testwf
         print("testing internals:", testwf.test_updateinternals(slater,configs))
         for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
             print('delta', delta, "Testing gradient",testwf.test_wf_gradient(slater,configs,delta=delta))

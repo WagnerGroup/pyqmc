@@ -1,6 +1,6 @@
 energy.py
 **********************************
 
-.. automodule:: energy
+.. automodule:: pyqmc.energy
    :members:
    

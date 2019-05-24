@@ -1,5 +1,5 @@
 import numpy as np 
-from energy import energy
+from pyqmc.energy import energy
 
 class EnergyAccumulator:
   """returns energy of each configuration in a dictionary. 

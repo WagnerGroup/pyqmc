@@ -1,6 +1,6 @@
 optvariance.py
 **********************************
 
-.. automodule:: optvariance
+.. automodule:: pyqmc.optvariance
    :members:
    

@@ -1,6 +1,6 @@
 accumulators.py
 **********************************
 
-.. automodule:: accumulators
+.. automodule:: pyqmc.accumulators
    :members:
    

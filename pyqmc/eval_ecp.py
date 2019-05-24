@@ -226,7 +226,7 @@ def get_rot(mol,configs,e,at,naip=6):
 
 
 def test():
-    from slateruhf import PySCFSlaterUHF
+    from pyqmc.slateruhf import PySCFSlaterUHF
     from pyscf import lib, gto, scf
     
     mol = gto.M(atom='C 0. 0. 0.',ecp='bfd',basis = 'bfd_vtz')

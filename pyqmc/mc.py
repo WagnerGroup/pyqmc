@@ -72,8 +72,11 @@ def vmc(wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False):
        coords: The final coordinates from this calculation.
        
     """
-    if accumulators is None and verbose:
-        print("WARNING: running VMC with no accumulators")
+    if accumulators is None:
+        accumulators={}
+        if verbose:
+            print("WARNING: running VMC with no accumulators")
+            
          
     nconf=coords.shape[0]
     nelec=coords.shape[1]
@@ -115,8 +118,8 @@ def vmc(wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False):
 
 def test():
     from pyscf import lib, gto, scf
-    from slater import PySCFSlaterRHF
-    from accumulators import EnergyAccumulator
+    from pyqmc.slater import PySCFSlaterRHF
+    from pyqmc.accumulators import EnergyAccumulator
     import pandas as pd
     
     mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)
@@ -125,7 +128,7 @@ def test():
     #import pyscf2qwalk
     #pyscf2qwalk.print_qwalk(mol,mf)
     nconf=5000
-    wf=PySCFSlaterRHF(nconf,mol,mf)
+    wf=PySCFSlaterRHF(mol,mf)
     coords = initial_guess(mol,nconf) 
     def dipole(coords,wf):
         return {'vec':np.sum(coords[:,:,:],axis=1) } 

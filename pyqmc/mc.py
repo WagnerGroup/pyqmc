@@ -72,8 +72,11 @@ def vmc(wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False):
        coords: The final coordinates from this calculation.
        
     """
-    if accumulators is None and verbose:
-        print("WARNING: running VMC with no accumulators")
+    if accumulators is None:
+        accumulators={}
+        if verbose:
+            print("WARNING: running VMC with no accumulators")
+            
          
     nconf=coords.shape[0]
     nelec=coords.shape[1]

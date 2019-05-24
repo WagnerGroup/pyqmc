@@ -2,7 +2,7 @@ import numpy as np
 from scipy.optimize import minimize
 from pyqmc.energy import kinetic
 
-def optvariance(energy,wf,coords,params=None,method='Powell',method_options=None):
+def optvariance(energy,wf,coords,params=None,**kwargs):
     """Optimizes variance of wave function against parameters indicated by params.
     
     Does not use gradient information, and assumes that only the kinetic energy changes.
@@ -12,46 +12,48 @@ def optvariance(energy,wf,coords,params=None,method='Powell',method_options=None
 
       coords: (nconfig,nelec,3)
 
-      params: dictionary with parameters to optimize
+      params: list of dictionary entries in wf.parameters to optimize
 
-      method: An optimization method usable by scipy.optimize
+      kwargs: options for scipy.minimize
       
     Returns:
       opt_variance, modifying params into optimized values.
       
     """
     if params is None:
-        params={}
-        for k,p in wf.parameters.items():
-            params[k]=p
-    #print(params)
+        params=list(wf.parameters.keys())
     
     # scipy.minimize() needs 1d argument 
-    x0=np.concatenate([ params[k].flatten() for k in params ])
-    shapes=np.array([ params[k].shape for k in params ])
+    x0=np.concatenate([ wf.parameters[k].flatten() for k in params ])
+    shapes=np.array([ wf.parameters[k].shape for k in params ])
     slices=np.array([ np.prod(s) for s in shapes ])
     Enref=energy(coords,wf)
 
     def variance_cost_function(x):
-        x_sliced=np.split(x,slices)
+        x_sliced=np.split(x,slices[:-1])
+        #print('sliced',len(x_sliced))
         for i,k in enumerate(params):
-            wf.parameters[k]=x_sliced[i]
+        #    print(x_sliced[i],slices)
+            wf.parameters[k]=x_sliced[i].reshape(wf.parameters[k].shape)
         wf.recompute(coords)
         ke=kinetic(coords,wf)
         #Here we assume the ecp is fixed and only recompute
         #kinetic energy
         En=Enref['total']-Enref['ke']+ke
+        #print("stddev",np.std(En))
         return np.std(En)**2
 
+    def callback(xk):
+        print(xk,variance_cost_function(xk))
+        return False
 
-    res=minimize(variance_cost_function, x0=x0, method=method, options=method_options)
+    res=minimize(variance_cost_function, x0=x0, callback=callback, **kwargs)
 
-    # Modfies params dictionary with optimized parameters (preserving original shape)
     opt_pars=np.split(res.x,slices[:-1])
     for i,k in enumerate(params):
-        params[k]=opt_pars[i].reshape(shapes[i])
+        wf.parameters[k]=opt_pars[i].reshape(shapes[i])
     
-    return res.fun
+    return res.fun,wf
 
 
 def test_single_opt():
@@ -74,25 +76,15 @@ def test_single_opt():
     nsteps=10
 
     coords = initial_guess(mol,nconf)
-    basis={'wf2coeff':[GaussianFunction(1.0),GaussianFunction(2.0)]}
-    wf=MultiplyWF(nconf,PySCFSlaterRHF(nconf,mol,mf),Jastrow2B(nconf,mol,basis['wf2coeff']))
-    params0={'wf2coeff':np.random.normal(loc=0.,scale=.1,size=len(wf.parameters['wf2coeff']))}
-    for k,p in wf.parameters.items():
-        if k in params0:
-            wf.parameters[k]=params0[k]
-    #params0=None
+    wf=MultiplyWF(nconf,PySCFSlaterRHF(nconf,mol,mf),Jastrow2B(nconf,mol,
+        basis=[GaussianFunction(1.0),GaussianFunction(2.0)]))
     
-    vmc(wf,coords,nsteps=nsteps,
-            accumulators={'energy':EnergyAccumulator(mol)})
+    vmc(wf,coords,nsteps=nsteps)
 
-    opt_var=optvariance(EnergyAccumulator(mol),wf,coords,params0)
+    opt_var,wf=optvariance(EnergyAccumulator(mol),wf,coords,['wf2coeff'])
     print('Optimized parameters:\n',params0)
     print('Final variance:',opt_var)
     
-    return 0
-
-
-
     
 if __name__=="__main__":
     test_single_opt()

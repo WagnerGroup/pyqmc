@@ -43,6 +43,8 @@ def gradient_descent(wf,coords,params=None,warmup=10,accumulators=None,
         import pyqmc.mc
         vmc=pyqmc.mc.vmc
     
+    if vmcoptions is None:
+        vmcoptions={}
     if params is None:
         params=list(wf.parameters.keys())
         print('Error: Parameter derivatives for Slater coefficients not implemented.')

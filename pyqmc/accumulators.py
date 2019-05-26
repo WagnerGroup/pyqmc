@@ -21,8 +21,8 @@ class PGradAccumulator:
     energy = d['total']
     pgrad = wf.pgradient()
     for k,grad in pgrad.items():
-        d['dpH_'+k] = np.einsum('i,ij->ij',energy,grad)
-        d['dppsi_'+k] = grad
+        d['dpH_'+k] = np.einsum('i,ij->ij',energy,grad.reshape((nconfig,-1)))
+        d['dppsi_'+k] = grad.reshape((nconfig,-1))
     for k1,grad1 in pgrad.items():
         for k2,grad2 in pgrad.items():
             d['dpidpj_'+k1+k2] = np.einsum('ij,ik->ijk',grad1.reshape((nconfig,-1)),grad2.reshape((nconfig,-1)))

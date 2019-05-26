@@ -31,16 +31,13 @@ def optvariance(energy,wf,coords,params=None,**kwargs):
 
     def variance_cost_function(x):
         x_sliced=np.split(x,slices[:-1])
-        #print('sliced',len(x_sliced))
         for i,k in enumerate(params):
-        #    print(x_sliced[i],slices)
             wf.parameters[k]=x_sliced[i].reshape(wf.parameters[k].shape)
         wf.recompute(coords)
         ke=kinetic(coords,wf)
         #Here we assume the ecp is fixed and only recompute
         #kinetic energy
         En=Enref['total']-Enref['ke']+ke
-        #print("stddev",np.std(En))
         return np.std(En)**2
 
     def callback(xk):

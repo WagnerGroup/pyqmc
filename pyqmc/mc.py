@@ -7,9 +7,26 @@ os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
     
 
+
+
 def initial_guess(mol,nconfig,r=1.0):
     """ Generate an initial guess by distributing electrons near atoms
-    proportional to their charge."""
+    proportional to their charge.
+
+    Args: 
+
+     mol: A PySCF-like molecule object. Should have atom_charges(), atom_coords(), and nelec
+
+     nconfig: How many configurations to generate.
+
+     r: How far from the atoms to distribute the electrons
+
+    Returns: 
+
+     A numpy array with shape (nconfig,nelectrons,3) with the electrons randomly distributed near 
+     the atoms.
+    
+    """
     nelec=np.sum(mol.nelec)
     epos=np.zeros((nconfig,nelec,3))
     wts=mol.atom_charges()
@@ -29,7 +46,9 @@ def initial_guess(mol,nconfig,r=1.0):
         ind0=s*mol.nelec[0]
         epos[:,ind0:ind0+nassigned,:] = np.repeat(mol.atom_coords(),neach,axis=0)[np.newaxis] # assign core electrons
         epos[:,ind0+nassigned:ind0+mol.nelec[s],:] = mol.atom_coords()[inds] # assign remaining electrons
+    
     epos+=r*np.random.randn(*epos.shape) # random shifts from atom positions
+    
     return epos
 
 
@@ -51,7 +70,7 @@ def limdrift(g,cutoff=1):
     return g
     
 
-def vmc(wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False):
+def vmc(wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False,stepoffset=0):
     """Run a Monte Carlo sample of a given wave function.
 
     Args:
@@ -65,6 +84,8 @@ def vmc(wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False):
       accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
 
       verbose: Print out step information 
+
+      stepoffset: If continuing a run, what to start the step numbering at.
 
     Returns: (df,coords)
        df: A list of dictionaries nstep long that contains all results from the accumulators.
@@ -112,6 +133,8 @@ def vmc(wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False):
             for m,res in dat.items():
                 avg[k+m]=np.mean(res,axis=0)
         avg['acceptance']=np.mean(acc)
+        avg['step']=stepoffset+step
+        avg['nconfig']=coords.shape[0]
         df.append(avg)
     return df, coords 
     

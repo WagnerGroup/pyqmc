@@ -1,7 +1,10 @@
 import numpy as np
+import pandas as pd
 
-
-def gradient_descent(wf,coords,params=None,vmcsteps=50,warmup=10,accumulators=None,options={'step':0.5,'eps':0.1,'maxiters':50}, vmc=None):
+def gradient_descent(wf,coords,params=None,warmup=10,accumulators=None,
+        step=0.5,eps=0.1,maxiters=50,
+        vmc=None,vmcoptions=None,
+        datafile=None):
     """Optimizes energy using gradient descent with stochastic reconfiguration.
 
     Args:
@@ -12,19 +15,21 @@ def gradient_descent(wf,coords,params=None,vmcsteps=50,warmup=10,accumulators=No
 
       params: list of dictionary entries in wf.parameters to optimize
 
-      vmcsteps: number of VMC steps to run at each iteration
+      vmc: A function that works like mc.vmc()
+
+      vmcoptions: a dictionary of options for the vmc method
 
       warmup: warmup cutoff for VMC steps
 
       accumulators: accumulators to store during VMC
 
-      options:
+      step: gradient descent step size
 
-        step: gradient descent step
+      eps: stabilizing constant for the stochastic reconfiguration matrix
 
-        eps: stabilizing constant for the stochastic reconfiguration matrix
+      maxiters: maximum number of steps in the gradient descent
 
-        maxiters: maximum number of steps in the gradient descent
+      datafile: a file in which the current progress can be dumped in JSON format.
 
     Returns:
 
@@ -54,7 +59,7 @@ def gradient_descent(wf,coords,params=None,vmcsteps=50,warmup=10,accumulators=No
         for i,k in enumerate(params):
             wf.parameters[k]=x_sliced[i].reshape(shapes[i])    
         wf.recompute(coords)
-        data,confs=vmc(wf,coords,nsteps=vmcsteps,accumulators=accumulators)
+        data,confs=vmc(wf,coords,accumulators=accumulators, **vmcoptions)
         df=pd.DataFrame(data)[warmup:]
         
         en=np.mean(df['energytotal'])
@@ -83,7 +88,7 @@ def gradient_descent(wf,coords,params=None,vmcsteps=50,warmup=10,accumulators=No
         dpdp=np.array([ [ dpdp[k+k2] for k2 in params if 'pgraddpH_'+k2 in df.keys() ] for k in params if 'pgraddpH_'+k in df.keys() ])
         dpdp=np.concatenate( np.array([ np.concatenate(d,axis=1) for d in dpdp ]) , axis=0)
         # Sij matrix with stabilizing diagonal
-        Sij = dpdp - np.einsum('i,j->ij',dp,dp) + options['eps']*np.eye(dpdp.shape[0])
+        Sij = dpdp - np.einsum('i,j->ij',dp,dp) + eps*np.eye(dpdp.shape[0])
         invSij=np.linalg.inv(Sij)
         
         return grad, grad_std, invSij, en, en_std
@@ -100,8 +105,8 @@ def gradient_descent(wf,coords,params=None,vmcsteps=50,warmup=10,accumulators=No
     print('p =',x0,'grad =',pgrad,'|grad|=%.6f'%np.linalg.norm(pgrad),'E=%.5f+-%.5f'%(en,en_std))
     
     # Gradient descent cycles
-    for it in range(options['maxiters']):
-        x0 -= np.einsum('ij,j->i',invSij,pgrad) * options['step']/(it/10+1)
+    for it in range(maxiters):
+        x0 -= np.einsum('ij,j->i',invSij,pgrad) * step/(it/10+1)
         pgrad,pgrad_std,invSij,en,en_std = gradient_energy_function(x0)
         print('i=%d: p ='%it,x0,'grad =',pgrad,'|grad|=%.6f'%np.linalg.norm(pgrad),'E=%.5f+-%.5f'%(en,en_std))
         data['iter'].append(it+1)
@@ -110,6 +115,9 @@ def gradient_descent(wf,coords,params=None,vmcsteps=50,warmup=10,accumulators=No
         data['pgrad_err'].append(pgrad_std)
         data['totalen'].append(en)
         data['totalen_err'].append(en_std)
+        if not (datafile is None):
+            pd.DataFrame(data).to_json(datafile)
+
 
     print('\nGradient descent terminated.')
     print('p =',x0,'grad =',pgrad,'|grad|=%.6f'%np.linalg.norm(pgrad),'E=%.5f+-%.5f'%(en,en_std))
@@ -150,7 +158,10 @@ def test():
     pgrad_acc=PGradAccumulator(energy_acc)
     
     # Gradient descent
-    wf,data=gradient_descent(wf,coords,params=list(params0.keys()),vmcsteps=nsteps,warmup=warmup,accumulators={'energy':energy_acc,'pgrad':pgrad_acc},options={'step':0.5,'eps':0.1,'maxiters':50})
+    wf,data=gradient_descent(wf,coords,params=list(params0.keys()),
+            vmcoptions={'nsteps':nsteps},warmup=warmup,
+            accumulators={'energy':energy_acc,'pgrad':pgrad_acc},
+            step=0.5,eps=0.1,maxiters=50,datafile='sropt.json')
 
     # GD data plot
     import pandas as pd

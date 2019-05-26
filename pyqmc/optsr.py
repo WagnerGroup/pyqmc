@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def GradientDescent(wf,coords,params=None,vmcsteps=50,warmup=10,accumulators=None,options={'step':0.5,'eps':0.1,'maxiters':50}):
+def gradient_descent(wf,coords,params=None,vmcsteps=50,warmup=10,accumulators=None,options={'step':0.5,'eps':0.1,'maxiters':50}, vmc=None):
     """Optimizes energy using gradient descent with stochastic reconfiguration.
 
     Args:
@@ -34,7 +34,9 @@ def GradientDescent(wf,coords,params=None,vmcsteps=50,warmup=10,accumulators=Non
 
     """
     import pandas as pd
-    from pyqmc.mc import vmc
+    if vmc is None:
+        import pyqmc.mc
+        vmc=pyqmc.mc.vmc
     
     if params is None:
         params=list(wf.parameters.keys())
@@ -148,7 +150,7 @@ def test():
     pgrad_acc=PGradAccumulator(energy_acc)
     
     # Gradient descent
-    wf,data=GradientDescent(wf,coords,params=list(params0.keys()),vmcsteps=nsteps,warmup=warmup,accumulators={'energy':energy_acc,'pgrad':pgrad_acc},options={'step':0.5,'eps':0.1,'maxiters':50})
+    wf,data=gradient_descent(wf,coords,params=list(params0.keys()),vmcsteps=nsteps,warmup=warmup,accumulators={'energy':energy_acc,'pgrad':pgrad_acc},options={'step':0.5,'eps':0.1,'maxiters':50})
 
     # GD data plot
     import pandas as pd

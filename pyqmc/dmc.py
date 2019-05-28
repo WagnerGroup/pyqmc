@@ -6,8 +6,8 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1" 
 
 import numpy as np
-from pyscf import lib, gto, scf
 import pyqmc.mc as mc
+import sys
 
 def limdrift(g,tau,acyrus=0.25):
     """
@@ -57,8 +57,10 @@ def dmc(mol,wf,configs,nsteps=1000,tstep=0.02,branchtime=5,accumulators=None,ver
     df=[]
     for step in range(npropagate):
         #print("branch step",step)
-        df_,configs,weights = dmc_propagate(mol,wf,configs,weights,tstep,nsteps=branchtime,accumulators=accumulators,
-                step_offset=branchtime*step)
+        df_,configs,weights = dmc_propagate(mol,wf,configs,weights,
+                tstep,nsteps=branchtime,accumulators=accumulators,
+                step_offset=branchtime*step,
+                verbose=verbose)
         df.extend(df_)
         configs, weights = branch(configs, weights)
     return df
@@ -123,6 +125,9 @@ def dmc_propagate(mol,wf,configs,weights,tstep,nsteps=5,accumulators=None,verbos
         avg['eref'] = eref
         avg['acceptance'] = np.mean(acc)
         avg['step']=step_offset+step
+        if verbose:
+            print("step",step,'acceptance', avg['acceptance'],
+                  'weight',avg['weight'],'weightstd',avg['weightvar'])
         df.append(avg)
     return df, configs, weights
     
@@ -137,57 +142,63 @@ def branch(configs, weights):
 
 
 def test():
+    from pyscf import lib, gto, scf
+    
     import pandas as pd
     import time
-    from pyqmc import PySCFSlaterRHF,Jastrow2B,MultiplyWF, EnergyAccumulator, initial_guess, vmc,ExpCuspFunction, GaussianFunction, optvariance
+    from pyqmc import PySCFSlaterRHF,JastrowSpin,MultiplyWF, EnergyAccumulator, initial_guess, vmc,ExpCuspFunction, GaussianFunction, optvariance
     
-    mol = gto.M(atom='H 0. 0. 0.; H 0. 0. 1.1', ecp='bfd',basis='bfd_vtz',unit='bohr',verbose=5)
+    mol = gto.M(atom='N 0. 0. 0.; N 0. 0. 2.0', ecp='bfd',basis='bfd_vtz',unit='bohr',verbose=5)
     mf = scf.RHF(mol).run()
 
     
-    nconf=1000
+    nconf=300
+    basis=[ExpCuspFunction(2.0,1.5),GaussianFunction(0.5),
+            GaussianFunction(2.0),GaussianFunction(.25),
+            GaussianFunction(1.0),GaussianFunction(4.0),
+            GaussianFunction(8.0)  ]
     wf1=PySCFSlaterRHF(mol,mf)
-    wf2=Jastrow2B(mol,
-        basis=[ExpCuspFunction(.4,.6)]+[GaussianFunction(0.2*2**n) for n in range(1,4+1)])
-    wf=MultiplyWF(wf1,wf2)
-    params0={ 'wf2coeff':np.array([-0.33,  -0.8, 0.3,  -0.00 , -0.1])} # these were close to var-optimized values
-    for k,p in wf.parameters.items():
-        if k in params0:
-            wf.parameters[k]=params0[k]
+    wf=MultiplyWF(wf1,JastrowSpin(mol,a_basis=basis,b_basis=basis))
+    optcoeff=[-0.000654322,-0.0007121276,0.1976771403,0.2249699815,-0.0005538429,-0.0023647576,0.236036959,0.2880757827,0.0900150779,0.0950073603,-0.0156273348,-0.0163297269,0.0036333132,0.0043803894,-0.0025742353,-0.0198104585,-0.002161816,-0.0806744038,-0.1426759301,-0.0970115406,-0.0412832563,-0.0447487546,-0.0344625724,0.0097164571,-0.0804903747,-0.0450287743,-0.0819815013,-0.1000744454,-0.0752387958,-0.0176527963,-0.0489049681,-0.0159655513,-0.0105098245,-0.1184213151,-0.0104448328]
+    split=len(optcoeff)-3*len(basis)
+    
+    wf.parameters['wf2acoeff']=np.asarray(optcoeff[0:split]).reshape(wf.parameters['wf2acoeff'].shape)
+    wf.parameters['wf2bcoeff']=np.asarray(optcoeff[split:]).reshape(wf.parameters['wf2bcoeff'].shape)
+
     configs = initial_guess(mol,nconf)
 
-    nsteps=2000
-    #tstart=time.process_time()
-    #dfvmc,configs_=vmc(wf,configs,nsteps=nsteps,accumulators={'energy':EnergyAccumulator(mol)} )
-    #tend=time.process_time()
-    #print("VMC took",tend-tstart,"seconds") 
-    #dfvmc=pd.DataFrame(dfvmc)
+    nsteps=200
+    tstart=time.process_time()
+    dfvmc,configs_=vmc(wf,configs,nsteps=10)
+    tend=time.process_time()
+    dfvmc=pd.DataFrame(dfvmc)
+    print("VMC took",tend-tstart)
     #dfvmc['method']=['vmc']*len(dfvmc)
     
 
     dfall=pd.DataFrame()
-    for tstep in [0.01,0.02,0.03]:
-        for limnm,dlimiter in {'cyrus':limdrift,'cutoff':limdrift_cutoff}.items():
+    for tstep in [0.01]:
+        for limnm,dlimiter in {'cyrus':limdrift}.items():
             print(limnm,tstep)
             dfdmc=dmc(mol,wf,configs,nsteps=nsteps,accumulators={'energy':EnergyAccumulator(mol)},
-                    tstep=tstep,drift_limiter=dlimiter)
+                    tstep=tstep,drift_limiter=dlimiter,verbose=True)
             dfdmc=pd.DataFrame(dfdmc)
             dfdmc['method']=['dmc']*len(dfdmc)
             dfdmc['limiter']=[limnm]*len(dfdmc)
             dfdmc['tstep']=[tstep]*len(dfdmc)
-            dfall=dfall.append(dfdmc).reset_index()
+            dfall=dfall.append(dfdmc).reset_index(drop=True)
             print(dfdmc)
             dfall.to_json("dmcdata.json")
 
 
 
 if __name__=="__main__":
-    #import cProfile, pstats, io
-    #from pstats import Stats
-    #pr = cProfile.Profile()
-    #pr.enable()
+    import cProfile, pstats, io
+    from pstats import Stats
+    pr = cProfile.Profile()
+    pr.enable()
     test()
-    #pr.disable()
-    #p=Stats(pr)
-    #print(p.sort_stats('cumulative').print_stats())
+    pr.disable()
+    p=Stats(pr)
+    print(p.sort_stats('cumulative').print_stats())
     

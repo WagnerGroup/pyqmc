@@ -26,15 +26,15 @@ class GaussianFunction:
         self.parameters={}
         self.parameters['exponent']=exponent
 
-    def value(self,x): 
+    def value(self,x,r): 
         """Returns function exp(-exponent*r^2).
         Parameters:
           x: (nconfig,3) vector
         Returns:
           func: (nconfig,) vector
         """
-        r2=np.sum(x**2,axis=1)
-        return np.exp(-self.parameters['exponent']*r2)
+        #r2=np.sum(x**2,axis=1)
+        return np.exp(-self.parameters['exponent']*r*r)
         
     def gradient(self,x):
         """Returns gradient of function.
@@ -43,7 +43,9 @@ class GaussianFunction:
         Returns:
           grad: (nconfig,3) vector
         """
-        v=self.value(x)
+        r=np.linalg.norm(x,axis=1)
+
+        v=self.value(x,r)
         return -2*self.parameters['exponent']*x*v[:,np.newaxis]
 
     def laplacian(self,x):
@@ -53,7 +55,9 @@ class GaussianFunction:
         Returns:
           grad: (nconfig,3) vector (components of laplacian d^2/dx_i^2 separately)
         """
-        v=self.value(x)
+        r=np.linalg.norm(x,axis=1)
+        
+        v=self.value(x,r)
         alpha=self.parameters['exponent']
         return (4*alpha*alpha*x*x-2*alpha)*v[:,np.newaxis]
 
@@ -77,14 +81,14 @@ class PadeFunction:
         self.parameters={}
         self.parameters['alphak'] = alphak
 
-    def value(self, rvec):
+    def value(self, rvec,r):
         """
         Parameters:
           rvec: nconf x ... x 3 (number of inner dimensions doesn't matter)
         Return:
           func: same dimensions as rvec, but the last one removed 
         """
-        r = np.linalg.norm(rvec, axis=-1)
+        #r = np.linalg.norm(rvec, axis=-1)
         a = self.parameters['alphak']* r
         return (a/(1+a))**2
 
@@ -142,18 +146,21 @@ class ExpCuspFunction:
         self.parameters['gamma'] = gamma
         self.parameters['rcut'] = rcut
 
-    def value(self, rvec):
+    def value(self, rvec,r):
         """Returns 
         Parameters:
           rvec: (nconf,3) vector
         Returns:
           func: p(r/rcut)/(1+gamma*p(r/rcut))
         """
-        r = np.linalg.norm(rvec, axis=-1)
+        #r = np.linalg.norm(rvec, axis=-1)
         y = r/self.parameters['rcut']
-        mask=y<=1
-        func=np.zeros(r.shape)
-        func[mask]=( - (y-y**2+y**3/3) / ( 1 + self.parameters['gamma'] * (y-y**2+y**3/3) ) + 1/(3+self.parameters['gamma']) )[mask]
+        #mask=y<=1
+        #func=np.zeros(r.shape)
+        p=y-y**2+y**3/3
+        #func=( - (y-y**2+y**3/3) / ( 1 + self.parameters['gamma'] * (y-y**2+y**3/3) ) + 1/(3+self.parameters['gamma']) )
+        func=( - p/(1+self.parameters['gamma']*p) + 1/(3+self.parameters['gamma']) ) 
+        func[y>1]=0.
         return func
         
     def gradient(self, rvec):
@@ -209,9 +216,9 @@ def test_func3d_gradient(bf, delta=1e-5):
     for d in range(3):
       pos = rvec.copy()
       pos[:,d] += delta
-      plusval = bf.value(pos)
+      plusval = bf.value(pos,np.linalg.norm(pos,axis=1))
       pos[:,d] -= 2*delta
-      minuval = bf.value(pos)
+      minuval = bf.value(pos,np.linalg.norm(pos,axis=1))
       numeric[:,d] = (plusval - minuval)/(2*delta)
     maxerror = np.amax(np.abs(grad-numeric))
     normerror = np.linalg.norm(grad-numeric)

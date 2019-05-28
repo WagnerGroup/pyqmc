@@ -12,27 +12,27 @@ class PySCFSlaterRHF:
     """A wave function object has a state defined by a reference configuration of electrons.
     The functions recompute() and updateinternals() change the state of the object, and 
     the rest compute and return values from that state. """
-    def __init__(self,nconfig,mol,mf):
+    def __init__(self,mol,mf):
         self.occ=np.asarray(mf.mo_occ > 1.0)
         nmo=np.sum(self.occ)
         self.parameters={}
         
         self.parameters['mo_coeff']=mf.mo_coeff[:,self.occ]
-        self._nconfig=nconfig
+#        self._nconfig=nconfig
         self._mol=mol
         self._nelec=np.sum(mol.nelec)
         self._nup=int(self._nelec/2)
         assert self._nup==nmo
-        self._movals=np.zeros((nconfig,2,self._nup,nmo)) # row is electron, column is mo
-        self._inverse=np.zeros((nconfig,2,self._nup,self._nup))
             
     def recompute(self,configs):
         """This computes the value from scratch. Returns the logarithm of the wave function as
         (phase,logdet). If the wf is real, phase will be +/- 1."""
+        nconfig=configs.shape[0]
+
         mycoords=configs.reshape((configs.shape[0]*configs.shape[1],configs.shape[2]))
         ao = self._mol.eval_gto('GTOval_sph', mycoords)
         mo = ao.dot(self.parameters['mo_coeff'])
-        self._movals=mo.reshape((self._nconfig,2,self._nup,self._nup))
+        self._movals=mo.reshape((nconfig,2,self._nup,self._nup))
         self.dets=np.linalg.slogdet(self._movals)
         self._inverse=np.linalg.inv(self._movals)
         return self.dets[0][:,0]*self.dets[0][:,1],self.dets[1][:,0]+self.dets[1][:,1]

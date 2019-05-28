@@ -7,9 +7,26 @@ os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
     
 
+
+
 def initial_guess(mol,nconfig,r=1.0):
     """ Generate an initial guess by distributing electrons near atoms
-    proportional to their charge."""
+    proportional to their charge.
+
+    Args: 
+
+     mol: A PySCF-like molecule object. Should have atom_charges(), atom_coords(), and nelec
+
+     nconfig: How many configurations to generate.
+
+     r: How far from the atoms to distribute the electrons
+
+    Returns: 
+
+     A numpy array with shape (nconfig,nelectrons,3) with the electrons randomly distributed near 
+     the atoms.
+    
+    """
     nelec=np.sum(mol.nelec)
     epos=np.zeros((nconfig,nelec,3))
     wts=mol.atom_charges()
@@ -29,7 +46,9 @@ def initial_guess(mol,nconfig,r=1.0):
         ind0=s*mol.nelec[0]
         epos[:,ind0:ind0+nassigned,:] = np.repeat(mol.atom_coords(),neach,axis=0)[np.newaxis] # assign core electrons
         epos[:,ind0+nassigned:ind0+mol.nelec[s],:] = mol.atom_coords()[inds] # assign remaining electrons
+    
     epos+=r*np.random.randn(*epos.shape) # random shifts from atom positions
+    
     return epos
 
 
@@ -51,7 +70,7 @@ def limdrift(g,cutoff=1):
     return g
     
 
-def vmc(wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False):
+def vmc(wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False,stepoffset=0):
     """Run a Monte Carlo sample of a given wave function.
 
     Args:
@@ -66,14 +85,19 @@ def vmc(wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False):
 
       verbose: Print out step information 
 
+      stepoffset: If continuing a run, what to start the step numbering at.
+
     Returns: (df,coords)
        df: A list of dictionaries nstep long that contains all results from the accumulators.
 
        coords: The final coordinates from this calculation.
        
     """
-    if accumulators is None and verbose:
-        print("WARNING: running VMC with no accumulators")
+    if accumulators is None:
+        accumulators={}
+        if verbose:
+            print("WARNING: running VMC with no accumulators")
+            
          
     nconf=coords.shape[0]
     nelec=coords.shape[1]
@@ -109,6 +133,8 @@ def vmc(wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False):
             for m,res in dat.items():
                 avg[k+m]=np.mean(res,axis=0)
         avg['acceptance']=np.mean(acc)
+        avg['step']=stepoffset+step
+        avg['nconfig']=coords.shape[0]
         df.append(avg)
     return df, coords 
     
@@ -125,7 +151,7 @@ def test():
     #import pyscf2qwalk
     #pyscf2qwalk.print_qwalk(mol,mf)
     nconf=5000
-    wf=PySCFSlaterRHF(nconf,mol,mf)
+    wf=PySCFSlaterRHF(mol,mf)
     coords = initial_guess(mol,nconf) 
     def dipole(coords,wf):
         return {'vec':np.sum(coords[:,:,:],axis=1) } 

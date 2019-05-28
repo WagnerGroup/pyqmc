@@ -7,10 +7,46 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 import numpy as np
 from pyscf import lib, gto, scf
+import pyqmc.mc as mc
 
-from pyqmc.mc import limdrift
+def limdrift(g,tau,acyrus=0.25):
+    """
+    Limit a vector to have a maximum magnitude of cutoff while maintaining direction
 
-def dmc(mol,wf,configs,nsteps=1000,tstep=0.02,branchtime=5,accumulators=None,verbose=False):
+    Args:
+      g: a [nconf,ndim] vector
+      
+      cutoff: the maximum magnitude
+
+    Returns: 
+      The vector with the cut off applied and multiplied by tau.
+    """
+    tot=np.linalg.norm(g,axis=1)*acyrus
+    mask=tot > 1e-8
+    taueff=np.ones(tot.shape)*tau
+    taueff[mask]=(np.sqrt(1+2*tau*tot[mask])-1)/tot[mask]
+    g*=taueff[:,np.newaxis]
+    return g
+
+
+def limdrift_cutoff(g,tau):
+    """
+    Limit a vector to have a maximum magnitude of cutoff while maintaining direction
+
+    Args:
+      g: a [nconf,ndim] vector
+      
+      cutoff: the maximum magnitude
+
+    Returns: 
+      The vector with the cut off applied and multiplied by tau.
+    """
+    return mc.limdrift(g)*tau
+
+
+
+def dmc(mol,wf,configs,nsteps=1000,tstep=0.02,branchtime=5,accumulators=None,verbose=False,
+        drift_limiter=limdrift):
     if accumulators is None:
         accumulators={'energy':EnergyAccumulator(mol) } 
     nconfig, nelec=configs.shape[0:2]
@@ -21,13 +57,15 @@ def dmc(mol,wf,configs,nsteps=1000,tstep=0.02,branchtime=5,accumulators=None,ver
     df=[]
     for step in range(npropagate):
         #print("branch step",step)
-        df_,configs,weights = dmc_propagate(mol,wf,configs,weights,tstep,nsteps=branchtime,accumulators=accumulators)
+        df_,configs,weights = dmc_propagate(mol,wf,configs,weights,tstep,nsteps=branchtime,accumulators=accumulators,
+                step_offset=branchtime*step)
         df.extend(df_)
         configs, weights = branch(configs, weights)
     return df
     
 
-def dmc_propagate(mol,wf,configs,weights,tstep,nsteps=5,accumulators=None,verbose=False):
+def dmc_propagate(mol,wf,configs,weights,tstep,nsteps=5,accumulators=None,verbose=False,
+        drift_limiter=limdrift,step_offset=0):
     if accumulators is None:
         accumulators={'energy':EnergyAccumulator(mol) } 
     nconfig, nelec=configs.shape[0:2]
@@ -41,14 +79,14 @@ def dmc_propagate(mol,wf,configs,weights,tstep,nsteps=5,accumulators=None,verbos
         acc=np.zeros(nelec)
         for e in range(nelec):
             # Propose move
-            grad=limdrift(wf.gradient(e, configs[:,e,:]).T)
+            grad=limdrift(wf.gradient(e, configs[:,e,:]).T,tstep)
             gauss = np.random.normal(scale=np.sqrt(tstep),size=(nconfig,3))
-            eposnew=configs[:,e,:] + gauss + grad*tstep
+            eposnew=configs[:,e,:] + gauss + grad
 
             # Compute reverse move
-            new_grad=limdrift(wf.gradient(e, eposnew).T) 
+            new_grad=limdrift(wf.gradient(e, eposnew).T,tstep) 
             forward=np.sum((configs[:,e,:]+tstep*grad-eposnew)**2,axis=1)
-            backward=np.sum((eposnew+tstep*new_grad-configs[:,e,:])**2,axis=1)
+            backward=np.sum((eposnew+new_grad-configs[:,e,:])**2,axis=1)
             t_prob = np.exp(1/(2*tstep)*(forward-backward))
 
             # Acceptance -- fixed-node: reject if wf changes sign
@@ -63,7 +101,8 @@ def dmc_propagate(mol,wf,configs,weights,tstep,nsteps=5,accumulators=None,verbos
 
         # weights
         elocold = eloc.copy()
-        eloc = accumulators['energy'](configs, wf)['total'] # TODO we're computing the same total energy twice (again in accumulator loop)
+        energydat=accumulators['energy'](configs, wf)
+        eloc = energydat['total'] # TODO this is fragile
         #print(elocold, eloc, eref)
         weights *= np.exp( -tstep*0.5*(elocold+eloc-2*eref) )
         wavg = np.mean(weights)
@@ -71,15 +110,19 @@ def dmc_propagate(mol,wf,configs,weights,tstep,nsteps=5,accumulators=None,verbos
 
         avg = {}
         for k,accumulator in accumulators.items():
-            dat=accumulator(configs,wf)
+            if k!='energy':
+                dat=accumulator(configs,wf)
+            else:
+                dat=energydat
             for m,res in dat.items():
                 avg[k+m]=np.dot(weights,res)/nconfig/wavg
-        avg['dmcweight'] = wavg
-        avg['dmcweightvar'] = np.std(weights)
-        avg['dmcweightmin'] = np.amin(weights)
-        avg['dmcweightmax'] = np.amax(weights)
-        avg['dmceref'] = eref
-        avg['dmcacceptance'] = np.mean(acc)
+        avg['weight'] = wavg
+        avg['weightvar'] = np.std(weights)
+        avg['weightmin'] = np.amin(weights)
+        avg['weightmax'] = np.amax(weights)
+        avg['eref'] = eref
+        avg['acceptance'] = np.mean(acc)
+        avg['step']=step_offset+step
         df.append(avg)
     return df, configs, weights
     
@@ -96,96 +139,55 @@ def branch(configs, weights):
 def test():
     import pandas as pd
     import time
-    import matplotlib.pyplot as plt
-    import seaborn as sns
     from pyqmc import PySCFSlaterRHF,Jastrow2B,MultiplyWF, EnergyAccumulator, initial_guess, vmc,ExpCuspFunction, GaussianFunction, optvariance
     
-    mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', ecp='bfd',basis='bfd_vtz',unit='bohr',verbose=5)
-    #mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5',basis='cc-pvtz',unit='bohr',verbose=5)
+    mol = gto.M(atom='H 0. 0. 0.; H 0. 0. 1.1', ecp='bfd',basis='bfd_vtz',unit='bohr',verbose=5)
     mf = scf.RHF(mol).run()
+
+    
     nconf=1000
-    wf1=PySCFSlaterRHF(nconf,mol,mf)
-    wf2=Jastrow2B(nconf,mol,
+    wf1=PySCFSlaterRHF(mol,mf)
+    wf2=Jastrow2B(mol,
         basis=[ExpCuspFunction(.4,.6)]+[GaussianFunction(0.2*2**n) for n in range(1,4+1)])
-    wf=MultiplyWF(nconf,wf1,wf2)
-    #params0={'wf2coeff':np.random.normal(loc=0.,scale=.1,size=len(wf.parameters['wf2coeff']))}
+    wf=MultiplyWF(wf1,wf2)
     params0={ 'wf2coeff':np.array([-0.33,  -0.8, 0.3,  -0.00 , -0.1])} # these were close to var-optimized values
     for k,p in wf.parameters.items():
         if k in params0:
             wf.parameters[k]=params0[k]
-    configs = initial_guess(mol,nconf) 
-    #import pickle
-    #with open('configs_Li2_ecp.pickle','rb') as f:
-    #    configs=pickle.load(f)
-    tstart=time.process_time()
-    print('Starting optimization')
-    df1,configs = vmc(wf,configs,nsteps=100,accumulators={}) 
-    df1=pd.DataFrame(df1)
-    df1['method']=['op0']*len(df1)
-    print('vmc ({0} steps) finished, {1}'.format(100,time.process_time()-tstart))
-    #opt_var=optvariance(EnergyAccumulator(mol),wf,configs,params0)
-    #print(params0)
-    #print('optimization 1: {0}, {1}'.format(opt_var,time.process_time()-tstart))
-    #nvmcsteps=30
-    #df2,configs = vmc(wf,configs,nsteps=nvmcsteps,accumulators={}) 
-    #df2=pd.DataFrame(df2)
-    #df2['method']=['op1']*len(df2)
-    #print('vmc ({0} steps) finished, {1}'.format(nvmcsteps,time.process_time()-tstart))
-    #opt_var=optvariance(EnergyAccumulator(mol),wf,configs,params0)
-    #print(params0)
-    #print('optimization 2: {0}, {1}'.format(opt_var,time.process_time()-tstart))
-    #df3,configs = vmc(wf,configs,nsteps=nvmcsteps,accumulators={}) 
-    #df3=pd.DataFrame(df3)
-    #df3['method']=['op2']*len(df3)
-    #print('vmc ({0} steps) finished, {1}'.format(nvmcsteps,time.process_time()-tstart))
-    #opt_var=optvariance(EnergyAccumulator(mol),wf,configs,params0)
-    #print(params0)
-    #print('optimization 3: {0}, {1}'.format(opt_var,time.process_time()-tstart))
+    configs = initial_guess(mol,nconf)
 
-    def dipole(configs,wf):
-        return {'vec':np.sum(configs[:,:,:],axis=1) } 
-
-    nsteps=300
-
-    tstart=time.process_time()
-    dfdmc=dmc(mol,wf,configs,nsteps=nsteps,accumulators={'energy':EnergyAccumulator(mol), 'dipole':dipole } )
-    tend=time.process_time()
-    print("DMC took",tend-tstart,"seconds") 
-    dfdmc=pd.DataFrame(dfdmc)
-    dfdmc['method']=['dmc']*len(dfdmc)
-
-    tstart=time.process_time()
-    dfvmc,configs_=vmc(wf,configs,nsteps=nsteps,accumulators={'energy':EnergyAccumulator(mol), 'dipole':dipole } )
-    tend=time.process_time()
-    print("VMC took",tend-tstart,"seconds") 
-    dfvmc=pd.DataFrame(dfvmc)
-    #with open('configs_Li2_ecp.pickle','wb') as f:
-    #    pickle.dump(configs_,f)
-
-    dfvmc['method']=['vmc']*len(dfvmc)
-
-    df=pd.concat([dfvmc,dfdmc])
-    df.to_csv("data.csv")
-    warmup=30
+    nsteps=2000
+    #tstart=time.process_time()
+    #dfvmc,configs_=vmc(wf,configs,nsteps=nsteps,accumulators={'energy':EnergyAccumulator(mol)} )
+    #tend=time.process_time()
+    #print("VMC took",tend-tstart,"seconds") 
+    #dfvmc=pd.DataFrame(dfvmc)
+    #dfvmc['method']=['vmc']*len(dfvmc)
     
-    print('mean field',mf.energy_tot(),
-          'vmc estimation', np.mean(dfvmc['energytotal'][warmup:]),np.std(dfvmc['energytotal'][warmup:])/np.sqrt(len(dfvmc)-warmup),
-          'dmc estimation', np.mean(dfdmc['energytotal'][warmup:]),np.std(dfdmc['energytotal'][warmup:])/np.sqrt(len(dfdmc)-warmup))
-    print('dipole',np.mean(np.asarray(dfdmc['dipolevec'][warmup:]),axis=0))
-    
-    g = sns.FacetGrid(df, hue='method')
-    g.map(plt.plot,'energytotal')
-    plt.legend()
-    plt.show()
-    
+
+    dfall=pd.DataFrame()
+    for tstep in [0.01,0.02,0.03]:
+        for limnm,dlimiter in {'cyrus':limdrift,'cutoff':limdrift_cutoff}.items():
+            print(limnm,tstep)
+            dfdmc=dmc(mol,wf,configs,nsteps=nsteps,accumulators={'energy':EnergyAccumulator(mol)},
+                    tstep=tstep,drift_limiter=dlimiter)
+            dfdmc=pd.DataFrame(dfdmc)
+            dfdmc['method']=['dmc']*len(dfdmc)
+            dfdmc['limiter']=[limnm]*len(dfdmc)
+            dfdmc['tstep']=[tstep]*len(dfdmc)
+            dfall=dfall.append(dfdmc).reset_index()
+            print(dfdmc)
+            dfall.to_json("dmcdata.json")
+
+
 
 if __name__=="__main__":
-    import cProfile, pstats, io
-    from pstats import Stats
-    pr = cProfile.Profile()
-    pr.enable()
+    #import cProfile, pstats, io
+    #from pstats import Stats
+    #pr = cProfile.Profile()
+    #pr.enable()
     test()
-    pr.disable()
-    p=Stats(pr)
+    #pr.disable()
+    #p=Stats(pr)
     #print(p.sort_stats('cumulative').print_stats())
     

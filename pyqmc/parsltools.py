@@ -79,11 +79,7 @@ def distvmc(wf,coords,accumulators,nsteps=100,npartitions=2,nsteps_per=20):
 
 
 def test():
-    from pyscf import lib, gto, scf
     import parsl
-    from parsl.app.app import python_app
-    from parsl.configs.local_threads import config
-    from parsl.monitoring import MonitoringHub
     from pyscf import lib, gto, scf
     import numpy as np
     import pandas as pd
@@ -110,7 +106,6 @@ def test():
             )
         ],
         strategy=None,
-        
     )
         
 

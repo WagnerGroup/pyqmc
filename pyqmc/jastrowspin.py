@@ -239,9 +239,10 @@ class JastrowSpin:
         nup = self._mol.nelec[0]
         mask=[True]*ne
         mask[e]=False
+        tmpconfigs=self._configscurrent[:,mask,:]
 
-        dnew=eedist_i(self._configscurrent,epos)[:,mask,:]
-        dold=eedist_i(self._configscurrent,self._configscurrent[:,e,:])[:,mask,:]
+        dnew=eedist_i(tmpconfigs,epos)
+        dold=eedist_i(tmpconfigs,self._configscurrent[:,e,:])
 
         eup = int(e<nup)
         edown = int(e>=nup)
@@ -260,10 +261,8 @@ class JastrowSpin:
 
         delta=np.zeros((nconf,len(self.b_basis), 3))
         for i,b in enumerate(self.b_basis):
-            delta[:,i,edown]+=np.sum((b.value(dnewup,rnewup)-b.value(doldup,roldup)).reshape(nconf,-1),
-                                     axis=1)
-            delta[:,i,1+edown]+=np.sum((b.value(dnewdown,rnewdown)-b.value(dolddown,rolddown)).reshape(nconf,-1),
-                                       axis=1)
+            delta[:,i,edown]+=np.sum((b.value(dnewup,rnewup)-b.value(doldup,roldup)).reshape(nconf,-1),axis=1)
+            delta[:,i,1+edown]+=np.sum((b.value(dnewdown,rnewdown)-b.value(dolddown,rolddown)).reshape(nconf,-1),axis=1)
         return delta
 
 

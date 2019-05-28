@@ -64,8 +64,8 @@ def gradient_descent(wf,coords,params=None,warmup=10,accumulators=None,
         data,confs=vmc(wf,coords,accumulators=accumulators, **vmcoptions)
         df=pd.DataFrame(data)[warmup:]
         
-        en=np.mean(df['energytotal'])
-        en_std=np.std(df['energytotal'])
+        en=np.mean(df['pgradtotal'])
+        en_std=np.std(df['pgradtotal'])
         
         grad={}
         grad_std={}
@@ -162,7 +162,7 @@ def test():
     # Gradient descent
     wf,data=gradient_descent(wf,coords,params=list(params0.keys()),
             vmcoptions={'nsteps':nsteps},warmup=warmup,
-            accumulators={'energy':energy_acc,'pgrad':pgrad_acc},
+            accumulators={'pgrad':pgrad_acc},
             step=0.5,eps=0.1,maxiters=50,datafile='sropt.json')
 
     # GD data plot

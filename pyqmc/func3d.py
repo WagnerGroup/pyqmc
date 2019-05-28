@@ -157,7 +157,7 @@ class ExpCuspFunction:
         y = r/self.parameters['rcut']
         #mask=y<=1
         #func=np.zeros(r.shape)
-        p=y-y**2+y**3/3
+        p=y-y*y+y*y*y/3
         #func=( - (y-y**2+y**3/3) / ( 1 + self.parameters['gamma'] * (y-y**2+y**3/3) ) + 1/(3+self.parameters['gamma']) )
         func=( - p/(1+self.parameters['gamma']*p) + 1/(3+self.parameters['gamma']) ) 
         func[y>1]=0.

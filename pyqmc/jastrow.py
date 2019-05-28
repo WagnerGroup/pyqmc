@@ -68,9 +68,10 @@ class Jastrow2B:
         #package the electron-electron distances into a 1d array
         d=eedist(configs)
         d=d.reshape((-1,3))
+        r=np.linalg.norm(d,axis=1)
 
         for i,b in enumerate(self.basis):
-            self._bvalues[:,i]=np.sum(b.value(d).reshape( (configs.shape[0],-1) ),axis=1)
+            self._bvalues[:,i]=np.sum(b.value(d,r).reshape( (configs.shape[0],-1) ),axis=1)
         u=np.einsum("ij,j->i",self._bvalues,self.parameters['coeff'])
         return (1,u)
 
@@ -134,9 +135,11 @@ class Jastrow2B:
         dnew=eedist_i(self._configscurrent,epos)[:,mask,:].reshape((-1,3))
         dold=eedist_i(self._configscurrent,self._configscurrent[:,e,:])[:,mask,:].reshape((-1,3))
         delta=np.zeros((nconf,len(self.basis)))
+        rnew=np.linalg.norm(dnew,axis=1)
+        rold=np.linalg.norm(dold,axis=1)
 
         for i,b in enumerate(self.basis):
-            delta[:,i]+=np.sum((b.value(dnew)-b.value(dold)).reshape(nconf,-1),axis=1)
+            delta[:,i]+=np.sum((b.value(dnew,rnew)-b.value(dold,rold)).reshape(nconf,-1),axis=1)
         return delta
 
     def testvalue(self,e,epos):

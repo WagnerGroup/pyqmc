@@ -126,7 +126,7 @@ def dmc_propagate(mol,wf,configs,weights,tstep,nsteps=5,accumulators=None,verbos
         avg['acceptance'] = np.mean(acc)
         avg['step']=step_offset+step
         if verbose:
-            print("step",step,'acceptance', avg['acceptance'],
+            print("step",step_offset+step,'acceptance', avg['acceptance'],
                   'weight',avg['weight'],'weightstd',avg['weightvar'])
         df.append(avg)
     return df, configs, weights

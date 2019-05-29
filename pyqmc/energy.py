@@ -2,15 +2,16 @@ import numpy as np
 import scipy
 import scipy.spatial
 import pyqmc.eval_ecp  as eval_ecp
+from distance import RawDistance
 
 
 def ee_energy(configs):
     ne=configs.shape[1]
     ee=np.zeros(configs.shape[0])
-    for i in range(ne):
-        for j in range(i+1,ne):
-            ee+=1./np.sqrt(np.sum((configs[:,i,:]-configs[:,j,:])**2,axis=1))
-    return ee
+    d=RawDistance()
+    ee,ij=d.dist_matrix(configs)
+    ee=np.linalg.norm(ee,axis=2)
+    return np.sum(1./ee,axis=1)
 
 def ei_energy(mol,configs):
     ei=0.0
@@ -23,11 +24,14 @@ def ei_energy(mol,configs):
 
 def ii_energy(mol):
     ei=0.0
-    r=scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(mol.atom_coords()))
+    d=RawDistance()
+    rij,ij = d.dist_matrix(mol.atom_coords()[np.newaxis,:,:])
+    rij=np.linalg.norm(rij,axis=2)[0,:]
+    iitot=0
     c=mol.atom_charges()
-    ind=np.triu_indices_from(r,1)
-    ii=np.sum((np.outer(c,c)/r)[ind])
-    return ii
+    for (i,j),r in zip(ij,rij):
+        iitot+=c[i]*c[j]/r
+    return iitot
 
 def get_ecp(mol,configs,wf):
     return eval_ecp.ecp(mol, configs, wf)

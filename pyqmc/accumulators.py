@@ -1,5 +1,5 @@
 import numpy as np 
-from energy import energy
+from pyqmc.energy import energy
 
 class EnergyAccumulator:
   """returns energy of each configuration in a dictionary. 
@@ -16,11 +16,16 @@ class PGradAccumulator:
     self.enacc = enacc
 
   def __call__(self,configs,wf):
+    nconfig=configs.shape[0]
     d=self.enacc(configs,wf)
     energy = d['total']
     pgrad = wf.pgradient()
     for k,grad in pgrad.items():
-        d['dpH_'+k] = np.einsum('i,ij->ij',energy,grad)
-        d['dppsi_'+k] = grad
+        d['dpH_'+k] = np.einsum('i,ij->ij',energy,grad.reshape((nconfig,-1)))
+        d['dppsi_'+k] = grad.reshape((nconfig,-1))
+    for k1,grad1 in pgrad.items():
+        for k2,grad2 in pgrad.items():
+            d['dpidpj_'+k1+k2] = np.einsum('ij,ik->ijk',grad1.reshape((nconfig,-1)),grad2.reshape((nconfig,-1)))
+
     return d
 

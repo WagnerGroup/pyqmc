@@ -1,5 +1,5 @@
 import numpy as np
-from func3d import GaussianFunction
+from pyqmc.func3d import GaussianFunction
 
 
 def eedist_spin(configs, nup, ndown):
@@ -71,7 +71,7 @@ class JastrowSpin:
     '''
     1 body and 2 body jastrow factor
     '''
-    def __init__(self,nconfig,mol,a_basis=None,b_basis=None):
+    def __init__(self,mol,a_basis=None,b_basis=None):
         if b_basis is None:
             nexpand=5
             self.b_basis=[GaussianFunction(0.2*2**n) for n in range(1,nexpand+1)]
@@ -91,9 +91,6 @@ class JastrowSpin:
         self._mol=mol
         self.parameters['bcoeff']=np.zeros((nexpand, 3))
         self.parameters['acoeff']=np.zeros((aexpand, 2))
-        self._bvalues=np.zeros((nconfig,nexpand, 3))
-        self._configscurrent=np.zeros((nconfig,self._nelec,3))
-        self._avalues=np.zeros((nconfig,mol.natm,aexpand, 2))
         
 
     def recompute(self,configs):
@@ -101,29 +98,40 @@ class JastrowSpin:
         u=0.0
         self._configscurrent=configs.copy()
         elec = self._mol.nelec
+        nconfig=configs.shape[0]
+        nexpand=len(self.b_basis)
+        aexpand=len(self.a_basis)
+        self._bvalues=np.zeros((nconfig,nexpand, 3))
+        self._avalues=np.zeros((nconfig,self._mol.natm,aexpand, 2))
         
         #package the electron-electron distances into a 1d array
         d1, d2, d3 = eedist_spin(configs, elec[0], elec[1])
         d1=d1.reshape((-1,3))
         d2=d2.reshape((-1,3))
         d3=d3.reshape((-1,3))
+        r1=np.linalg.norm(d1,axis=1)
+        r2=np.linalg.norm(d2,axis=1)
+        r3=np.linalg.norm(d3,axis=1)
 
         # Package the electron-ion distances into a 1d array
         di1, di2 = eidist_spin(configs, self._mol.atom_coords(), elec[0], elec[1])
         di1 = di1.reshape((-1, 3))
         di2 = di2.reshape((-1, 3))
+        ri1=np.linalg.norm(di1,axis=1)
+        ri2=np.linalg.norm(di2,axis=1)
         
+
         # Update bvalues according to spin case
         for i,b in enumerate(self.b_basis):
-            self._bvalues[:,i,0]=np.sum(b.value(d1).reshape( (configs.shape[0], -1) ),axis=1)
-            self._bvalues[:,i,1]=np.sum(b.value(d2).reshape( (configs.shape[0], -1) ),axis=1)
-            self._bvalues[:,i,2]=np.sum(b.value(d3).reshape( (configs.shape[0], -1) ),axis=1)
+            self._bvalues[:,i,0]=np.sum(b.value(d1,r1).reshape( (configs.shape[0], -1) ),axis=1)
+            self._bvalues[:,i,1]=np.sum(b.value(d2,r2).reshape( (configs.shape[0], -1) ),axis=1)
+            self._bvalues[:,i,2]=np.sum(b.value(d3,r3).reshape( (configs.shape[0], -1) ),axis=1)
 
         # Update avalues according to spin case
         for i,a in enumerate(self.a_basis):
-            self._avalues[:,:,i,0] = np.sum(a.value(di1).reshape((configs.shape[0],
+            self._avalues[:,:,i,0] = np.sum(a.value(di1,ri1).reshape((configs.shape[0],
                                                                self._mol.natm, -1)), axis=2)
-            self._avalues[:,:,i,1] = np.sum(a.value(di2).reshape((configs.shape[0],
+            self._avalues[:,:,i,1] = np.sum(a.value(di2,ri2).reshape((configs.shape[0],
                                                                self._mol.natm, -1)), axis=2)
 
         u=np.sum(self._bvalues*self.parameters['bcoeff'], axis=(2,1)) +\
@@ -245,11 +253,16 @@ class JastrowSpin:
         doldup = dold[:,:sep,:].reshape((-1,3)) 
         dolddown = dold[:,sep:,:].reshape((-1,3)) 
 
+        rnewup=np.linalg.norm(dnewup,axis=1)
+        rnewdown=np.linalg.norm(dnewdown,axis=1)
+        roldup=np.linalg.norm(doldup,axis=1)
+        rolddown=np.linalg.norm(dolddown,axis=1)
+
         delta=np.zeros((nconf,len(self.b_basis), 3))
         for i,b in enumerate(self.b_basis):
-            delta[:,i,edown]+=np.sum((b.value(dnewup)-b.value(doldup)).reshape(nconf,-1),
+            delta[:,i,edown]+=np.sum((b.value(dnewup,rnewup)-b.value(doldup,roldup)).reshape(nconf,-1),
                                      axis=1)
-            delta[:,i,1+edown]+=np.sum((b.value(dnewdown)-b.value(dolddown)).reshape(nconf,-1),
+            delta[:,i,1+edown]+=np.sum((b.value(dnewdown,rnewdown)-b.value(dolddown,rolddown)).reshape(nconf,-1),
                                        axis=1)
         return delta
 
@@ -266,8 +279,11 @@ class JastrowSpin:
         dold=eidist_i(self._mol.atom_coords(),self._configscurrent[:,e,:]).reshape((-1,3))
         delta=np.zeros((nconf,ni,len(self.a_basis), 2))
 
+        rnew=np.linalg.norm(dnew,axis=1)
+        rold=np.linalg.norm(dold,axis=1)
+
         for i,a in enumerate(self.a_basis):
-            delta[:,:,i,int(e>=nup)]+=(a.value(dnew)-a.value(dold)).reshape((nconf, -1))
+            delta[:,:,i,int(e>=nup)]+=(a.value(dnew,rnew)-a.value(dold,rold)).reshape((nconf, -1))
 
         return delta
 
@@ -298,10 +314,10 @@ def test():
     
     abasis=[GaussianFunction(0.2),GaussianFunction(0.4)]
     bbasis=[GaussianFunction(0.2),GaussianFunction(0.4)]
-    jastrow=JastrowSpin(nconf,mol,a_basis=abasis,b_basis=bbasis)
+    jastrow=JastrowSpin(mol,a_basis=abasis,b_basis=bbasis)
     jastrow.parameters['bcoeff']=np.random.random(jastrow.parameters['bcoeff'].shape)
     jastrow.parameters['acoeff']=np.random.random(jastrow.parameters['acoeff'].shape)
-    import testwf
+    import pyqmc.testwf as testwf
     for key, val in testwf.test_updateinternals(jastrow, configs).items():
         print(key, val)
 

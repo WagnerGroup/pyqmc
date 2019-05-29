@@ -125,9 +125,9 @@ def test_sample_onebody(mol,orb_coeff,mf,nsample=int(1e4)):
 def test():
   from pyscf import gto,scf,lo
   from numpy.linalg import solve
-  from slater import PySCFSlaterRHF
-  from mc import initial_guess,vmc
-  from accumulators import EnergyAccumulator
+  from pyqmc.slater import PySCFSlaterRHF
+  from pyqmc.mc import initial_guess,vmc
+  from pyqmc.accumulators import EnergyAccumulator
   from pandas import DataFrame
 
   ### Generate some basic objects.

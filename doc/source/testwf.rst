@@ -1,6 +1,6 @@
 testwf.py
 **********************************
 
-.. automodule:: testwf
+.. automodule:: pyqmc.testwf
    :members:
    

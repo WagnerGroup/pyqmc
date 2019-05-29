@@ -1,6 +1,6 @@
 slateruhf.py
 **********************************
 
-.. automodule:: slateruhf
+.. automodule:: pyqmc.slateruhf
    :members:
    

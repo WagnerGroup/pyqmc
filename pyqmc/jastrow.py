@@ -1,5 +1,5 @@
 import numpy as np
-from func3d import GaussianFunction
+from pyqmc.func3d import GaussianFunction
 
 def eedist(configs):
      """returns a list of electron-electron distances within a collection """
@@ -42,7 +42,7 @@ class Jastrow2B:
     """A simple two-body Jastrow factor that is written as
     :math:`ln Psi_J  = sum_k c_k sum_{i<j} b_k(r_{ij})`
     b are function objects"""
-    def __init__(self,nconfig,mol,basis=None):
+    def __init__(self,mol,basis=None):
         if basis is None:
             nexpand=4
             self.basis=[GaussianFunction(0.2*2**n) for n in range(1,nexpand+1)]
@@ -53,21 +53,23 @@ class Jastrow2B:
         self._nelec=np.sum(mol.nelec)
         self._mol=mol
         self.parameters['coeff']=np.zeros(nexpand)
-        self._bvalues=np.zeros((nconfig,nexpand))
-        self._configscurrent=np.zeros((nconfig,self._nelec,3))
 
     def recompute(self,configs):
         """ """
         u=0.0
         self._configscurrent=configs.copy()
+        nconfig=configs.shape[0]
+        nexpand=len(self.basis)
         #We will save the b sums over i,j in _bvalues
+        self._bvalues=np.zeros((nconfig,nexpand))
 
         #package the electron-electron distances into a 1d array
         d=eedist(configs)
         d=d.reshape((-1,3))
+        r=np.linalg.norm(d,axis=1)
 
         for i,b in enumerate(self.basis):
-            self._bvalues[:,i]=np.sum(b.value(d).reshape( (configs.shape[0],-1) ),axis=1)
+            self._bvalues[:,i]=np.sum(b.value(d,r).reshape( (configs.shape[0],-1) ),axis=1)
         u=np.einsum("ij,j->i",self._bvalues,self.parameters['coeff'])
         return (1,u)
 
@@ -131,9 +133,11 @@ class Jastrow2B:
         dnew=eedist_i(self._configscurrent,epos)[:,mask,:].reshape((-1,3))
         dold=eedist_i(self._configscurrent,self._configscurrent[:,e,:])[:,mask,:].reshape((-1,3))
         delta=np.zeros((nconf,len(self.basis)))
+        rnew=np.linalg.norm(dnew,axis=1)
+        rold=np.linalg.norm(dold,axis=1)
 
         for i,b in enumerate(self.basis):
-            delta[:,i]+=np.sum((b.value(dnew)-b.value(dold)).reshape(nconf,-1),axis=1)
+            delta[:,i]+=np.sum((b.value(dnew,rnew)-b.value(dold,rold)).reshape(nconf,-1),axis=1)
         return delta
 
     def testvalue(self,e,epos):
@@ -155,9 +159,9 @@ def test():
     nconf=20
     configs=np.random.randn(nconf,np.sum(mol.nelec),3)
     
-    jastrow=Jastrow2B(nconf,mol)
+    jastrow=Jastrow2B(mol)
     jastrow.parameters['coeff']=np.random.random(jastrow.parameters['coeff'].shape)
-    import testwf
+    import pyqmc.testwf as testwf
     #print(testwf.test_updateinternals(jastrow,configs))
     for key, val in testwf.test_updateinternals(jastrow, configs).items():
         print(key, val)

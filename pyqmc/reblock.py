@@ -34,6 +34,7 @@ def optimally_reblocked(data, cols):
         reblocked_data.at[c, "reblocked_data"] = reblock(data, reblocks, c)
     return reblocked_data
 
+
 def test_reblocking():
     '''
         Tests reblock function above against PyBlock values

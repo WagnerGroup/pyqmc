@@ -44,37 +44,101 @@ def limdrift_cutoff(g,tau):
     return mc.limdrift(g)*tau
 
 
+def dmc(wf,configs,weights=None, nsteps=1000,tstep=0.02,branchtime=5,accumulators=None,ekey=('energy','total'),verbose=False,
+        drift_limiter=limdrift, stepoffset=0):
+    """
+    Run DMC (not parallel)
+    
+    Args:
+      wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as anything (such as laplacian() ) used by accumulators
 
-def dmc(mol,wf,configs,nsteps=1000,tstep=0.02,branchtime=5,accumulators=None,verbose=False,
-        drift_limiter=limdrift):
-    if accumulators is None:
-        accumulators={'energy':EnergyAccumulator(mol) } 
+      configs: (nconfig, nelec, 3) - initial coordinates to start calculation.
+
+      weights: (nconfig,) - initial weights to start calculation, defaults to uniform.
+
+      nsteps: number of DMC steps to take
+
+      tstep: Time step for move proposals. Introduces time step error.
+
+      branchtime: number of steps to take between branching
+
+      accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
+
+      ekey: tuple of strings; energy is needed for DMC weights. Access total energy by accumulators[ekey[0]](configs, wf)[ekey[1]
+
+      verbose: Print out step information 
+
+      drift_limiter: a function that takes a gradient and a cutoff and returns an adjusted gradient
+
+      stepoffset: If continuing a run, what to start the step numbering at.
+
+    Returns: (df,coords,weights)
+      df: A list of dictionaries nstep long that contains all results from the accumulators.
+
+      coords: The final coordinates from this calculation.
+
+      weights: The final weights from this calculation
+      
+    """
+    assert accumulators is not None, "Need an energy accumulator for DMC"
     nconfig, nelec=configs.shape[0:2]
+    if weights is None:
+        weights = np.ones(nconfig)
+
     wf.recompute(configs)
     
-    weights = np.ones(nconfig)
     npropagate = int(np.ceil(nsteps/branchtime))
     df=[]
     for step in range(npropagate):
-        #print("branch step",step)
-        df_,configs,weights = dmc_propagate(mol,wf,configs,weights,
+        if verbose:
+            print("branch step",step)
+        df_,configs,weights = dmc_propagate(wf,configs,weights,
                 tstep,nsteps=branchtime,accumulators=accumulators,
-                step_offset=branchtime*step,
-                verbose=verbose)
+                stepoffset=branchtime*step+stepoffset,ekey=ekey,
+                verbose=verbose, drift_limiter=drift_limiter)
         df.extend(df_)
         configs, weights = branch(configs, weights)
-    return df
+    return df, configs, weights
     
 
-def dmc_propagate(mol,wf,configs,weights,tstep,nsteps=5,accumulators=None,verbose=False,
-        drift_limiter=limdrift,step_offset=0):
-    if accumulators is None:
-        accumulators={'energy':EnergyAccumulator(mol) } 
+def dmc_propagate(wf,configs,weights,tstep,nsteps=5,accumulators=None,ekey=('energy','total'), verbose=False, drift_limiter=limdrift,stepoffset=0):
+    """
+    Propagate DMC without branching
+    
+    Args:
+      wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as anything (such as laplacian() ) used by accumulators
+
+      configs: (nconfig, nelec, 3) - initial coordinates to start calculation.
+
+      weights: (nconfig,) - initial weights to start calculation
+
+      tstep: Time step for move proposals. Introduces time step error.
+
+      nsteps: number of DMC steps to take
+
+      accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
+
+      ekey: tuple of strings; energy is needed for DMC weights. Access total energy by accumulators[ekey[0]](configs, wf)[ekey[1]
+
+      verbose: Print out step information 
+
+      drift_limiter: a function that takes a gradient and a cutoff and returns an adjusted gradient
+
+      stepoffset: what to start the step numbering at.
+
+    Returns: (df,coords,weights)
+      df: A list of dictionaries nstep long that contains all results from the accumulators.
+
+      coords: The final coordinates from this calculation.
+
+      weights: The final weights from this calculation
+      
+    """
+    assert accumulators is not None, "Need an energy accumulator for DMC"
     nconfig, nelec=configs.shape[0:2]
     wf.recompute(configs)
 
-    E = accumulators['energy'](configs, wf)
-    eloc = E['total']
+    eloc = accumulators[ekey[0]](configs, wf)[ekey[1]]
     eref = np.mean(eloc) 
     df=[]
     for step in range(nsteps):
@@ -103,28 +167,28 @@ def dmc_propagate(mol,wf,configs,weights,tstep,nsteps=5,accumulators=None,verbos
 
         # weights
         elocold = eloc.copy()
-        energydat=accumulators['energy'](configs, wf)
-        eloc = energydat['total'] # TODO this is fragile
+        energydat=accumulators[ekey[0]](configs, wf)
+        eloc = energydat[ekey[1]] 
         #print(elocold, eloc, eref)
         weights *= np.exp( -tstep*0.5*(elocold+eloc-2*eref) )
         wavg = np.mean(weights)
-        eref = np.dot(weights,eloc)/nconfig/wavg #-= np.log(wavg)
 
         avg = {}
         for k,accumulator in accumulators.items():
-            if k!='energy':
+            if k!=ekey[0]:
                 dat=accumulator(configs,wf)
             else:
                 dat=energydat
             for m,res in dat.items():
-                avg[k+m]=np.dot(weights,res)/nconfig/wavg
+                avg[k+m]=np.dot(weights,res)/(nconfig*wavg)
         avg['weight'] = wavg
         avg['weightvar'] = np.std(weights)
         avg['weightmin'] = np.amin(weights)
         avg['weightmax'] = np.amax(weights)
         avg['eref'] = eref
+        eref -= np.log(wavg)
         avg['acceptance'] = np.mean(acc)
-        avg['step']=step_offset+step
+        avg['step']=stepoffset+step
         if verbose:
             print("step",step,'acceptance', avg['acceptance'],
                   'weight',avg['weight'],'weightstd',avg['weightvar'])
@@ -132,6 +196,18 @@ def dmc_propagate(mol,wf,configs,weights,tstep,nsteps=5,accumulators=None,verbos
     return df, configs, weights
     
 def branch(configs, weights):
+    """
+    Perform branching on a set of walkers  by stochastic reconfiguration
+
+    Walkers are resampled with probability proportional to the weights, and the new weights are all set to be equal to the average weight.
+    
+    Args:
+      configs: (nconfig,nelec,3) walker coordinates
+
+      weights: (nconfig,) walker weights
+
+    Returns
+    """
     nconfig = configs.shape[0]
     wtot = np.sum(weights)
     probability = np.cumsum(weights/wtot)
@@ -180,7 +256,8 @@ def test():
     for tstep in [0.01]:
         for limnm,dlimiter in {'cyrus':limdrift}.items():
             print(limnm,tstep)
-            dfdmc=dmc(mol,wf,configs,nsteps=nsteps,accumulators={'energy':EnergyAccumulator(mol)},
+            dfdmc,configs_,weights_=dmc(wf,configs,nsteps=nsteps,
+                    accumulators={'energy':EnergyAccumulator(mol)}, ekey=('energy','total'),
                     tstep=tstep,drift_limiter=dlimiter,verbose=True)
             dfdmc=pd.DataFrame(dfdmc)
             dfdmc['method']=['dmc']*len(dfdmc)

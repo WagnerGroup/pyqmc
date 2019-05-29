@@ -29,7 +29,7 @@ def limdrift(g,tau,acyrus=0.25):
     return g
 
 
-def limdrift_cutoff(g,tau):
+def limdrift_cutoff(g,tau,cutoff=1):
     """
     Limit a vector to have a maximum magnitude of cutoff while maintaining direction
 
@@ -41,7 +41,7 @@ def limdrift_cutoff(g,tau):
     Returns: 
       The vector with the cut off applied and multiplied by tau.
     """
-    return mc.limdrift(g)*tau
+    return mc.limdrift(g,cutoff)*tau
 
 
 def dmc(wf,configs,weights=None, nsteps=1000,tstep=0.02,branchtime=5,accumulators=None,ekey=('energy','total'),verbose=False,
@@ -145,12 +145,12 @@ def dmc_propagate(wf,configs,weights,tstep,nsteps=5,accumulators=None,ekey=('ene
         acc=np.zeros(nelec)
         for e in range(nelec):
             # Propose move
-            grad=limdrift(wf.gradient(e, configs[:,e,:]).T,tstep)
+            grad=drift_limiter(wf.gradient(e, configs[:,e,:]).T,tstep)
             gauss = np.random.normal(scale=np.sqrt(tstep),size=(nconfig,3))
             eposnew=configs[:,e,:] + gauss + grad
 
             # Compute reverse move
-            new_grad=limdrift(wf.gradient(e, eposnew).T,tstep) 
+            new_grad=drift_limiter(wf.gradient(e, eposnew).T,tstep) 
             forward=np.sum((configs[:,e,:]+tstep*grad-eposnew)**2,axis=1)
             backward=np.sum((eposnew+new_grad-configs[:,e,:])**2,axis=1)
             t_prob = np.exp(1/(2*tstep)*(forward-backward))
@@ -206,7 +206,10 @@ def branch(configs, weights):
 
       weights: (nconfig,) walker weights
 
-    Returns
+    Returns:
+      configs: resampled walker configurations
+
+      weights: (nconfig,) all weights are equal to average weight
     """
     nconfig = configs.shape[0]
     wtot = np.sum(weights)

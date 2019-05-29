@@ -25,6 +25,7 @@ def eidist(configs, coords):
     return d
     
 
+
 def eedist_i(configs,vec):
     """returns a list of electron-electron distances from an electron at position 'vec'
     configs will most likely be [nconfig,electron,dimension], and vec will be [nconfig,dimension]

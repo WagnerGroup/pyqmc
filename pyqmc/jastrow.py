@@ -13,6 +13,7 @@ def eedist(configs):
      return d
 
 
+
 def eidist(configs, coords):
     """returns a list of electron-ion distances"""
     ne=configs.shape[1]
@@ -22,6 +23,7 @@ def eidist(configs, coords):
         for j in range(ni):
             d[:,i,j,:]=configs[:,i,:]-coords[j]
     return d
+    
     
 
 def eedist_i(configs,vec):
@@ -148,6 +150,8 @@ class Jastrow2B:
         For the derivatives of basis functions, we will have to compute the derivative of all the b's
         and redo the sums, similar to recompute() """
         return {'coeff':self._bvalues}
+
+
 
 
 def test(): 

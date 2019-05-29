@@ -24,7 +24,6 @@ def eidist(configs, coords):
             d[:,i,j,:]=configs[:,i,:]-coords[j]
     return d
     
-    
 
 def eedist_i(configs,vec):
     """returns a list of electron-electron distances from an electron at position 'vec'

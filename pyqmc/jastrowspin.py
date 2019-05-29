@@ -1,77 +1,24 @@
 import numpy as np
 from pyqmc.func3d import GaussianFunction
-
-
-def eedist_spin(configs, nup, ndown):
-    """returns a separate list of electron-electron distances within a collection 
-    according to the spin state of the electron pair, assumes forst nup electrons are spin up
-    and the remaining ndown electrons are spin down"""
-    ne=configs.shape[1]
-    d1=np.zeros((configs.shape[0],int(nup*(nup-1)/2),3))      # up-up case
-    d2=np.zeros((configs.shape[0],int(nup*ndown),3))          # up-down case
-    d3=np.zeros((configs.shape[0],int(ndown*(ndown-1)/2),3))  # down-down case
-
-    # First electrons are spin up by convenction
-    for i in range(int(nup*(nup-1)/2)): # Both spins up
-        for j in range(i+1, nup):
-            d1[:,i,:] = configs[:,j,:]-configs[:,i,:]
-
-    for i in range(nup): # One spin up, one spin down
-        for j in range(ndown):
-            d2[:,i*ndown+j,:] = configs[:,j+nup,:]-configs[:,i,:]
-
-    c=0
-    for i in range(nup,ne):
-        for j in range(i+1,ne):
-            d3[:,c,:]=configs[:,j,:]-configs[:,i,:]
-            c+=1
-
-    return d1, d2, d3
-
-    
-
-def eidist_spin(configs, coords, nup, ndown):
-    """returns a separate list of electron-ion distances according to the spin
-    of each electron assumes the first nup electrons are spin up and the remaining spin
-    down electrons are spin down"""
-    ne=configs.shape[1]
-    ni=len(coords)
-    d1=np.zeros((configs.shape[0],nup,ni,3))   # up case
-    d2=np.zeros((configs.shape[0],ndown,ni,3)) # down case
-
-    # First electrons are spin up by convenction
-    for i in range(nup): # spin up case
-        for j in range(ni):
-            d1[:,i,j,:] = configs[:,i,:]-coords[j]
-            
-    for i in range(ndown): # spin down case
-        for j in range(ni):
-            d2[:,i,j,:] = configs[:,i+nup,:]-coords[j]
-
-    return d1, d2
-
-
-def eedist_i(configs,vec):
-    """returns a list of electron-electron distances from an electron at position 'vec'
-    configs will most likely be [nconfig,electron,dimension], and vec will be [nconfig,dimension]
-    """
-    return vec[:,np.newaxis,:]-configs
-
-
-def eidist_i(coords,vec):
-    """returns a list of electron-electron distances from an electron at position 'vec'
-    configs will most likely be [nconfig,electron,dimension], and vec will be [nconfig,dimension]
-    """
-    return vec[:,np.newaxis,:]-coords
-    
-
-
+from pyqmc.distance import RawDistance
 
 class JastrowSpin:
     '''
     1 body and 2 body jastrow factor
     '''
-    def __init__(self,mol,a_basis=None,b_basis=None):
+    def __init__(self,mol,a_basis=None,b_basis=None,dist=RawDistance() ):
+        """ 
+        Args: 
+
+        mol : a pyscf molecule object
+
+        a_basis : list of func3d objects that comprise the electron-ion basis
+
+        b_basis : list of func3d objects that comprise the electron-electron basis
+
+        dist: a distance calculator
+
+        """
         if b_basis is None:
             nexpand=5
             self.b_basis=[GaussianFunction(0.2*2**n) for n in range(1,nexpand+1)]
@@ -89,6 +36,7 @@ class JastrowSpin:
         self.parameters={}
         self._nelec=np.sum(mol.nelec)
         self._mol=mol
+        self._dist=dist
         self.parameters['bcoeff']=np.zeros((nexpand, 3))
         self.parameters['acoeff']=np.zeros((aexpand, 2))
         
@@ -104,8 +52,11 @@ class JastrowSpin:
         self._bvalues=np.zeros((nconfig,nexpand, 3))
         self._avalues=np.zeros((nconfig,self._mol.natm,aexpand, 2))
         
-        #package the electron-electron distances into a 1d array
-        d1, d2, d3 = eedist_spin(configs, elec[0], elec[1])
+        nup=elec[0]
+        d1,ij=self._dist.dist_matrix(configs[:,:nup,:])
+        d2,ij=self._dist.pairwise(configs[:,:nup,:],configs[:,nup:,:])
+        d3,ij=self._dist.dist_matrix(configs[:,nup:,:])
+        
         d1=d1.reshape((-1,3))
         d2=d2.reshape((-1,3))
         d3=d3.reshape((-1,3))
@@ -114,7 +65,8 @@ class JastrowSpin:
         r3=np.linalg.norm(d3,axis=1)
 
         # Package the electron-ion distances into a 1d array
-        di1, di2 = eidist_spin(configs, self._mol.atom_coords(), elec[0], elec[1])
+        di1,ij=self._dist.pairwise(self._mol.atom_coords(),configs[:,:nup,:])
+        di2,ij=self._dist.pairwise(self._mol.atom_coords(),configs[:,nup:,:])
         di1 = di1.reshape((-1, 3))
         di2 = di2.reshape((-1, 3))
         ri1=np.linalg.norm(di1,axis=1)
@@ -165,9 +117,8 @@ class JastrowSpin:
         nconf=epos.shape[0]
         ne=self._configscurrent.shape[1]
         nup = self._mol.nelec[0]
-        dnew=eedist_i(self._configscurrent,epos)
-
-        dinew=eidist_i(self._mol.atom_coords(),epos)
+        dnew=self._dist.dist_i(self._configscurrent,epos)
+        dinew=self._dist.dist_i(self._mol.atom_coords(),epos)
         dinew=dinew.reshape(-1,3)
 
         mask=[True]*ne
@@ -200,7 +151,7 @@ class JastrowSpin:
         ne=self._configscurrent.shape[1]
         
         # Get and break up eedist_i
-        dnew=eedist_i(self._configscurrent,epos)
+        dnew=self._dist.dist_i(self._configscurrent,epos)
         mask=[True]*ne
         mask[e]=False
         dnew=dnew[:,mask,:]
@@ -210,8 +161,8 @@ class JastrowSpin:
         dnewup = dnew[:,:nup-eup,:].reshape(-1,3) # Other electron is spin up
         dnewdown = dnew[:,nup-eup:,:].reshape(-1,3) # Other electron is spin down
 
-        # Get and reshape eidist_i
-        dinew = eidist_i(self._mol.atom_coords(),epos)
+        #Electron-ion distances
+        dinew = self._dist.dist_i(self._mol.atom_coords(),epos)
         dinew = dinew.reshape(-1,3)
 
         delta=np.zeros(nconf)
@@ -239,9 +190,10 @@ class JastrowSpin:
         nup = self._mol.nelec[0]
         mask=[True]*ne
         mask[e]=False
+        tmpconfigs=self._configscurrent[:,mask,:]
 
-        dnew=eedist_i(self._configscurrent,epos)[:,mask,:]
-        dold=eedist_i(self._configscurrent,self._configscurrent[:,e,:])[:,mask,:]
+        dnew=self._dist.dist_i(tmpconfigs,epos)
+        dold=self._dist.dist_i(tmpconfigs,self._configscurrent[:,e,:])
 
         eup = int(e<nup)
         edown = int(e>=nup)
@@ -260,10 +212,8 @@ class JastrowSpin:
 
         delta=np.zeros((nconf,len(self.b_basis), 3))
         for i,b in enumerate(self.b_basis):
-            delta[:,i,edown]+=np.sum((b.value(dnewup,rnewup)-b.value(doldup,roldup)).reshape(nconf,-1),
-                                     axis=1)
-            delta[:,i,1+edown]+=np.sum((b.value(dnewdown,rnewdown)-b.value(dolddown,rolddown)).reshape(nconf,-1),
-                                       axis=1)
+            delta[:,i,edown]+=np.sum((b.value(dnewup,rnewup)-b.value(doldup,roldup)).reshape(nconf,-1),axis=1)
+            delta[:,i,1+edown]+=np.sum((b.value(dnewdown,rnewdown)-b.value(dolddown,rolddown)).reshape(nconf,-1),axis=1)
         return delta
 
 
@@ -275,8 +225,8 @@ class JastrowSpin:
         nconf=epos.shape[0]
         ni=self._mol.natm
         nup = self._mol.nelec[0]
-        dnew=eidist_i(self._mol.atom_coords(),epos).reshape((-1,3))
-        dold=eidist_i(self._mol.atom_coords(),self._configscurrent[:,e,:]).reshape((-1,3))
+        dnew=self._dist.dist_i(self._mol.atom_coords(),epos).reshape((-1,3))
+        dold=self._dist.dist_i(self._mol.atom_coords(),self._configscurrent[:,e,:]).reshape((-1,3))
         delta=np.zeros((nconf,ni,len(self.a_basis), 2))
 
         rnew=np.linalg.norm(dnew,axis=1)

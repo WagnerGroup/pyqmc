@@ -7,6 +7,8 @@ from pyqmc.distance import RawDistance
 
 def ee_energy(configs):
     ne=configs.shape[1]
+    if ne==1:
+        return np.zeros(configs.shape[0])
     ee=np.zeros(configs.shape[0])
     d=RawDistance()
     ee,ij=d.dist_matrix(configs)
@@ -26,6 +28,8 @@ def ii_energy(mol):
     ei=0.0
     d=RawDistance()
     rij,ij = d.dist_matrix(mol.atom_coords()[np.newaxis,:,:])
+    if len(ij)==0:
+        return np.array([0.0])
     rij=np.linalg.norm(rij,axis=2)[0,:]
     iitot=0
     c=mol.atom_charges()
@@ -64,6 +68,7 @@ def energy(mol,configs,wf):
     ii=ii_energy(mol)
     nconf=configs.shape[0]
     ke=kinetic(configs,wf)
+    #print(ke,ee,ei,ii)
     return {'ke':ke,
             'ee':ee,
             'ei':ei+ecp_val,

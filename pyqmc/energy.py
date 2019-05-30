@@ -2,7 +2,7 @@ import numpy as np
 import scipy
 import scipy.spatial
 import pyqmc.eval_ecp  as eval_ecp
-from distance import RawDistance
+from pyqmc.distance import RawDistance
 
 
 def ee_energy(configs):

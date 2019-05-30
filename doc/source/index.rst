@@ -15,6 +15,7 @@ Welcome to pyQMC's documentation!
    
    mc
    dmc
+   optsr
    slater
    jastrow
    ecp

@@ -27,28 +27,42 @@ def optimally_reblocked(data, cols):
     '''
     stats = pyblock.pd_utils.reblock(data[cols])
     reblocked_data = pd.DataFrame(columns=['mean', 'standard error', 'standard error error',
-                                           'reblocked_data'], index=cols)
+                                           'reblocked_data', 'reblocks'], index=cols)
     for c in cols:
         reblocked_data.loc[c] = pyblock.pd_utils.reblock_summary(stats[1][c]).squeeze()
         reblocks = pyblock.pd_utils.optimal_block(stats[1][c])
+        reblocked_data.at[c, "reblocks"] = reblocks
         reblocked_data.at[c, "reblocked_data"] = reblock(data, reblocks, c)
     return reblocked_data
 
 
 def test_reblocking():
     '''
-        Tests reblock function above against PyBlock values
+        Tests reblocking against known distribution.
     '''
+    def corr_data(N,L):
+        '''
+            Creates correlated data. Taken from 
+            https://pyblock.readthedocs.io/en/latest/tutorial.html.
+        '''
+        return np.convolve(np.random.randn(2**N), np.ones(2**L)/10, 'same')
 
-    cols = ["energytotal", "energyee", "energyei", "energyke"]
-    #data = pd.read_csv("./data.csv")
-    data = pd.read_json("./dmcdata.json")
-    reblocked_data = optimally_reblocked(data, cols)
+    cols = ['test_data1', 'test_data2']
+    dat1 = corr_data(11,7)
+    dat2 = corr_data(11,4)
+    test_data = pd.DataFrame(data={cols[0]:dat1, cols[1]:dat2})
+    reblocked_data = optimally_reblocked(test_data, cols)
     for c in cols:
         row = reblocked_data.loc[c]
-        assert row["mean"] == np.mean(row["reblocked_data"]), "Means are not equal"
-        assert np.isclose(row["standard error"], sem(row["reblocked_data"]), 1e-10, 1e-12),\
-                 "Standard errors are not equal"
+        std_err = sem(reblock(test_data, reblocked_data.loc[c,"reblocks"], c))
+        std_err_err = std_err/np.sqrt(2*(len(reblocked_data.loc[c,"reblocked_data"])-1))
+
+        assert np.isclose(row["mean"], np.mean(test_data[c]), 1e-10, 1e-12), \
+               "Means are not equal"
+        assert np.isclose(row["standard error"], std_err, 1e-10, 1e-12), \
+               "Standard errors are not equal"
+        assert np.isclose(row["standard error error"], std_err_err, 1e-10, 1e-12), \
+               "Standard error errors are not equal"
 
 
 if __name__ == '__main__':

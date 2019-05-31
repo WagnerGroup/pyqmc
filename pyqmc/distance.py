@@ -24,6 +24,9 @@ class RawDistance:
         """
         n=configs.shape[1]
         npairs=int(n*(n-1)/2)
+        if npairs==0:
+            return np.zeros((0,0,0)),[]
+        
         vs=[]
         ij=[]
         for i in range(n):
@@ -45,6 +48,8 @@ class RawDistance:
         """
         n1=config1.shape[1]
         n2=config2.shape[1]
+        if n1==0 or n2==0:
+            return np.zeros((0,0,0)),[]
         vs=[]
         ij=[]
         for i in range(n2):

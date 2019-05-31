@@ -25,8 +25,7 @@ def limdrift(g,tau,acyrus=0.25):
     mask=tot > 1e-8
     taueff=np.ones(tot.shape)*tau
     taueff[mask]=(np.sqrt(1+2*tau*tot[mask])-1)/tot[mask]
-    g*=taueff[:,np.newaxis]
-    return g
+    return g*taueff[:,np.newaxis]
 
 
 def limdrift_cutoff(g,tau,cutoff=1):
@@ -139,7 +138,8 @@ def dmc_propagate(wf,configs,weights,tstep,nsteps=5,accumulators=None,ekey=('ene
     wf.recompute(configs)
 
     eloc = accumulators[ekey[0]](configs, wf)[ekey[1]]
-    eref = np.mean(eloc) 
+    eref_mean = np.mean(weights*eloc)/np.mean(weights)
+    eref=eref_mean
     df=[]
     for step in range(nsteps):
         acc=np.zeros(nelec)
@@ -151,7 +151,7 @@ def dmc_propagate(wf,configs,weights,tstep,nsteps=5,accumulators=None,ekey=('ene
 
             # Compute reverse move
             new_grad=drift_limiter(wf.gradient(e, eposnew).T,tstep) 
-            forward=np.sum((configs[:,e,:]+tstep*grad-eposnew)**2,axis=1)
+            forward=np.sum((configs[:,e,:]+grad-eposnew)**2,axis=1)
             backward=np.sum((eposnew+new_grad-configs[:,e,:])**2,axis=1)
             t_prob = np.exp(1/(2*tstep)*(forward-backward))
 
@@ -169,8 +169,9 @@ def dmc_propagate(wf,configs,weights,tstep,nsteps=5,accumulators=None,ekey=('ene
         elocold = eloc.copy()
         energydat=accumulators[ekey[0]](configs, wf)
         eloc = energydat[ekey[1]] 
-        #print(elocold, eloc, eref)
-        weights *= np.exp( -tstep*0.5*(elocold+eloc-2*eref) )
+        wmult=np.exp( -tstep*0.5*(elocold+eloc-2*eref) )
+        wmult[wmult > 2.0] = 2.0
+        weights*=wmult
         wavg = np.mean(weights)
 
         avg = {}
@@ -186,12 +187,15 @@ def dmc_propagate(wf,configs,weights,tstep,nsteps=5,accumulators=None,ekey=('ene
         avg['weightmin'] = np.amin(weights)
         avg['weightmax'] = np.amax(weights)
         avg['eref'] = eref
-        eref -= np.log(wavg)
         avg['acceptance'] = np.mean(acc)
         avg['step']=stepoffset+step
         if verbose:
-            print("step",step_offset+step,'acceptance', avg['acceptance'],
-                  'weight',avg['weight'],'weightstd',avg['weightvar'])
+            print("step",stepoffset+step,'acceptance', avg['acceptance'],
+                  'weight',avg['weight'],'weightstd',avg['weightvar'],'eref',eref)
+            print("eref_mean",eref_mean,"logwavg",np.log(wavg),'wmax',avg['weightmax'],
+                 'wmin',avg['weightmin'])
+            
+        eref = eref_mean-np.log(wavg)
         df.append(avg)
     return df, configs, weights
     

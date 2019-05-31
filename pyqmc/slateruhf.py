@@ -111,17 +111,33 @@ class PySCFSlaterUHF:
         mo=ao.dot(self.parameters[self._coefflookup[s]])
         return self._testrow(e,mo)
 
-    def pgradient(self):
+    def pgradient(self,configs):
         """Compute the parameter gradient of Psi. 
         Returns d_p \Psi/\Psi as a dictionary of numpy arrays,
         which correspond to the parameter dictionary.
         """
         d={}
-#        ao = self._mol.eval_gto('GTOval_sph', mycoords)
-        
-        #use testcol() to update determinant values for each mo_coeff
+       
+        for parm in self.parameters:
+          s = 0 
+          if("beta" in parm): s = 1
+          #Calculate AO values for our configurations
+          shape = configs.shape
+          ao = self._mol.eval_gto('GTOval_sph',
+            configs.reshape(shape[0]*shape[1],shape[2])) #(Nconfig*Nelec, NAO)
+          ao = ao.reshape((shape[0],shape[1],ao.shape[1])) #(config, electron, ao)
+          ao = ao[:,:sum(self.occ[s]),:] #(config, electron, ao)
+
+          #pgrad_shape = (shape[0],)+self.parameters['mo_coeff'].shape
+          pgrad_shape = (shape[0],)+self.parameters[parm].shape
+          pgrad = np.zeros(pgrad_shape)
+          #Compute derivatives w.r.t MO coefficients
+          for i in range(sum(self.occ[s])):     #MO loop
+            for j in range(ao.shape[2]): #AO loop
+              vec = ao[:,:,j]
+              pgrad[:,j,i] = self._testcol(i,s,vec) #nconfig
+          d = {parm: np.array(pgrad)} #Returns config, coeff. No spin
         return d
-        
         
 def test():  
     from pyscf import lib, gto, scf

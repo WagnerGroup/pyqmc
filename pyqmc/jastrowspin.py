@@ -246,7 +246,7 @@ class JastrowSpin:
         return np.exp(b_val + a_val)
 
 
-    def pgradient(self):
+    def pgradient(self,configs):
         """Given the b sums, this is pretty trivial for the coefficient derivatives.
         For the derivatives of basis functions, we will have to compute the derivative
         of all the b's and redo the sums, similar to recompute() """

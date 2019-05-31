@@ -74,7 +74,7 @@ def test_wf_gradient(wf, configs, delta=1e-5):
 def test_wf_pgradient(wf,configs,delta=1e-5):
     pkeys=wf.parameters.keys()
     baseval=wf.recompute(configs)
-    gradient=wf.pgradient()
+    gradient=wf.pgradient(configs)
     error={}
     #This is a little tricky; you cannot assign wf.parameters[k] to a numpy array
     #because it breaks multiplywf (since wf.parameters are a reference to self.wf1.parameters
@@ -96,7 +96,7 @@ def test_wf_pgradient(wf,configs,delta=1e-5):
         #print(gradient[k],numgrad)            
         error[k]=(np.amax(np.abs(gradient[k].reshape((-1,nparms))-numgrad)),
                   np.mean(np.abs(gradient[k].reshape((-1,nparms))-numgrad)))
-    return error
+    return error[max(error)] #Return maximum coefficient error
             
         
 def test_wf_laplacian(wf, configs, delta=1e-5):

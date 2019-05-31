@@ -89,9 +89,9 @@ class MultiplyWF:
         l2=self.wf2.laplacian(e,epos)
         return l1+l2+2*np.sum(g1*g2,axis=0)
 
-    def pgradient(self):
+    def pgradient(self,configs):
         """Here we need to combine the results"""
-        return WFmerger(self.wf1.pgradient(),self.wf2.pgradient())
+        return WFmerger(self.wf1.pgradient(configs),self.wf2.pgradient(configs))
 
 
 

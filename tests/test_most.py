@@ -29,12 +29,13 @@ def test_wfs():
                MultiplyWF(PySCFSlaterRHF(mol,mf),Jastrow2B(mol)), 
                PySCFSlaterUHF(mol,mf_uhf),PySCFSlaterUHF(mol,mf), 
                PySCFSlaterUHF(mol,mf_rohf)]:
+        print(wf)
         for k in wf.parameters:
             wf.parameters[k]=np.random.rand(*wf.parameters[k].shape)
         assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon 
         assert testwf.test_wf_laplacian(wf, epos, delta=1e-5)[0] < epsilon 
-        assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon 
-        assert testwf.test_wf_laplacian(wf, epos, delta=1e-5)[0] < epsilon 
+        assert testwf.test_wf_pgradient(wf, epos, delta=1e-5)[0] < epsilon
+        
         for k,item in testwf.test_updateinternals(wf,epos).items():
             assert item < epsilon
 
@@ -128,4 +129,5 @@ def test_ecp():
     assert abs(mf.energy_tot()-np.mean(df['energytotal'][warmup:])) <= np.std(df['energytotal'][warmup:])
 
 
- 
+if __name__ == '__main__':
+  test_wfs()

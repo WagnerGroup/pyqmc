@@ -129,7 +129,3 @@ def test_ecp():
     print('mean field',mf.energy_tot(),'vmc estimation', np.mean(df['energytotal'][warmup:]),np.std(df['energytotal'][warmup:]))
     
     assert abs(mf.energy_tot()-np.mean(df['energytotal'][warmup:])) <= np.std(df['energytotal'][warmup:])
-
-
-if __name__ == '__main__':
-  test_wfs()

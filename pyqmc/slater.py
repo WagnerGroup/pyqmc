@@ -72,7 +72,7 @@ class PySCFSlaterRHF:
         
     def _testcol(self,i,s,vec):
         """vec is a nconfig,nmo vector which replaces column i"""
-        ratio=np.einsum("ij,ij->i",vec,self._inverse[:,s,i,:]) #need to test this!
+        ratio=np.einsum("ij,ij->i",vec,self._inverse[:,s,i,:])
         return ratio
     
     def gradient(self,e,epos):

@@ -37,6 +37,8 @@ class PySCFSlaterUHF:
         (phase,logdet). If the wf is real, phase will be +/- 1."""
         mycoords=configs.reshape((configs.shape[0]*configs.shape[1],configs.shape[2]))
         ao = self._mol.eval_gto('GTOval_sph', mycoords).reshape((configs.shape[0],configs.shape[1],-1))
+        
+        self._aovals = ao
         self._dets=[]
         self._inverse=[]
         for s in [0,1]:
@@ -111,7 +113,7 @@ class PySCFSlaterUHF:
         mo=ao.dot(self.parameters[self._coefflookup[s]])
         return self._testrow(e,mo)
 
-    def pgradient(self,configs):
+    def pgradient(self):
         """Compute the parameter gradient of Psi. 
         Returns d_p \Psi/\Psi as a dictionary of numpy arrays,
         which correspond to the parameter dictionary.
@@ -121,14 +123,10 @@ class PySCFSlaterUHF:
         for parm in self.parameters:
           s = 0 
           if("beta" in parm): s = 1
-          #Calculate AO values for our configurations
-          shape = configs.shape
-          ao = self._mol.eval_gto('GTOval_sph',
-            configs.reshape(shape[0]*shape[1],shape[2])) #(Nconfig*Nelec, NAO)
-          ao = ao.reshape((shape[0],shape[1],ao.shape[1])) #(config, electron, ao)
-          ao = ao[:,s*self._nelec[0]:self._nelec[s] + s*self._nelec[0],:] #(config, electron, ao)
+          #Get AOs for our spin channel only
+          ao = self._aovals[:,s*self._nelec[0]:self._nelec[s] + s*self._nelec[0],:] #(config, electron, ao)
 
-          pgrad_shape = (shape[0],)+self.parameters[parm].shape
+          pgrad_shape = (ao.shape[0],)+self.parameters[parm].shape
           pgrad = np.zeros(pgrad_shape)
           #Compute derivatives w.r.t MO coefficients
           for i in range(self._nelec[s]):     #MO loop

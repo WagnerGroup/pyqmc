@@ -74,7 +74,7 @@ def test_wf_gradient(wf, configs, delta=1e-5):
 def test_wf_pgradient(wf,configs,delta=1e-5):
     pkeys=wf.parameters.keys()
     baseval=wf.recompute(configs)
-    gradient=wf.pgradient(configs)
+    gradient=wf.pgradient()
     error={}
     #This is a little tricky; you cannot assign wf.parameters[k] to a numpy array
     #because it breaks multiplywf (since wf.parameters are a reference to self.wf1.parameters

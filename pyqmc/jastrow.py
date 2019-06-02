@@ -145,7 +145,7 @@ class Jastrow2B:
     def testvalue(self,e,epos):
         return np.exp(np.einsum('j,ij->i',self.parameters['coeff'],self._get_deltab(e,epos)))
 
-    def pgradient(self, configs):
+    def pgradient(self):
         """Given the b sums, this is pretty trivial for the coefficient derivatives.
         For the derivatives of basis functions, we will have to compute the derivative of all the b's
         and redo the sums, similar to recompute() """

@@ -32,6 +32,8 @@ class PySCFSlaterRHF:
         mycoords=configs.reshape((configs.shape[0]*configs.shape[1],configs.shape[2]))
         ao = self._mol.eval_gto('GTOval_sph', mycoords)
         mo = ao.dot(self.parameters['mo_coeff'])
+        
+        self._aovals = ao.reshape((nconfig,2,self._nup,ao.shape[1])) 
         self._movals=mo.reshape((nconfig,2,self._nup,self._nup))
         self.dets=np.linalg.slogdet(self._movals)
         self._inverse=np.linalg.inv(self._movals)
@@ -70,7 +72,7 @@ class PySCFSlaterRHF:
         
     def _testcol(self,i,s,vec):
         """vec is a nconfig,nmo vector which replaces column i"""
-        ratio=np.einsum("ij,ij->i",vec,self._inverse[:,s,i,:]) #need to test this!
+        ratio=np.einsum("ij,ij->i",vec,self._inverse[:,s,i,:])
         return ratio
     
     def gradient(self,e,epos):
@@ -102,11 +104,20 @@ class PySCFSlaterRHF:
         which correspond to the parameter dictionary.
         """
         d={}
-#        ao = self._mol.eval_gto('GTOval_sph', mycoords)
-        
-        #use testcol() to update determinant values for each mo_coeff
+     
+        pgrad_shape = (self._aovals.shape[0],)+self.parameters['mo_coeff'].shape
+        pgrad = np.zeros(pgrad_shape)
+        #Compute derivatives w.r.t MO coefficients
+        for i in range(self._nup):     #MO loop
+          for j in range(self._aovals.shape[3]): #AO loop
+            ratio = 0
+            for s in range(2):
+              vec = self._aovals[:,s,:,j]
+              ratio += self._testcol(i,s,vec) #nconfig
+            pgrad[:,j,i] = ratio
+
+        d = {'mo_coeff': np.array(pgrad)} #Returns config, coeff. No spin
         return d
-        
         
 def test(): 
     mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')

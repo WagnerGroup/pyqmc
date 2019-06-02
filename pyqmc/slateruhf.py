@@ -37,6 +37,8 @@ class PySCFSlaterUHF:
         (phase,logdet). If the wf is real, phase will be +/- 1."""
         mycoords=configs.reshape((configs.shape[0]*configs.shape[1],configs.shape[2]))
         ao = self._mol.eval_gto('GTOval_sph', mycoords).reshape((configs.shape[0],configs.shape[1],-1))
+        
+        self._aovals = ao
         self._dets=[]
         self._inverse=[]
         for s in [0,1]:
@@ -81,7 +83,7 @@ class PySCFSlaterUHF:
         
     def _testcol(self,i,s,vec):
         """vec is a nconfig,nmo vector which replaces column i"""
-        ratio=np.einsum("ij,ij->i",vec,self._inverse[:,s,i,:]) #need to test this!
+        ratio=np.einsum("ij,ij->i",vec,self._inverse[s][:,i,:])
         return ratio
     
     def gradient(self,e,epos):
@@ -117,11 +119,22 @@ class PySCFSlaterUHF:
         which correspond to the parameter dictionary.
         """
         d={}
-#        ao = self._mol.eval_gto('GTOval_sph', mycoords)
-        
-        #use testcol() to update determinant values for each mo_coeff
+       
+        for parm in self.parameters:
+          s = 0 
+          if("beta" in parm): s = 1
+          #Get AOs for our spin channel only
+          ao = self._aovals[:,s*self._nelec[0]:self._nelec[s] + s*self._nelec[0],:] #(config, electron, ao)
+
+          pgrad_shape = (ao.shape[0],)+self.parameters[parm].shape
+          pgrad = np.zeros(pgrad_shape)
+          #Compute derivatives w.r.t MO coefficients
+          for i in range(self._nelec[s]):     #MO loop
+            for j in range(ao.shape[2]): #AO loop
+              vec = ao[:,:,j]
+              pgrad[:,j,i] = self._testcol(i,s,vec) #nconfig
+          d = {parm: np.array(pgrad)} #Returns config, coeff
         return d
-        
         
 def test():  
     from pyscf import lib, gto, scf

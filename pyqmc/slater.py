@@ -105,14 +105,6 @@ class PySCFSlaterRHF:
         """
         d={}
      
-        #Calculate AO values for our configurations
-        '''
-        shape = configs.shape
-        ao = self._mol.eval_gto('GTOval_sph',
-          configs.reshape(shape[0]*shape[1],shape[2])) #(Nconfig*Nelec, NAO)
-        ao = ao.reshape((shape[0],2,int(shape[1]/2),ao.shape[1])) #(config, spin, electron, ao)
-        '''
-
         pgrad_shape = (self._aovals.shape[0],)+self.parameters['mo_coeff'].shape
         pgrad = np.zeros(pgrad_shape)
         #Compute derivatives w.r.t MO coefficients

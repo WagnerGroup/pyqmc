@@ -34,9 +34,6 @@ def test_wfs():
         assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon 
         assert testwf.test_wf_laplacian(wf, epos, delta=1e-5)[0] < epsilon 
         assert testwf.test_wf_pgradient(wf, epos, delta=1e-5)[0] < epsilon
-        assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon 
-        assert testwf.test_wf_laplacian(wf, epos, delta=1e-5)[0] < epsilon 
-        assert testwf.test_wf_pgradient(wf, epos, delta=1e-5)[0] < epsilon
         
         for k,item in testwf.test_updateinternals(wf,epos).items():
             assert item < epsilon

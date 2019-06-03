@@ -10,25 +10,6 @@ class EnergyAccumulator:
   def __call__(self,configs, wf):
     return energy(self.mol, configs, wf)
 
-class PGradAccumulator:
-  """returns parameter derivatives of energy for each configuration"""
-  def __init__ (self,enacc):
-    self.enacc = enacc
-
-  def __call__(self,configs,wf):
-    nconfig=configs.shape[0]
-    d=self.enacc(configs,wf)
-    energy = d['total']
-    pgrad = wf.pgradient()
-    for k,grad in pgrad.items():
-        d['dpH_'+k] = np.einsum('i,ij->ij',energy,grad.reshape((nconfig,-1)))
-        d['dppsi_'+k] = grad.reshape((nconfig,-1))
-    for k1,grad1 in pgrad.items():
-        for k2,grad2 in pgrad.items():
-            d['dpidpj_'+k1+k2] = np.einsum('ij,ik->ijk',grad1.reshape((nconfig,-1)),grad2.reshape((nconfig,-1)))
-
-    return d
-
 
 class LinearTransform:
     def __init__(self,parameters,to_opt=None):

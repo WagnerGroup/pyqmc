@@ -88,7 +88,7 @@ def test_accumulator_rhf():
     from pyscf import gto,scf
     from pyqmc.energy import energy
     from pyqmc.slater import PySCFSlaterRHF
-    from pyqmc.accumulators import EnergyAccumulator,PGradAccumulator
+    from pyqmc.accumulators import EnergyAccumulator
 
     mol = gto.M(atom='Li 0. 0. 0.; Li 0. 0. 1.5', basis='cc-pvtz',unit='bohr',verbose=5)
     mf = scf.RHF(mol).run()
@@ -100,8 +100,6 @@ def test_accumulator_rhf():
     df=pd.DataFrame(df)
     eaccum=EnergyAccumulator(mol)
     eaccum_energy=eaccum(coords,wf)
-    pgrad=PGradAccumulator(eaccum)
-    pgrad_dat=pgrad(coords,wf)
     df=pd.DataFrame(df)
     print(df['energytotal'][29] == np.average(eaccum_energy['total']))
 

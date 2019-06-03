@@ -76,24 +76,23 @@ def test_wf_pgradient(wf,configs,delta=1e-5):
     baseval=wf.recompute(configs)
     gradient=wf.pgradient()
     error={}
-    #This is a little tricky; you cannot assign wf.parameters[k] to a numpy array
-    #because it breaks multiplywf (since wf.parameters are a reference to self.wf1.parameters
-    #and self.wf2.parameters, resetting the reference breaks it.)
-    #
     for k in gradient.keys(): #We only check the gradients that are exposed.
-        flt=wf.parameters[k].ravel()
+        flt=wf.parameters[k].reshape(-1)
         #print(flt.shape,wf.parameters[k].shape,gradient[k].shape)
         nparms=len(flt)
         numgrad=np.zeros((configs.shape[0],nparms))
         for i,c in enumerate(flt):
             flt[i]+=delta
+            wf.parameters[k]=flt.reshape(wf.parameters[k].shape)
             plusval=wf.recompute(configs)
             flt[i]-=2*delta
+            wf.parameters[k]=flt.reshape(wf.parameters[k].shape)            
             minuval=wf.recompute(configs)
             numgrad[:,i] = (plusval[0]*baseval[0]*np.exp(plusval[1]-baseval[1]) 
                     - minuval[0]*baseval[0]*np.exp(minuval[1]-baseval[1]))/(2*delta)
             flt[i]+=delta
-        #print(gradient[k],numgrad)            
+            wf.parameters[k]=flt.reshape(wf.parameters[k].shape)            
+            
         error[k]=(np.amax(np.abs(gradient[k].reshape((-1,nparms))-numgrad)),
                   np.mean(np.abs(gradient[k].reshape((-1,nparms))-numgrad)))
     return error[max(error)] #Return maximum coefficient error

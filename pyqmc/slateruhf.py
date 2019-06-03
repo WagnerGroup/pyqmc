@@ -133,7 +133,7 @@ class PySCFSlaterUHF:
             for j in range(ao.shape[2]): #AO loop
               vec = ao[:,:,j]
               pgrad[:,j,i] = self._testcol(i,s,vec) #nconfig
-          d = {parm: np.array(pgrad)} #Returns config, coeff
+          d[parm]=np.array(pgrad) #Returns config, coeff
         return d
         
 def test():  

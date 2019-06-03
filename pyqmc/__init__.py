@@ -7,7 +7,7 @@ from pyqmc.slateruhf import PySCFSlaterUHF
 from pyqmc.multiplywf import MultiplyWF
 from pyqmc.jastrowspin import JastrowSpin
 
-from pyqmc.accumulators import EnergyAccumulator,PGradAccumulator
+from pyqmc.accumulators import EnergyAccumulator,PGradTransform,LinearTransform
 from pyqmc.func3d import PadeFunction,GaussianFunction,ExpCuspFunction
 from pyqmc.optvariance import optvariance
 from pyqmc.optsr import gradient_descent
@@ -26,3 +26,7 @@ def slater_jastrow(mol,mf,abasis=None,bbasis=None):
            JastrowSpin(mol,a_basis=abasis,b_basis=bbasis))
     return wf
 
+
+
+def gradient_generator(mol,wf,to_opt=None):
+    return PGradTransform(EnergyAccumulator(mol),LinearTransform(wf.parameters,to_opt))

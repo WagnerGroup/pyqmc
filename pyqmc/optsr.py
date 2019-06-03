@@ -105,10 +105,6 @@ def gradient_descent(wf,coords,pgrad_acc,warmup=10,
 
     if verbose > 1:
         print('\nGradient descent terminated.')
-        print('p =',x0)
-        print('grad =',pgrad)
-    if verbose > 0:
-        print('|grad|=%.6f'%np.linalg.norm(pgrad),'E=%.5f+-%.5f'%(en,en_std/np.sqrt(nsteps)))
     
             
     return wf, data

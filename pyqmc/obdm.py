@@ -154,12 +154,12 @@ def test():
   ### Test OBDM calculation.
   nconf = 5000
   nsteps = 50
-  obdm_steps = 20
+  obdm_steps = 200
   warmup = 15
-  wf = PySCFSlaterRHF(nconf,mol,mf)
+  wf = PySCFSlaterRHF(mol,mf)
   configs = initial_guess(mol,nconf) 
   energy = EnergyAccumulator(mol)
-  obdm = OBDMAccumulator(mol=mol,orb_coeff=mf.mo_coeff,nstep=obdm_steps)
+  obdm = OBDMAccumulator(mol=mol,orb_coeff=lowdin,nstep=obdm_steps)
   df,coords = vmc(wf,configs,nsteps=nsteps,accumulators={'energy':energy,'obdm':obdm})
   df = DataFrame(df)
   df['obdm'] = df[['obdmvalue','obdmnorm']]\

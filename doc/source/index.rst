@@ -14,6 +14,8 @@ Welcome to pyQMC's documentation!
    example
    
    mc
+   dmc
+   optsr
    slater
    jastrow
    ecp

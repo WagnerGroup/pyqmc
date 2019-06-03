@@ -4,7 +4,7 @@ import pandas as pd
 def gradient_descent(wf,coords,params=None,warmup=10,accumulators=None,
         step=0.5,eps=0.1,maxiters=50,
         vmc=None,vmcoptions=None,
-        datafile=None):
+        datafile=None,verbose=2):
     """Optimizes energy using gradient descent with stochastic reconfiguration.
 
     Args:
@@ -47,8 +47,6 @@ def gradient_descent(wf,coords,params=None,warmup=10,accumulators=None,
         vmcoptions={}
     if params is None:
         params=list(wf.parameters.keys())
-        print('Error: Parameter derivatives for Slater coefficients not implemented.')
-        exit()
         
     # Gradient takes 1d argument of parameters 
     x0=np.concatenate([ wf.parameters[k].flatten() for k in params ])
@@ -93,36 +91,49 @@ def gradient_descent(wf,coords,params=None,warmup=10,accumulators=None,
         Sij = dpdp - np.einsum('i,j->ij',dp,dp) + eps*np.eye(dpdp.shape[0])
         invSij=np.linalg.inv(Sij)
         
-        return grad, grad_std, invSij, en, en_std
+        return grad, grad_std, invSij, en, en_std, len(df)
 
 
     data={'iter':[],'params':[],'pgrad':[],'pgrad_err':[],'totalen':[],'totalen_err':[]}
-    pgrad,pgrad_std,invSij,en,en_std=gradient_energy_function(x0)
+    pgrad,pgrad_std,invSij,en,en_std,nsteps=gradient_energy_function(x0)
     data['iter'].append(0)
     data['params'].append(x0)
     data['pgrad'].append(pgrad)
     data['pgrad_err'].append(pgrad_std)
     data['totalen'].append(en)
-    data['totalen_err'].append(en_std)
-    print('p =',x0,'grad =',pgrad,'|grad|=%.6f'%np.linalg.norm(pgrad),'E=%.5f+-%.5f'%(en,en_std))
+    data['totalen_err'].append(en_std/np.sqrt(nsteps))
+    if verbose > 1:
+        print('p =',x0)
+        print('grad =',pgrad)
+    if verbose > 0:
+        print('|grad|=%.6f'%np.linalg.norm(pgrad),'E=%.5f+-%.5f'%(en,en_std/np.sqrt(nsteps)))
     
     # Gradient descent cycles
     for it in range(maxiters):
         x0 -= np.einsum('ij,j->i',invSij,pgrad) * step/(it/10+1)
-        pgrad,pgrad_std,invSij,en,en_std = gradient_energy_function(x0)
-        print('i=%d: p ='%it,x0,'grad =',pgrad,'|grad|=%.6f'%np.linalg.norm(pgrad),'E=%.5f+-%.5f'%(en,en_std))
+        pgrad,pgrad_std,invSij,en,en_std,nsteps = gradient_energy_function(x0)
+        if verbose > 1:
+            print('p =',x0)
+            print('grad =',pgrad)
+        if verbose > 0:
+            print('|grad|=%.6f'%np.linalg.norm(pgrad),'E=%.5f+-%.5f'%(en,en_std/np.sqrt(nsteps)))
+            
         data['iter'].append(it+1)
         data['params'].append(x0)
         data['pgrad'].append(pgrad)
         data['pgrad_err'].append(pgrad_std)
         data['totalen'].append(en)
-        data['totalen_err'].append(en_std)
+        data['totalen_err'].append(en_std/np.sqrt(nsteps))
         if not (datafile is None):
             pd.DataFrame(data).to_json(datafile)
 
-
-    print('\nGradient descent terminated.')
-    print('p =',x0,'grad =',pgrad,'|grad|=%.6f'%np.linalg.norm(pgrad),'E=%.5f+-%.5f'%(en,en_std))
+    if verbose > 1:
+        print('\nGradient descent terminated.')
+        print('p =',x0)
+        print('grad =',pgrad)
+    if verbose > 0:
+        print('|grad|=%.6f'%np.linalg.norm(pgrad),'E=%.5f+-%.5f'%(en,en_std/np.sqrt(nsteps)))
+    
             
     return wf, data
 

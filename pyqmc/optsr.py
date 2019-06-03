@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-def gradient_descent(wf,coords,pgrad_acc, params=None,warmup=10,
+def gradient_descent(wf,coords,pgrad_acc,warmup=10,
         step=0.5,eps=0.1,maxiters=50,
         vmc=None,vmcoptions=None,
         datafile=None,verbose=2):
@@ -14,8 +14,6 @@ def gradient_descent(wf,coords,pgrad_acc, params=None,warmup=10,
       coords: initial configurations
 
       pgrad_acc: A PGradAccumulator-like object
-
-      params: list of dictionary entries in wf.parameters to optimize
 
       vmc: A function that works like mc.vmc()
 
@@ -45,8 +43,6 @@ def gradient_descent(wf,coords,pgrad_acc, params=None,warmup=10,
     
     if vmcoptions is None:
         vmcoptions={}
-    if params is None:
-        params=list(wf.parameters.keys())
         
 
     def gradient_energy_function(x):
@@ -146,9 +142,8 @@ def test():
     pgrad_acc=PGradTransform(energy_acc,LinearTransform(wf.parameters))
     
     # Gradient descent
-    wf,data=gradient_descent(wf,coords,params=list(params0.keys()),
+    wf,data=gradient_descent(wf,coords,pgrad_acc,
             vmcoptions={'nsteps':nsteps},warmup=warmup,
-            pgrad_acc=pgrad_acc,
             step=0.5,eps=0.1,maxiters=50,datafile='sropt.json')
 
        

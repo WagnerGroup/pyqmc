@@ -26,3 +26,7 @@ def slater_jastrow(mol,mf,abasis=None,bbasis=None):
            JastrowSpin(mol,a_basis=abasis,b_basis=bbasis))
     return wf
 
+
+
+def gradient_generator(mol,wf,to_opt=None):
+    return PGradTransform(EnergyAccumulator(mol),LinearTransform(wf.parameters,to_opt))

@@ -120,19 +120,19 @@ def test():
     mf.stdout=None
     mf.chkfile=None
     from pyqmc import ExpCuspFunction,GaussianFunction,MultiplyWF,PySCFSlaterRHF,JastrowSpin,initial_guess,EnergyAccumulator
-    from pyqmc.accumulators import PGradAccumulator
+    from pyqmc.accumulators import PGradTransform,LinearTransform
     
     nconf=1600
     basis=[ExpCuspFunction(2.0,1.5),GaussianFunction(0.5),GaussianFunction(2.0),GaussianFunction(.25),GaussianFunction(1.0),GaussianFunction(4.0),GaussianFunction(8.0)  ]
     wf=MultiplyWF(PySCFSlaterRHF(mol,mf),JastrowSpin(mol,basis,basis))
     coords = initial_guess(mol,nconf)
     energy_acc=EnergyAccumulator(mol)
-    pgrad_acc=PGradAccumulator(energy_acc)
+    pgrad_acc=PGradTransform(energy_acc,LinearTransform(wf.parameters,['wf2acoeff','wf2bcoeff']))
     
     from pyqmc.optsr import gradient_descent
-    gradient_descent(wf,coords,params=['wf2acoeff','wf2bcoeff'],vmc=distvmc,
-            vmcoptions={'npartitions':ncore,'nsteps':100,'nsteps_per':100},
-            accumulators={'energy':energy_acc,'pgrad':pgrad_acc})
+    gradient_descent(wf,coords,pgrad_acc,vmc=distvmc,
+            vmcoptions={'npartitions':ncore,'nsteps':100,'nsteps_per':100}
+            )
             
 
 if __name__=="__main__":

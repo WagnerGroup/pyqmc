@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-def gradient_descent(wf,coords,params=None,warmup=10,accumulators=None,
+def gradient_descent(wf,coords,pgrad_acc, params=None,warmup=10,
         step=0.5,eps=0.1,maxiters=50,
         vmc=None,vmcoptions=None,
         datafile=None,verbose=2):
@@ -13,6 +13,8 @@ def gradient_descent(wf,coords,params=None,warmup=10,accumulators=None,
 
       coords: initial configurations
 
+      pgrad_acc: A PGradAccumulator-like object
+
       params: list of dictionary entries in wf.parameters to optimize
 
       vmc: A function that works like mc.vmc()
@@ -20,8 +22,6 @@ def gradient_descent(wf,coords,params=None,warmup=10,accumulators=None,
       vmcoptions: a dictionary of options for the vmc method
 
       warmup: warmup cutoff for VMC steps
-
-      accumulators: accumulators to store during VMC
 
       step: gradient descent step size
 
@@ -48,52 +48,29 @@ def gradient_descent(wf,coords,params=None,warmup=10,accumulators=None,
     if params is None:
         params=list(wf.parameters.keys())
         
-    # Gradient takes 1d argument of parameters 
-    x0=np.concatenate([ wf.parameters[k].flatten() for k in params ])
-    shapes=np.array([ wf.parameters[k].shape for k in params ])
-    slices=np.array([ np.prod(s) for s in shapes ])
-
 
     def gradient_energy_function(x):
-        x_sliced=np.split(x,slices[:-1])
-        for i,k in enumerate(params):
-            wf.parameters[k]=x_sliced[i].reshape(shapes[i])    
-        wf.recompute(coords)
-        data,confs=vmc(wf,coords,accumulators=accumulators, **vmcoptions)
+        newparms=pgrad_acc.transform.deserialize(x)
+        for k in newparms:
+            wf.parameters[k]=newparms[k]
+        data,newcoords=vmc(wf,coords,accumulators={'pgrad':pgrad_acc}, **vmcoptions)
         df=pd.DataFrame(data)[warmup:]
         
         en=np.mean(df['pgradtotal'])
         en_std=np.std(df['pgradtotal'])
         
-        grad={}
-        grad_std={}
-        dp={}
-        dpdp={}
-        for k in params:
-            if 'pgraddpH_'+k in df.keys():
-                dpH = np.mean(df['pgraddpH_'+k],axis=0)
-                dpH_std = np.std(df['pgraddpH_'+k].values,axis=0)
-                dp[k] = np.mean(df['pgraddppsi_'+k],axis=0)
-                dp_std = np.std(df['pgraddppsi_'+k].values,axis=0)
-                grad[k] = 2*( dpH - en * dp[k])
-                grad_std[k] = 2*np.sqrt( dpH_std**2 + (en*dp[k])**2 * ( (en_std/en)**2 + (dp_std/dp[k])**2 ) )
-                for k2 in params:
-                    if 'pgraddpH_'+k2 in df.keys():
-                        dpdp[k+k2] = np.mean(df['pgraddpidpj_'+k+k2],axis=0)
-        # Concatenates types of gradients
-        grad=np.concatenate([ grad[k].reshape(-1) for k in params if 'pgraddpH_'+k in df.keys() ])
-        grad_std=np.concatenate([ grad_std[k].reshape(-1) for k in params if 'pgraddpH_'+k in df.keys() ])
-        dp=np.concatenate([ dp[k] for k in params if 'pgraddpH_'+k in df.keys() ])
-        # Concatenates Sij sub-matrices into one matrix
-        dpdp=np.array([ [ dpdp[k+k2] for k2 in params if 'pgraddpH_'+k2 in df.keys() ] for k in params if 'pgraddpH_'+k in df.keys() ])
-        dpdp=np.concatenate( np.array([ np.concatenate(d,axis=1) for d in dpdp ]) , axis=0)
         # Sij matrix with stabilizing diagonal
+        dpH=np.mean(df['pgraddpH'],axis=0)
+        dp=np.mean(df['pgraddppsi'],axis=0)
+        dpdp=np.mean(df['pgraddpidpj'],axis=0)
+        grad=2*(dpH-en*dp)
         Sij = dpdp - np.einsum('i,j->ij',dp,dp) + eps*np.eye(dpdp.shape[0])
         invSij=np.linalg.inv(Sij)
-        
+        grad_std=0
         return grad, grad_std, invSij, en, en_std, len(df)
 
 
+    x0=pgrad_acc.transform.serialize_parameters(wf.parameters)
     data={'iter':[],'params':[],'pgrad':[],'pgrad_err':[],'totalen':[],'totalen_err':[]}
     pgrad,pgrad_std,invSij,en,en_std,nsteps=gradient_energy_function(x0)
     data['iter'].append(0)
@@ -115,6 +92,9 @@ def gradient_descent(wf,coords,params=None,warmup=10,accumulators=None,
         if verbose > 1:
             print('p =',x0)
             print('grad =',pgrad)
+            pgrad_k=pgrad_acc.transform.deserialize(pgrad)
+            for k,gradient in pgrad_k.items():
+                print('rms gradient for', k,np.linalg.norm(gradient))
         if verbose > 0:
             print('|grad|=%.6f'%np.linalg.norm(pgrad),'E=%.5f+-%.5f'%(en,en_std/np.sqrt(nsteps)))
             
@@ -139,14 +119,9 @@ def gradient_descent(wf,coords,params=None,warmup=10,accumulators=None,
 
 
 
-
-
-
-    
-
 def test():    
     from pyscf import lib, gto, scf
-    from pyqmc.accumulators import EnergyAccumulator, PGradAccumulator    
+    from pyqmc.accumulators import EnergyAccumulator, PGradTransform, LinearTransform 
     from pyqmc.multiplywf import MultiplyWF
     from pyqmc.jastrow import Jastrow2B
     from pyqmc.func3d import GaussianFunction
@@ -168,34 +143,14 @@ def test():
             wf.parameters[k]=params0[k]
     
     energy_acc=EnergyAccumulator(mol)
-    pgrad_acc=PGradAccumulator(energy_acc)
+    pgrad_acc=PGradTransform(energy_acc,LinearTransform(wf.parameters))
     
     # Gradient descent
     wf,data=gradient_descent(wf,coords,params=list(params0.keys()),
             vmcoptions={'nsteps':nsteps},warmup=warmup,
-            accumulators={'pgrad':pgrad_acc},
+            pgrad_acc=pgrad_acc,
             step=0.5,eps=0.1,maxiters=50,datafile='sropt.json')
 
-    # GD data plot
-    import pandas as pd
-    import matplotlib.pyplot as plt
-    df=pd.DataFrame(data)
-    df2=pd.DataFrame(df['pgrad'].values.tolist())
-    df3=pd.DataFrame(df['pgrad_err'].values.tolist())
-    df2['iter']=df['iter']
-    fig, ax = plt.subplots(1,2)
-    for c in df2.keys():
-        if c!='iter':
-            ax[0].errorbar(df2['iter'],df2[c],yerr=df3[c],label=c)
-    ax[0].set_xlabel('Gradient descent step')
-    ax[0].set_ylabel('PGradient (Ha)')
-    ax[1].errorbar(df['iter'],df['totalen'],yerr=df['totalen_err'])
-    ax[1].set_xlabel('Gradient descent step')
-    ax[1].set_ylabel('Total Energy (Ha)')
-    ax[0].legend(title='PGrad')
-    plt.tight_layout()
-    plt.savefig("gradesc_Enmin.png")
-    df.to_csv("gradesc_Enmin.csv")
        
     
 

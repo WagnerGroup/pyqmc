@@ -116,7 +116,7 @@ class PySCFSlaterRHF:
               ratio += self._testcol(i,s,vec) #nconfig
             pgrad[:,j,i] = ratio
 
-        d = {'mo_coeff': np.array(pgrad)} #Returns config, coeff. No spin
+        d = {'mo_coeff': pgrad} #Returns config, coeff. No spin
         return d
         
 def test(): 

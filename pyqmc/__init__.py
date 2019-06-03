@@ -2,6 +2,8 @@ name = "pyqmc"
 from pyqmc.mc import vmc,initial_guess
 from pyqmc.jastrow import Jastrow2B
 from pyqmc.slater import PySCFSlaterRHF
+from pyqmc.slateruhf import PySCFSlaterUHF
+
 from pyqmc.multiplywf import MultiplyWF
 from pyqmc.jastrowspin import JastrowSpin
 
@@ -20,7 +22,7 @@ def slater_jastrow(mol,mf,abasis=None,bbasis=None):
         bbasis=[ExpCuspFunction(2.0,1.5),GaussianFunction(0.8),GaussianFunction(1.6),GaussianFunction(3.2)]
 
         
-    wf=MultiplyWF(PySCFSlaterRHF(mol,mf),
+    wf=MultiplyWF(PySCFSlaterUHF(mol,mf),
            JastrowSpin(mol,a_basis=abasis,b_basis=bbasis))
     return wf
 

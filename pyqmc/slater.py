@@ -120,11 +120,12 @@ class PySCFSlaterRHF:
         return d
         
 def test(): 
+    from pyscf import gto,scf
     mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
     mf = scf.RHF(mol).run()
     nconf=10
     nelec=np.sum(mol.nelec)
-    slater=PySCFSlaterRHF(nconf,mol,mf)
+    slater=PySCFSlaterRHF(mol,mf)
     configs=np.random.randn(nconf,nelec,3)
     import pyqmc.testwf as testwf
     for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:

@@ -41,11 +41,12 @@ def initial_guess(mol,nconfig,r=1.0):
         nleft=mol.nelec[s]*wts-neach # fraction of electron unassigned on each atom
         nassigned=np.sum(neach) # number of electrons assigned
         totleft=int(mol.nelec[s]-nassigned) # number of electrons not yet assigned
-        bins=np.cumsum(nleft)/totleft
-        inds = np.argpartition(np.random.random((nconfig,len(wts))), totleft, axis=1)[:,:totleft]
-        ind0=s*mol.nelec[0]
-        epos[:,ind0:ind0+nassigned,:] = np.repeat(mol.atom_coords(),neach,axis=0)[np.newaxis] # assign core electrons
-        epos[:,ind0+nassigned:ind0+mol.nelec[s],:] = mol.atom_coords()[inds] # assign remaining electrons
+        if totleft > 0:
+            bins=np.cumsum(nleft)/totleft
+            inds = np.argpartition(np.random.random((nconfig,len(wts))), totleft, axis=1)[:,:totleft]
+            ind0=s*mol.nelec[0]
+            epos[:,ind0:ind0+nassigned,:] = np.repeat(mol.atom_coords(),neach,axis=0)[np.newaxis] # assign core electrons
+            epos[:,ind0+nassigned:ind0+mol.nelec[s],:] = mol.atom_coords()[inds] # assign remaining electrons
     
     epos+=r*np.random.randn(*epos.shape) # random shifts from atom positions
     

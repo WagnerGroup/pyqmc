@@ -75,21 +75,23 @@ def vmc(wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False,stepoffse
     """Run a Monte Carlo sample of a given wave function.
 
     Args:
-      mol: A pyscf molecule-like class. Used to generate an energy accumulator if none is given
-
       wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as 
       anything (such as laplacian() ) used by accumulators
+      
+      coords: Initial electron coordinates
+
+      nsteps: Number of VMC steps to propagate
 
       tstep: Time step for move proposals. Only affects efficiency.
 
-      accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
-
+      accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If None, then the coordinates will only be propagated with acceptance information.
+      
       verbose: Print out step information 
 
       stepoffset: If continuing a run, what to start the step numbering at.
 
     Returns: (df,coords)
-       df: A list of dictionaries nstep long that contains all results from the accumulators.
+       df: A list of dictionaries nstep long that contains all results from the accumulators. These are averaged across all walkers.
 
        coords: The final coordinates from this calculation.
        

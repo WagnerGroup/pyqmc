@@ -1,7 +1,7 @@
 ''' Evaluate the OBDM for a wave function object. '''
 import numpy as np
 from copy import deepcopy
-
+from pyqmc.mc import initial_guess
 # Implementation TODO:
 # - [x] Set up test calculation RHF Li calculation.
 # - [x] Evaluate orbital ratios and normalizations.
@@ -24,78 +24,91 @@ class OBDMAccumulator:
     tstep (float): width of the Gaussian to update a walker position for the 
       extra coordinate.
   '''
-  def __init__(self,mol,orb_coeff,nstep=10,tstep=0.50,warmup=100):
+  def __init__(self,mol,orb_coeff,nstep=10,tstep=0.50,warmup=100,naux=500):
     assert len(orb_coeff.shape)==2, "orb_coeff should be a list of orbital coefficients."
 
     self._orb_coeff = orb_coeff
     self._tstep = tstep
     self._mol = mol
-    self._extra_config = np.random.normal(scale=tstep,size=3) # not zero to avoid sitting on top of atom.
+    #self._extra_config = np.random.normal(scale=tstep,size=3) # not zero to avoid sitting on top of atom.
+    nelec=sum(self._mol.nelec)
+    self._extra_config=initial_guess(mol,int(naux/nelec)+1).reshape(-1,3)
+
     self._nstep = nstep
 
     # Maybe shouldn't do this here?
     for i in range(warmup):
       accept,self._extra_config = sample_onebody(mol,orb_coeff,self._extra_config,tstep)
 
+
+
   def __call__(self,configs,wf):
-    ''' Returns numerator and denomenator and their errors in equation (9) of DOI:10.1063/1.4793531'''
+    ''' Returns numerator and denominator and their errors in equation (9) of DOI:10.1063/1.4793531'''
 
     results = {
-        'value':np.zeros((configs.shape[0],self._orb_coeff.shape[0],self._orb_coeff.shape[1])),
-        'norm':np.zeros(self._orb_coeff.shape[0])
+        'value':np.zeros((configs.shape[0],self._orb_coeff.shape[1],self._orb_coeff.shape[1])),
+        'norm':np.zeros((configs.shape[0],self._orb_coeff.shape[0]))
       }
     acceptance = 0
+    naux=self._extra_config.shape[0]
+    nelec=configs.shape[1]
 
     for step in range(self._nstep):
-      points = np.concatenate((self._extra_config.reshape(1,3),configs.reshape(configs.shape[0]*configs.shape[1],configs.shape[2])))
-      ao = self._mol.eval_gto('GTOval_sph',points)
-      borb = ao.dot(self._orb_coeff) 
+        e=np.random.randint(0,configs.shape[1])
+        
+        #print(self._extra_config.shape,configs.shape)
+        points = np.concatenate([self._extra_config,
+                                 configs[:,e,:]])
+        ao = self._mol.eval_gto('GTOval_sph',points)
+        borb = ao.dot(self._orb_coeff) 
+        #print(borb.shape)
 
-      # Orbital evaluations at extra coordinate.
-      borb_prim = borb[0]
-      borb_prim_sq = borb_prim**2
-      fsum = borb_prim_sq.sum()
-      norm = borb_prim_sq/fsum
 
-      # Orbital evaluations at all electrons and configs.
-      borb = borb[1:].reshape(configs.shape[0],configs.shape[1],borb.shape[1])
+        # Orbital evaluations at extra coordinate.
+        borb_aux = borb[0:naux,:]
+        #borb_prim_sq = borb_prim**2
+        fsum = np.sum(borb_aux*borb_aux,axis=1)
+        norm = borb_aux*borb_aux/fsum[:,np.newaxis]
 
-      # Numerator of obervable, given all these quantities.
-      # TODO loop necessary for wfratio?
-      wfratio = np.array([wf.testvalue(esel,self._extra_config[np.newaxis,:]) for esel in range(configs.shape[1])]).T
-      orbratio = (borb_prim/fsum)[np.newaxis,np.newaxis,:,np.newaxis]*borb[:,:,np.newaxis,:]
+        # Orbital evaluations at all electrons and configs.
+        #borb = borb[1:].reshape(configs.shape[0],configs.shape[1],borb.shape[1])
+        borb_configs=borb[naux:,:]        
 
-      # Accumulate results for old extra coord.
-      results['value'] += ( wfratio[:,:,np.newaxis,np.newaxis]*orbratio ).sum(axis=1)
-      results['norm'] += norm
+        # Numerator of observable, given all these quantities.
+        auxassignments=np.random.randint(0,naux,size=configs.shape[0])
+        wfratio = wf.testvalue(e,self._extra_config[auxassignments,:])
+        
+        orbratio = np.einsum("ij,ik->ijk",borb_aux[auxassignments,:]/fsum[auxassignments,np.newaxis],borb_configs)
 
-      # Update extra coord.
-      accept,self._extra_config = sample_onebody(self._mol,self._orb_coeff,self._extra_config,tstep=self._tstep)
-      
-      # Keep track of internal acceptance.
-      acceptance += accept
+        results['value'] += nelec*np.einsum('i,ijk->ijk',wfratio,orbratio)
+        results['norm'] += norm[auxassignments]
+
+        # Update extra coord.
+        accept,self._extra_config = sample_onebody(self._mol,self._orb_coeff,self._extra_config,tstep=self._tstep)
+
+        # Keep track of internal acceptance.
+        acceptance += np.mean(accept)
 
     print("OBDM sample acceptance ratio",acceptance/self._nstep)
 
     results['value'] /= self._nstep
-    results['norm'] = results['norm'][np.newaxis,:]/self._nstep
+    results['norm'] = results['norm']/self._nstep
 
     return results
 
-def sample_onebody(mol,orb_coeff,epos,tstep=2.0):
+def sample_onebody(mol,orb_coeff,configs,tstep=2.0):
   ''' For a set of orbitals defined by orb_coeff, return samples from f(r) = \sum_i phi_i(r)^2. '''
-  configs = np.array((epos,epos+np.random.normal(scale=tstep,size=3)))
+  config_pack = np.concatenate([configs,configs+np.sqrt(tstep)*np.random.randn(*configs.shape)],axis=0)
 
-  ao = mol.eval_gto('GTOval_sph',configs)
+  ao = mol.eval_gto('GTOval_sph',config_pack)
   borb = ao.dot(orb_coeff)
   fsum = (borb**2).sum(axis=1)
 
-  accept = fsum[1]/fsum[0] > np.random.rand()
-
-  if accept:
-    return 1,configs[1]
-  else:
-    return 0,configs[0]
+  n=configs.shape[0]
+  accept = fsum[n:]/fsum[0:n] > np.random.rand(n)
+  newconf=config_pack[n:,:]
+  configs[accept,:]=newconf[accept,:]
+  return accept,configs
 
 def test_sample_onebody(mol,orb_coeff,mf,nsample=int(1e4)):
   ''' Test the one-body sampling by sampling the integral of f(r).'''
@@ -152,14 +165,14 @@ def test():
   #test_sample_onebody(mol,lowdin,mf,nsample=int(1e5))
 
   ### Test OBDM calculation.
-  nconf = 5000
-  nsteps = 50
-  obdm_steps = 200
+  nconf = 500
+  nsteps = 400
+  obdm_steps = 2
   warmup = 15
   wf = PySCFSlaterRHF(mol,mf)
   configs = initial_guess(mol,nconf) 
   energy = EnergyAccumulator(mol)
-  obdm = OBDMAccumulator(mol=mol,orb_coeff=lowdin,nstep=obdm_steps)
+  obdm = OBDMAccumulator(mol=mol,orb_coeff=mf.mo_coeff,nstep=obdm_steps)
   df,coords = vmc(wf,configs,nsteps=nsteps,accumulators={'energy':energy,'obdm':obdm})
   df = DataFrame(df)
   df['obdm'] = df[['obdmvalue','obdmnorm']]\

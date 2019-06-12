@@ -42,6 +42,7 @@ class PySCFSlaterUHF:
                 mo=ao[:,0:self._nelec[0],:].dot(self.parameters[self._coefflookup[s]])
             else:
                 mo=ao[:,self._nelec[0]:self._nelec[0]+self._nelec[1],:].dot(self.parameters[self._coefflookup[s]])
+            #This could be done faster; we are doubling our effort here.
             self._dets.append(np.linalg.slogdet(mo))
             self._inverse.append(np.linalg.inv(mo))
             

@@ -26,10 +26,6 @@ class PySCFSlaterUHF:
         self._coefflookup=('mo_coeff_alpha','mo_coeff_beta')
         self._mol=mol
         self._nelec=mol.nelec
-        #self._inverse=(np.zeros((nconfig,self._nelec[0],self._nelec[0])),
-        #           np.zeros((nconfig,self._nelec[1],self._nelec[1])))
-        #self._dets=( (np.zeros(nconfig),np.zeros(nconfig)),
-        #            (np.zeros(nconfig),np.zeros(nconfig)))
         
             
     def recompute(self,configs):
@@ -46,6 +42,7 @@ class PySCFSlaterUHF:
                 mo=ao[:,0:self._nelec[0],:].dot(self.parameters[self._coefflookup[s]])
             else:
                 mo=ao[:,self._nelec[0]:self._nelec[0]+self._nelec[1],:].dot(self.parameters[self._coefflookup[s]])
+            #This could be done faster; we are doubling our effort here.
             self._dets.append(np.linalg.slogdet(mo))
             self._inverse.append(np.linalg.inv(mo))
             

@@ -95,7 +95,7 @@ def gradient_descent(wf,coords,pgrad_acc,warmup=10,
             print('|grad|=%.6f'%np.linalg.norm(pgrad),'E=%.5f+-%.5f'%(en,en_std/np.sqrt(nsteps)))
             
         data['iter'].append(it+1)
-        data['params'].append(x0)
+        data['params'].append(x0.copy())
         data['pgrad'].append(pgrad)
         data['pgrad_err'].append(pgrad_std)
         data['totalen'].append(en)

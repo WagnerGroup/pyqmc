@@ -58,7 +58,7 @@ def distvmc(wf,coords,accumulators,nsteps=100,npartitions=2,nsteps_per=20):
     import pandas as pd
     import time
     while True:
-        print([r.done() for r in  allruns])
+        print("Job done:",[r.done() for r in  allruns])
         df=[]
         done=[]
         for r in allruns:

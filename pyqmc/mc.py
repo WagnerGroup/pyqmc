@@ -132,9 +132,10 @@ def vmc(wf,coords,nsteps=100,tstep=0.5,accumulators=None,verbose=False,stepoffse
             acc.append(np.mean(accept))
         avg={}
         for k,accumulator in accumulators.items():
-            dat=accumulator(coords,wf)
+            dat=accumulator.avg(coords,wf)
             for m,res in dat.items():
-                avg[k+m]=np.mean(res,axis=0)
+                #print(m,res.nbytes/1024/1024)
+                avg[k+m]=res #np.mean(res,axis=0)
         avg['acceptance']=np.mean(acc)
         avg['step']=stepoffset+step
         avg['nconfig']=coords.shape[0]

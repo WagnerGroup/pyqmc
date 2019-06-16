@@ -5,10 +5,17 @@ class EnergyAccumulator:
   """returns energy of each configuration in a dictionary. 
   Keys and their meanings can be found in energy.energy """
   def __init__(self, mol):
-    self.mol = mol
+      self.mol = mol
 
   def __call__(self,configs, wf):
-    return energy(self.mol, configs, wf)
+      return energy(self.mol, configs, wf)
+
+  def avg(self,configs,wf):
+      d={}
+      for k,it in self().items():
+          d[k]=np.mean(it,axis=0)
+      return d
+
 
 
 class LinearTransform:
@@ -68,6 +75,17 @@ class PGradTransform:
         d['dpH'] = np.einsum('i,ij->ij',energy,dp)
         d['dppsi'] = dp
         d['dpidpj'] = np.einsum('ij,ik->ijk',dp,dp)
+        return d
+
+    def avg(self,configs,wf):
+        nconf=configs.shape[0]
+        pgrad=wf.pgradient()
+        d=self.enacc(configs,wf)
+        energy = d['total']
+        dp=self.transform.serialize_gradients(pgrad)
+        d['dpH'] = np.einsum('i,ij->j',energy,dp)/nconf
+        d['dppsi'] = np.mean(dp,axis=0)
+        d['dpidpj'] = np.einsum('ij,ik->jk',dp,dp)/nconf
         return d
 
 

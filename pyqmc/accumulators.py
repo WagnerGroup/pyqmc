@@ -12,7 +12,7 @@ class EnergyAccumulator:
 
   def avg(self,configs,wf):
       d={}
-      for k,it in self().items():
+      for k,it in self(configs,wf).items():
           d[k]=np.mean(it,axis=0)
       return d
 

@@ -80,9 +80,13 @@ class PGradTransform:
     def avg(self,configs,wf):
         nconf=configs.shape[0]
         pgrad=wf.pgradient()
-        d=self.enacc(configs,wf)
-        energy = d['total']
+        den=self.enacc(configs,wf)
+        energy = den['total']
         dp=self.transform.serialize_gradients(pgrad)
+
+        d={}
+        for k,it in den.items():
+            d[k]=np.mean(it,axis=0)
         d['dpH'] = np.einsum('i,ij->j',energy,dp)/nconf
         d['dppsi'] = np.mean(dp,axis=0)
         d['dpidpj'] = np.einsum('ij,ik->jk',dp,dp)/nconf

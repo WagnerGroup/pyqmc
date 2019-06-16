@@ -12,6 +12,7 @@ Welcome to pyQMC's documentation!
 
    install
    example
+   objects
    
    mc
    dmc

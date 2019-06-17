@@ -143,8 +143,11 @@ def ecp_ea(mol,configs,wf,e,at):
     """ 
     Returns the ECP value between electron e and atom at, local+nonlocal.
     """
-    weights,epos_rot = get_rot(mol,configs,e,at,naip=6)
     l_list,v_l = get_v_l(mol,configs,e,at)
+    naip = 6
+    if len(l_list) > 2: naip = 12
+
+    weights,epos_rot = get_rot(mol,configs,e,at,naip)
     P_l = get_P_l(mol,configs,weights,epos_rot,l_list,e,at)
     ratio = get_wf_ratio(wf,epos_rot,e)
     ecp_val = np.einsum("ij,ik,ijk->i", ratio, v_l, P_l)
@@ -166,37 +169,7 @@ def ecp(mol,configs,wf):
     return ecp_tot
 
 #################### Quadrature Rules ############################
-def get_angles(nconf,naip=6): 
-    """
-    Generates a random point on a sphere, then returns the angular positions (theta,phi) of
-    other points according to the quadrature rule. 
-    Currently only naip = 6 is supported. Use with caution. 
-    For details of the quadrature rules, see qwalk/src/system/gesqua.cpp.
-    Parameters: 
-      nconf = number of configurations
-    Returns:
-      theta,phi: angular positions of the rotated electrons, nconf x naip array.
-    """
-    # t and p are sampled randomly over a sphere around the atom 
-    t = np.random.uniform(low=0.,high=np.pi,size=nconf)
-    p = np.random.uniform(low=0.,high=2*np.pi,size=nconf)
-
-    d1,d2 = np.zeros([nconf,naip]),np.zeros([nconf,naip])
-    d1[:,0] = t
-    d1[:,1] = np.pi*np.ones(t.shape)-t
-    d1[:,2] = 0.5*np.pi*np.ones(t.shape)
-    d1[:,3] = 0.5*np.pi*np.ones(t.shape)
-    d1[:,4] = 0.5*np.pi*np.ones(t.shape)+t
-    d1[:,5] = 0.5*np.pi*np.ones(t.shape)-t
-    d2[:,0] = p
-    d2[:,1] = np.pi*np.ones(t.shape)+p
-    d2[:,2] = -0.5*np.pi*np.ones(t.shape)+p
-    d2[:,3] = 0.5*np.pi*np.ones(t.shape)+p
-    d2[:,4] = p
-    d2[:,5] = np.pi*np.ones(t.shape)+p
-    return d1,d2
-
-def get_rot(mol,configs,e,at,naip=6):
+def get_rot(mol,configs,e,at,naip):
     """
     Returns the integration weights (naip), and the positions of the rotated electron e (nconf x naip x 3)
     Parameters: 
@@ -212,14 +185,58 @@ def get_rot(mol,configs,e,at,naip=6):
     r_ea_vec = get_r_ea(mol,configs,e,at)
     r_ea = np.linalg.norm(r_ea_vec,axis = 1)
 
-    t,p = get_angles(nconf,naip)
+
+    # t and p are sampled randomly over a sphere around the atom 
+    t = np.random.uniform(low=0.,high=np.pi,size=nconf)
+    p = np.random.uniform(low=0.,high=2*np.pi,size=nconf)
+    
+    # rotated unit vectors:
+    i_rot,j_rot,k_rot = np.zeros([nconf,3]),np.zeros([nconf,3]),np.zeros([nconf,3])
+    i_rot[:,0] = np.cos(p-np.pi/2.)
+    i_rot[:,1] = np.sin(p-np.pi/2.)
+    j_rot[:,0] = np.sin(t+np.pi/2.)*np.cos(p)
+    j_rot[:,1] = np.sin(t+np.pi/2.)*np.sin(p)
+    j_rot[:,2] = np.cos(t+np.pi/2.)
+    k_rot[:,0] = np.sin(t)*np.cos(p)
+    k_rot[:,1] = np.sin(t)*np.sin(p)
+    k_rot[:,2] = np.cos(t)
+
+    d1,d2 = np.zeros(naip),np.zeros(naip)
+    if naip == 6:
+        d1[1] = np.pi
+
+        d1[2] = np.pi/2.
+
+        d1[3] = np.pi/2.
+        d2[3] = np.pi
+
+        d1[4] = np.pi/2.
+        d2[4] = np.pi/2.
+     
+        d1[5] = np.pi/2.
+        d2[5] = 3.*np.pi/2.
+
+    elif naip == 12:
+        d1[1] = np.pi
+
+        fi0=np.pi/5.
+        tha = np.arccos(1./np.sqrt(5.))
+        for i in range(5):
+            rk2 = 2*i
+            d1[i+2] = tha
+            d2[i+2] = rk2*fi0        
+
+            d1[i+7] = np.pi-tha
+            d2[i+7] = (rk2+1)*fi0
 
     epos_rot = np.zeros([nconf,naip,3])
     for aip in range(naip):
-        epos_rot[:,aip,0] = apos[:,0]+r_ea*np.sin(t[:,aip])*np.cos(p[:,aip])
-        epos_rot[:,aip,1] = apos[:,1]+r_ea*np.sin(t[:,aip])*np.sin(p[:,aip])
-        epos_rot[:,aip,2] = apos[:,2]+r_ea*np.cos(t[:,aip])
+        for d in range(3):
+            epos_rot[:,aip,d] = apos[:,d]+r_ea*(np.sin(d1[aip])*np.cos(d2[aip])*i_rot[:,d]+\
+                                                np.sin(d1[aip])*np.sin(d2[aip])*j_rot[:,d]+\
+                                                np.cos(d1[aip])*k_rot[:,d])                                 
     weights = 1./naip*np.ones(naip)
+
     return weights,epos_rot
 
 

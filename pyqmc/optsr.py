@@ -1,10 +1,10 @@
 import numpy as np
 import pandas as pd
-
+import json
 def gradient_descent(wf,coords,pgrad_acc,warmup=10,
         step=0.5,eps=0.1,maxiters=50,
         vmc=None,vmcoptions=None,
-        datafile=None,verbose=2):
+        datafile=None,verbose=2,wfsave=None):
     """Optimizes energy using gradient descent with stochastic reconfiguration.
 
     Args:
@@ -102,6 +102,13 @@ def gradient_descent(wf,coords,pgrad_acc,warmup=10,
         data['totalen_err'].append(en_std/np.sqrt(nsteps))
         if not (datafile is None):
             pd.DataFrame(data).to_json(datafile)
+
+        if not (wfsave is None):
+            with open(wfsave,'w') as f:
+                save={}
+                for k,param in pgrad_acc.transform.deserialize(x0).items():
+                    save[k]=param.tolist()
+                json.dump(save,f)
 
     if verbose > 1:
         print('\nGradient descent terminated.')

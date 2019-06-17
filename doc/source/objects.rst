@@ -39,6 +39,5 @@ Return the laplacian Psi/ Psi. Conditions similar to gradient()
 .. py:function:: pgradient()
 
 Return the parameter gradient of Psi. 
-        Returns d_p \Psi/\Psi as a dictionary of numpy arrays,
-        which correspond to the parameter dictionary.
+Returns d_p \Psi/\Psi as a dictionary of numpy arrays, which correspond to the parameter dictionary.
 

@@ -1,7 +1,7 @@
 import numpy as np
 from numpy import polyfit,linspace,inf
 
-
+      
 def line_minimization(func, params0, line=None, line_min_steps=5, max_step=1, verbose=0, **func_kwargs):
     """
     Args:
@@ -22,8 +22,9 @@ def line_minimization(func, params0, line=None, line_min_steps=5, max_step=1, ve
     """
 
     assert line_min_steps>3, "cubic line minimization needs at least 4 points"
-    val, grad = func(params0)
-    if verbose>0: print('val',val,'grad',np.linalg.norm(grad))
+    if verbose>0: import time; start=time.process_time()
+    val, grad = func(params0, **func_kwargs)
+    if verbose>0: print('val',val, '\ngrad',np.linalg.norm(grad), '\ntime', time.process_time()-start)
     if line is None:
         line=-grad/np.linalg.norm(grad)
     normalization = np.sum(line**2)
@@ -32,13 +33,14 @@ def line_minimization(func, params0, line=None, line_min_steps=5, max_step=1, ve
     line_steps[0] = -max_step/line_min_steps # already have current point; need one behind
     line_points = params0 + line*line_steps[:,np.newaxis]
     line_data = [ func(p, **func_kwargs) for pidx,p in enumerate(line_points) ]
+    if verbose>0: print('{0} vmc done'.format(line_min_steps), 'time', time.process_time()-start)
     line_data.insert(1,(val,grad))
     line_deriv = [np.dot(data[1],line)/normalization for data in line_data]
     line_steps = np.insert(line_steps,1,0)
     line_min, fitted_delta_minval = fit_line_minimum(line_steps,line_deriv,verbose=verbose)
 
     params = params0 + line_min*line
-    return params, val+fitted_delta_minval
+    return params, val+fitted_delta_minval, (val, grad)
       
 def fit_line_minimum(xvals,yderivs,yderiv_err=None,verbose=0):
     ''' Fit a cubic function using its derivatives and return its minimum.
@@ -54,7 +56,7 @@ def fit_line_minimum(xvals,yderivs,yderiv_err=None,verbose=0):
     Returns:
       float: between xvals[0] and xvals[-1].
     '''
-    if verbose>1: print("Line minimizaion.")
+    if verbose>1: print("Fitting minimum.")
     if yderiv_err is not None: raise NotImplementedError("Should be trivial to add this.")
   
     coefs = polyfit(xvals,yderivs,deg=2)

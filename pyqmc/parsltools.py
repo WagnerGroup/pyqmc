@@ -31,7 +31,7 @@ def vmcparsl(wf,lastrun,nsteps,accumulators,stepoffset=0):
 
 
         
-def distvmc(wf,coords,accumulators,nsteps=100,npartitions=2,nsteps_per=20):
+def distvmc(wf,coords,accumulators=None,nsteps=100,npartitions=2,nsteps_per=20):
     """ 
     Args: 
     wf: a wave function object

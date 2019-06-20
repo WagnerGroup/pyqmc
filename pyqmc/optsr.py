@@ -51,8 +51,8 @@ def gradient_descent(wf,coords,pgrad_acc,warmup=10,
             wf.parameters[k]=newparms[k]
         data,newcoords=vmc(wf,coords,accumulators={'pgrad':pgrad_acc}, **vmcoptions)
         df=pd.DataFrame(data)[warmup:]
-        
         en=np.mean(df['pgradtotal'])
+        
         en_std=np.std(df['pgradtotal'])
         
         # Sij matrix with stabilizing diagonal

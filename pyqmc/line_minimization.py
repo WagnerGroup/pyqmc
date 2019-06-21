@@ -2,7 +2,7 @@ import numpy as np
 from numpy import polyfit,linspace,inf
 
       
-def line_minimization(func, params0, line=None, line_min_steps=5, max_step=1, verbose=0, **func_kwargs):
+def line_minimization(func, params0, line=None, line_min_steps=5, max_step=1, verbose=0, shortvmc=20, **func_kwargs):
     """
     Args:
         func: a function that takes in parameters (p0) and returns (value, grad)
@@ -32,6 +32,8 @@ def line_minimization(func, params0, line=None, line_min_steps=5, max_step=1, ve
     line_steps = linspace(0.0,max_step,line_min_steps-1) 
     line_steps[0] = -max_step/line_min_steps # already have current point; need one behind
     line_points = params0 + line*line_steps[:,np.newaxis]
+    func_kwargs.update({'nsteps':shortvmc,'nsteps_per':shortvmc})
+    print(func_kwargs)
     line_data = [ func(p, **func_kwargs) for pidx,p in enumerate(line_points) ]
     if verbose>0: print('{0} vmc done'.format(line_min_steps), 'time', time.process_time()-start)
     line_data.insert(1,(val,grad))

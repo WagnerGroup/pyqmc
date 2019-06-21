@@ -114,8 +114,6 @@ class JastrowSpin:
         u=np.sum(self._bvalues*self.parameters['bcoeff'], axis=(2,1))
 
         u += np.einsum('ijkl,jkl->i', self._avalues, self.parameters['acoeff'])
-        #for i in range(self._mol.natm):
-        #    u += np.einsum('ijkl,kl->i', self._avalues, self.parameters['acoeff'][i])
         return (1,u)
 
 
@@ -158,7 +156,7 @@ class JastrowSpin:
                 grad_all = a.gradient(dinew).reshape(nconf,-1,3)
                 grad_slice = grad_all[:,i,:]
                 delta += c[edown]*grad_slice.T
-                
+
         return delta
 
 
@@ -189,10 +187,6 @@ class JastrowSpin:
         for c,b in zip(self.parameters['bcoeff'],self.b_basis):
             delta += c[edown]*np.sum(b.laplacian(dnewup).reshape(nconf,-1),axis=1)
             delta += c[1+edown]*np.sum(b.laplacian(dnewdown).reshape(nconf,-1),axis=1)
-
-        # a-value component
-        #for c,a in zip(self.parameters['acoeff'],self.a_basis):
-        #    delta += np.einsum('j,ijk->ki', c[:,edown], a.laplacian(dinew).reshape(nconf,-1,3))
 
         for i in range(self._mol.natm):
             for c,a in zip(self.parameters['acoeff'][i],self.a_basis):
@@ -266,11 +260,6 @@ class JastrowSpin:
         b_val = np.sum(self._get_deltab(e,epos)*self.parameters['bcoeff'],
                        axis=(2,1))
         a_val = np.einsum("ijkl,jkl->i",self._get_deltaa(e,epos),self.parameters['acoeff'])
-        #a_val = np.zeros(len(epos))
-        #for i in range(self._mol.natm):
-        #    a_val += np.sum(self._get_deltaa(e,epos)*self.parameters['acoeff'][i],
-        #                    axis=(3,2,1))
-
         return np.exp(b_val + a_val)
 
 
@@ -286,7 +275,6 @@ def test():
     np.random.seed(10)
 
     mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
-#    mol = gto.M(atom='He 0. 0. 0.', basis='cc-pvtz',unit='bohr')
     l = dir(mol)
     nconf=20
     configs=np.random.randn(nconf,np.sum(mol.nelec),3)
@@ -294,8 +282,7 @@ def test():
     abasis=[GaussianFunction(0.2),GaussianFunction(0.4)]
     bbasis=[GaussianFunction(0.2),GaussianFunction(0.4)]
     jastrow=JastrowSpin(mol,a_basis=abasis,b_basis=bbasis)
-    #jastrow.parameters['bcoeff']=np.random.random(jastrow.parameters['bcoeff'].shape)
-    #jastrow.parameters['acoeff']=np.repeat(np.random.random(jastrow.parameters['acoeff'][0].shape)[None,:,:], 2, axis=0)
+    jastrow.parameters['bcoeff']=np.random.random(jastrow.parameters['bcoeff'].shape)
     jastrow.parameters['acoeff']=np.random.random(jastrow.parameters['acoeff'].shape)
     import pyqmc.testwf as testwf
     for key, val in testwf.test_updateinternals(jastrow, configs).items():

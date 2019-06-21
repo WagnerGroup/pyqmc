@@ -114,30 +114,8 @@ class PGradTransform:
         return d
 
 
-def test_transform():
-    from pyscf import gto,scf 
-    import pyqmc
-
-    r=1.54/.529177
-    mol = gto.M(atom='H 0. 0. 0.; H 0. 0. %g'%r, ecp='bfd',basis='bfd_vtz',unit='bohr',verbose=1)
-    mf=scf.RHF(mol).run()
-    wf=pyqmc.slater_jastrow(mol,mf)
-    enacc=pyqmc.EnergyAccumulator(mol)
-    print(list(wf.parameters.keys()))
-    transform=LinearTransform(wf.parameters)
-    x=transform.serialize_parameters(wf.parameters)
-    print(x)
-    print(transform.deserialize(x))
-    configs=pyqmc.initial_guess(mol,10)
-    wf.recompute(configs)
-    pgrad=wf.pgradient()
-    print(transform.serialize_gradients(pgrad))
-
     
 
-if __name__=="__main__":
-    test_transform()
-        
         
 
 

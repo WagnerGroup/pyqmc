@@ -242,21 +242,3 @@ def get_rot(mol,configs,e,at,naip):
 
 
 
-def test():
-    from pyqmc.slateruhf import PySCFSlaterUHF
-    from pyscf import lib, gto, scf
-    
-    mol = gto.M(atom='C 0. 0. 0.',ecp='bfd',basis = 'bfd_vtz')
-    mf = scf.UHF(mol).run()
-
-    nconf=2
-    nelec=np.sum(mol.nelec)
-
-    slater=PySCFSlaterUHF(nconf,mol,mf)
-    configs=np.random.randn(nconf,nelec,3)
-    ecp_val = ecp(mol,configs,slater)
-    print("ecp values:", ecp_val)
-
-if __name__=="__main__":
-    test()
-

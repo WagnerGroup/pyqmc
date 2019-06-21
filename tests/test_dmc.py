@@ -11,6 +11,7 @@ import pytest
 import pyblock.pd_utils as pyblock
 
 def test():
+    """ Ensure that DMC obtains the exact result for a hydrogen atom """
     from pyscf import lib, gto, scf
     from pyqmc.slateruhf import PySCFSlaterUHF
     from pyqmc.jastrowspin import JastrowSpin

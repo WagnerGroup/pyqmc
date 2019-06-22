@@ -7,19 +7,40 @@ from pyqmc.mc import initial_guess
 class OBDMAccumulator:
     """ Return the obdm as an array with indices rho[spin][i][k] = <c_{spin,i}c^+_{spin,j}>
   Args:
+
     mol (Mole): PySCF Mole object.
+
     configs (array): electron positions.
+
     wf (pyqmc wave function object): wave function to evaluate on.
+
     orb_coeff (array): coefficients with size (nbasis,norb) relating mol basis to basis 
       of 1-RDM desired.
+      
     tstep (float): width of the Gaussian to update a walker position for the 
       extra coordinate.
+
+    spin: 0 or 1 for up or down. Defaults to all electrons.
   """
 
-    def __init__(self, mol, orb_coeff, nstep=10, tstep=0.50, warmup=100, naux=500):
+    def __init__(self, mol, orb_coeff, nstep=10, tstep=0.50, warmup=100, naux=500,
+                 spin=None, electrons=None):
         assert (
             len(orb_coeff.shape) == 2
         ), "orb_coeff should be a list of orbital coefficients."
+
+        if not (spin is None):
+            if spin==0:
+                self._electrons=np.arange(0,mol.nelec[0])
+            elif spin==1:
+                self._electrons=np.arange(mol.nelec[0],np.sum(mol.nelec))
+            else:
+                raise ValueError("Spin not equal to 0 or 1")
+        elif not (electrons is None):
+            self._electrons=electrons
+        else: 
+            self._electrons=np.arange(0,np.sum(mol.nelec))
+            
 
         self._orb_coeff = orb_coeff
         self._tstep = tstep
@@ -47,10 +68,10 @@ class OBDMAccumulator:
         }
         acceptance = 0
         naux = self._extra_config.shape[0]
-        nelec = configs.shape[1]
+        nelec = len(self._electrons)
 
         for step in range(self._nstep):
-            e = np.random.randint(0, configs.shape[1])
+            e = np.random.choice(self._electrons)
 
             points = np.concatenate([self._extra_config, configs[:, e, :]])
             ao = self._mol.eval_gto("GTOval_sph", points)

@@ -96,29 +96,6 @@ class MultiplyWF:
 
 
 
-
-def test():
-    from pyscf import lib,gto,scf
-    from pyqmc.jastrow import Jastrow2B
-    from pyqmc.slater import PySCFSlaterRHF
-    nconf=10
-    
-    mol = gto.M(atom='Li 0. 0. 0.; H 0. 0. 1.5', basis='cc-pvtz',unit='bohr')
-    mf = scf.RHF(mol).run()
-    slater=PySCFSlaterRHF(nconf,mol,mf)
-    jastrow=Jastrow2B(nconf,mol)
-    jastrow.parameters['coeff']=np.random.random(jastrow.parameters['coeff'].shape)
-    configs=np.random.randn(nconf,4,3)
-    wf=MultiplyWF(nconf,slater,jastrow)
-    wf.parameters['wf2coeff']=np.ones(len(wf.parameters['wf2coeff']))
-    print(wf.wf2.parameters['coeff'])
-    print(wf.parameters)
-    import pyqmc.testwf as testwf
-    for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
-        print('delta', delta, "Testing gradient",testwf.test_wf_gradient(wf,configs,delta=delta))
-        print('delta', delta, "Testing laplacian", testwf.test_wf_laplacian(wf,configs,delta=delta))
-        print('delta', delta, "Testing pgradient", testwf.test_wf_pgradient(wf,configs,delta=delta))
-    
     
 
 def test_WFmerger():

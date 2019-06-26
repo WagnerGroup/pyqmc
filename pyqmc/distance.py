@@ -66,7 +66,7 @@ class MinimalImageDistance(RawDistance):
     """ Compute distance vectors under a minimal image condition
     using periodic boundary conditions."""
     def __init__(self,latvec):
-        """latvec should be a 3x3 set of lattice vectors
+        """latvec should be a 3x3 set of lattice vectors, each row is a vector
         One strategy:
         * Find reduced basis
         * Find Wigner-Seitz cell
@@ -75,20 +75,49 @@ class MinimalImageDistance(RawDistance):
 
         Can also do something smarter by dividing the unit cell up into pieces that need to be determined or not.
         """ 
+        ortho_tol=1e-10
+        orthogonal=np.dot(latvec[0],latvec[1])<ortho_tol and \
+                        np.dot(latvec[1],latvec[2])<ortho_tol and \
+                        np.dot(latvec[2],latvec[0])<ortho_tol
+        if orthogonal:
+            self.dist_i=self.orthogonal_dist_i
+            print("Orthogonal lattics vectors")
+        else:
+            self.dist_i=self.general_dist_i
+            print("Non-orthogonal lattics vectors")
         self._latvec=latvec
+        self._invvec=np.linalg.inv(latvec)
+        # list of all 26 neighboring cells
+        self.point_list = np.array([m.ravel() for m in np.meshgrid(*[[0,1,2]]*3)]).T[1:]-1
+        # TODO build a minimal list instead of using all 26
 
-    def dist_i(self,configs,vec):
+    def general_dist_i(self,configs,vec):
         """returns a list of electron-electron distances from an electron at position 'vec'
         configs will most likely be [nconfig,electron,dimension], and vec will be [nconfig,dimension]
         """
         d1=vec[:,np.newaxis,:]-configs
+        shifts=np.dot(self.point_list,self._latvec)
+        d1all=d1[np.newaxis,:,:,:]+shifts[:,np.newaxis,np.newaxis,:]
+        dists = np.linalg.norm(d1all, axis=-1)
+        mininds = np.argmin(dists, axis=0)
+        cinds, einds = np.meshgrid(*[np.arange(n) for n in configs.shape[:2]],indexing='ij')
+        return d1all[mininds,cinds,einds]
 
-        
+    def orthogonal_dist_i(self,configs,vec):
+        """Like dist_i, but assuming lattice vectors are orthogonal"""    
+        d1=vec[:,np.newaxis,:]-configs
+        frac_disps=np.dot(d1,self._invvec)
+        frac_disps=(frac_disps+.5)%1-.5
+        return np.dot(frac_disps, self._latvec)
     
 def test():
-    d=MinimalImageDistance(None)
-    configs=np.random.randn(2,4,3)
-    print(d.dist_matrix(configs))
+    configs=np.random.rand(2,4,3)*2
+    vecs=np.diag([2,3,4])
+    s = np.zeros((3,3))
+    s[0,1]=1
+    for i in range(2):
+      d=MinimalImageDistance(vecs+s*i)
+      print(d.dist_matrix(configs))
 
 
 if __name__ == "__main__":

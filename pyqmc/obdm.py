@@ -63,7 +63,7 @@ class OBDMAccumulator:
             "value": np.zeros(
                 (configs.shape[0], self._orb_coeff.shape[1], self._orb_coeff.shape[1])
             ),
-            "norm": np.zeros((configs.shape[0], self._orb_coeff.shape[0])),
+            "norm": np.zeros((configs.shape[0], self._orb_coeff.shape[1])),
             "acceptance":np.zeros(configs.shape[0])
         }
         acceptance = 0

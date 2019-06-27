@@ -88,37 +88,57 @@ class MinimalImageDistance(RawDistance):
         self._latvec=latvec
         self._invvec=np.linalg.inv(latvec)
         # list of all 26 neighboring cells
-        self.point_list = np.array([m.ravel() for m in np.meshgrid(*[[0,1,2]]*3)]).T[1:]-1
-        # TODO build a minimal list instead of using all 26
+        self.point_list = np.array([m.ravel() for m in np.meshgrid(*[[0,1,2]]*3)]).T-1
+        self.shifts=np.dot(self.point_list,self._latvec)
+        # TODO build a minimal list instead of using all 27
 
     def general_dist_i(self,configs,vec):
         """returns a list of electron-electron distances from an electron at position 'vec'
         configs will most likely be [nconfig,electron,dimension], and vec will be [nconfig,dimension]
         """
         d1=vec[:,np.newaxis,:]-configs
-        shifts=np.dot(self.point_list,self._latvec)
-        d1all=d1[np.newaxis,:,:,:]+shifts[:,np.newaxis,np.newaxis,:]
+        d1all=d1[np.newaxis,:,:,:]+self.shifts[:,np.newaxis,np.newaxis,:]
         dists = np.linalg.norm(d1all, axis=-1)
         mininds = np.argmin(dists, axis=0)
         cinds, einds = np.meshgrid(*[np.arange(n) for n in configs.shape[:2]],indexing='ij')
         return d1all[mininds,cinds,einds]
 
     def orthogonal_dist_i(self,configs,vec):
-        """Like dist_i, but assuming lattice vectors are orthogonal"""    
+        """Like dist_i, but assuming lattice vectors are orthogonal
+           It's about 10x faster than the general one checking all 27 lattice points
+        """    
         d1=vec[:,np.newaxis,:]-configs
         frac_disps=np.dot(d1,self._invvec)
         frac_disps=(frac_disps+.5)%1-.5
         return np.dot(frac_disps, self._latvec)
     
 def test():
-    configs=np.random.rand(2,4,3)*2
-    vecs=np.diag([2,3,4])
+    import time
+    configs=np.random.rand(400,80,3)*2
+    latvecs=np.diag([2,3,4])
     s = np.zeros((3,3))
     s[0,1]=1
-    for i in range(2):
-      d=MinimalImageDistance(vecs+s*i)
-      print(d.dist_matrix(configs))
-
+    mid=MinimalImageDistance(latvecs)
+    vec = np.dot(np.random.random((len(configs),3)),latvecs)
+    d1=vec[:,np.newaxis,:]-configs
+    d1norm = np.linalg.norm(d1,axis=-1)
+    start = time.time()
+    gd = mid.general_dist_i(configs, vec)
+    print('general', time.time()-start)
+    start = time.time()
+    od = mid.orthogonal_dist_i(configs, vec)
+    print('orthogonal', time.time()-start)
+    diff = gd-od
+    print('norm diff', np.linalg.norm(diff))
+    gnorm=np.linalg.norm(gd,axis=-1)
+    onorm=np.linalg.norm(od,axis=-1)
+    dist_diff=gnorm-onorm
+    if np.linalg.norm(diff)>1e-12:
+        print('number',np.count_nonzero(diff > 1e-8))
+        print('general\n',gd[dist_diff>1e-8],'\ndist',gnorm[dist_diff>1e-8])
+        print('orthogonal\n',od[dist_diff>1e-8],'\ndist',onorm[dist_diff>1e-8])
+        print(np.round(diff[dist_diff>1e-8],2),'\ndist',
+            np.linalg.norm(diff,axis=-1)[dist_diff>1e-8])
 
 if __name__ == "__main__":
     test()

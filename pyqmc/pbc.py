@@ -18,21 +18,21 @@ def enforce_pbc_orth(lattvecs,init_epos,translation):
 
       wraparound: vector used to bring a given electron back to the simulation cell written in terms of lattvecs: (nconfig,3)
     '''
-    # Checks lattice vecs orthogonality. Note: assuming latt vecs are columns, [[v1],[v2],[v3]]=lattvecs.T
-    orth=np.einsum('ij,jk->ik',lattvecs.T,lattvecs)
+    # Checks lattice vecs orthogonality. Note: assuming latt vecs are rows, [[v1],[v2],[v3]]=lattvecs.T
+    orth=np.einsum('ij,jk->ik',lattvecs,lattvecs.T)
     np.fill_diagonal(orth,0)
     assert np.all(orth==0), "Using enforce_pbc_orth() but lattice vectors are not orthogonal."
     
     # Constructs p.v/|v|^2
     #  p is matrix with electronic positions
     #  v is diag matrix with lattice vecs
-    nlattvecs2=np.einsum('ij,j->ij',lattvecs,1/np.linalg.norm(lattvecs,axis=0)**2)
-    trans_lvecs_coord=np.einsum('ij,jk->ik',translation,nlattvecs2)
+    nlattvecs2=np.einsum('ij,i->ij',lattvecs,1/np.linalg.norm(lattvecs,axis=1)**2)
+    trans_lvecs_coord=np.einsum('ij,kj->ik',translation,nlattvecs2)
 
     # Finds position inside box and wraparound vectors (in lattice vector coordinates) 
     tmp=np.divmod(trans_lvecs_coord,1)
     wraparound=tmp[0]
-    final_epos=np.einsum('ij,kj->ki',lattvecs,tmp[1])
+    final_epos=np.einsum('ji,kj->ki',lattvecs,tmp[1])
 
     return final_epos, wraparound 
 
@@ -64,7 +64,7 @@ def test_orth():
     #         of lattice vectors not along ex,ey,ez.
     #         We do controlled comparison between
     #         initial configs and final ones.
-    lattvecs=np.array([[1,0.5,0],[-0.75,2/3.,0],[0,0,2]])
+    lattvecs=np.array([[1,-0.75,0],[0.5,2/3.,0],[0,0,2]])
     epos=np.zeros((6,3))
     trans=np.array([[0.1,0.1,0.1],[1.1,-0.825,0.2],[0.525,0.7,0.],[1.8,-0.1,0.],[0.2,0.2,-0.2],[-0.375,0.125,-0.1]])
     check_final=np.array([[0.1,0.1,0.1],[0.1,-0.075,0.2],[0.025,1/30,0.],[0.3,-1/60,0.],[0.2,0.2,1.8],[1.125,1/24,1.9]])
@@ -84,8 +84,8 @@ def test_orth():
     #         is out of the simulation box for set
     #         of lattice vectors not along ex,ey,ez.
     nconf=50
-    lattvecs=np.array([[np.sqrt(2)/2,-np.sqrt(2)/2,0],[np.sqrt(2)/2,np.sqrt(2)/2,0],[0,0,2]])    
-    diag=np.dot(lattvecs.T,lattvecs)
+    lattvecs=np.array([[np.sqrt(2)/2,-np.sqrt(2)/2,0],[1,1,0],[0,0,2]])    
+    diag=np.dot(lattvecs,lattvecs.T)
     rot=np.linalg.inv(lattvecs.T)
     # Old config
     epos=np.random.random((nconf,3))
@@ -96,8 +96,8 @@ def test_orth():
     trans=epos+step*(np.random.random((nconf,3))-0.5*np.ones((nconf,3)))
     final_trans,wrap = enforce_pbc_orth(lattvecs,epos,trans)
     # Configs in lattice vectors basis
-    nlv2=np.einsum('ij,j->ij',lattvecs,1/np.linalg.norm(lattvecs,axis=0)**2)
-    aa=np.einsum('ij,jk->ik',final_trans,nlv2)
+    nlv2=np.einsum('ij,i->ij',lattvecs,1/np.linalg.norm(lattvecs,axis=1)**2)
+    aa=np.einsum('ij,kj->ik',final_trans,nlv2)
     test3 = np.all(aa<1) & np.all(aa>=0)
     print('Test 3 success:',test2)
     

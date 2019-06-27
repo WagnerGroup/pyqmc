@@ -63,15 +63,31 @@ class LinearTransform:
 
 class PGradTransform:
     """   """
-    def __init__(self,enacc,transform):
+    def __init__(self,enacc,transform,nodal_cutoff=1e-6):
         self.enacc=enacc
         self.transform=transform
+        self.nodal_cutoff=nodal_cutoff
+
+    def _node_cut(self,configs,wf):
+        """ Return true if a given configuration is within nodal_cutoff 
+        of the node """
+        ne=configs.shape[1]
+        d2=0.0
+        for e in range(ne):
+            d2+=np.sum(wf.gradient(e,configs[:,e,:])**2,axis=0)
+        r=1./(d2*ne*ne)
+        return r < self.nodal_cutoff**2
+
 
     def __call__(self,configs,wf):
         pgrad=wf.pgradient()
         d=self.enacc(configs,wf)
         energy = d['total']
         dp=self.transform.serialize_gradients(pgrad)
+        node_cut=self._node_cut(configs,wf)
+        dp[node_cut,:]=0.0
+        #print('number cut off',np.sum(node_cut))
+        
         d['dpH'] = np.einsum('i,ij->ij',energy,dp)
         d['dppsi'] = dp
         d['dpidpj'] = np.einsum('ij,ik->ijk',dp,dp)
@@ -84,39 +100,22 @@ class PGradTransform:
         energy = den['total']
         dp=self.transform.serialize_gradients(pgrad)
 
+        node_cut=self._node_cut(configs,wf)
+        dp[node_cut,:]=0.0
+        print('number cut off',np.sum(node_cut))
+
         d={}
         for k,it in den.items():
             d[k]=np.mean(it,axis=0)
         d['dpH'] = np.einsum('i,ij->j',energy,dp)/nconf
         d['dppsi'] = np.mean(dp,axis=0)
         d['dpidpj'] = np.einsum('ij,ik->jk',dp,dp)/nconf
+
         return d
 
 
-def test_transform():
-    from pyscf import gto,scf 
-    import pyqmc
-
-    r=1.54/.529177
-    mol = gto.M(atom='H 0. 0. 0.; H 0. 0. %g'%r, ecp='bfd',basis='bfd_vtz',unit='bohr',verbose=1)
-    mf=scf.RHF(mol).run()
-    wf=pyqmc.slater_jastrow(mol,mf)
-    enacc=pyqmc.EnergyAccumulator(mol)
-    print(list(wf.parameters.keys()))
-    transform=LinearTransform(wf.parameters)
-    x=transform.serialize_parameters(wf.parameters)
-    print(x)
-    print(transform.deserialize(x))
-    configs=pyqmc.initial_guess(mol,10)
-    wf.recompute(configs)
-    pgrad=wf.pgradient()
-    print(transform.serialize_gradients(pgrad))
-
     
 
-if __name__=="__main__":
-    test_transform()
-        
         
 
 

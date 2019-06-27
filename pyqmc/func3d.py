@@ -239,14 +239,4 @@ def test_func3d_laplacian(bf, delta=1e-5):
     normerror = np.linalg.norm(lap-numeric)
     return (maxerror,normerror)
 
-def test(): 
-    test_functions = {'Pade':PadeFunction(0.2), 'Gaussian':GaussianFunction(0.4), 'ExpCusp':ExpCuspFunction(0.4,0.6)}
-    for name, func in test_functions.items():
-        for delta in [1e-3,1e-4,1e-5,1e-6,1e-7]:
-            print(name, 'delta', delta, "Testing gradient", test_func3d_gradient(func,delta=delta))
-            print(name, 'delta', delta, "Testing laplacian", test_func3d_laplacian(func,delta=delta))
-
-            
-if __name__=="__main__":
-    test()
 

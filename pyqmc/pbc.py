@@ -1,15 +1,13 @@
 import numpy as np
 
 
-def enforce_pbc_orth(lattvecs,init_epos,translation):
+def enforce_pbc_orth(lattvecs,epos):
     '''
     Args:
 
       lattvecs: orthogonal lattice vectors defining 3D torus: (3,3)
 
-      init_epos: initial electron coordinates: (nconfig,3)
-
-      translation: attempted new electron coordinates: (nconfig,3)
+      init_epos: attempted new electron coordinates: (nconfig,3)
 
     Returns:
     
@@ -26,10 +24,10 @@ def enforce_pbc_orth(lattvecs,init_epos,translation):
     #  p is matrix with electronic positions
     #  v is diag matrix with lattice vecs
     nlattvecs2=np.einsum('ij,i->ij',lattvecs,1/np.linalg.norm(lattvecs,axis=1)**2)
-    trans_lvecs_coord=np.einsum('ij,kj->ik',translation,nlattvecs2)
+    epos_lvecs_coord=np.einsum('ij,kj->ik',epos,nlattvecs2)
 
     # Finds position inside box and wraparound vectors (in lattice vector coordinates) 
-    tmp=np.divmod(trans_lvecs_coord,1)
+    tmp=np.divmod(epos_lvecs_coord,1)
     wraparound=tmp[0]
     final_epos=np.einsum('ji,kj->ki',lattvecs,tmp[1])
 

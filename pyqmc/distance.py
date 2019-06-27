@@ -112,33 +112,3 @@ class MinimalImageDistance(RawDistance):
         frac_disps=(frac_disps+.5)%1-.5
         return np.dot(frac_disps, self._latvec)
     
-def test():
-    import time
-    configs=np.random.rand(400,80,3)*2
-    latvecs=np.diag([2,3,4])
-    s = np.zeros((3,3))
-    s[0,1]=1
-    mid=MinimalImageDistance(latvecs)
-    vec = np.dot(np.random.random((len(configs),3)),latvecs)
-    d1=vec[:,np.newaxis,:]-configs
-    d1norm = np.linalg.norm(d1,axis=-1)
-    start = time.time()
-    gd = mid.general_dist_i(configs, vec)
-    print('general', time.time()-start)
-    start = time.time()
-    od = mid.orthogonal_dist_i(configs, vec)
-    print('orthogonal', time.time()-start)
-    diff = gd-od
-    print('norm diff', np.linalg.norm(diff))
-    gnorm=np.linalg.norm(gd,axis=-1)
-    onorm=np.linalg.norm(od,axis=-1)
-    dist_diff=gnorm-onorm
-    if np.linalg.norm(diff)>1e-12:
-        print('number',np.count_nonzero(diff > 1e-8))
-        print('general\n',gd[dist_diff>1e-8],'\ndist',gnorm[dist_diff>1e-8])
-        print('orthogonal\n',od[dist_diff>1e-8],'\ndist',onorm[dist_diff>1e-8])
-        print(np.round(diff[dist_diff>1e-8],2),'\ndist',
-            np.linalg.norm(diff,axis=-1)[dist_diff>1e-8])
-
-if __name__ == "__main__":
-    test()

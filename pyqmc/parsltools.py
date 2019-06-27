@@ -43,6 +43,11 @@ def distvmc(wf,coords,accumulators=None,nsteps=100,npartitions=2,nsteps_per=20):
 
     """
     
+    if accumulators is None:
+        accumulators={}
+        if verbose:
+            print("WARNING: running VMC with no accumulators")
+            
     allruns=[]
     niterations=int(nsteps/nsteps_per)
     coord=np.split(coords,npartitions)

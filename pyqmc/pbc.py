@@ -53,11 +53,7 @@ def enforce_pbc(lattvecs,epos):
     '''
     # Writes epos in terms of (lattice vecs) fractional coordinates
     recpvecs=np.linalg.inv(lattvecs)
-    print(np.einsum('ij,jk->ik',lattvecs,recpvecs))
     epos_lvecs_coord=np.einsum('ij,jk->ik',epos,recpvecs)  
-    print('->\n',lattvecs)
-    print(epos) 
-    print(epos_lvecs_coord)
     
     # Finds position inside box and wraparound vectors (in lattice vector coordinates) 
     tmp=np.divmod(epos_lvecs_coord,1)

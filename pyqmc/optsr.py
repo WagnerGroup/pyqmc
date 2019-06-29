@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import json
 def gradient_descent(wf,coords,pgrad_acc,warmup=10,
-        step=0.5,eps=0.1,maxiters=50,
+        step=0.1,eps=0.1,maxiters=50,
         vmc=None,vmcoptions=None,
         datafile=None,verbose=2,wfsave=None):
     """Optimizes energy using gradient descent with stochastic reconfiguration.

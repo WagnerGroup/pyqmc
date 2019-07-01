@@ -1,8 +1,7 @@
 import numpy as np
 
-
-def enforce_pbc_orth(lattvecs,epos):
-    '''
+def enforce_pbc(lattvecs,epos):
+    '''Enforces periodic boundary conditions on a set of configs.
     Args:
 
       lattvecs: orthogonal lattice vectors defining 3D torus: (3,3)
@@ -15,17 +14,10 @@ def enforce_pbc_orth(lattvecs,epos):
 
       wraparound: vector used to bring a given electron back to the simulation cell written in terms of lattvecs: (nconfig,3)
     '''
-    # Checks lattice vecs orthogonality. Note: assuming latt vecs are rows, [[v1],[v2],[v3]]=lattvecs.T
-    orth=np.einsum('ij,jk->ik',lattvecs,lattvecs.T)
-    np.fill_diagonal(orth,0)
-    assert np.all(orth==0), "Using enforce_pbc_orth() but lattice vectors are not orthogonal."
+    # Writes epos in terms of (lattice vecs) fractional coordinates
+    recpvecs=np.linalg.inv(lattvecs)
+    epos_lvecs_coord=np.einsum('ij,jk->ik',epos,recpvecs)  
     
-    # Constructs p.v/|v|^2
-    #  p is matrix with electronic positions
-    #  v is diag matrix with lattice vecs
-    nlattvecs2=np.einsum('ij,i->ij',lattvecs,1/np.linalg.norm(lattvecs,axis=1)**2)
-    epos_lvecs_coord=np.einsum('ij,kj->ik',epos,nlattvecs2)
-
     # Finds position inside box and wraparound vectors (in lattice vector coordinates) 
     tmp=np.divmod(epos_lvecs_coord,1)
     wraparound=tmp[0]

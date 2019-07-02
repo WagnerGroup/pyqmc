@@ -45,8 +45,10 @@ def limdrift_cutoff(g,tau,cutoff=1):
     return mc.limdrift(g,cutoff)*tau
 
 
-def dmc(wf,configs,weights=None, nsteps=1000,tstep=0.02,branchtime=5,accumulators=None,ekey=('energy','total'),verbose=False,
-        drift_limiter=limdrift, stepoffset=0):
+def dmc(wf,configs,weights=None, nsteps=1000,tstep=0.02,branchtime=5, stepoffset=0,
+        verbose=False, **dmc_prop_kwargs):
+        #accumulators=None,ekey=('energy','total'),
+        #branchcut_start=3, branchcut_stop=6, drift_limiter=limdrift):
     """
     Run DMC (not parallel)
     
@@ -81,7 +83,7 @@ def dmc(wf,configs,weights=None, nsteps=1000,tstep=0.02,branchtime=5,accumulator
       weights: The final weights from this calculation
       
     """
-    assert accumulators is not None, "Need an energy accumulator for DMC"
+    #assert accumulators is not None, "Need an energy accumulator for DMC"
     nconfig, nelec=configs.shape[0:2]
     if weights is None:
         weights = np.ones(nconfig)
@@ -92,17 +94,17 @@ def dmc(wf,configs,weights=None, nsteps=1000,tstep=0.02,branchtime=5,accumulator
     df=[]
     for step in range(npropagate):
         if verbose:
-            print("branch step",step)
-        df_,configs,weights = dmc_propagate(wf,configs,weights,
-                tstep,nsteps=branchtime,accumulators=accumulators,
-                stepoffset=branchtime*step+stepoffset,ekey=ekey,
-                verbose=verbose, drift_limiter=drift_limiter)
+            print("branch step",step, flush=True)
+        df_,configs,weights = dmc_propagate(wf,configs,weights, tstep,
+                nsteps=branchtime, stepoffset=branchtime*step+stepoffset, verbose=verbose,
+                **dmc_prop_kwargs)
+                #accumulators=accumulators,ekey=ekey, drift_limiter=drift_limiter)
         df.extend(df_)
         configs, weights = branch(configs, weights)
     return df, configs, weights
     
 
-def dmc_propagate(wf,configs,weights,tstep,nsteps=5,accumulators=None,ekey=('energy','total'), verbose=False, drift_limiter=limdrift,stepoffset=0):
+def dmc_propagate(wf,configs,weights,tstep,nsteps=5,accumulators=None,ekey=('energy','total'), verbose=False, branchcut_start=5, branchcut_stop=10, drift_limiter=limdrift,stepoffset=0):
     """
     Propagate DMC without branching
     
@@ -141,6 +143,7 @@ def dmc_propagate(wf,configs,weights,tstep,nsteps=5,accumulators=None,ekey=('ene
 
     eloc = accumulators[ekey[0]](configs, wf)[ekey[1]]
     eref_mean = np.mean(weights*eloc)/np.mean(weights)
+    eref_sigma = np.mean(weights*eloc/np.mean(weights))
     eref=eref_mean
     df=[]
     for step in range(nsteps):
@@ -171,7 +174,8 @@ def dmc_propagate(wf,configs,weights,tstep,nsteps=5,accumulators=None,ekey=('ene
         elocold = eloc.copy()
         energydat=accumulators[ekey[0]](configs, wf)
         eloc = energydat[ekey[1]] 
-        wmult=np.exp( -tstep*0.5*(elocold+eloc-2*eref) )
+        tdamp = stabilize_weights(weights, eloc, elocold, eref, eref_sigma, branchcut_start, branchcut_stop)
+        wmult=np.exp( -tstep*0.5*tdamp*(elocold+eloc-2*eref) )
         wmult[wmult > 2.0] = 2.0
         weights*=wmult
         wavg = np.mean(weights)
@@ -201,6 +205,36 @@ def dmc_propagate(wf,configs,weights,tstep,nsteps=5,accumulators=None,ekey=('ene
         df.append(avg)
     return df, configs, weights
     
+def stabilize_weights(weights, elocnew, elocold, eref, erefsigma, branchcut_start, branchcut_stop):
+    """
+    Stabilizes weights by scaling down the effective tstep if the local energy is too far from eref.
+    The damping factor is 
+        1 if eref-eloc < branchcut_start*sigma 
+        0 if eref-eloc > branchcut_stop*sigma  
+        decreases linearly inbetween.
+
+    Args:
+      weights: (nconfigs,) array
+        walker weights
+      elocnew: (nconfigs,) array
+        current local energy of each walker
+      elocold: (nconfigs,) array
+        previous local energy of each walker
+      eref: scalar
+        reference energy that fixes normalization
+      branchcut_start: scalar
+        number of sigmas to start damping tstep
+      branchcut_stop: scalar
+        number of sigmas where tstep becomes zero
+    """
+    assert branchcut_stop>branchcut_start, "stabilize weights requires branchcut_stop>branchcut_start. Invalid branchcut_stop={0}, branchcut_start={1}".format(branchcut_stop, branchcut_start)
+    eloc = np.stack([elocnew,elocold])
+    sigma = erefsigma #np.mean(weights[np.newaxis]*eloc/np.mean(weights))
+    fbet = np.amax((eref-eloc)/sigma, axis=0)
+    tdamp = np.clip((1-(fbet-branchcut_start))/(branchcut_stop-branchcut_start), 0, 1)
+    return tdamp
+    
+
 def branch(configs, weights):
     """
     Perform branching on a set of walkers  by stochastic reconfiguration

@@ -102,7 +102,7 @@ class PGradTransform:
 
         node_cut=self._node_cut(configs,wf)
         dp[node_cut,:]=0.0
-        #print('number cut off',np.sum(node_cut))
+        print('number cut off',np.sum(node_cut))
 
         d={}
         for k,it in den.items():

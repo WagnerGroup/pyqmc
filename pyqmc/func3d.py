@@ -149,21 +149,78 @@ class PolyPadeFunction:
     def value(self, rvec,r):
         """Returns 
         Parameters:
-          rvec: (nconf,3) vector
+          rvec: (nconf,3) 
+          r: (nconf,) 
+              magnitude of rvec
         Returns:
           func: (1-p(r/rcut))/(1+beta*p(r/rcut))
         """
-        #r = np.linalg.norm(rvec, axis=-1)
-        y = r/self.parameters['rcut']
-        #mask=y<=1
-        #func=np.zeros(r.shape)
-        p=y-y*y+y*y*y/3
-        #func=( - (y-y**2+y**3/3) / ( 1 + self.parameters['gamma'] * (y-y**2+y**3/3) ) + 1/(3+self.parameters['gamma']) )
-        func=( - p/(1+self.parameters['gamma']*p) + 1/(3+self.parameters['gamma']) ) 
-        func[y>1]=0.
+        z = r/self.parameters['rcut']
+        p=z*z*(6-8*z+3*z*z)
+        func=(1 - p)/(1+self.parameters['beta']*p)
+        func[z>1]=0.
         return func
         
+    def gradient(self, rvec):
+        """
+        Parameters:
+          rvec: (nconf,3) 
+        Returns:
+          grad: (nconf,3)
+        """
+        r = np.linalg.norm(rvec, axis=-1, keepdims=True)
+        z = r/self.parameters['rcut']
+        p=z*z*(6-8*z+3*z*z)
+        dpdz=12*z*(z*z-2*z+1)
+        dbdp = -(1+self.parameters['beta'])/(1+self.parameters['beta']*p)**2
+        dzdx = rvec/(r*self.parameters['rcut'])
+        func = dbdp*dpdz*dzdx
+        func[np.outer(z>1,[True]*3)] = 0 
+        return func
+
+    def laplacian(self, rvec):
+        """
+        Parameters:
+          rvec: (nconf,3) 
+        Returns:
+          lapl: (nconf,3) 
+              returns components of laplacian d^2/dx_i^2 separately
+        """
+        r = np.linalg.norm(rvec, axis=-1, keepdims=True)
+        z = r/self.parameters['rcut']
+        p=z*z*(6-8*z+3*z*z)
+        dbdp = -(1+self.parameters['beta'])/(1+self.parameters['beta']*p)**2
+        dpdz = 12*z*(z*z-2*z+1)
+        dzdx = rvec/(r*self.parameters['rcut'])
+        #d2pdz2=12*(3*z*z-4*z+1)
+        #d2bdp2 = 2*self.parameters['beta']*(1+self.parameters['beta'])/(1+self.parameters['beta']*p)**3
+        #d2zdx2 = (1-(rvec/r)**2)/(r*self.parameters['rcut'])
+        d2pdz2_over_dpdz = (3*z-1)/(z*(z-1))
+        d2bdp2_over_dbdp = -2*self.parameters['beta']/(1+self.parameters['beta']*p)
+        d2zdx2_over_dzdx = (1-(rvec/r)**2)/rvec
+        lapl = dbdp*dpdz*dzdx*(d2bdp2_over_dbdp*dpdz*dzdx + d2pdz2_over_dpdz*dzdx + d2zdx2_over_dzdx)
+        lapl[np.outer(z>1,[True]*3)] = 0 
+        return lapl
     
+    def pgradient(self, rvec):
+        """ Returns gradient of self.value with respect to all parameters
+        Parameters:
+          rvec: (nconf,3) 
+        Returns:
+          paramderivs: dictionary {'rcut':d/drcut,'beta':d/dbeta}
+        """
+        r = np.linalg.norm(rvec, axis=-1)
+        zz = r/self.parameters['rcut']
+        mask = zz<1
+        z = zz[mask]
+        p=z*z*(6-8*z+3*z*z)
+        dbdp = -(1+self.parameters['beta'])/(1+self.parameters['beta']*p)**2
+        dpdz = 12*z*(z*z-2*z+1)
+        pderiv={'rcut':np.zeros(r.shape),'gamma':np.zeros(r.shape)}
+        pderiv['rcut'][mask] = dbdp*dpdz*(-z/self.parameters['rcut'])
+        pderiv['beta'][mask] = -p*(1-p)/(1+self.parameters['beta']*p)**2 
+        return pderiv
+
 class ExpCuspFunction:
     """
     :math:`b(r) = -\frac{p(r/r_{cut})}{1+\gamma*p(r/r_{cut})} + \frac{1}{3+\gamma}` 

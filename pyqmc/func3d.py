@@ -132,6 +132,37 @@ class PadeFunction:
         akderiv = 2*a/(1+a)**3 * r
         return {'alphak':akderiv}
 
+class PolyPadeFunction:
+    """
+    :math:`b(r) = \frac{1-p(z)}{1+\beta p(z)}`
+    :math:`z = r/r_{\rm cut}`
+    where 
+    :math:`p(z) = 6z^2 - 8z^3 + 3z^4`
+    This function is positive at small r, decreasing to zero at r=rcut, being cutoff to 
+    zero for r>rcut.
+    """
+    def __init__(self, beta, rcut):
+        self.parameters={}
+        self.parameters['beta'] = beta
+        self.parameters['rcut'] = rcut
+
+    def value(self, rvec,r):
+        """Returns 
+        Parameters:
+          rvec: (nconf,3) vector
+        Returns:
+          func: (1-p(r/rcut))/(1+beta*p(r/rcut))
+        """
+        #r = np.linalg.norm(rvec, axis=-1)
+        y = r/self.parameters['rcut']
+        #mask=y<=1
+        #func=np.zeros(r.shape)
+        p=y-y*y+y*y*y/3
+        #func=( - (y-y**2+y**3/3) / ( 1 + self.parameters['gamma'] * (y-y**2+y**3/3) ) + 1/(3+self.parameters['gamma']) )
+        func=( - p/(1+self.parameters['gamma']*p) + 1/(3+self.parameters['gamma']) ) 
+        func[y>1]=0.
+        return func
+        
     
 class ExpCuspFunction:
     """

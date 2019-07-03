@@ -91,11 +91,11 @@ def dmc(wf,configs,weights=None, nsteps=1000,tstep=0.02,branchtime=5, stepoffset
     
     npropagate = int(np.ceil(nsteps/branchtime))
     df=[]
+    eloc = accumulators[ekey[0]](configs, wf)[ekey[1]]
+    esigma = np.std(weights*eloc/np.mean(weights))
     for step in range(npropagate):
         if verbose:
             print("branch step",step, flush=True)
-        eloc = accumulators[ekey[0]](configs, wf)[ekey[1]]
-        esigma = np.std(weights*eloc/np.mean(weights))
         df_,configs,weights = dmc_propagate(wf,configs,weights, tstep,
                 branchcut_start*esigma, branchcut_stop*esigma,
                 nsteps=branchtime, stepoffset=branchtime*step+stepoffset, verbose=verbose,

@@ -105,8 +105,8 @@ if __name__ == "__main__":
 
 
     #Set up calculation and 
-    ncore = 4
-    nconf = 400
+    ncore = 2
+    nconf = 800
     configs = pyqmc.initial_guess(sys["mol"], nconf)
     df, configs = vmc(
         sys["wf"], configs, accumulators={}, nsteps=40, nsteps_per=40, npartitions=ncore
@@ -116,7 +116,7 @@ if __name__ == "__main__":
         sys["wf"],
         configs,
         pyqmc.gradient_generator(sys['mol'], sys['wf']),
-        maxiters=20,
+        maxiters=5,
         vmc=vmc,
         vmcoptions=dict(npartitions=ncore, nsteps=100),
     )

@@ -1,7 +1,5 @@
 import numpy as np
 import pandas as pd
-import json
-import itertools
 import scipy
 
 
@@ -34,6 +32,7 @@ def line_minimization(
     update=sr_update,
     update_kws=None,
     verbose=2,
+    npts=5,
 ):
     """Optimizes energy using gradient descent with stochastic reconfiguration.
 
@@ -88,10 +87,7 @@ def line_minimization(
         df = pd.DataFrame(data)[warmup:]
         nsteps = len(df)
         en = np.mean(df["pgradtotal"])
-
         en_std = np.std(df["pgradtotal"])
-
-        # Sij matrix with stabilizing diagonal
         dpH = np.mean(df["pgraddpH"], axis=0)
         dp = np.mean(df["pgraddppsi"], axis=0)
         dpdp = np.mean(df["pgraddpidpj"], axis=0)
@@ -124,8 +120,8 @@ def line_minimization(
         xfit = []
         yfit = []
         xfit.append(0.0)
-        yfit.append(np.linalg.norm(pgrad) ** 2)
-        npts = 8
+        #yfit.append(np.linalg.norm(pgrad) ** 2)
+        yfit.append(en)
         steps = np.linspace(0, steprange, npts)
         steps[0] = -steprange / npts
 
@@ -136,7 +132,8 @@ def line_minimization(
 
             print("descent step", step, enp, en_stdp, flush=True)
             xfit.append(step)
-            yfit.append(np.linalg.norm(pgradp) ** 2)
+            #yfit.append(np.linalg.norm(pgradp) ** 2)
+            yfit.append(enp)
             datatest.append(
                 {
                     "en": enp,
@@ -153,13 +150,26 @@ def line_minimization(
         print("polynomial fit", p)
         est_min = -p[1] / (2 * p[0])
         print("estimated minimum", est_min, flush=True)
-        if est_min > step:
-            est_min = step
-        if est_min < 0:
-            est_min = 0.0
+        minstep=np.min(xfit)
+        if est_min > steprange and p[0] > 0: #minimum past the search radius
+            est_min=steprange
+        if est_min < minstep and p[0] > 0:  #mimimum behind the search radius
+            est_min=minstep
+        if p[0] < 0:
+            plin=np.polyfit(xfit,yfit,1)
+            if plin[0] < 0:
+                est_min=steprange
+            if plin[0] > 0:
+                est_min=minstep
+        print("estimated minimum adjusted",est_min,flush=True)
+        
         x0 += update(pgrad, Sij, est_min, **update_kws)
 
         pd.DataFrame(datagrad).to_json(dataprefix + "grad.json")
         pd.DataFrame(datatest).to_json(dataprefix + "line.json")
+
+    newparms = pgrad_acc.transform.deserialize(x0)
+    for k in newparms:
+        wf.parameters[k] = newparms[k]
 
     return wf, datagrad, datatest

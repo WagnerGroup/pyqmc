@@ -4,7 +4,6 @@ import os
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
-import sys
 import parsl
 from parsl.app.app import python_app
 
@@ -22,7 +21,6 @@ def vmcparsl(wf,lastrun,nsteps,accumulators,stepoffset=0):
     import copy
     import numpy as np
     
-    print("running")
     df,coords=vmc(copy.copy(wf),np.asarray(lastrun[1]).copy(),
                  nsteps=nsteps,
                  accumulators=copy.copy(accumulators),
@@ -31,7 +29,7 @@ def vmcparsl(wf,lastrun,nsteps,accumulators,stepoffset=0):
 
 
         
-def distvmc(wf,coords,accumulators=None,nsteps=100,npartitions=2,nsteps_per=20):
+def distvmc(wf,coords,accumulators=None,nsteps=100,npartitions=2,nsteps_per=None,sleeptime=5):
     """ 
     Args: 
     wf: a wave function object
@@ -42,6 +40,8 @@ def distvmc(wf,coords,accumulators=None,nsteps=100,npartitions=2,nsteps_per=20):
 
 
     """
+    if nsteps_per is None:
+        nsteps_per=nsteps
     
     if accumulators is None:
         accumulators={}
@@ -63,17 +63,15 @@ def distvmc(wf,coords,accumulators=None,nsteps=100,npartitions=2,nsteps_per=20):
     import pandas as pd
     import time
     while True:
-        print("Job done:",[r.done() for r in  allruns])
+        print("Job done:",[r.done() for r in  allruns],flush=True)
         df=[]
         done=[]
         for r in allruns:
             if r.done():
                 df.extend(r.result()[0])
-        pd.DataFrame(df).to_json("data.json")
-        sys.stdout.flush()
         if np.all([r.done() for r in  allruns]):
             break
-        time.sleep(10)
+        time.sleep(sleeptime)
 
     coords=np.asarray(np.concatenate([x.result()[1] for x in allruns[-npartitions:]]))
     

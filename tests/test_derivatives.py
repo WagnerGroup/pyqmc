@@ -44,8 +44,11 @@ def test_func3d():
     """
     Ensure that the 3-dimensional functions correctly compute their gradient and laplacian
     """
-    from pyqmc.func3d import PadeFunction,GaussianFunction,test_func3d_gradient,test_func3d_laplacian
-    test_functions = {'Pade':PadeFunction(0.2), 'Gaussian':GaussianFunction(0.4)}
+    from pyqmc.func3d import PadeFunction,PolyPadeFunction,GaussianFunction,ExpCuspFunction,test_func3d_gradient,test_func3d_laplacian
+    test_functions = {'Pade':PadeFunction(0.2), 
+                      'PolyPade':PolyPadeFunction(2.0,1.5), 
+                      'ExpCusp':ExpCuspFunction(2.0,1.5), 
+                      'Gaussian':GaussianFunction(0.4)}
     delta=1e-6
     epsilon=1e-5
     

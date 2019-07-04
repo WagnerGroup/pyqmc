@@ -157,12 +157,10 @@ def test():
     nconf=5000
     wf=PySCFSlaterRHF(mol,mf)
     coords = initial_guess(mol,nconf) 
-    def dipole(coords,wf):
-        return {'vec':np.sum(coords[:,:,:],axis=1) } 
 
     import time
     tstart=time.process_time()
-    df,coords=vmc(wf,coords,nsteps=100,accumulators={'energy':EnergyAccumulator(mol), 'dipole':dipole } )
+    df,coords=vmc(wf,coords,nsteps=100,accumulators={'energy':EnergyAccumulator(mol) } )
     tend=time.process_time()
     print("VMC took",tend-tstart,"seconds")
 
@@ -170,7 +168,6 @@ def test():
     df.to_csv("data.csv")
     warmup=30
     print('mean field',mf.energy_tot(),'vmc estimation', np.mean(df['energytotal'][warmup:]),np.std(df['energytotal'][warmup:]))
-    print('dipole',np.mean(np.asarray(df['dipolevec'][warmup:]),axis=0))
     
     
 def test_compare_init_guess():

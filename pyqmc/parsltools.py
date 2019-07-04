@@ -80,7 +80,13 @@ def distvmc(wf,coords,accumulators=None,nsteps=100,npartitions=2,nsteps_per=20):
     return df,coords
 
         
-                
+def clean_pyscf_objects(mol,mf):
+    mol.output=None
+    mol.stdout=None
+    mf.output=None
+    mf.stdout=None
+    mf.chkfle=None
+    return mol,mf
 
 
 def test():
@@ -119,11 +125,7 @@ def test():
     mol=gto.M(atom='H 0. 0. 0.; H 0. 0. 2.0',unit='bohr',
                 ecp='bfd', basis='bfd_vtz')
     mf = scf.RHF(mol).run()
-    mol.output=None
-    mol.stdout=None
-    mf.output=None
-    mf.stdout=None
-    mf.chkfile=None
+    mol,mf=clean_pyscf_object(mol,mf)
     from pyqmc import ExpCuspFunction,GaussianFunction,MultiplyWF,PySCFSlaterRHF,JastrowSpin,initial_guess,EnergyAccumulator
     from pyqmc.accumulators import PGradTransform,LinearTransform
     

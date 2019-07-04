@@ -77,9 +77,9 @@ def gradient_descent(wf,coords,pgrad_acc,warmup=10,
     data['totalen_err'].append(en_std/np.sqrt(nsteps))
     if verbose > 1:
         print('p =',x0)
-        print('grad =',pgrad)
+        print('grad =',pgrad,flush=True)
     if verbose > 0:
-        print('|grad|=%.6f'%np.linalg.norm(pgrad),'E=%.5f+-%.5f'%(en,en_std/np.sqrt(nsteps)))
+        print('|grad|=%.6f'%np.linalg.norm(pgrad),'E=%.5f+-%.5f'%(en,en_std/np.sqrt(nsteps)),flush=True)
     
     # Gradient descent cycles
     for it in range(maxiters):
@@ -92,7 +92,7 @@ def gradient_descent(wf,coords,pgrad_acc,warmup=10,
             for k,gradient in pgrad_k.items():
                 print('rms gradient for', k,np.linalg.norm(gradient))
         if verbose > 0:
-            print('|grad|=%.6f'%np.linalg.norm(pgrad),'E=%.5f+-%.5f'%(en,en_std/np.sqrt(nsteps)))
+            print('|grad|=%.6f'%np.linalg.norm(pgrad),'E=%.5f+-%.5f'%(en,en_std/np.sqrt(nsteps)),flush=True)
             
         data['iter'].append(it+1)
         data['params'].append(x0.copy())

@@ -63,7 +63,7 @@ class LinearTransform:
 
 class PGradTransform:
     """   """
-    def __init__(self,enacc,transform,nodal_cutoff=1e-6):
+    def __init__(self,enacc,transform,nodal_cutoff=1e-5):
         self.enacc=enacc
         self.transform=transform
         self.nodal_cutoff=nodal_cutoff
@@ -102,7 +102,7 @@ class PGradTransform:
 
         node_cut=self._node_cut(configs,wf)
         dp[node_cut,:]=0.0
-        print('number cut off',np.sum(node_cut))
+        #print('number cut off',np.sum(node_cut))
 
         d={}
         for k,it in den.items():

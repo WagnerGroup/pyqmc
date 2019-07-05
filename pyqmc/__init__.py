@@ -9,6 +9,7 @@ from pyqmc.accumulators import EnergyAccumulator,PGradTransform,LinearTransform
 from pyqmc.func3d import PadeFunction,GaussianFunction,ExpCuspFunction
 from pyqmc.optvariance import optvariance
 from pyqmc.optsr import gradient_descent
+from pyqmc.linemin import line_minimization
 from pyqmc.dmc import dmc
 
 

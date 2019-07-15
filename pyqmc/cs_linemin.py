@@ -116,7 +116,8 @@ def line_minimization(
     warmupoptions = vmcoptions.copy()
     if warmup is not None:
         warmupoptions.update(nsteps=warmup)
-    data, coords = vmc(wf, coords, accumulators={}, **warmupoptions)
+    if warmup is None or if warmup>0:
+        data, coords = vmc(wf, coords, accumulators={}, **warmupoptions)
     print('warmup finished, nsteps', len(data))
 
     # Gradient descent cycles
@@ -147,7 +148,7 @@ def line_minimization(
         steps = np.linspace(0, steprange, npts)
         steps[0] = -steprange / npts
         params = [x0 + update(pgrad, Sij, step, **update_kws) for step in steps]
-        stepsdata = cslm(wf, coords, params, pgrad_acc)
+        stepsdata = cslm(wf, coords, params, pgrad_acc, **cslmoptions)
         dfs = []
         for data, p, step in zip(stepsdata, params, steps):
             en = np.mean(data['total'])

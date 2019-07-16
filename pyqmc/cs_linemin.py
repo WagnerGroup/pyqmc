@@ -147,7 +147,7 @@ def line_minimization(
         steps = np.linspace(0, steprange, npts)
         steps[0] = -steprange / npts
         params = [x0 + update(pgrad, Sij, step, **update_kws) for step in steps]
-        stepsdata = cslm(wf, coords, params, pgrad_acc)
+        stepsdata = cslm(wf, coords, params, pgrad_acc, **cslmoptions)
         dfs = []
         for data, p, step in zip(stepsdata, params, steps):
             en = np.mean(data['total'])

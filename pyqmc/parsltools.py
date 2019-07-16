@@ -134,17 +134,16 @@ def dist_cslm_sampler(wf,
         time.sleep(sleeptime)
 
     stepsresults = zip(*[x.result() for x in allruns]) # length should be nsteps
-    assert len(results)==len(steps)
 
     data = []
     df = {}
     for result in stepsresults:
         # result is a list of dicts, coming from the partitions
         df['dpH'] = np.concatenate([r['dpH'] for r in result], axis=0)
-        df['dp'] = np.concatenate([r['dppsi'] for r in result], axis=0)
-        df['dpdp'] = np.concatenate([r['dpidpj'] for r in result], axis=0)
+        df['dppsi'] = np.concatenate([r['dppsi'] for r in result], axis=0)
+        df['dpidpj'] = np.concatenate([r['dpidpj'] for r in result], axis=0)
         df['total'] = np.concatenate([r['total'] for r in result], axis=0)
-        data.append(df.copy)
+        data.append(df.copy())
     
     return data 
 

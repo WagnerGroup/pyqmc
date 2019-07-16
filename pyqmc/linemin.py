@@ -24,12 +24,12 @@ def line_minimization(
     coords,
     pgrad_acc,
     steprange=0.5,
-    warmup=None,
+    warmup=0,
     maxiters=50,
     vmc=None,
     vmcoptions=None,
-    cslm=None,
-    cslmoptions=None,
+    lm=None,
+    lmoptions=None,
     dataprefix="",
     update=sr_update,
     update_kws=None,
@@ -57,9 +57,9 @@ def line_minimization(
 
       vmcoptions: a dictionary of options for the vmc method
 
-      cslm: the correlated sampling line minimization function to use
+      lm: the correlated sampling line minimization function to use
 
-      cslmoptions: a dictionary of options for the cslm method
+      lmoptions: a dictionary of options for the lm method
 
       update: A function that generates a parameter change 
 
@@ -83,29 +83,29 @@ def line_minimization(
         vmc = pyqmc.mc.vmc 
     if vmcoptions is None:
         vmcoptions = {}
-    if cslm is None:
-        cslm = cslm_sampler
-    if cslmoptions is None:
-        cslmoptions = {}
+    if lm is None:
+        lm = lm_sampler
+    if lmoptions is None:
+        lmoptions = {}
     if update_kws is None:
         update_kws = {}
 
-    def gradient_energy_function(x, configs):
+    def gradient_energy_function(x, coords):
         newparms = pgrad_acc.transform.deserialize(x)
         for k in newparms:
             wf.parameters[k] = newparms[k]
-        data, configs= vmc(
-            wf, configs, accumulators={"pgrad": pgrad_acc}, **vmcoptions
+        data, coords= vmc(
+            wf, coords, accumulators={"pgrad": pgrad_acc}, **vmcoptions
         )
-        df = pd.DataFrame(data)
-        en = np.mean(df['pgradtotal'])
-        en_err = np.std(df['pgradtotal']) / len(df)
+        df = pd.DataFrame(data)[warmup:]
+        en = np.mean(df["pgradtotal"])
+        en_err = np.std(df["pgradtotal"]) / len(df)
         dpH = np.mean(df["pgraddpH"], axis=0)
         dp = np.mean(df["pgraddppsi"], axis=0)
         dpdp = np.mean(df["pgraddpidpj"], axis=0)
         grad = 2 * (dpH - en * dp)
         Sij = dpdp - np.einsum("i,j->ij", dp, dp)  # + eps*np.eye(dpdp.shape[0])
-        return configs, df['pgradtotal'].values[-1], grad, Sij, en, en_err
+        return coords, df["pgradtotal"].values[-1], grad, Sij, en, en_err
 
     x0 = pgrad_acc.transform.serialize_parameters(wf.parameters)
     datagrad = []
@@ -113,10 +113,7 @@ def line_minimization(
 
     # VMC warm up period
     print('starting warmup')
-    warmupoptions = vmcoptions.copy()
-    if warmup is not None:
-        warmupoptions.update(nsteps=warmup)
-    data, coords = vmc(wf, coords, accumulators={}, **warmupoptions)
+    data, coords = vmc(wf, coords, accumulators={}, **vmcoptions)
     print('warmup finished, nsteps', len(data))
 
     # Gradient descent cycles
@@ -147,7 +144,7 @@ def line_minimization(
         steps = np.linspace(0, steprange, npts)
         steps[0] = -steprange / npts
         params = [x0 + update(pgrad, Sij, step, **update_kws) for step in steps]
-        stepsdata = cslm(wf, coords, params, pgrad_acc, **cslmoptions)
+        stepsdata = lm(wf, coords, params, pgrad_acc, **lmoptions)
         dfs = []
         for data, p, step in zip(stepsdata, params, steps):
             en = np.mean(data['total'])
@@ -194,7 +191,7 @@ def line_minimization(
 
     return wf, datagrad, datatest
 
-def cslm_sampler(wf, configs, params, pgrad_acc):
+def lm_sampler(wf, configs, params, pgrad_acc):
     """ 
     Evaluates accumulator on the same set of configs for correlated sampling of different wave function parameters
 

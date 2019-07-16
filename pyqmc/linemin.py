@@ -23,18 +23,21 @@ def line_minimization(
     wf,
     coords,
     pgrad_acc,
-    warmup=0,
     steprange=0.5,
+    warmup=None,
     maxiters=50,
     vmc=None,
     vmcoptions=None,
+    cslm=None,
+    cslmoptions=None,
     dataprefix="",
     update=sr_update,
     update_kws=None,
     verbose=2,
     npts=5,
 ):
-    """Optimizes energy using gradient descent with stochastic reconfiguration.
+    """Optimizes energy by determining gradients with stochastic reconfiguration
+        and minimizing the energy along gradient directions using correlated sampling.
 
     Args:
 
@@ -46,17 +49,25 @@ def line_minimization(
 
       steprange: How far to search in the line minimization
 
+      warmup: number of steps to use for vmc warmup; if None, same as in vmcoptions
+
+      maxiters: (maximum) number of steps in the gradient descent
+
       vmc: A function that works like mc.vmc()
 
       vmcoptions: a dictionary of options for the vmc method
+
+      cslm: the correlated sampling line minimization function to use
+
+      cslmoptions: a dictionary of options for the cslm method
 
       update: A function that generates a parameter change 
 
       update_kws: Any keywords 
 
-      maxiters: maximum number of steps in the gradient descent
-
       dataprefix: A base filename in which to save datafileline.json and datafilegrad.json, which contain information about the optimization
+
+      npts: number of points to fit to in each line minimization
 
     Returns:
 
@@ -68,84 +79,93 @@ def line_minimization(
 
     """
     if vmc is None:
-        import pyqmc.mc
-
-        vmc = pyqmc.mc.vmc
-
+        import pyqmc.mc 
+        vmc = pyqmc.mc.vmc 
     if vmcoptions is None:
         vmcoptions = {}
+    if cslm is None:
+        cslm = cslm_sampler
+    if cslmoptions is None:
+        cslmoptions = {}
     if update_kws is None:
         update_kws = {}
 
-    def gradient_energy_function(x):
+    def gradient_energy_function(x, configs):
         newparms = pgrad_acc.transform.deserialize(x)
         for k in newparms:
             wf.parameters[k] = newparms[k]
-        data, newcoords = vmc(
-            wf, coords, accumulators={"pgrad": pgrad_acc}, **vmcoptions
+        data, configs= vmc(
+            wf, configs, accumulators={"pgrad": pgrad_acc}, **vmcoptions
         )
-        df = pd.DataFrame(data)[warmup:]
-        nsteps = len(df)
-        en = np.mean(df["pgradtotal"])
-        en_std = np.std(df["pgradtotal"])
+        df = pd.DataFrame(data)
+        en = np.mean(df['pgradtotal'])
+        en_err = np.std(df['pgradtotal']) / len(df)
         dpH = np.mean(df["pgraddpH"], axis=0)
         dp = np.mean(df["pgraddppsi"], axis=0)
         dpdp = np.mean(df["pgraddpidpj"], axis=0)
         grad = 2 * (dpH - en * dp)
         Sij = dpdp - np.einsum("i,j->ij", dp, dp)  # + eps*np.eye(dpdp.shape[0])
-        grad_std = 0
-        return grad, Sij, en, en_std, len(df)
+        return configs, df['pgradtotal'].values[-1], grad, Sij, en, en_err
 
     x0 = pgrad_acc.transform.serialize_parameters(wf.parameters)
     datagrad = []
     datatest = []
 
+    # VMC warm up period
+    print('starting warmup')
+    warmupoptions = vmcoptions.copy()
+    if warmup is not None:
+        warmupoptions.update(nsteps=warmup)
+    data, coords = vmc(wf, coords, accumulators={}, **warmupoptions)
+    print('warmup finished, nsteps', len(data))
+
     # Gradient descent cycles
     for it in range(maxiters):
-        pgrad, Sij, en, en_std, nsteps = gradient_energy_function(x0)
+        # Calculate gradient accurately
+        coords, last_en, pgrad, Sij, en, en_err = gradient_energy_function(x0, coords)
         datagrad.append(
             {
                 "pgrad": pgrad,
                 "S": Sij,
                 "en": en,
-                "en_err": en_std / np.sqrt(nsteps),
+                "en_err": en_err,
                 "iter": it,
                 "params": x0.copy(),
             }
         )
 
-        print("descent en", en, en_std / np.sqrt(nsteps))
-        print("descent grad", pgrad, flush=True)
+        print("descent en", en, en_err )
+        #print("descent grad", pgrad)
+        print("descent |grad|", np.linalg.norm(pgrad), flush=True)
 
         xfit = []
         yfit = []
         xfit.append(0.0)
-        #yfit.append(np.linalg.norm(pgrad) ** 2)
-        yfit.append(en)
+        yfit.append(last_en)
+
+        # Calculate samples to fit
         steps = np.linspace(0, steprange, npts)
         steps[0] = -steprange / npts
+        params = [x0 + update(pgrad, Sij, step, **update_kws) for step in steps]
+        stepsdata = cslm(wf, coords, params, pgrad_acc, **cslmoptions)
+        dfs = []
+        for data, p, step in zip(stepsdata, params, steps):
+            en = np.mean(data['total'])
+            dfs.append( {
+                'en': en,
+                'en_err': np.std(data['total']) / np.sqrt(data['total'].size),
+                'pgrad': 2*(np.mean(data['dpH'], axis=0)-en*np.mean(data['dppsi'],axis=0)),
+                'step': step,
+                'params': p.copy(),
+                'iter': it
+            })
+            print("descent step", step, dfs[-1]['en'], dfs[-1]['en_err'], flush=True)
 
-        for step in steps:
-            x = x0 + update(pgrad, Sij, step, **update_kws)
-            pgradp, Sijp, enp, en_stdp, nstepsp = gradient_energy_function(x)
-            en_stdp /= np.sqrt(nstepsp)
+        xfit.extend(steps)
+        yfit.extend([df['en'] for df in dfs])
+        datatest.extend(dfs)
 
-            print("descent step", step, enp, en_stdp, flush=True)
-            xfit.append(step)
-            #yfit.append(np.linalg.norm(pgradp) ** 2)
-            yfit.append(enp)
-            datatest.append(
-                {
-                    "en": enp,
-                    "en_err": en_stdp,
-                    "iter": it,
-                    "step": step,
-                    "eps": 0.0,
-                    "params": x.copy(),
-                    "pgrad": pgradp,
-                }
-            )
-
+        # Fit minimum
         p = np.polyfit(xfit, yfit, 2)
         print("polynomial fit", p)
         est_min = -p[1] / (2 * p[0])
@@ -173,3 +193,37 @@ def line_minimization(
         wf.parameters[k] = newparms[k]
 
     return wf, datagrad, datatest
+
+def cslm_sampler(wf, configs, params, pgrad_acc):
+    """ 
+    Evaluates accumulator on the same set of configs for correlated sampling of different wave function parameters
+
+    Args:
+        wf: wave function object
+        configs: (nconf, nelec, 3) array
+        params: (nsteps, nparams) array 
+            list of arrays of parameters (serialized) at each step
+        pgrad_acc: PGradAccumulator 
+
+    Returns:
+        data: list of dicts, one dict for each sample
+            each dict contains arrays returned from pgrad_acc, weighted by psi**2/psi0**2
+    """
+
+    import copy
+    import numpy as np
+    data = []
+    psi0 = wf.recompute(configs)[1] # recompute gives logdet 
+    for p in params:  
+        newparms = pgrad_acc.transform.deserialize(p)
+        for k in newparms:
+            wf.parameters[k] = newparms[k]
+        psi = wf.recompute(configs)[1] # recompute gives logdet
+        rawweights = np.exp(2*(psi-psi0)) # convert from log(|psi|) to |psi|**2
+        weights = rawweights/np.mean(rawweights) 
+        df = pgrad_acc(configs, wf) 
+        for k in df: 
+            df[k] = np.einsum('i,i...->i...',weights,df[k]) # reweight all averaged quantities by sampling probability
+        data.append(df)
+    return data
+

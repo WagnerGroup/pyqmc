@@ -2,7 +2,7 @@ from pyscf import gto,scf
 import pyqmc
 import parsl
 from parsl.configs.exex_local import config
-from pyqmc.parsltools import clean_pyscf_objects,distvmc,dist_lm_sampler
+from pyqmc.parsltools import clean_pyscf_objects,distvmc,dist_lm_sampler,line_minimization
 
 #############################
 # Set up the parallelization
@@ -53,11 +53,9 @@ acc=pyqmc.gradient_generator(mol,wf,['wf2acoeff','wf2bcoeff'])
 configs = pyqmc.initial_guess(mol, nconf)
 df,configs = distvmc(wf,configs,accumulators={}, nsteps=10, npartitions=ncore)
 
-#Line minimization costs a lot more per iteration but is more reliable than 
-# stochastic gradient descent (gradient_descent). 
-wf,dfgrad,dfline=pyqmc.line_minimization(wf,configs,acc,
-        vmcoptions={'nsteps':30, 'npartitions':ncore},vmc=distvmc,
-        lmoptions={'npartitions':ncore},lm=dist_lm_sampler,
-        dataprefix="parsl_h2o")
+# This uses a stochastic reconfiguration step to generate parameter changes along a line,
+# then minimizes the energy along that line.
+wf,dfgrad,dfline=line_minimization(wf,configs,acc,
+     vmcoptions={'nsteps':30}, dataprefix='parsl_h2o')
 
 

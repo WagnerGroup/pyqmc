@@ -45,8 +45,6 @@ def distvmc(wf,coords,accumulators=None,nsteps=100,npartitions=2,nsteps_per=None
     
     if accumulators is None:
         accumulators={}
-        if verbose:
-            print("WARNING: running VMC with no accumulators")
             
     allruns=[]
     niterations=int(nsteps/nsteps_per)
@@ -63,9 +61,8 @@ def distvmc(wf,coords,accumulators=None,nsteps=100,npartitions=2,nsteps_per=None
     import pandas as pd
     import time
     while True:
-        print("Job done:",[r.done() for r in  allruns],flush=True)
+        print("Jobs done: {0}/{1}".format(np.sum([r.done() for r in allruns]),len(allruns)), flush=True)
         df=[]
-        done=[]
         for r in allruns:
             if r.done():
                 df.extend(r.result()[0])
@@ -147,7 +144,17 @@ def dist_lm_sampler(wf,
     
     return data 
 
-
+def line_minimization(*args,npartitions=2,**kwargs):
+    import pyqmc
+    if 'vmcoptions' in kwargs:
+        kwargs['vmcoptions']['npartitions']=npartitions
+    else:
+        kwargs['vmcoptions']={'npartitions':npartitions}
+    if 'lmoptions' in kwargs:
+        kwargs['lmoptions']['npartitions']=npartitions
+    else:
+        kwargs['lmoptions']={'npartitions':npartitions}
+    return pyqmc.line_minimization(*args,vmc=distvmc, lm=dist_lm_sampler, **kwargs)
     
         
 def clean_pyscf_objects(mol,mf):
@@ -159,61 +166,7 @@ def clean_pyscf_objects(mol,mf):
     return mol,mf
 
 
-def test():
-    import parsl
-    from pyscf import lib, gto, scf
-    import numpy as np
-    import pandas as pd
-    import logging
 
-    from parsl.config import Config
-    from parsl.providers import LocalProvider
-    from parsl.channels import LocalChannel
-    from parsl.launchers import SimpleLauncher
-    from parsl.executors import ExtremeScaleExecutor
-    ncore=4
-    config = Config(
-        executors=[
-            ExtremeScaleExecutor(
-                label="Extreme_Local",
-                worker_debug=True,
-                ranks_per_node=ncore,
-                provider=LocalProvider(
-                    channel=LocalChannel(),
-                    init_blocks=1,
-                    max_blocks=1,
-                    launcher=SimpleLauncher()
-                )
-            )
-        ],
-        strategy=None,
-    )
-        
-
-    parsl.load(config)
-
-    mol=gto.M(atom='H 0. 0. 0.; H 0. 0. 2.0',unit='bohr',
-                ecp='bfd', basis='bfd_vtz')
-    mf = scf.RHF(mol).run()
-    mol,mf=clean_pyscf_object(mol,mf)
-    from pyqmc import ExpCuspFunction,GaussianFunction,MultiplyWF,PySCFSlaterRHF,JastrowSpin,initial_guess,EnergyAccumulator
-    from pyqmc.accumulators import PGradTransform,LinearTransform
-    
-    nconf=1600
-    basis=[ExpCuspFunction(2.0,1.5),GaussianFunction(0.5),GaussianFunction(2.0),GaussianFunction(.25),GaussianFunction(1.0),GaussianFunction(4.0),GaussianFunction(8.0)  ]
-    wf=MultiplyWF(PySCFSlaterRHF(mol,mf),JastrowSpin(mol,basis,basis))
-    coords = initial_guess(mol,nconf)
-    energy_acc=EnergyAccumulator(mol)
-    pgrad_acc=PGradTransform(energy_acc,LinearTransform(wf.parameters,['wf2acoeff','wf2bcoeff']))
-    
-    from pyqmc.optsr import gradient_descent
-    gradient_descent(wf,coords,pgrad_acc,vmc=distvmc,
-            vmcoptions={'npartitions':ncore,'nsteps':100,'nsteps_per':100}
-            )
-            
-
-if __name__=="__main__":
-    test()
     
                 
                 

@@ -79,7 +79,7 @@ class PGradDescriptor:
         d['dpH'] = np.einsum('i,ij->ij',energy,dp)
         d['dppsi'] = dp
         d['dpidpj'] = np.einsum('ij,ik->ijk',dp,dp)
-        raise NotImplemented("define __call__ for PGradOBDMTransform")
+        raise NotImplementedError("define __call__ for PGradOBDMTransform")
         return d
 
     def avg(self,configs,wf):

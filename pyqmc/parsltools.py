@@ -77,6 +77,78 @@ def distvmc(wf,coords,accumulators=None,nsteps=100,npartitions=2,nsteps_per=None
     
     return df,coords
 
+@python_app
+def lmparsl(wf, configs, params, pgrad_acc):
+    import os
+    os.environ["MKL_NUM_THREADS"] = "1"
+    os.environ["NUMEXPR_NUM_THREADS"] = "1"
+    os.environ["OMP_NUM_THREADS"] = "1"
+
+    from pyqmc.linemin import lm_sampler 
+    import copy
+    import numpy as np
+
+    data = lm_sampler(copy.copy(wf), np.array(configs), np.array(params), copy.copy(pgrad_acc))
+    for d in data:
+        for k in d:
+            d[k] = d[k].tolist() 
+    return data
+
+def dist_lm_sampler(wf, 
+    configs, 
+    params,
+    pgrad_acc, 
+    npartitions=2,
+    sleeptime=5
+    ):
+    """
+    Evaluates accumulator on the same set of configs for correlated sampling of different wave function parameters.  Parallelized with parsl.
+
+    Args:
+        wf: wave function object
+        configs: (nconf, nelec, 3) array
+        params: (nsteps, nparams) array 
+            list of arrays of parameters (serialized) at each step
+        pgrad_acc: PGradAccumulator 
+
+    kwargs:
+        npartitions: number of tasks for parallelization
+            divides configs array into npartitions chunks
+        sleeptime: time to wait between checking for results from parsl jobs
+
+    Returns:
+        data: list of dicts, one dict for each sample
+            each dict contains arrays returned from pgrad_acc, weighted by psi**2/psi0**2 
+    """
+    import copy
+    configspart = np.split(configs,npartitions)
+    allruns = []
+    for p in range(npartitions):
+        allruns.append(lmparsl(wf, configspart[p], params, pgrad_acc))
+    
+    import time
+    while True:
+        print("Jobs done: {0}/{1}".format(np.sum([r.done() for r in allruns]),len(allruns)), flush=True)
+        if np.all([r.done() for r in  allruns]):
+            break
+        time.sleep(sleeptime)
+
+    stepsresults = zip(*[x.result() for x in allruns]) # length should be nsteps
+
+    data = []
+    df = {}
+    for result in stepsresults:
+        # result is a list of dicts, coming from the partitions
+        df['dpH'] = np.concatenate([r['dpH'] for r in result], axis=0)
+        df['dppsi'] = np.concatenate([r['dppsi'] for r in result], axis=0)
+        df['dpidpj'] = np.concatenate([r['dpidpj'] for r in result], axis=0)
+        df['total'] = np.concatenate([r['total'] for r in result], axis=0)
+        data.append(df.copy())
+    
+    return data 
+
+
+    
         
 def clean_pyscf_objects(mol,mf):
     mol.output=None

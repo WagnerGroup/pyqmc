@@ -23,24 +23,32 @@ class OBDMAccumulator:
     spin: 0 or 1 for up or down. Defaults to all electrons.
   """
 
-    def __init__(self, mol, orb_coeff, nstep=10, tstep=0.50, warmup=100, naux=500,
-                 spin=None, electrons=None):
+    def __init__(
+        self,
+        mol,
+        orb_coeff,
+        nstep=10,
+        tstep=0.50,
+        warmup=100,
+        naux=500,
+        spin=None,
+        electrons=None,
+    ):
         assert (
             len(orb_coeff.shape) == 2
         ), "orb_coeff should be a list of orbital coefficients."
 
         if not (spin is None):
-            if spin==0:
-                self._electrons=np.arange(0,mol.nelec[0])
-            elif spin==1:
-                self._electrons=np.arange(mol.nelec[0],np.sum(mol.nelec))
+            if spin == 0:
+                self._electrons = np.arange(0, mol.nelec[0])
+            elif spin == 1:
+                self._electrons = np.arange(mol.nelec[0], np.sum(mol.nelec))
             else:
                 raise ValueError("Spin not equal to 0 or 1")
         elif not (electrons is None):
-            self._electrons=electrons
-        else: 
-            self._electrons=np.arange(0,np.sum(mol.nelec))
-            
+            self._electrons = electrons
+        else:
+            self._electrons = np.arange(0, np.sum(mol.nelec))
 
         self._orb_coeff = orb_coeff
         self._tstep = tstep
@@ -64,7 +72,7 @@ class OBDMAccumulator:
                 (configs.shape[0], self._orb_coeff.shape[1], self._orb_coeff.shape[1])
             ),
             "norm": np.zeros((configs.shape[0], self._orb_coeff.shape[1])),
-            "acceptance":np.zeros(configs.shape[0])
+            "acceptance": np.zeros(configs.shape[0]),
         }
         acceptance = 0
         naux = self._extra_config.shape[0]
@@ -99,7 +107,7 @@ class OBDMAccumulator:
                 self._mol, self._orb_coeff, self._extra_config, tstep=self._tstep
             )
 
-            results['acceptance']+=np.mean(accept)
+            results["acceptance"] += np.mean(accept)
 
         results["value"] /= self._nstep
         results["norm"] = results["norm"] / self._nstep
@@ -111,7 +119,7 @@ class OBDMAccumulator:
         d = self(configs, wf)
         davg = {}
         for k, v in d.items():
-            #print(k, v.shape)
+            # print(k, v.shape)
             davg[k] = np.mean(v, axis=0)
         return davg
 
@@ -135,5 +143,3 @@ def sample_onebody(mol, orb_coeff, configs, tstep=2.0):
 
 def normalize_obdm(obdm, norm):
     return obdm / (norm[np.newaxis, :] * norm[:, np.newaxis]) ** 0.5
-
-

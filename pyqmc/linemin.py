@@ -79,8 +79,9 @@ def line_minimization(
 
     """
     if vmc is None:
-        import pyqmc.mc 
-        vmc = pyqmc.mc.vmc 
+        import pyqmc.mc
+
+        vmc = pyqmc.mc.vmc
     if vmcoptions is None:
         vmcoptions = {}
     if lm is None:
@@ -94,9 +95,7 @@ def line_minimization(
         newparms = pgrad_acc.transform.deserialize(x)
         for k in newparms:
             wf.parameters[k] = newparms[k]
-        data, coords= vmc(
-            wf, coords, accumulators={"pgrad": pgrad_acc}, **vmcoptions
-        )
+        data, coords = vmc(wf, coords, accumulators={"pgrad": pgrad_acc}, **vmcoptions)
         df = pd.DataFrame(data)[warmup:]
         en = np.mean(df["pgradtotal"])
         en_err = np.std(df["pgradtotal"]) / len(df)
@@ -112,9 +111,9 @@ def line_minimization(
     datatest = []
 
     # VMC warm up period
-    print('starting warmup')
+    print("starting warmup")
     data, coords = vmc(wf, coords, accumulators={}, **vmcoptions)
-    print('warmup finished, nsteps', len(data))
+    print("warmup finished, nsteps", len(data))
 
     # Gradient descent cycles
     for it in range(maxiters):
@@ -131,8 +130,8 @@ def line_minimization(
             }
         )
 
-        print("descent en", en, en_err )
-        #print("descent grad", pgrad)
+        print("descent en", en, en_err)
+        # print("descent grad", pgrad)
         print("descent |grad|", np.linalg.norm(pgrad), flush=True)
 
         xfit = []
@@ -147,19 +146,25 @@ def line_minimization(
         stepsdata = lm(wf, coords, params, pgrad_acc, **lmoptions)
         dfs = []
         for data, p, step in zip(stepsdata, params, steps):
-            en = np.mean(data['total'])
-            dfs.append( {
-                'en': en,
-                'en_err': np.std(data['total']) / np.sqrt(data['total'].size),
-                'pgrad': 2*(np.mean(data['dpH'], axis=0)-en*np.mean(data['dppsi'],axis=0)),
-                'step': step,
-                'params': p.copy(),
-                'iter': it
-            })
-            print("descent step", step, dfs[-1]['en'], dfs[-1]['en_err'], flush=True)
+            en = np.mean(data["total"])
+            dfs.append(
+                {
+                    "en": en,
+                    "en_err": np.std(data["total"]) / np.sqrt(data["total"].size),
+                    "pgrad": 2
+                    * (
+                        np.mean(data["dpH"], axis=0)
+                        - en * np.mean(data["dppsi"], axis=0)
+                    ),
+                    "step": step,
+                    "params": p.copy(),
+                    "iter": it,
+                }
+            )
+            print("descent step", step, dfs[-1]["en"], dfs[-1]["en_err"], flush=True)
 
         xfit.extend(steps)
-        yfit.extend([df['en'] for df in dfs])
+        yfit.extend([df["en"] for df in dfs])
         datatest.extend(dfs)
 
         # Fit minimum
@@ -167,19 +172,19 @@ def line_minimization(
         print("polynomial fit", p)
         est_min = -p[1] / (2 * p[0])
         print("estimated minimum", est_min, flush=True)
-        minstep=np.min(xfit)
-        if est_min > steprange and p[0] > 0: #minimum past the search radius
-            est_min=steprange
-        if est_min < minstep and p[0] > 0:  #mimimum behind the search radius
-            est_min=minstep
+        minstep = np.min(xfit)
+        if est_min > steprange and p[0] > 0:  # minimum past the search radius
+            est_min = steprange
+        if est_min < minstep and p[0] > 0:  # mimimum behind the search radius
+            est_min = minstep
         if p[0] < 0:
-            plin=np.polyfit(xfit,yfit,1)
+            plin = np.polyfit(xfit, yfit, 1)
             if plin[0] < 0:
-                est_min=steprange
+                est_min = steprange
             if plin[0] > 0:
-                est_min=minstep
-        print("estimated minimum adjusted",est_min,flush=True)
-        
+                est_min = minstep
+        print("estimated minimum adjusted", est_min, flush=True)
+
         x0 += update(pgrad, Sij, est_min, **update_kws)
 
         pd.DataFrame(datagrad).to_json(dataprefix + "grad.json")
@@ -190,6 +195,7 @@ def line_minimization(
         wf.parameters[k] = newparms[k]
 
     return wf, datagrad, datatest
+
 
 def lm_sampler(wf, configs, params, pgrad_acc):
     """ 
@@ -209,18 +215,20 @@ def lm_sampler(wf, configs, params, pgrad_acc):
 
     import copy
     import numpy as np
+
     data = []
-    psi0 = wf.recompute(configs)[1] # recompute gives logdet 
-    for p in params:  
+    psi0 = wf.recompute(configs)[1]  # recompute gives logdet
+    for p in params:
         newparms = pgrad_acc.transform.deserialize(p)
         for k in newparms:
             wf.parameters[k] = newparms[k]
-        psi = wf.recompute(configs)[1] # recompute gives logdet
-        rawweights = np.exp(2*(psi-psi0)) # convert from log(|psi|) to |psi|**2
-        weights = rawweights/np.mean(rawweights) 
-        df = pgrad_acc(configs, wf) 
-        for k in df: 
-            df[k] = np.einsum('i,i...->i...',weights,df[k]) # reweight all averaged quantities by sampling probability
+        psi = wf.recompute(configs)[1]  # recompute gives logdet
+        rawweights = np.exp(2 * (psi - psi0))  # convert from log(|psi|) to |psi|**2
+        weights = rawweights / np.mean(rawweights)
+        df = pgrad_acc(configs, wf)
+        for k in df:
+            df[k] = np.einsum(
+                "i,i...->i...", weights, df[k]
+            )  # reweight all averaged quantities by sampling probability
         data.append(df)
     return data
-

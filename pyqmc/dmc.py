@@ -1,15 +1,17 @@
-# This must be done BEFORE importing numpy or anything else. 
+# This must be done BEFORE importing numpy or anything else.
 # Therefore it must be in your main script.
 import os
-os.environ["MKL_NUM_THREADS"] = "1" 
-os.environ["NUMEXPR_NUM_THREADS"] = "1" 
-os.environ["OMP_NUM_THREADS"] = "1" 
+
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
 
 import numpy as np
 import pyqmc.mc as mc
 import sys
 
-def limdrift(g,tau,acyrus=0.25):
+
+def limdrift(g, tau, acyrus=0.25):
     """
     Use Cyrus Umrigar's algorithm to limit the drift near nodes.
 
@@ -23,14 +25,14 @@ def limdrift(g,tau,acyrus=0.25):
     Returns: 
       The vector with the cut off applied and multiplied by tau.
     """
-    tot=np.linalg.norm(g,axis=1)*acyrus
-    mask=tot > 1e-8
-    taueff=np.ones(tot.shape)*tau
-    taueff[mask]=(np.sqrt(1+2*tau*tot[mask])-1)/tot[mask]
-    return g*taueff[:,np.newaxis]
+    tot = np.linalg.norm(g, axis=1) * acyrus
+    mask = tot > 1e-8
+    taueff = np.ones(tot.shape) * tau
+    taueff[mask] = (np.sqrt(1 + 2 * tau * tot[mask]) - 1) / tot[mask]
+    return g * taueff[:, np.newaxis]
 
 
-def limdrift_cutoff(g,tau,cutoff=1):
+def limdrift_cutoff(g, tau, cutoff=1):
     """
     Limit a vector to have a maximum magnitude of cutoff while maintaining direction
 
@@ -42,12 +44,24 @@ def limdrift_cutoff(g,tau,cutoff=1):
     Returns: 
       The vector with the cut off applied and multiplied by tau.
     """
-    return mc.limdrift(g,cutoff)*tau
+    return mc.limdrift(g, cutoff) * tau
 
 
-def dmc(wf,configs,weights=None, nsteps=1000,tstep=0.02,branchtime=5, stepoffset=0,
-        branchcut_start=3, branchcut_stop=6, drift_limiter=limdrift,
-        verbose=False, accumulators=None,ekey=('energy','total')):
+def dmc(
+    wf,
+    configs,
+    weights=None,
+    nsteps=1000,
+    tstep=0.02,
+    branchtime=5,
+    stepoffset=0,
+    branchcut_start=3,
+    branchcut_stop=6,
+    drift_limiter=limdrift,
+    verbose=False,
+    accumulators=None,
+    ekey=("energy", "total"),
+):
     """
     Run DMC (not parallel)
     
@@ -82,31 +96,53 @@ def dmc(wf,configs,weights=None, nsteps=1000,tstep=0.02,branchtime=5, stepoffset
       weights: The final weights from this calculation
       
     """
-    #assert accumulators is not None, "Need an energy accumulator for DMC"
-    nconfig, nelec=configs.shape[0:2]
+    # assert accumulators is not None, "Need an energy accumulator for DMC"
+    nconfig, nelec = configs.shape[0:2]
     if weights is None:
         weights = np.ones(nconfig)
 
     wf.recompute(configs)
-    
-    npropagate = int(np.ceil(nsteps/branchtime))
-    df=[]
+
+    npropagate = int(np.ceil(nsteps / branchtime))
+    df = []
     eloc = accumulators[ekey[0]](configs, wf)[ekey[1]]
-    esigma = np.std(weights*eloc/np.mean(weights))
+    esigma = np.std(weights * eloc / np.mean(weights))
     for step in range(npropagate):
         if verbose:
-            print("branch step",step, flush=True)
-        df_,configs,weights = dmc_propagate(wf,configs,weights, tstep,
-                branchcut_start*esigma, branchcut_stop*esigma,
-                nsteps=branchtime, stepoffset=branchtime*step+stepoffset, verbose=verbose,
-                accumulators=accumulators,ekey=ekey, drift_limiter=drift_limiter)
+            print("branch step", step, flush=True)
+        df_, configs, weights = dmc_propagate(
+            wf,
+            configs,
+            weights,
+            tstep,
+            branchcut_start * esigma,
+            branchcut_stop * esigma,
+            nsteps=branchtime,
+            stepoffset=branchtime * step + stepoffset,
+            verbose=verbose,
+            accumulators=accumulators,
+            ekey=ekey,
+            drift_limiter=drift_limiter,
+        )
         df.extend(df_)
         configs, weights = branch(configs, weights)
     return df, configs, weights
-    
 
-def dmc_propagate(wf,configs,weights,tstep,branchcut_start, branchcut_stop, 
-    nsteps=5,accumulators=None,ekey=('energy','total'), verbose=False, drift_limiter=limdrift,stepoffset=0):
+
+def dmc_propagate(
+    wf,
+    configs,
+    weights,
+    tstep,
+    branchcut_start,
+    branchcut_stop,
+    nsteps=5,
+    accumulators=None,
+    ekey=("energy", "total"),
+    verbose=False,
+    drift_limiter=limdrift,
+    stepoffset=0,
+):
     """
     Propagate DMC without branching
     
@@ -140,72 +176,93 @@ def dmc_propagate(wf,configs,weights,tstep,branchcut_start, branchcut_stop,
       
     """
     assert accumulators is not None, "Need an energy accumulator for DMC"
-    nconfig, nelec=configs.shape[0:2]
+    nconfig, nelec = configs.shape[0:2]
     wf.recompute(configs)
 
     eloc = accumulators[ekey[0]](configs, wf)[ekey[1]]
-    eref_mean = np.mean(weights*eloc)/np.mean(weights)
-    eref=eref_mean
-    df=[]
+    eref_mean = np.mean(weights * eloc) / np.mean(weights)
+    eref = eref_mean
+    df = []
     for step in range(nsteps):
-        acc=np.zeros(nelec)
+        acc = np.zeros(nelec)
         for e in range(nelec):
             # Propose move
-            grad=drift_limiter(wf.gradient(e, configs[:,e,:]).T,tstep)
-            gauss = np.random.normal(scale=np.sqrt(tstep),size=(nconfig,3))
-            eposnew=configs[:,e,:] + gauss + grad
+            grad = drift_limiter(wf.gradient(e, configs[:, e, :]).T, tstep)
+            gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconfig, 3))
+            eposnew = configs[:, e, :] + gauss + grad
 
             # Compute reverse move
-            new_grad=drift_limiter(wf.gradient(e, eposnew).T,tstep) 
-            forward=np.sum((configs[:,e,:]+grad-eposnew)**2,axis=1)
-            backward=np.sum((eposnew+new_grad-configs[:,e,:])**2,axis=1)
-            t_prob = np.exp(1/(2*tstep)*(forward-backward))
+            new_grad = drift_limiter(wf.gradient(e, eposnew).T, tstep)
+            forward = np.sum((configs[:, e, :] + grad - eposnew) ** 2, axis=1)
+            backward = np.sum((eposnew + new_grad - configs[:, e, :]) ** 2, axis=1)
+            t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
 
             # Acceptance -- fixed-node: reject if wf changes sign
-            wfratio = wf.testvalue(e,eposnew)
-            ratio=wfratio**2*t_prob
-            accept=ratio*np.sign(wfratio) > np.random.rand(nconfig)
-            
+            wfratio = wf.testvalue(e, eposnew)
+            ratio = wfratio ** 2 * t_prob
+            accept = ratio * np.sign(wfratio) > np.random.rand(nconfig)
+
             # Update wave function
-            configs[accept,e,:]=eposnew[accept,:]
-            wf.updateinternals(e,configs[:,e,:],accept)
-            acc[e]=np.mean(accept)
+            configs[accept, e, :] = eposnew[accept, :]
+            wf.updateinternals(e, configs[:, e, :], accept)
+            acc[e] = np.mean(accept)
 
         # weights
         elocold = eloc.copy()
-        energydat=accumulators[ekey[0]](configs, wf)
-        eloc = energydat[ekey[1]] 
-        tdamp = limit_timestep(weights, eloc, elocold, eref, branchcut_start, branchcut_stop)
-        wmult=np.exp( -tstep*0.5*tdamp*(elocold+eloc-2*eref) )
+        energydat = accumulators[ekey[0]](configs, wf)
+        eloc = energydat[ekey[1]]
+        tdamp = limit_timestep(
+            weights, eloc, elocold, eref, branchcut_start, branchcut_stop
+        )
+        wmult = np.exp(-tstep * 0.5 * tdamp * (elocold + eloc - 2 * eref))
         wmult[wmult > 2.0] = 2.0
-        weights*=wmult
+        weights *= wmult
         wavg = np.mean(weights)
 
         avg = {}
-        for k,accumulator in accumulators.items():
-            if k!=ekey[0]:
-                dat=accumulator(configs,wf)
+        for k, accumulator in accumulators.items():
+            if k != ekey[0]:
+                dat = accumulator(configs, wf)
             else:
-                dat=energydat
-            for m,res in dat.items():
-                avg[k+m]=np.dot(weights,res)/(nconfig*wavg)
-        avg['weight'] = wavg
-        avg['weightvar'] = np.std(weights)
-        avg['weightmin'] = np.amin(weights)
-        avg['weightmax'] = np.amax(weights)
-        avg['eref'] = eref
-        avg['acceptance'] = np.mean(acc)
-        avg['step']=stepoffset+step
+                dat = energydat
+            for m, res in dat.items():
+                avg[k + m] = np.dot(weights, res) / (nconfig * wavg)
+        avg["weight"] = wavg
+        avg["weightvar"] = np.std(weights)
+        avg["weightmin"] = np.amin(weights)
+        avg["weightmax"] = np.amax(weights)
+        avg["eref"] = eref
+        avg["acceptance"] = np.mean(acc)
+        avg["step"] = stepoffset + step
         if verbose:
-            print("step",stepoffset+step,'acceptance', avg['acceptance'],
-                  'weight',avg['weight'],'weightstd',avg['weightvar'],'eref',eref)
-            print("eref_mean",eref_mean,"logwavg",np.log(wavg),'wmax',avg['weightmax'],
-                 'wmin',avg['weightmin'])
-            
-        eref = eref_mean-np.log(wavg)
+            print(
+                "step",
+                stepoffset + step,
+                "acceptance",
+                avg["acceptance"],
+                "weight",
+                avg["weight"],
+                "weightstd",
+                avg["weightvar"],
+                "eref",
+                eref,
+            )
+            print(
+                "eref_mean",
+                eref_mean,
+                "logwavg",
+                np.log(wavg),
+                "wmax",
+                avg["weightmax"],
+                "wmin",
+                avg["weightmin"],
+            )
+
+        eref = eref_mean - np.log(wavg)
         df.append(avg)
     return df, configs, weights
-    
+
+
 def limit_timestep(weights, elocnew, elocold, eref, start, stop):
     """
     Stabilizes weights by scaling down the effective tstep if the local energy is too far from eref.
@@ -233,12 +290,16 @@ def limit_timestep(weights, elocnew, elocold, eref, start, stop):
     """
     if start is None or stop is None:
         return 1
-    assert stop>start, "stabilize weights requires stop>start. Invalid stop={0}, start={1}".format(stop, start)
-    eloc = np.stack([elocnew,elocold])
-    fbet = np.amax(eref-eloc, axis=0)
-    tdamp = np.clip((1-(fbet-start))/(stop-start), 0, 1)
+    assert (
+        stop > start
+    ), "stabilize weights requires stop>start. Invalid stop={0}, start={1}".format(
+        stop, start
+    )
+    eloc = np.stack([elocnew, elocold])
+    fbet = np.amax(eref - eloc, axis=0)
+    tdamp = np.clip((1 - (fbet - start)) / (stop - start), 0, 1)
     return tdamp
-    
+
 
 def branch(configs, weights):
     """
@@ -258,10 +319,8 @@ def branch(configs, weights):
     """
     nconfig = configs.shape[0]
     wtot = np.sum(weights)
-    probability = np.cumsum(weights/wtot)
+    probability = np.cumsum(weights / wtot)
     newinds = np.searchsorted(probability, np.random.random(nconfig))
     configs = configs[newinds]
-    weights.fill(wtot/nconfig)
+    weights.fill(wtot / nconfig)
     return configs, weights
-
-

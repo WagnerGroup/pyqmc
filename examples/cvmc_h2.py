@@ -1,11 +1,12 @@
 import pyqmc
 
+
 def setuph2(r, obdm_steps=5):
     from pyscf import gto, scf, lo
     from pyqmc.accumulators import LinearTransform, EnergyAccumulator
     from pyqmc.obdm import OBDMAccumulator
-    from pyqmc.cvmc import DescriptorFromOBDM,PGradDescriptor
-    
+    from pyqmc.cvmc import DescriptorFromOBDM, PGradDescriptor
+
     import itertools
 
     # ccECP from A. Annaberdiyev et al. Journal of Chemical Physics 149, 134108 (2018)
@@ -98,29 +99,26 @@ if __name__ == "__main__":
     ncore = 4
     sys = setuph2(r)
     sys["mol"], sys["mf"] = clean_pyscf_objects(sys["mol"], sys["mf"])
-    
 
     config.executors[0].ranks_per_node = ncore
     parsl.load(config)
 
-
-    #Set up calculation and 
+    # Set up calculation and
     ncore = 2
     nconf = 800
     configs = pyqmc.initial_guess(sys["mol"], nconf)
     df, configs = vmc(
         sys["wf"], configs, accumulators={}, nsteps=40, nsteps_per=40, npartitions=ncore
     )
-    
+
     wf, df = line_minimization(
         sys["wf"],
         configs,
-        pyqmc.gradient_generator(sys['mol'], sys['wf']),
+        pyqmc.gradient_generator(sys["mol"], sys["wf"]),
         maxiters=5,
         vmc=vmc,
         vmcoptions=dict(npartitions=ncore, nsteps=100),
     )
-
 
     forcing = {}
     obj = {}

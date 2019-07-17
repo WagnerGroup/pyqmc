@@ -66,7 +66,6 @@ def energy(mol,configs,wf):
     ei=ei_energy(mol,configs)
     ecp_val = get_ecp(mol,configs,wf)
     ii=ii_energy(mol)
-    nconf=configs.shape[0]
     ke=kinetic(configs,wf)
     #print(ke,ee,ei,ii)
     return {'ke':ke,

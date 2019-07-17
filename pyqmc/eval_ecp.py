@@ -118,7 +118,7 @@ def get_P_l(mol,configs,weights,epos_rot,l_list,e,at):
     Return:
       P_l values: nconf x naip x nl array  
     """
-    at_name = mol._atom[at][0]
+    #at_name = mol._atom[at][0]
     nconf,naip = epos_rot.shape[0:2]
     
     P_l_val = np.zeros([nconf,naip,len(l_list)])
@@ -179,7 +179,7 @@ def get_rot(mol,configs,e,at,naip):
       epos_rot: positions of the rotated electron, nconf x naip x 3
       
     """
-    nconf,nelec = configs.shape[0:2]
+    nconf = configs.shape[0]
     apos = np.outer(np.ones(nconf),np.array(mol._atom[at][1]))
 
     r_ea_vec = get_r_ea(mol,configs,e,at)

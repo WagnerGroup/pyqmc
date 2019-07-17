@@ -222,7 +222,7 @@ class PolyPadeFunction:
         return pderiv
 
 class ExpCuspFunction:
-    """
+    r"""
     :math:`b(r) = -\frac{p(r/r_{cut})}{1+\gamma*p(r/r_{cut})} + \frac{1}{3+\gamma}` 
     where 
     :math:`p(y) = y - y^2 + y^3/3`
@@ -274,7 +274,7 @@ class ExpCuspFunction:
         """
         r = np.linalg.norm(rvec, axis=-1, keepdims=True)
         y = r/self.parameters['rcut']
-        dydr = 1/self.parameters['rcut']
+        #dydr = 1/self.parameters['rcut']
         mask=(y<=1)*np.ones(rvec.shape).astype(bool)
         func=np.zeros(rvec.shape)
         func[mask]=-( ((1-2*y+y**2) / r / (1+self.parameters['gamma']*(y-y**2+y**3/3))**2 / self.parameters['rcut']) + (( (-2/self.parameters['rcut']+2*r/self.parameters['rcut']**2)/r**2 - (1-2*y+y**2)/r**3 ) / self.parameters['rcut'] / (1+self.parameters['gamma']*(y-y**2+y**3/3))**2 + ((1-2*y+y**2)/self.parameters['rcut'])**2 * (-2*self.parameters['gamma']/(1+self.parameters['gamma']*(y-y**2+y**3/3))**3) / r**2) * (rvec**2) )[mask]

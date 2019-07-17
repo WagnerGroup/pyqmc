@@ -7,8 +7,8 @@ from pyqmc.parsltools import clean_pyscf_objects,distvmc,dist_lm_sampler,line_mi
 #############################
 # Set up the parallelization
 #############################
-ncore=2
-nconf=1000   #This must be a multiple of ncore
+ncore=3
+nconf=1500   #This must be a multiple of ncore
 
 #having one extra rank seems to help with performance a little; we only  
 #ever run on ncore
@@ -55,7 +55,7 @@ df,configs = distvmc(wf,configs,accumulators={}, nsteps=10, npartitions=ncore)
 
 # This uses a stochastic reconfiguration step to generate parameter changes along a line,
 # then minimizes the energy along that line.
-wf,dfgrad,dfline=line_minimization(wf,configs,acc,
+wf,dfgrad,dfline=line_minimization(wf,configs,acc,npartitions=ncore,
      vmcoptions={'nsteps':30}, dataprefix='parsl_h2o')
 
 

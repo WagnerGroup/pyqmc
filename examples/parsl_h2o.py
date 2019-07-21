@@ -1,38 +1,51 @@
 from pyscf import gto, scf
 import pyqmc
 import parsl
-from parsl.configs.exex_local import config
+import logging
 from pyqmc.parsltools import (
     clean_pyscf_objects,
     distvmc,
-    dist_lm_sampler,
     line_minimization,
 )
 
 #############################
 # Set up the parallelization
 #############################
-ncore = 3
+ncore = 2
 nconf = 1500  # This must be a multiple of ncore
 
-# having one extra rank seems to help with performance a little; we only
-# ever run on ncore
-config.executors[0].ranks_per_node = ncore + 1
 
 # parsl for some reason always makes a directory called 'runinfo'
 # If you want to run several calculations in a single directory,
 # make sure that they get different directory names.
 import string
 import random
+from parsl.providers import LocalProvider
+from parsl.channels import LocalChannel
+from parsl.launchers import SimpleLauncher
 
+from parsl.config import Config
+from parsl.executors import ExtremeScaleExecutor
+# having one extra rank seems to help with performance a little; we only
+# ever run on ncore
 
-def randomString(stringLength=10):
-    """Generate a random string of fixed length """
-    letters = string.ascii_lowercase
-    return "".join(random.choice(letters) for i in range(stringLength))
-
-
-config.run_dir = "parsldir" + randomString(4)
+config = Config(
+    executors=[
+        ExtremeScaleExecutor(
+            label="Extreme_Local",
+            worker_debug=False, #Turn this on to make large files!
+            ranks_per_node=ncore+1,
+            provider=LocalProvider(
+                channel=LocalChannel(),
+                init_blocks=1,
+                max_blocks=1,
+                launcher=SimpleLauncher(),
+            )
+        )
+    ],
+    strategy=None,
+    run_dir='parsldir' + "".join([random.choice(string.ascii_letters) for i in range(3)])
+)
 
 
 ##########################
@@ -50,6 +63,7 @@ mol, mf = clean_pyscf_objects(mol, mf)
 # It's better to load parsl after pyscf has run. Some of the
 # executors have timeouts and will kill the job while pyscf is running!
 parsl.load(config)
+parsl.set_stream_logger(level=logging.WARNING)
 
 
 # We make a Slater-Jastrow wave function and

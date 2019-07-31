@@ -246,8 +246,8 @@ def rundmc(
     wf,
     configs,
     weights=None,
+    tstep=.01,
     nsteps=1000,
-    tstep=0.02,
     branchtime=5,
     stepoffset=0,
     branchcut_start=3,
@@ -258,6 +258,7 @@ def rundmc(
     ekey=("energy", "total"),
     propagate=dmc_propagate,
     feedback=1.0,
+    **kwargs,
 ):
     """
     Run DMC 
@@ -319,6 +320,7 @@ def rundmc(
         accumulators=accumulators,
         ekey=ekey,
         drift_limiter=drift_limiter,
+        **kwargs,
     )
     df_=pd.DataFrame(df_)
     eref = df_[ekey[0] + ekey[1]][0]
@@ -340,6 +342,7 @@ def rundmc(
             accumulators=accumulators,
             ekey=ekey,
             drift_limiter=drift_limiter,
+            **kwargs
         )
         df_=pd.DataFrame(df_)
         df_['eref']=eref

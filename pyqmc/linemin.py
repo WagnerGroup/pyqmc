@@ -25,7 +25,7 @@ def line_minimization(
     pgrad_acc,
     steprange=0.5,
     warmup=0,
-    maxiters=50,
+    maxiters=10,
     vmc=None,
     vmcoptions=None,
     lm=None,

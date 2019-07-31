@@ -207,7 +207,7 @@ def distdmc_propagate(
     configs,
     weights,
     *args, 
-    npartitions=2,
+    npartitions,
     **kwargs,
 ):
     coord = np.split(configs, npartitions)

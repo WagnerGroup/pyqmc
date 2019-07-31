@@ -175,9 +175,8 @@ def dist_lm_sampler(wf, configs, params, pgrad_acc, npartitions=2, sleeptime=5):
     return data
 
 
-def line_minimization(*args, npartitions=2, **kwargs):
+def line_minimization(*args, npartitions, **kwargs):
     import pyqmc
-
     if "vmcoptions" in kwargs:
         kwargs["vmcoptions"]["npartitions"] = npartitions
     else:

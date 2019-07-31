@@ -303,7 +303,7 @@ def limit_timestep(weights, elocnew, elocold, eref, start, stop):
 
 def branch(configs, weights):
     """
-    Perform branching on a set of walkers  by stochastic reconfiguration
+    Perform branching on a set of walkers by stochastic reconfiguration
 
     Walkers are resampled with probability proportional to the weights, and the new weights are all set to be equal to the average weight.
     

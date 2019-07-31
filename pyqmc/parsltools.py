@@ -188,6 +188,65 @@ def line_minimization(*args, npartitions, **kwargs):
     return pyqmc.line_minimization(*args, vmc=distvmc, lm=dist_lm_sampler, **kwargs)
 
 
+@python_app
+def dmc_worker(*args,**kwargs):
+    import pyqmc
+    import pyqmc.dmc 
+    import copy
+    argcopy=tuple(copy.copy(x) for x in args)
+    kwcopy={}
+    for k,v in kwargs.items():
+        kwcopy[k]=copy.copy(v)
+    #print(argcopy)
+    df, configs, weights= pyqmc.dmc.dmc_propagate(*argcopy,**kwcopy)
+    return df, configs.tolist(), weights.tolist()
+
+
+def distdmc_propagate(
+    wf,
+    configs,
+    weights,
+    *args, 
+    npartitions=2,
+    **kwargs,
+):
+    coord = np.split(configs, npartitions)
+    weight = np.split(weights, npartitions)
+    allruns=[]
+    for nodeconfigs,nodeweight in zip(coord,weight):
+        allruns.append(dmc_worker(wf,nodeconfigs,nodeweight,*args,**kwargs))
+
+    import pandas as pd
+    import time
+    while True:
+        time.sleep(.01)
+        print(
+            "Jobs done: {0}/{1}".format(
+                np.sum([r.done() for r in allruns]), len(allruns)
+            ),
+            flush=True,
+        )
+        if np.all([r.done() for r in allruns]):
+            allresults=[r.result() for r in allruns]
+            coordret=np.vstack([x[1] for x in allresults])
+            weightret=np.vstack([x[2] for x in allresults])
+            df=pd.concat([pd.DataFrame(x[0]) for x in allresults])
+            notavg=['weight', 'weightvar', 'weightmin', 'weightmax', 'acceptance', 'step']
+            # Here we reweight the averages since each step on each node 
+            # was done with a different average weight. 
+            for k in df.keys():
+                if k not in notavg:
+                    df[k] = df[k]*df['weight']
+            df=df.groupby("step").aggregate(np.mean,axis=0).reset_index()
+            for k in df.keys():
+                if k not in notavg:
+                    df[k] = df[k]/df['weight']
+            return df, coordret, weightret
+
+
+
+
+
 def clean_pyscf_objects(mol, mf):
     mol.output = None
     mol.stdout = None

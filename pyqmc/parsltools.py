@@ -25,10 +25,10 @@ def vmcparsl(wf, lastrun, nsteps, accumulators, stepoffset=0):
     import numpy as np
 
     df, coords = vmc(
-        copy.copy(wf),
+        copy.deepcopy(wf),
         np.asarray(lastrun[1]).copy(),
         nsteps=nsteps,
-        accumulators=copy.copy(accumulators),
+        accumulators=copy.deepcopy(accumulators),
         stepoffset=stepoffset,
     )
     return df, coords.tolist()
@@ -112,7 +112,7 @@ def lmparsl(wf, configs, params, pgrad_acc):
     import numpy as np
 
     data = lm_sampler(
-        copy.copy(wf), np.array(configs), np.array(params), copy.copy(pgrad_acc)
+        copy.deepcopy(wf), np.array(configs), np.array(params), copy.deepcopy(pgrad_acc)
     )
     for d in data:
         for k in d:

@@ -193,10 +193,11 @@ def dmc_worker(*args,**kwargs):
     import pyqmc
     import pyqmc.dmc 
     import copy
-    argcopy=tuple(copy.copy(x) for x in args)
+    import pandas as pd
+    argcopy=tuple(copy.deepcopy(x) for x in args)
     kwcopy={}
     for k,v in kwargs.items():
-        kwcopy[k]=copy.copy(v)
+        kwcopy[k]=copy.deepcopy(v)
     #print(argcopy)
     df, configs, weights= pyqmc.dmc.dmc_propagate(*argcopy,**kwcopy)
     return df, configs.tolist(), weights.tolist()
@@ -217,31 +218,23 @@ def distdmc_propagate(
         allruns.append(dmc_worker(wf,nodeconfigs,nodeweight,*args,**kwargs))
 
     import pandas as pd
-    import time
-    while True:
-        time.sleep(.01)
-        print(
-            "Jobs done: {0}/{1}".format(
-                np.sum([r.done() for r in allruns]), len(allruns)
-            ),
-            flush=True,
-        )
-        if np.all([r.done() for r in allruns]):
-            allresults=[r.result() for r in allruns]
-            coordret=np.vstack([x[1] for x in allresults])
-            weightret=np.vstack([x[2] for x in allresults])
-            df=pd.concat([pd.DataFrame(x[0]) for x in allresults])
-            notavg=['weight', 'weightvar', 'weightmin', 'weightmax', 'acceptance', 'step']
-            # Here we reweight the averages since each step on each node 
-            # was done with a different average weight. 
-            for k in df.keys():
-                if k not in notavg:
-                    df[k] = df[k]*df['weight']
-            df=df.groupby("step").aggregate(np.mean,axis=0).reset_index()
-            for k in df.keys():
-                if k not in notavg:
-                    df[k] = df[k]/df['weight']
-            return df, coordret, weightret
+    allresults=[r.result() for r in allruns]
+    coordret=np.vstack([x[1] for x in allresults])
+    weightret=np.vstack([x[2] for x in allresults])
+    df=pd.concat([pd.DataFrame(x[0]) for x in allresults])
+    notavg=['weight', 'weightvar', 'weightmin', 'weightmax', 'acceptance', 'step']
+    # Here we reweight the averages since each step on each node 
+    # was done with a different average weight. 
+
+    for k in df.keys():
+        if k not in notavg:
+            df[k] = df[k]*df['weight']
+    df=df.groupby("step").aggregate(np.mean,axis=0).reset_index()
+    for k in df.keys():
+        if k not in notavg:
+            df[k] = df[k]/df['weight']
+    print(df)
+    return df, coordret, weightret
 
 
 

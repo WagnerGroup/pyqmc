@@ -79,21 +79,19 @@ def distvmc(
     import pandas as pd
     import time
 
-    while True:
+    while False:
         print(
             "Jobs done: {0}/{1}".format(
                 np.sum([r.done() for r in allruns]), len(allruns)
             ),
             flush=True,
         )
-        df = []
-        for r in allruns:
-            if r.done():
-                df.extend(r.result()[0])
         if np.all([r.done() for r in allruns]):
             break
         time.sleep(sleeptime)
-
+    df=[]
+    for r in allruns:
+        df.extend(r.result()[0])
     coords = np.asarray(np.concatenate([x.result()[1] for x in allruns[-npartitions:]]))
 
     return df, coords
@@ -149,7 +147,7 @@ def dist_lm_sampler(wf, configs, params, pgrad_acc, npartitions=2, sleeptime=5):
 
     import time
 
-    while True:
+    while False:
         print(
             "Jobs done: {0}/{1}".format(
                 np.sum([r.done() for r in allruns]), len(allruns)
@@ -198,7 +196,6 @@ def dmc_worker(*args,**kwargs):
     kwcopy={}
     for k,v in kwargs.items():
         kwcopy[k]=copy.deepcopy(v)
-    #print(argcopy)
     df, configs, weights= pyqmc.dmc.dmc_propagate(*argcopy,**kwcopy)
     return df, configs.tolist(), weights.tolist()
 

@@ -59,7 +59,6 @@ def dmc_propagate(
     nsteps=5,
     accumulators=None,
     ekey=("energy", "total"),
-    verbose=False,
     drift_limiter=limdrift,
     stepoffset=0,
 ):
@@ -80,8 +79,6 @@ def dmc_propagate(
       accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
 
       ekey: tuple of strings; energy is needed for DMC weights. Access total energy by accumulators[ekey[0]](configs, wf)[ekey[1]
-
-      verbose: Print out step information 
 
       drift_limiter: a function that takes a gradient and a cutoff and returns an adjusted gradient
 
@@ -153,27 +150,6 @@ def dmc_propagate(
         avg["weightmax"] = np.amax(weights)
         avg["acceptance"] = np.mean(acc)
         avg["step"] = stepoffset + step
-        if verbose:
-            print(
-                "step",
-                stepoffset + step,
-                "acceptance",
-                avg["acceptance"],
-                "weight",
-                avg["weight"],
-                "weightstd",
-                avg["weightvar"],
-                "eref",
-                eref,
-            )
-            print(
-                "logwavg",
-                np.log(wavg),
-                "wmax",
-                avg["weightmax"],
-                "wmin",
-                avg["weightmin"],
-            )
 
         df.append(avg)
     return df, configs, weights
@@ -294,17 +270,13 @@ def rundmc(
       weights: The final weights from this calculation
       
     """
-    # assert accumulators is not None, "Need an energy accumulator for DMC"
     nconfig, nelec = configs.shape[0:2]
     if weights is None:
         weights = np.ones(nconfig)
 
-    # wf.recompute(configs)
 
     npropagate = int(np.ceil(nsteps / branchtime))
     df = []
-    # eloc = accumulators[ekey[0]](configs, wf)[ekey[1]]
-    # esigma = np.std(weights * eloc / np.mean(weights))
 
     df_, configs, weights = propagate(
         wf,
@@ -316,7 +288,6 @@ def rundmc(
         eref=0.0,
         nsteps=1,
         stepoffset=0,
-        verbose=False,
         accumulators=accumulators,
         ekey=ekey,
         drift_limiter=drift_limiter,
@@ -338,7 +309,6 @@ def rundmc(
             eref=eref,
             nsteps=branchtime,
             stepoffset=branchtime * step + stepoffset,
-            verbose=verbose,
             accumulators=accumulators,
             ekey=ekey,
             drift_limiter=drift_limiter,

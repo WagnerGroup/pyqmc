@@ -49,11 +49,11 @@ def distvmc(
             thiscoord,
             **{"nsteps": nsteps, "accumulators": accumulators},
         )
-        for r, c in zip(runs, coord):
+        for i,r in enumerate(runs):
             res = r.result()
             alldata.extend(res[0])
-            c = res[1]
-        print("epoch", epoch, "finished")
+            coord[i] = res[1]
+        print("epoch", epoch, "finished", flush=True)
 
     coords = np.asarray(np.concatenate(coord))
 

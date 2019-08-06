@@ -212,7 +212,10 @@ def branch(configs, weights):
     nconfig = configs.shape[0]
     wtot = np.sum(weights)
     probability = np.cumsum(weights / wtot)
-    newinds = np.searchsorted(probability, np.random.random(nconfig))
+    base=np.random.rand()
+    #newinds = np.searchsorted(probability, np.random.random(nconfig))
+    newinds = np.searchsorted(probability, (base + np.arange(nconfig)/nconfig)%1.0 )
+    #print(newinds)
     configs = configs[newinds]
     weights.fill(wtot / nconfig)
     return configs, weights

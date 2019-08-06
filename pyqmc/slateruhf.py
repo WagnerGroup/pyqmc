@@ -36,6 +36,7 @@ class PySCFSlaterUHF:
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
         self._mol = mol
         self._nelec = mol.nelec
+        self.pbc_str = "PBC" if hasattr(mol, "a") else ""
 
     def recompute(self, configs):
         """This computes the value from scratch. Returns the logarithm of the wave function as
@@ -43,7 +44,7 @@ class PySCFSlaterUHF:
         mycoords = configs.reshape(
             (configs.shape[0] * configs.shape[1], configs.shape[2])
         )
-        ao = self._mol.eval_gto("GTOval_sph", mycoords).reshape(
+        ao = self._mol.eval_gto(self.pbc_str + "GTOval_sph", mycoords).reshape(
             (configs.shape[0], configs.shape[1], -1)
         )
 
@@ -72,7 +73,7 @@ class PySCFSlaterUHF:
         if mask is None:
             mask = [True] * epos.shape[0]
         eeff = e - s * self._nelec[0]
-        ao = self._mol.eval_gto("GTOval_sph", epos)
+        ao = self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos)
         mo = ao.dot(self.parameters[self._coefflookup[s]])
         ratio, self._inverse[s][mask, :, :] = sherman_morrison_row(
             eeff, self._inverse[s][mask, :, :], mo[mask, :]
@@ -107,7 +108,7 @@ class PySCFSlaterUHF:
         Note that this can be called even if the internals have not been updated for electron e,
         if epos differs from the current position of electron e."""
         s = int(e >= self._nelec[0])
-        aograd = self._mol.eval_gto("GTOval_ip_sph", epos)
+        aograd = self._mol.eval_gto(self.pbc_str + "GTOval_ip_sph", epos)
         mograd = aograd.dot(self.parameters[self._coefflookup[s]])
         ratios = [self._testrow(e, x) for x in mograd]
         return np.asarray(ratios) / self.testvalue(e, epos)[np.newaxis, :]
@@ -115,8 +116,11 @@ class PySCFSlaterUHF:
     def laplacian(self, e, epos):
         """ Compute the laplacian Psi/ Psi. """
         s = int(e >= self._nelec[0])
-        # aograd=self._mol.eval_gto('GTOval_sph_deriv2',epos)
-        aolap = np.sum(self._mol.eval_gto("GTOval_sph_deriv2", epos)[[4, 7, 9]], axis=0)
+        # aograd=self._mol.eval_gto(self.pbc_str+'GTOval_sph_deriv2',epos)
+        aolap = np.sum(
+            self._mol.eval_gto(self.pbc_str + "GTOval_sph_deriv2", epos)[[4, 7, 9]],
+            axis=0,
+        )
         molap = aolap.dot(self.parameters[self._coefflookup[s]])
         ratios = self._testrow(e, molap)
         return ratios / self.testvalue(e, epos)
@@ -125,7 +129,7 @@ class PySCFSlaterUHF:
         """ return the ratio between the current wave function and the wave function if 
         electron e's position is replaced by epos"""
         s = int(e >= self._nelec[0])
-        ao = self._mol.eval_gto("GTOval_sph", epos)
+        ao = self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos)
         mo = ao.dot(self.parameters[self._coefflookup[s]])
         return self._testrow(e, mo)
 

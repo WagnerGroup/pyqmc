@@ -6,7 +6,7 @@ import scipy
 def sr_update(pgrad, Sij, step, eps=0.1):
     invSij = np.linalg.inv(Sij + eps * np.eye(Sij.shape[0]))
     v = np.einsum("ij,j->i", invSij, pgrad)
-    return -v * step / np.linalg.norm(v)
+    return -v * step #/ np.linalg.norm(v)
 
 
 def sd_update(pgrad, Sij, step, eps=0.1):
@@ -146,7 +146,7 @@ def line_minimization(
         stepsdata = lm(wf, coords, params, pgrad_acc, **lmoptions)
         dfs = []
         for data, p, step in zip(stepsdata, params, steps):
-            en = np.mean(data["total"])
+            en = np.mean(data["total"]*data['weight'])/np.mean(data['weight'])
             dfs.append(
                 {
                     "en": en,
@@ -224,11 +224,14 @@ def lm_sampler(wf, configs, params, pgrad_acc):
             wf.parameters[k] = newparms[k]
         psi = wf.recompute(configs)[1]  # recompute gives logdet
         rawweights = np.exp(2 * (psi - psi0))  # convert from log(|psi|) to |psi|**2
-        weights = rawweights / np.mean(rawweights)
+        #weights = rawweights / np.mean(rawweights)
         df = pgrad_acc(configs, wf)
-        for k in df:
-            df[k] = np.einsum(
-                "i,i...->i...", weights, df[k]
-            )  # reweight all averaged quantities by sampling probability
+        df['weight']=rawweights
+        
+
+#        for k in df:
+#            df[k] = np.einsum(
+#                "i,i...->i...", weights, df[k]
+#            )  # reweight all averaged quantities by sampling probability
         data.append(df)
     return data

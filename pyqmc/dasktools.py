@@ -91,9 +91,20 @@ def dist_lm_sampler(wf, configs, params, pgrad_acc, npartitions=None, client=Non
 
     stepresults = []
     for r in allruns:
-        stepresults.extend(r.result())
+        stepresults.append(r.result())
 
-    return stepresults
+    keys=stepresults[0][0].keys()
+    #This will be a list of dictionaries
+    final_results=[]
+    for p in range(len(params)):
+        df={}
+        for k in keys:
+            #print(k,flush=True)
+            #print(stepresults[0][p][k])
+            df[k]=np.concatenate([x[p][k] for x in stepresults],axis=0)
+        final_results.append(df)
+
+    return final_results
 
 
 def line_minimization(*args, client, **kwargs):

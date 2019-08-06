@@ -10,20 +10,20 @@ def sr_update(pgrad, Sij, step, eps=0.1):
 
 
 def sd_update(pgrad, Sij, step, eps=0.1):
-    return -pgrad * step / np.linalg.norm(pgrad)
+    return -pgrad * step #/ np.linalg.norm(pgrad)
 
 
 def sr12_update(pgrad, Sij, step, eps=0.1):
     invSij = scipy.linalg.sqrtm(np.linalg.inv(Sij + eps * np.eye(Sij.shape[0])))
     v = np.einsum("ij,j->i", invSij, pgrad)
-    return -v * step / np.linalg.norm(v)
+    return -v * step #/ np.linalg.norm(v)
 
 
 def line_minimization(
     wf,
     coords,
     pgrad_acc,
-    steprange=0.5,
+    steprange=0.2,
     warmup=0,
     maxiters=10,
     vmc=None,
@@ -131,17 +131,16 @@ def line_minimization(
         )
 
         print("descent en", en, en_err)
-        # print("descent grad", pgrad)
         print("descent |grad|", np.linalg.norm(pgrad), flush=True)
 
         xfit = []
         yfit = []
-        xfit.append(0.0)
-        yfit.append(last_en)
-
-        # Calculate samples to fit
-        steps = np.linspace(0, steprange, npts)
-        steps[0] = -steprange / npts
+        
+        # Calculate samples to fit.
+        # include near zero in the fit, and go backwards as well
+        # We don't use the above computed value because we are
+        # doing correlated sampling.
+        steps = np.linspace(-steprange/npts, steprange, npts)
         params = [x0 + update(pgrad, Sij, step, **update_kws) for step in steps]
         stepsdata = lm(wf, coords, params, pgrad_acc, **lmoptions)
         dfs = []
@@ -161,7 +160,8 @@ def line_minimization(
                     "iter": it,
                 }
             )
-            print("descent step", step, dfs[-1]["en"], dfs[-1]["en_err"], flush=True)
+            print("descent step", step, dfs[-1]["en"],
+                  "weight stddev", np.std(data['weight']), flush=True)
 
         xfit.extend(steps)
         yfit.extend([df["en"] for df in dfs])

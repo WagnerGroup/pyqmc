@@ -158,19 +158,22 @@ def dist_lm_sampler(wf, configs, params, pgrad_acc, npartitions=2, sleeptime=5):
             break
         time.sleep(sleeptime)
 
-    stepsresults = zip(*[x.result() for x in allruns])  # length should be nsteps
+    stepresults = []
+    for r in allruns:
+        stepresults.append(r.result())
 
-    data = []
-    df = {}
-    for result in stepsresults:
-        # result is a list of dicts, coming from the partitions
-        df["dpH"] = np.concatenate([r["dpH"] for r in result], axis=0)
-        df["dppsi"] = np.concatenate([r["dppsi"] for r in result], axis=0)
-        df["dpidpj"] = np.concatenate([r["dpidpj"] for r in result], axis=0)
-        df["total"] = np.concatenate([r["total"] for r in result], axis=0)
-        data.append(df.copy())
+    keys=stepresults[0][0].keys()
+    #This will be a list of dictionaries
+    final_results=[]
+    for p in range(len(params)):
+        df={}
+        for k in keys:
+            #print(k,flush=True)
+            #print(stepresults[0][p][k])
+            df[k]=np.concatenate([x[p][k] for x in stepresults],axis=0)
+        final_results.append(df)
 
-    return data
+    return final_results
 
 
 def line_minimization(*args, npartitions, **kwargs):

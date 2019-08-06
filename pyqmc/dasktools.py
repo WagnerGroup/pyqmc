@@ -131,7 +131,7 @@ def distdmc_propagate(wf, configs, weights, *args, client, npartitions=None, **k
     for nodeconfigs, nodeweight in zip(coord, weight):
         allruns.append(
             client.submit(
-                pyqmc.dmc.dmc_propagate(wf, nodeconfigs, nodeweight, *args, **kwargs)
+                pyqmc.dmc.dmc_propagate, wf, nodeconfigs, nodeweight, *args, **kwargs
             )
         )
 

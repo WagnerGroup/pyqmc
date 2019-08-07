@@ -25,10 +25,10 @@ def vmcparsl(wf, lastrun, nsteps, accumulators, stepoffset=0):
     import numpy as np
 
     df, coords = vmc(
-        copy.copy(wf),
+        copy.deepcopy(wf),
         np.asarray(lastrun[1]).copy(),
         nsteps=nsteps,
-        accumulators=copy.copy(accumulators),
+        accumulators=copy.deepcopy(accumulators),
         stepoffset=stepoffset,
     )
     return df, coords.tolist()
@@ -79,21 +79,19 @@ def distvmc(
     import pandas as pd
     import time
 
-    while True:
+    while False:
         print(
             "Jobs done: {0}/{1}".format(
                 np.sum([r.done() for r in allruns]), len(allruns)
             ),
             flush=True,
         )
-        df = []
-        for r in allruns:
-            if r.done():
-                df.extend(r.result()[0])
         if np.all([r.done() for r in allruns]):
             break
         time.sleep(sleeptime)
-
+    df=[]
+    for r in allruns:
+        df.extend(r.result()[0])
     coords = np.asarray(np.concatenate([x.result()[1] for x in allruns[-npartitions:]]))
 
     return df, coords
@@ -112,7 +110,7 @@ def lmparsl(wf, configs, params, pgrad_acc):
     import numpy as np
 
     data = lm_sampler(
-        copy.copy(wf), np.array(configs), np.array(params), copy.copy(pgrad_acc)
+        copy.deepcopy(wf), np.array(configs), np.array(params), copy.deepcopy(pgrad_acc)
     )
     for d in data:
         for k in d:
@@ -149,7 +147,7 @@ def dist_lm_sampler(wf, configs, params, pgrad_acc, npartitions=2, sleeptime=5):
 
     import time
 
-    while True:
+    while False:
         print(
             "Jobs done: {0}/{1}".format(
                 np.sum([r.done() for r in allruns]), len(allruns)
@@ -160,24 +158,26 @@ def dist_lm_sampler(wf, configs, params, pgrad_acc, npartitions=2, sleeptime=5):
             break
         time.sleep(sleeptime)
 
-    stepsresults = zip(*[x.result() for x in allruns])  # length should be nsteps
+    stepresults = []
+    for r in allruns:
+        stepresults.append(r.result())
 
-    data = []
-    df = {}
-    for result in stepsresults:
-        # result is a list of dicts, coming from the partitions
-        df["dpH"] = np.concatenate([r["dpH"] for r in result], axis=0)
-        df["dppsi"] = np.concatenate([r["dppsi"] for r in result], axis=0)
-        df["dpidpj"] = np.concatenate([r["dpidpj"] for r in result], axis=0)
-        df["total"] = np.concatenate([r["total"] for r in result], axis=0)
-        data.append(df.copy())
+    keys=stepresults[0][0].keys()
+    #This will be a list of dictionaries
+    final_results=[]
+    for p in range(len(params)):
+        df={}
+        for k in keys:
+            #print(k,flush=True)
+            #print(stepresults[0][p][k])
+            df[k]=np.concatenate([x[p][k] for x in stepresults],axis=0)
+        final_results.append(df)
 
-    return data
+    return final_results
 
 
-def line_minimization(*args, npartitions=2, **kwargs):
+def line_minimization(*args, npartitions, **kwargs):
     import pyqmc
-
     if "vmcoptions" in kwargs:
         kwargs["vmcoptions"]["npartitions"] = npartitions
     else:
@@ -187,6 +187,57 @@ def line_minimization(*args, npartitions=2, **kwargs):
     else:
         kwargs["lmoptions"] = {"npartitions": npartitions}
     return pyqmc.line_minimization(*args, vmc=distvmc, lm=dist_lm_sampler, **kwargs)
+
+
+@python_app
+def dmc_worker(*args,**kwargs):
+    import pyqmc
+    import pyqmc.dmc 
+    import copy
+    import pandas as pd
+    argcopy=tuple(copy.deepcopy(x) for x in args)
+    kwcopy={}
+    for k,v in kwargs.items():
+        kwcopy[k]=copy.deepcopy(v)
+    df, configs, weights= pyqmc.dmc.dmc_propagate(*argcopy,**kwcopy)
+    return df, configs.tolist(), weights.tolist()
+
+
+def distdmc_propagate(
+    wf,
+    configs,
+    weights,
+    *args, 
+    npartitions,
+    **kwargs,
+):
+    coord = np.split(configs, npartitions)
+    weight = np.split(weights, npartitions)
+    allruns=[]
+    for nodeconfigs,nodeweight in zip(coord,weight):
+        allruns.append(dmc_worker(wf,nodeconfigs,nodeweight,*args,**kwargs))
+
+    import pandas as pd
+    allresults=[r.result() for r in allruns]
+    coordret=np.vstack([x[1] for x in allresults])
+    weightret=np.vstack([x[2] for x in allresults])
+    df=pd.concat([pd.DataFrame(x[0]) for x in allresults])
+    notavg=['weight', 'weightvar', 'weightmin', 'weightmax', 'acceptance', 'step']
+    # Here we reweight the averages since each step on each node 
+    # was done with a different average weight. 
+
+    for k in df.keys():
+        if k not in notavg:
+            df[k] = df[k]*df['weight']
+    df=df.groupby("step").aggregate(np.mean,axis=0).reset_index()
+    for k in df.keys():
+        if k not in notavg:
+            df[k] = df[k]/df['weight']
+    print(df)
+    return df, coordret, weightret
+
+
+
 
 
 def clean_pyscf_objects(mol, mf):

@@ -35,7 +35,7 @@ class PySCFSlaterUHF:
 
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
         self._mol = mol
-        self._nelec = mol.nelec
+        self._nelec = tuple(mol.nelec)
         self.pbc_str = "PBC" if hasattr(mol, "a") else ""
 
     def recompute(self, configs):

@@ -6,26 +6,26 @@ import scipy
 def sr_update(pgrad, Sij, step, eps=0.1):
     invSij = np.linalg.inv(Sij + eps * np.eye(Sij.shape[0]))
     v = np.einsum("ij,j->i", invSij, pgrad)
-    return -v * step / np.linalg.norm(v)
+    return -v * step #/ np.linalg.norm(v)
 
 
 def sd_update(pgrad, Sij, step, eps=0.1):
-    return -pgrad * step / np.linalg.norm(pgrad)
+    return -pgrad * step #/ np.linalg.norm(pgrad)
 
 
 def sr12_update(pgrad, Sij, step, eps=0.1):
     invSij = scipy.linalg.sqrtm(np.linalg.inv(Sij + eps * np.eye(Sij.shape[0])))
     v = np.einsum("ij,j->i", invSij, pgrad)
-    return -v * step / np.linalg.norm(v)
+    return -v * step #/ np.linalg.norm(v)
 
 
 def line_minimization(
     wf,
     coords,
     pgrad_acc,
-    steprange=0.5,
+    steprange=0.2,
     warmup=0,
-    maxiters=50,
+    maxiters=10,
     vmc=None,
     vmcoptions=None,
     lm=None,
@@ -98,7 +98,7 @@ def line_minimization(
         data, coords = vmc(wf, coords, accumulators={"pgrad": pgrad_acc}, **vmcoptions)
         df = pd.DataFrame(data)[warmup:]
         en = np.mean(df["pgradtotal"])
-        en_err = np.std(df["pgradtotal"]) / len(df)
+        en_err = np.std(df["pgradtotal"]) / np.sqrt(len(df))
         dpH = np.mean(df["pgraddpH"], axis=0)
         dp = np.mean(df["pgraddppsi"], axis=0)
         dpdp = np.mean(df["pgraddpidpj"], axis=0)
@@ -131,22 +131,21 @@ def line_minimization(
         )
 
         print("descent en", en, en_err)
-        # print("descent grad", pgrad)
         print("descent |grad|", np.linalg.norm(pgrad), flush=True)
 
         xfit = []
         yfit = []
-        xfit.append(0.0)
-        yfit.append(last_en)
-
-        # Calculate samples to fit
-        steps = np.linspace(0, steprange, npts)
-        steps[0] = -steprange / npts
+        
+        # Calculate samples to fit.
+        # include near zero in the fit, and go backwards as well
+        # We don't use the above computed value because we are
+        # doing correlated sampling.
+        steps = np.linspace(-steprange/npts, steprange, npts)
         params = [x0 + update(pgrad, Sij, step, **update_kws) for step in steps]
         stepsdata = lm(wf, coords, params, pgrad_acc, **lmoptions)
         dfs = []
         for data, p, step in zip(stepsdata, params, steps):
-            en = np.mean(data["total"])
+            en = np.mean(data["total"]*data['weight'])/np.mean(data['weight'])
             dfs.append(
                 {
                     "en": en,
@@ -161,7 +160,8 @@ def line_minimization(
                     "iter": it,
                 }
             )
-            print("descent step", step, dfs[-1]["en"], dfs[-1]["en_err"], flush=True)
+            print("descent step", step, dfs[-1]["en"],
+                  "weight stddev", np.std(data['weight']), flush=True)
 
         xfit.extend(steps)
         yfit.extend([df["en"] for df in dfs])
@@ -224,11 +224,14 @@ def lm_sampler(wf, configs, params, pgrad_acc):
             wf.parameters[k] = newparms[k]
         psi = wf.recompute(configs)[1]  # recompute gives logdet
         rawweights = np.exp(2 * (psi - psi0))  # convert from log(|psi|) to |psi|**2
-        weights = rawweights / np.mean(rawweights)
+        #weights = rawweights / np.mean(rawweights)
         df = pgrad_acc(configs, wf)
-        for k in df:
-            df[k] = np.einsum(
-                "i,i...->i...", weights, df[k]
-            )  # reweight all averaged quantities by sampling probability
+        df['weight']=rawweights
+        
+
+#        for k in df:
+#            df[k] = np.einsum(
+#                "i,i...->i...", weights, df[k]
+#            )  # reweight all averaged quantities by sampling probability
         data.append(df)
     return data

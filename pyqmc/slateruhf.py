@@ -35,7 +35,7 @@ class PySCFSlaterUHF:
 
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
         self._mol = mol
-        self._nelec = mol.nelec
+        self._nelec = tuple(mol.nelec)
 
     def recompute(self, configs):
         """This computes the value from scratch. Returns the logarithm of the wave function as

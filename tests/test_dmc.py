@@ -17,7 +17,7 @@ def test():
     from pyscf import lib, gto, scf
     from pyqmc.slateruhf import PySCFSlaterUHF
     from pyqmc.jastrowspin import JastrowSpin
-    from pyqmc.dmc import limdrift, dmc
+    from pyqmc.dmc import limdrift, rundmc
     from pyqmc.mc import vmc
     from pyqmc.accumulators import EnergyAccumulator
     from pyqmc.func3d import ExpCuspFunction
@@ -44,16 +44,16 @@ def test():
         np.std(dfvmc["energytotal"]) / np.sqrt(len(dfvmc)),
     )
 
-    dfdmc, configs_, weights_ = dmc(
+    dfdmc, configs_, weights_ = rundmc(
         wf,
         configs,
-        nsteps=5000,
+        nsteps=1000,
         branchtime=5,
         accumulators={"energy": EnergyAccumulator(mol)},
         ekey=("energy", "total"),
         tstep=0.01,
         drift_limiter=limdrift,
-        verbose=True,
+        verbose=False,
     )
 
     dfdmc = pd.DataFrame(dfdmc)

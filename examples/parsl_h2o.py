@@ -2,17 +2,20 @@ from pyscf import gto, scf
 import pyqmc
 import parsl
 import logging
+import pandas as pd
 from pyqmc.parsltools import (
     clean_pyscf_objects,
     distvmc,
     line_minimization,
+    distdmc_propagate
 )
+from pyqmc import rundmc, EnergyAccumulator
 
 #############################
 # Set up the parallelization
 #############################
 ncore = 2
-nconf = 1500  # This must be a multiple of ncore
+nconf = 500  # This must be a multiple of ncore
 
 
 # parsl for some reason always makes a directory called 'runinfo'
@@ -88,3 +91,28 @@ wf, dfgrad, dfline = line_minimization(
     vmcoptions={"nsteps": 30},
     dataprefix="parsl_h2o",
 )
+
+
+
+dfdmc, configs_, weights_ = rundmc(
+    wf,
+    configs,
+    nsteps=1000,
+    branchtime=5,
+    accumulators={"energy": EnergyAccumulator(mol)},
+    ekey=("energy", "total"),
+    tstep=0.01,
+    verbose=True,
+    propagate=distdmc_propagate,
+    npartitions=ncore,
+)
+
+dfdmc = pd.DataFrame(dfdmc)
+dfdmc.sort_values("step", inplace=True)
+dfdmc.to_csv("parsl_h2o_dmc.csv")
+warmup = 200
+dfprod = dfdmc[dfdmc.step > warmup]
+
+reblock = pyblock.reblock(dfprod[["energytotal", "energyei"]])
+print(reblock[1])
+

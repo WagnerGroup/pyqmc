@@ -150,11 +150,6 @@ def line_minimization(
                 {
                     "en": en,
                     "en_err": np.std(data["total"]) / np.sqrt(data["total"].size),
-                    "pgrad": 2
-                    * (
-                        np.mean(data["dpH"], axis=0)
-                        - en * np.mean(data["dppsi"], axis=0)
-                    ),
                     "step": step,
                     "params": p.copy(),
                     "iter": it,
@@ -224,14 +219,8 @@ def lm_sampler(wf, configs, params, pgrad_acc):
             wf.parameters[k] = newparms[k]
         psi = wf.recompute(configs)[1]  # recompute gives logdet
         rawweights = np.exp(2 * (psi - psi0))  # convert from log(|psi|) to |psi|**2
-        #weights = rawweights / np.mean(rawweights)
-        df = pgrad_acc(configs, wf)
-        df['weight']=rawweights
-        
+        df = pgrad_acc.enacc(configs, wf)
+        df['weight'] = rawweights
 
-#        for k in df:
-#            df[k] = np.einsum(
-#                "i,i...->i...", weights, df[k]
-#            )  # reweight all averaged quantities by sampling probability
         data.append(df)
     return data

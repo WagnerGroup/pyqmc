@@ -78,7 +78,7 @@ def limdrift(g, cutoff=1):
     """
     tot = np.linalg.norm(g, axis=1)
     mask = tot > cutoff
-    g[mask, :] = g[mask, :] / tot[mask, np.newaxis]
+    g[mask, :] = cutoff * g[mask, :] / tot[mask, np.newaxis]
     return g
 
 

@@ -11,7 +11,7 @@ Welcome to pyQMC's documentation!
    :caption: Contents:
 
    install
-   example
+   tutorial
    objects
    
    mc

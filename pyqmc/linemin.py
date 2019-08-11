@@ -6,17 +6,17 @@ import scipy
 def sr_update(pgrad, Sij, step, eps=0.1):
     invSij = np.linalg.inv(Sij + eps * np.eye(Sij.shape[0]))
     v = np.einsum("ij,j->i", invSij, pgrad)
-    return -v * step #/ np.linalg.norm(v)
+    return -v * step  # / np.linalg.norm(v)
 
 
 def sd_update(pgrad, Sij, step, eps=0.1):
-    return -pgrad * step #/ np.linalg.norm(pgrad)
+    return -pgrad * step  # / np.linalg.norm(pgrad)
 
 
 def sr12_update(pgrad, Sij, step, eps=0.1):
     invSij = scipy.linalg.sqrtm(np.linalg.inv(Sij + eps * np.eye(Sij.shape[0])))
     v = np.einsum("ij,j->i", invSij, pgrad)
-    return -v * step #/ np.linalg.norm(v)
+    return -v * step  # / np.linalg.norm(v)
 
 
 def line_minimization(
@@ -135,33 +135,34 @@ def line_minimization(
 
         xfit = []
         yfit = []
-        
+
         # Calculate samples to fit.
         # include near zero in the fit, and go backwards as well
         # We don't use the above computed value because we are
         # doing correlated sampling.
-        steps = np.linspace(-steprange/npts, steprange, npts)
+        steps = np.linspace(-steprange / npts, steprange, npts)
         params = [x0 + update(pgrad, Sij, step, **update_kws) for step in steps]
         stepsdata = lm(wf, coords, params, pgrad_acc, **lmoptions)
         dfs = []
         for data, p, step in zip(stepsdata, params, steps):
-            en = np.mean(data["total"]*data['weight'])/np.mean(data['weight'])
+            en = np.mean(data["total"] * data["weight"]) / np.mean(data["weight"])
             dfs.append(
                 {
                     "en": en,
                     "en_err": np.std(data["total"]) / np.sqrt(data["total"].size),
-                    "pgrad": 2
-                    * (
-                        np.mean(data["dpH"], axis=0)
-                        - en * np.mean(data["dppsi"], axis=0)
-                    ),
                     "step": step,
                     "params": p.copy(),
                     "iter": it,
                 }
             )
-            print("descent step", step, dfs[-1]["en"],
-                  "weight stddev", np.std(data['weight']), flush=True)
+            print(
+                "descent step",
+                step,
+                dfs[-1]["en"],
+                "weight stddev",
+                np.std(data["weight"]),
+                flush=True,
+            )
 
         xfit.extend(steps)
         yfit.extend([df["en"] for df in dfs])
@@ -224,14 +225,8 @@ def lm_sampler(wf, configs, params, pgrad_acc):
             wf.parameters[k] = newparms[k]
         psi = wf.recompute(configs)[1]  # recompute gives logdet
         rawweights = np.exp(2 * (psi - psi0))  # convert from log(|psi|) to |psi|**2
-        #weights = rawweights / np.mean(rawweights)
-        df = pgrad_acc(configs, wf)
-        df['weight']=rawweights
-        
+        df = pgrad_acc.enacc(configs, wf)
+        df["weight"] = rawweights
 
-#        for k in df:
-#            df[k] = np.einsum(
-#                "i,i...->i...", weights, df[k]
-#            )  # reweight all averaged quantities by sampling probability
         data.append(df)
     return data

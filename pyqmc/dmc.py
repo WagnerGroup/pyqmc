@@ -323,4 +323,4 @@ def rundmc(
         df.append(df_)
         eref = df_[ekey[0]+ekey[1]].values[-1]-feedback*np.log(np.mean(weights))
         configs, weights = branch(configs, weights)
-    return pd.concat(df), configs, weights
+    return pd.concat(df).reset_index(), configs, weights

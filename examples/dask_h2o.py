@@ -28,7 +28,7 @@ if __name__=="__main__":
     from pyqmc import EnergyAccumulator
     df,coords=distvmc(wf,pyqmc.initial_guess(mol,nconfig),client=client,nsteps_per=10,nsteps=10)
     line_minimization(wf,coords,pyqmc.gradient_generator(mol,wf,["wf2acoeff", "wf2bcoeff"]),client=client)
-    dfdmc, configs_, weights_ = rundmc(
+    dfdmc, configs, weights = rundmc(
         wf,
         coords,
         nsteps=5000,

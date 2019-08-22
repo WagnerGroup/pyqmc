@@ -11,11 +11,6 @@ def binary_to_occ(S, ncore):
 
 class MultiSlater: 
     def __init__(self, mol, mf, mc):
-        #Need to figure out init structure, for now
-        #just have this
-        #self._mol = mol
-        #self._nelec = tuple(ci.nelecas)
-     
         self.parameters = {}
         self._mol = mol
         self._nelec = tuple(mol.nelec)
@@ -179,6 +174,23 @@ class MultiSlater:
         curr_val = self.value()
         return lap / (self.testvalue(e, epos) * curr_val[0] * np.exp(curr_val[1]))
 
+    def pgradient(self):
+        """Compute the parameter gradient of Psi. 
+        Returns d_p \Psi/\Psi as a dictionary of numpy arrays,
+        which correspond to the parameter dictionary.
+        """
+        d = {}
+        for parm in self.parameters:
+            if(parm == 'det_coeff'): 
+                det_coeff_grad = np.zeros((self._aovals.shape[0],len(self._det_occup)))
+                for det in range(det_coeff_grad.shape[1]):
+                    det_coeff_grad[:,det] = self._dets[det][0][0]*self._dets[det][1][0]*\
+                        np.exp(self._dets[det][0][1] + self._dets[det][1][1])
+                curr_val = self.value()
+                d[parm] = det_coeff_grad/(curr_val[0] * np.exp(curr_val[1]))[:,np.newaxis]
+            else: pass #Mo_coeff not implemented yet
+        return d
+
 if __name__ == '__main__':
     from pyscf import gto, scf, mcscf
     from pyqmc.testwf import * 
@@ -234,3 +246,6 @@ if __name__ == '__main__':
 
     ret = test_wf_laplacian(wf,configs)
     print('Test laplacian: ',ret)
+
+    ret = test_wf_pgradient(wf,configs)
+    print('Test pgrad: ',ret)

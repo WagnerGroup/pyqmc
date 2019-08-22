@@ -24,7 +24,7 @@ def test_updateinternals(wf, configs):
         wf.updateinternals(e, configs[:, e, :])
         update = wf.value()
         recompute = wf.recompute(configs)
-        print(val1, ratio, update, recompute)
+        
         updatevstest[e, :] = update[0] / val1[0] * np.exp(update[1] - val1[1]) - ratio
         recomputevsupdate[e, :] = update[0] / val1[0] * np.exp(
             update[1] - val1[1]

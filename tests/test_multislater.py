@@ -1,19 +1,24 @@
+import os
+
+os.environ["MKL_NUM_THREADS"] = "1" 
+os.environ["NUMEXPR_NUM_THREADS"] = "1" 
+os.environ["OMP_NUM_THREADS"] = "1" 
+
 import numpy as np
+import pandas as pd
+from pyscf import lib, gto, scf, mcscf
+import pyqmc.testwf as testwf
+from pyqmc.mc import vmc, initial_guess
+from pyqmc.accumulators import EnergyAccumulator
+from pyqmc.multislater import MultiSlater
 
 def test():
-    from pyscf import lib, gto, scf, mcscf
-    import pyqmc.testwf as testwf
-    from pyqmc.mc import vmc, initial_guess
-    from pyqmc.accumulators import EnergyAccumulator
-    import pandas as pd
-    from pyqmc.multislater import MultiSlater
-
     mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="cc-pvtz", unit="bohr", spin=0)
     for mf in [scf.RHF(mol).run(), scf.ROHF(mol).run(), scf.UHF(mol).run()]:
         print("")
         mc = mcscf.CASCI(mf,ncas=2,nelecas=(1,1))
         mc.kernel()
-        wf = pyqmc.multislater.MultiSlater(mol, mf, mc)
+        wf = MultiSlater(mol, mf, mc)
         
         nconf = 10
         nelec = np.sum(mol.nelec)
@@ -39,7 +44,7 @@ def test():
                 "Testing pgradient",
                 testwf.test_wf_pgradient(wf, configs, delta=delta),
             )
-
+        
         print("Testing VMC")
         nconf = 5000
         nsteps = 100

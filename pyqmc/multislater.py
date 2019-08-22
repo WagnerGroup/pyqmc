@@ -1,6 +1,5 @@
 import numpy as np
 from slateruhf import sherman_morrison_row
-import pyqmc 
 
 #Taken from autogenv2/pyscf2qwalk
 def binary_to_occ(S, ncore):
@@ -26,6 +25,7 @@ class MultiSlater:
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
 
     def _copy_ci(self, mc):
+        from pyscf import fci #SHIFTY, probably don't want this import 
         norb  = mc.ncas 
         nelec = mc.nelecas
         ncore = mc.ncore 
@@ -35,7 +35,6 @@ class MultiSlater:
         detwt = []
         occup = []
 
-        from pyscf import fci #SHIFTY, probably don't want this import 
         deters = fci.addons.large_ci(mc.ci, norb, nelec, tol=0)
           
         for x in deters:

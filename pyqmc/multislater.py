@@ -161,6 +161,24 @@ class MultiSlater:
         curr_val = self.value()
         return grad / (self.testvalue(e, epos)[np.newaxis, :] * curr_val[0] * np.exp(curr_val[1]))
 
+    def laplacian(self, e, epos):
+        """ Compute the laplacian Psi/ Psi. """
+        s = int(e >= self._nelec[0])
+        aolap = np.sum(self._mol.eval_gto("GTOval_sph_deriv2", epos)[[4, 7, 9]], axis=0)
+        
+        lap = None
+        for det in range(len(self._det_occup)):
+            molap = aolap.dot(self.parameters[self._coefflookup[s]])[:,self._det_occup[det][s]]
+            det_ratio = self._testrow(e,det,molap)
+            det_lap = self.parameters['det_coeff'][det]*det_ratio*\
+                self._dets[det][0][0]*self._dets[det][1][0]*\
+                np.exp(self._dets[det][0][1] + self._dets[det][1][1])
+            if(lap is None): lap = det_lap
+            else: lap += det_lap
+
+        curr_val = self.value()
+        return lap / (self.testvalue(e, epos) * curr_val[0] * np.exp(curr_val[1]))
+
 if __name__ == '__main__':
     from pyscf import gto, scf, mcscf
     from pyqmc.testwf import * 
@@ -209,7 +227,10 @@ if __name__ == '__main__':
     wf = MultiSlater(mol, mf, mc)
 
     ret = test_updateinternals(wf,configs)
-    print(ret)
+    print('Test internals: ',ret)
 
     ret = test_wf_gradient(wf,configs)
-    print(ret)
+    print('Test gradient: ',ret)
+
+    ret = test_wf_laplacian(wf,configs)
+    print('Test laplacian: ',ret)

@@ -145,10 +145,25 @@ class MultiSlater:
         """ Compute the gradient of the log wave function 
         Note that this can be called even if the internals have not been updated for electron e,
         if epos differs from the current position of electron e."""
-  
+        s = int(e >= self._nelec[0])
+        aograd = self._mol.eval_gto("GTOval_ip_sph", epos)
+       
+        grad = None
+        for det in range(len(self._det_occup)):
+            mograd = aograd.dot(self.parameters[self._coefflookup[s]])[:,:,self._det_occup[det][s]]
+            det_ratio = [self._testrow(e,det,x) for x in mograd]
+            det_grad = self.parameters['det_coeff'][det]*np.asarray(det_ratio)*\
+                self._dets[det][0][0]*self._dets[det][1][0]*\
+                np.exp(self._dets[det][0][1] + self._dets[det][1][1])
+            if(grad is None): grad = det_grad
+            else: grad += det_grad  
+
+        curr_val = self.value()
+        return grad / (self.testvalue(e, epos)[np.newaxis, :] * curr_val[0] * np.exp(curr_val[1]))
+
 if __name__ == '__main__':
     from pyscf import gto, scf, mcscf
-    from pyqmc.testwf import test_updateinternals
+    from pyqmc.testwf import * 
     
     r = 1.1
     basis = {
@@ -196,3 +211,5 @@ if __name__ == '__main__':
     ret = test_updateinternals(wf,configs)
     print(ret)
 
+    ret = test_wf_gradient(wf,configs)
+    print(ret)

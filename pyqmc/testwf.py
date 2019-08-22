@@ -24,7 +24,6 @@ def test_updateinternals(wf, configs):
         wf.updateinternals(e, configs[:, e, :])
         update = wf.value()
         recompute = wf.recompute(configs)
-        
         updatevstest[e, :] = update[0] / val1[0] * np.exp(update[1] - val1[1]) - ratio
         recomputevsupdate[e, :] = update[0] / val1[0] * np.exp(
             update[1] - val1[1]
@@ -148,7 +147,7 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
 
 if __name__ == "__main__":
     from pyscf import lib, gto, scf
-    from pyqmc.slateruhf import PySCFSlaterRHF
+    from pyqmc.slater import PySCFSlaterRHF
     from pyqmc.jastrow import Jastrow2B
 
     mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="cc-pvtz", unit="bohr")

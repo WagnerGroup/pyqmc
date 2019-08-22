@@ -1,8 +1,12 @@
 import numpy as np
-from slateruhf import sherman_morrison_row
+from pyqmc.slateruhf import sherman_morrison_row
 
-#Taken from autogenv2/pyscf2qwalk
 def binary_to_occ(S, ncore):
+  """
+  Converts the binary cistring for a given determinant
+  to occupation values for molecular orbitals within
+  the determinant.
+  """
   occup = [ int(i) for i in range(ncore)]
   occup += [ int(i+ncore)  for i, c in enumerate(reversed(S))
           if c=='1']
@@ -10,6 +14,11 @@ def binary_to_occ(S, ncore):
   return (occup, max_orb)
 
 class MultiSlater: 
+    """
+    A multi-determinant wave function object initialized
+    via an SCF calculation. Methods and structure are very similar
+    to the PySCFSlaterUHF class.
+    """
     def __init__(self, mol, mf, mc):
         self.parameters = {}
         self._mol = mol
@@ -25,7 +34,11 @@ class MultiSlater:
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
 
     def _copy_ci(self, mc):
-        from pyscf import fci #SHIFTY, probably don't want this import 
+        """     
+        Copies over determinant coefficients and MO occupations
+        for a multi-configuration calculation mc.
+        """
+        from pyscf import fci 
         norb  = mc.ncas 
         nelec = mc.nelecas
         ncore = mc.ncore 
@@ -43,8 +56,8 @@ class MultiSlater:
           beta_occ, __ =  binary_to_occ(x[2], ncore)
           occup.append((alpha_occ,beta_occ))
         
-        self.parameters['det_coeff'] = np.array(detwt) #Ndet, just coefficients
-        self._det_occup = occup #Ndet, nested tuple of two arrays - spin up and spin down
+        self.parameters['det_coeff'] = np.array(detwt) 
+        self._det_occup = occup 
 
     def recompute(self, configs):
         """This computes the value from scratch. Returns the logarithm of the wave function as
@@ -177,16 +190,13 @@ class MultiSlater:
     def pgradient(self):
         """Compute the parameter gradient of Psi. 
         Returns d_p \Psi/\Psi as a dictionary of numpy arrays,
-        which correspond to the parameter dictionary.
-        """
+        which correspond to the parameter dictionary."""
         d = {}
-        for parm in self.parameters:
-            if(parm == 'det_coeff'): 
-                det_coeff_grad = np.zeros((self._aovals.shape[0],len(self._det_occup)))
-                for det in range(det_coeff_grad.shape[1]):
-                    det_coeff_grad[:,det] = self._dets[det][0][0]*self._dets[det][1][0]*\
-                        np.exp(self._dets[det][0][1] + self._dets[det][1][1])
-                curr_val = self.value()
-                d[parm] = det_coeff_grad/(curr_val[0] * np.exp(curr_val[1]))[:,np.newaxis]
-            else: pass #Mo_coeff not implemented yet
+        det_coeff_grad = np.zeros((self._aovals.shape[0],len(self._det_occup)))
+        for det in range(det_coeff_grad.shape[1]):
+            det_coeff_grad[:,det] = self._dets[det][0][0]*self._dets[det][1][0]*\
+                np.exp(self._dets[det][0][1] + self._dets[det][1][1])
+        curr_val = self.value()
+        d["det_coeff"] = det_coeff_grad/(curr_val[0] * np.exp(curr_val[1]))[:,np.newaxis]
+        #Mo_coeff not implemented yet
         return d

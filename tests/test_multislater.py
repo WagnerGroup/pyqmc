@@ -13,39 +13,28 @@ from pyqmc.accumulators import EnergyAccumulator
 from pyqmc.multislater import MultiSlater
 
 def test():
+    """ 
+    Tests that the multi-slater wave function value, gradient and 
+    parameter gradient evaluations are working correctly. Also 
+    checks that VMC energy matches energy calculated in PySCF
+    """
     mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="cc-pvtz", unit="bohr", spin=0)
     for mf in [scf.RHF(mol).run(), scf.ROHF(mol).run(), scf.UHF(mol).run()]:
-        print("")
         mc = mcscf.CASCI(mf,ncas=2,nelecas=(1,1))
         mc.kernel()
         wf = MultiSlater(mol, mf, mc)
         
+        epsilon = 1e-5
         nconf = 10
         nelec = np.sum(mol.nelec)
-        configs = np.random.randn(nconf, nelec, 3)
+        epos = np.random.randn(nconf, nelec, 3)
+      
+        for k, item in testwf.test_updateinternals(wf, epos).items():
+            assert item < epsilon
+        assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon
+        assert testwf.test_wf_laplacian(wf, epos, delta=1e-5)[0] < epsilon
+        assert testwf.test_wf_pgradient(wf, epos, delta=1e-5)[0] < epsilon
         
-        print("Testing internals:", testwf.test_updateinternals(wf, configs))
-        for delta in [1e-3, 1e-4, 1e-5, 1e-6, 1e-7]:
-            print(
-                "delta",
-                delta,
-                "Testing gradient",
-                testwf.test_wf_gradient(wf, configs, delta=delta),
-            )
-            print(
-                "delta",
-                delta,
-                "Testing laplacian",
-                testwf.test_wf_laplacian(wf, configs, delta=delta),
-            )
-            print(
-                "delta",
-                delta,
-                "Testing pgradient",
-                testwf.test_wf_pgradient(wf, configs, delta=delta),
-            )
-        
-        print("Testing VMC")
         nconf = 5000
         nsteps = 100
         warmup = 30
@@ -57,7 +46,7 @@ def test():
         df = pd.DataFrame(df)
         en = np.mean(df["energytotal"][warmup:])
         err = np.std(df["energytotal"][warmup:]) / np.sqrt(nsteps - warmup)
-        print('VMC E = ',en,'+/-',err)
-
+        assert en - mc.e_tot < 10 * err
+  
 if __name__ == "__main__":
     test()

@@ -194,7 +194,9 @@ class MultiSlater:
 if __name__ == '__main__':
     from pyscf import gto, scf, mcscf
     from pyqmc.testwf import * 
-    
+   
+    '''
+    #H2 molecule test: smallest cas 
     r = 1.1
     basis = {
         "H": gto.basis.parse(
@@ -226,16 +228,24 @@ if __name__ == '__main__':
     mol = gto.M(
         atom=f"H 0. 0. 0.; H 0. 0. {r}", unit="bohr", basis=basis, ecp=ecp
     )
-    
-    mf = scf.ROHF(mol)
+    nconf = 10
+    configs = np.random.randn(nconf, 2, 3)
+    '''
+
+    #N2 molecule test: bigger cas
+    mol = gto.M(atom='N 0 0 0; N 0 0 1', basis='ccpvdz', verbose=0)
+    nconf = 10
+    configs = np.random.randn(nconf, 14, 3)
+
+    mf = scf.UHF(mol)
+    #mf = scf.ROHF(mol)
+    #mf = scf.RHF(mol)
     mf.scf()
-    print('ROHF energy:', mf.e_tot)
+    print('SCF energy:', mf.e_tot)
     
     mc = mcscf.CASCI(mf,ncas=2,nelecas=(1,1))
     print('CASCI energy:', mc.kernel()[0])
 
-    nconf = 10
-    configs = np.random.randn(nconf, 2, 3)
     wf = MultiSlater(mol, mf, mc)
 
     ret = test_updateinternals(wf,configs)

@@ -153,6 +153,7 @@ if __name__ == "__main__":
     mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="cc-pvtz", unit="bohr")
     mf = scf.RHF(mol).run()
     wf = PySCFSlaterRHF(10, mol, mf)
+
     # wf=Jastrow2B(10,mol)
     for i in range(5):
         configs = np.random.randn(10, 4, 3)

@@ -73,19 +73,6 @@ class MultiSlater:
             self._inverse.append(det_inv)
         
         return self.value()
-       
-    def value(self):
-         """Return logarithm of the wave function as noted in recompute()"""
-         wf_val = 0
-         wf_sign = 0
-         for det in range(len(self._dets)):
-           wf_val += self.parameters['det_coeff'][det]*\
-                self._dets[det][0][0]*self._dets[det][1][0]*\
-                np.exp(self._dets[det][0][1] + self._dets[det][1][1])
-         wf_sign = np.sign(wf_val)
-         wf_val = np.log(np.abs(wf_val))
-         
-         return wf_sign, wf_val
     
     def updateinternals(self, e, epos, mask=None):
         """Update any internals given that electron e moved to epos. mask is a Boolean array 
@@ -105,28 +92,22 @@ class MultiSlater:
             )
             self._updateval(det_ratio, det, s, mask)
 
+    def value(self):
+         """Return logarithm of the wave function as noted in recompute()"""
+         wf_val = 0
+         wf_sign = 0
+         for det in range(len(self._dets)):
+           wf_val += self.parameters['det_coeff'][det]*\
+                self._dets[det][0][0]*self._dets[det][1][0]*\
+                np.exp(self._dets[det][0][1] + self._dets[det][1][1])
+         wf_sign = np.sign(wf_val)
+         wf_val = np.log(np.abs(wf_val))
+         
+         return wf_sign, wf_val
+    
     def _updateval(self, ratio, det, s, mask):
         self._dets[det][s][0][mask] *= np.sign(ratio)  # will not work for complex!
         self._dets[det][s][1][mask] += np.log(np.abs(ratio))
-
-    def testvalue(self, e, epos):
-        """ return the ratio between the current wave function and the wave function if 
-        electron e's position is replaced by epos"""
-        s = int(e >= self._nelec[0])
-        ao = self._mol.eval_gto("GTOval_sph", epos)
-        mo = ao.dot(self.parameters[self._coefflookup[s]])
-
-        ratio = 0
-        for det in range(len(self._det_occup)):
-            mo_det = mo[:,self._det_occup[det][s]]
-            det_ratio = self._testrow(e,det,mo_det) 
-            ratio += (det_ratio*self.parameters['det_coeff'][det]*\
-                self._dets[det][0][0]*self._dets[det][1][0]*\
-                np.exp(self._dets[det][0][1] + self._dets[det][1][1]))
-
-        curr_val = self.value()
-        ratio /= (curr_val[0]*np.exp(curr_val[1]))
-        return ratio
         
     def _testrow(self, e, det, vec):
         """vec is a nconfig,nmo vector which replaces row e"""
@@ -173,7 +154,26 @@ class MultiSlater:
 
         curr_val = self.value()
         return lap / (self.testvalue(e, epos) * curr_val[0] * np.exp(curr_val[1]))
+    
+    def testvalue(self, e, epos):
+        """ return the ratio between the current wave function and the wave function if 
+        electron e's position is replaced by epos"""
+        s = int(e >= self._nelec[0])
+        ao = self._mol.eval_gto("GTOval_sph", epos)
+        mo = ao.dot(self.parameters[self._coefflookup[s]])
 
+        ratio = 0
+        for det in range(len(self._det_occup)):
+            mo_det = mo[:,self._det_occup[det][s]]
+            det_ratio = self._testrow(e,det,mo_det) 
+            ratio += (det_ratio*self.parameters['det_coeff'][det]*\
+                self._dets[det][0][0]*self._dets[det][1][0]*\
+                np.exp(self._dets[det][0][1] + self._dets[det][1][1]))
+
+        curr_val = self.value()
+        ratio /= (curr_val[0]*np.exp(curr_val[1]))
+        return ratio
+    
     def pgradient(self):
         """Compute the parameter gradient of Psi. 
         Returns d_p \Psi/\Psi as a dictionary of numpy arrays,
@@ -190,3 +190,59 @@ class MultiSlater:
                 d[parm] = det_coeff_grad/(curr_val[0] * np.exp(curr_val[1]))[:,np.newaxis]
             else: pass #Mo_coeff not implemented yet
         return d
+
+def test():
+    from pyscf import lib, gto, scf, mcscf
+    import pyqmc.testwf as testwf
+    from pyqmc.mc import vmc, initial_guess
+    from pyqmc.accumulators import EnergyAccumulator
+    import pandas as pd
+
+    mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="cc-pvtz", unit="bohr", spin=0)
+    for mf in [scf.RHF(mol).run(), scf.ROHF(mol).run(), scf.UHF(mol).run()]:
+        print("")
+        mc = mcscf.CASCI(mf,ncas=2,nelecas=(1,1))
+        mc.kernel()
+        wf = MultiSlater(mol, mf, mc)
+        
+        nconf = 10
+        nelec = np.sum(mol.nelec)
+        configs = np.random.randn(nconf, nelec, 3)
+        
+        print("Testing internals:", testwf.test_updateinternals(wf, configs))
+        for delta in [1e-3, 1e-4, 1e-5, 1e-6, 1e-7]:
+            print(
+                "delta",
+                delta,
+                "Testing gradient",
+                testwf.test_wf_gradient(wf, configs, delta=delta),
+            )
+            print(
+                "delta",
+                delta,
+                "Testing laplacian",
+                testwf.test_wf_laplacian(wf, configs, delta=delta),
+            )
+            print(
+                "delta",
+                delta,
+                "Testing pgradient",
+                testwf.test_wf_pgradient(wf, configs, delta=delta),
+            )
+
+        print("Testing VMC")
+        nconf = 5000
+        nsteps = 100
+        warmup = 30
+        coords = initial_guess(mol, nconf)
+        df, coords = vmc(
+            wf, coords, nsteps=nsteps, accumulators={"energy": EnergyAccumulator(mol)}
+        )
+
+        df = pd.DataFrame(df)
+        en = np.mean(df["energytotal"][warmup:])
+        err = np.std(df["energytotal"][warmup:]) / np.sqrt(nsteps - warmup)
+        print('VMC E = ',en,'+/-',err)
+
+if __name__ == "__main__":
+    test()

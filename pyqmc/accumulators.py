@@ -20,11 +20,24 @@ class EnergyAccumulator:
 
 
 class LinearTransform:
-    def __init__(self, parameters, to_opt=None):
+    """
+    Linearize a dictionary of wf parameters, only to_opt 
+    terms optimized. A dict freeze can be used to freeze
+    certain wf parameters. 
+    """
+    def __init__(self, parameters, to_opt=None, freeze=None):
         if to_opt is None:
             self.to_opt = list(parameters.keys())
         else:
             self.to_opt = to_opt
+
+        if freeze is None:
+            freeze = {}
+            for i, k in enumerate(parameters):
+                freeze[k] = np.zeros(parameters[k].shape).astype(bool)
+            self.frozen = freeze       
+        else: 
+            self.frozen = freeze
 
         self.shapes = np.array([parameters[k].shape for k in self.to_opt])
         self.slices = np.array([np.prod(s) for s in self.shapes])
@@ -40,11 +53,14 @@ class LinearTransform:
 
     def serialize_gradients(self, pgrad):
         """Convert the dictionary to a linear list
-        of gradients
+        of gradients, mask allows for certain fixed parameters
         """
         grads = []
         for k in self.to_opt:
-            grads.append(pgrad[k].reshape((pgrad[k].shape[0], -1)))
+            mask_grads = np.ma.array(pgrad[k],\
+                mask = np.repeat(self.frozen[k],pgrad[k].shape[0],axis=0),
+                fill_value = 0).reshape(pgrad[k].shape[0],-1)
+            grads.append(mask_grads.filled())
         return np.concatenate(grads, axis=1)
 
     def deserialize(self, parameters):

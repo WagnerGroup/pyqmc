@@ -30,7 +30,7 @@ class LinearTransform:
             self.to_opt = list(parameters.keys())
         else:
             self.to_opt = to_opt
-
+        
         if freeze is None:
             freeze = {}
             for i, k in enumerate(parameters):
@@ -38,17 +38,25 @@ class LinearTransform:
             self.frozen = freeze       
         else: 
             self.frozen = freeze
-        
+
+        self.frozen_parms = {}
+        for k in self.to_opt:
+            mask = self.frozen[k]
+            self.frozen_parms[k] = np.ma.array(parameters[k],mask=~mask)
+
         self.shapes = np.array([parameters[k].shape for k in self.to_opt])
         self.slices = np.array([np.prod(s) for s in self.shapes])
-
+    
     def serialize_parameters(self, parameters):
         """Convert the dictionary to a linear list
         of gradients
         """
         params = []
         for k in self.to_opt:
-            params.append(parameters[k].flatten())
+            mask = self.frozen[k]
+            params.append(
+              np.ma.array(parameters[k],mask=mask).compressed()
+            )
         return np.concatenate(params)
 
     def serialize_gradients(self, pgrad):
@@ -57,10 +65,11 @@ class LinearTransform:
         """
         grads = []
         for k in self.to_opt:
-            mask_grads = np.ma.array(pgrad[k],\
-                mask = np.repeat(self.frozen[k],pgrad[k].shape[0],axis=0),
-                fill_value = 0).reshape(pgrad[k].shape[0],-1)
-            grads.append(mask_grads.filled())
+            mask = np.repeat(self.frozen[k][np.newaxis,:],
+                pgrad[k].shape[0],axis=0)
+            mask_grads = np.ma.array(pgrad[k],
+                mask = mask).reshape(pgrad[k].shape[0],-1)
+            grads.append(np.ma.compress_cols(mask_grads))
         return np.concatenate(grads, axis=1)
 
     def deserialize(self, parameters):
@@ -69,9 +78,14 @@ class LinearTransform:
         n = 0
         d = {}
         for i, k in enumerate(self.to_opt):
-            np = self.slices[i]
-            d[k] = parameters[n : n + np].reshape(self.shapes[i])
-            n += np
+            mask = self.frozen[k].flatten()
+            n_p = np.sum(~mask)
+            
+            flat_parms = np.zeros(self.slices[i])
+            flat_parms[mask] = self.frozen_parms[k].compressed()
+            flat_parms[~mask] = parameters[n : n + n_p]
+            d[k] = flat_parms.reshape(self.shapes[i])
+            n += n_p
         return d
 
 
@@ -126,54 +140,3 @@ class PGradTransform:
         d["dpidpj"] = np.einsum("ij,ik->jk", dp, dp) / nconf
 
         return d
-
-def test():
-    import os
-
-    os.environ["MKL_NUM_THREADS"] = "1"
-    os.environ["NUMEXPR_NUM_THREADS"] = "1"
-    os.environ["OMP_NUM_THREADS"] = "1"
-    import pandas as pd
-    from pyscf import lib, gto, scf, mcscf
-    from pyqmc import slater_jastrow, line_minimization, initial_guess, gradient_generator
-    import numpy as np
-    from pyqmc.multislater import MultiSlater
-    from pyqmc.func3d import GaussianFunction, ExpCuspFunction
-    from pyqmc.multiplywf import MultiplyWF
-    from pyqmc.jastrowspin import JastrowSpin
-    
-    
-    mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="cc-pvtz", unit="bohr", spin=0)
-    mf = scf.RHF(mol).run()
-    mc = mcscf.CASCI(mf,ncas=2,nelecas=(1,1))
-    mc.kernel()
-    wf = MultiSlater(mol, mf, mc) 
-    abasis = [GaussianFunction(0.8), GaussianFunction(1.6), GaussianFunction(3.2)]
-    bbasis = [ 
-        ExpCuspFunction(2.0, 1.5),
-        GaussianFunction(0.8),
-        GaussianFunction(1.6),
-        GaussianFunction(3.2),
-    ]   
-    wf = MultiplyWF(wf, JastrowSpin(mol, a_basis=abasis, b_basis=bbasis))   
-        
-    nconf = 500 
-    freeze = {}
-    for k in wf.parameters:
-      freeze[k] = np.random.randint(0,2,size=wf.parameters[k].shape).astype(bool)
-    #freeze = None
-    to_opt = ['wf1det_coeff','wf2acoeff','wf2bcoeff']
-    wf, dfgrad, dfline = line_minimization(
-        wf, initial_guess(mol, nconf),
-        PGradTransform(EnergyAccumulator(mol), 
-        LinearTransform(wf.parameters, to_opt = to_opt, freeze = freeze))
-    )   
-    dfgrad = pd.DataFrame(dfgrad)
-    mfen = mc.e_tot
-    enfinal = dfgrad["en"].values[-1]
-    enfinal_err = dfgrad["en_err"].values[-1]
-    print(enfinal, enfinal_err, mfen)
-    assert mfen > enfinal
-
-if __name__ == '__main__':
-  test()

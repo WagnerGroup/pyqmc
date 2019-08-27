@@ -1,18 +1,10 @@
 # This must be done BEFORE importing numpy or anything else.
 # Therefore it must be in your main script.
-import os
-
-os.environ["MKL_NUM_THREADS"] = "1" 
-os.environ["NUMEXPR_NUM_THREADS"] = "1" 
-os.environ["OMP_NUM_THREADS"] = "1" 
 import pandas as pd
-from pyscf import lib, gto, scf, mcscf
-from pyqmc import gradient_generator, default_msj
 import numpy as np 
-from pyqmc.multislater import MultiSlater 
-from pyqmc.multiplywf import MultiplyWF
-from pyqmc.linemin import line_minimization
-from pyqmc.mc import initial_guess
+from pyscf import lib, gto, scf, mcscf
+from pyqmc import default_msj
+from pyqmc.accumulators import LinearTransform
 
 def test():
     #Default multi-Slater wave function
@@ -23,23 +15,24 @@ def test():
 
     wf, to_opt, freeze = default_msj(mol, mf, mc)
     old_parms = wf.parameters
+    lt = LinearTransform(wf.parameters,to_opt,freeze)
 
-    nconf = 500
-    wf, dfgrad, dfline = line_minimization(
-        wf, initial_guess(mol, nconf),
-        gradient_generator(mol, wf, to_opt = to_opt, freeze = freeze)
-    )
-    dfgrad = pd.DataFrame(dfgrad)
-    dfgrad.to_pickle('const.pickle')
-    mfen = mc.e_tot
-    enfinal = dfgrad["en"].values[-1]
-    enfinal_err = dfgrad["en_err"].values[-1]
-    new_parms = wf.parameters
-    
-    print(enfinal, enfinal_err, mfen)
-    assert mfen > enfinal 
-    assert new_parms['wf1det_coeff'][0] == old_parms['wf1det_coeff'][0]
-    assert np.sum(new_parms['wf2bcoeff'][0,:] - old_parms['wf2bcoeff'][0,:]) == 0
+    #Test serialize parameters
+    x0 = lt.serialize_parameters(wf.parameters)
+    x0 += np.random.normal(size = x0.shape)
+    wf.parameters = lt.deserialize(x0)
+    assert wf.parameters['wf1det_coeff'][0] ==\
+        old_parms['wf1det_coeff'][0]
+    assert np.sum(wf.parameters['wf2bcoeff'][0] -\
+        old_parms['wf2bcoeff'][0]) == 0
+
+    #Test serialize gradients 
+    configs = np.random.randn(10, 4, 3)
+    wf.recompute(configs)
+    pgrad = wf.pgradient()
+    pgrad_serial = lt.serialize_gradients(pgrad)
+    assert np.sum(pgrad_serial[:,:3] -\
+        pgrad['wf1det_coeff'][:,1:4]) == 0
 
 if __name__ == "__main__":
     test()

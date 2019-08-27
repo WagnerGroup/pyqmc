@@ -22,12 +22,13 @@ def test():
     from pyqmc.accumulators import EnergyAccumulator
     from pyqmc.func3d import ExpCuspFunction
     from pyqmc.multiplywf import MultiplyWF
+    from pyqmc.coord import OpenConfigs
     import pandas as pd
 
     mol = gto.M(atom="H 0. 0. 0.", basis="sto-3g", unit="bohr", spin=1)
     mf = scf.UHF(mol).run()
     nconf = 1000
-    configs = np.random.randn(nconf, 1, 3)
+    configs = OpenConfigs(np.random.randn(nconf, 1, 3))
     wf1 = PySCFSlaterUHF(mol, mf)
     wf = wf1
     wf2 = JastrowSpin(mol, a_basis=[ExpCuspFunction(5, 0.2)], b_basis=[])

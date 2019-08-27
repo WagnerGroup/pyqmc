@@ -17,9 +17,32 @@ class PySCFSlaterUHF:
     The functions recompute() and updateinternals() change the state of the object, and 
     the rest compute and return values from that state. """
 
-    def __init__(self, mol, mf):
+    def __init__(self, mol, mf, twist=[0,0,0]):
+        """
+        Inputs:
+          mol:
+          mf:
+          twist: (3,) array-like. k=pi*twist, real-valued twists are integer
+        """
         self.occ = np.asarray(mf.mo_occ > 0.9)
         self.parameters = {}
+        #self.twist = np.array(twist)
+        if np.linalg.norm(twist)==0:
+            self.get_twist_phase = lambda wrap : 1
+            self.get_full_phase = lambda wrap, i0, i1 : 1
+        else:
+            assert hasattr(mol, "a"), "twist can only be nonzero for a periodic system"
+            if (np.mod(twist, 1)==0).all(): # real kpt
+                get_twist = lambda wrap : np.prod((-1)**np.dot(wrap, twist), axis=1)
+            else: 
+                get_twist = lambda wrap : np.prod(
+                        np.exp(1j*np.pi*np.dot(wrap, twist)), axis=1
+                    )
+            def get_full_twist(configs, ind0, ind1):
+                return np.prod(get_twist(configs.wrap[:, ind0 : ind1, :]), axis=1)
+            self.get_twist_phase = get_twist
+            self.get_full_phase = get_full_twist
+            
 
         # Determine if we're initializing from an RHF or UHF object...
         if len(mf.mo_occ.shape) == 2:
@@ -41,12 +64,12 @@ class PySCFSlaterUHF:
     def recompute(self, configs):
         """This computes the value from scratch. Returns the logarithm of the wave function as
         (phase,logdet). If the wf is real, phase will be +/- 1."""
-        mycoords = configs.reshape(
-            (configs.shape[0] * configs.shape[1], configs.shape[2])
-        )
+        nconf, nelec, ndim = configs.configs.shape
+        mycoords = configs.configs.reshape((nconf * nelec, ndim))
         ao = self._mol.eval_gto(self.pbc_str + "GTOval_sph", mycoords).reshape(
-            (configs.shape[0], configs.shape[1], -1)
+            (nconf, nelec, -1)
         )
+            
 
         self._aovals = ao
         self._dets = []
@@ -61,12 +84,18 @@ class PySCFSlaterUHF:
                     self.parameters[self._coefflookup[s]]
                 )
             # This could be done faster; we are doubling our effort here.
-            self._dets.append(np.linalg.slogdet(mo))
+            phase, mag = np.linalg.slogdet(mo)
+            phase *= self.get_full_phase(
+                configs, s * self._nelec[0], self._nelec[0] + s * self._nelec[1]
+            ) 
+            self._dets.append((phase,mag))
             self._inverse.append(np.linalg.inv(mo))
+            # Apply twist to phase
+        
 
         return self.value()
 
-    def updateinternals(self, e, epos, mask=None):
+    def updateinternals(self, e, epos, wrap=None, mask=None):
         """Update any internals given that electron e moved to epos. mask is a Boolean array 
         which allows us to update only certain walkers"""
         s = int(e >= self._nelec[0])
@@ -78,6 +107,7 @@ class PySCFSlaterUHF:
         ratio, self._inverse[s][mask, :, :] = sherman_morrison_row(
             eeff, self._inverse[s][mask, :, :], mo[mask, :]
         )
+        ratio *= self.get_twist_phase(wrap)
         self._updateval(ratio, s, mask)
 
     ### not state-changing functions
@@ -125,13 +155,13 @@ class PySCFSlaterUHF:
         ratios = self._testrow(e, molap)
         return ratios / self.testvalue(e, epos)
 
-    def testvalue(self, e, epos):
+    def testvalue(self, e, epos, wrap=[0,0,0]):
         """ return the ratio between the current wave function and the wave function if 
         electron e's position is replaced by epos"""
         s = int(e >= self._nelec[0])
         ao = self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos)
         mo = ao.dot(self.parameters[self._coefflookup[s]])
-        return self._testrow(e, mo)
+        return self._testrow(e, mo) * self.get_twist_phase(wrap)
 
     def pgradient(self):
         """Compute the parameter gradient of Psi. 

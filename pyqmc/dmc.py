@@ -68,7 +68,7 @@ def dmc_propagate(
     Args:
       wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as anything (such as laplacian() ) used by accumulators
 
-      configs: (nconfig, nelec, 3) - initial coordinates to start calculation.
+      configs: Configs object, (nconfig, nelec, 3) - initial coordinates to start calculation.
 
       weights: (nconfig,) - initial weights to start calculation
 
@@ -93,10 +93,10 @@ def dmc_propagate(
       
     """
     assert accumulators is not None, "Need an energy accumulator for DMC"
-    nconfig, nelec = configs.shape[0:2]
+    nconfig, nelec = configs.configs.shape[0:2]
     wf.recompute(configs)
 
-    eloc = accumulators[ekey[0]](configs, wf)[ekey[1]]
+    eloc = accumulators[ekey[0]](configs.configs, wf)[ekey[1]]
     # eref_mean = np.mean(weights * eloc) / np.mean(weights)
     # eref = eref_mean
     df = []
@@ -104,29 +104,32 @@ def dmc_propagate(
         acc = np.zeros(nelec)
         for e in range(nelec):
             # Propose move
-            grad = drift_limiter(wf.gradient(e, configs[:, e, :]).T, tstep)
+            grad = drift_limiter(wf.gradient(e, configs.configs[:, e, :]).T, tstep)
             gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconfig, 3))
-            eposnew = configs[:, e, :] + gauss + grad
+            eposnew = configs.configs[:, e, :] + gauss + grad
+            irrepos, wrap = configs.make_irreducible(eposnew)
 
             # Compute reverse move
-            new_grad = drift_limiter(wf.gradient(e, eposnew).T, tstep)
-            forward = np.sum((configs[:, e, :] + grad - eposnew) ** 2, axis=1)
-            backward = np.sum((eposnew + new_grad - configs[:, e, :]) ** 2, axis=1)
+            new_grad = drift_limiter(wf.gradient(e, irrepos).T, tstep)
+            forward = np.sum(gauss ** 2, axis=1)
+            backward = np.sum((gauss + grad + new_grad) ** 2, axis=1)
+            #forward = np.sum((configs[:, e, :] + grad - eposnew) ** 2, axis=1)
+            #backward = np.sum((eposnew + new_grad - configs[:, e, :]) ** 2, axis=1)
             t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
 
             # Acceptance -- fixed-node: reject if wf changes sign
-            wfratio = wf.testvalue(e, eposnew)
+            wfratio = wf.testvalue(e, irrepos, wrap=wrap)
             ratio = wfratio ** 2 * t_prob
             accept = ratio * np.sign(wfratio) > np.random.rand(nconfig)
 
             # Update wave function
-            configs[accept, e, :] = eposnew[accept, :]
-            wf.updateinternals(e, configs[:, e, :], accept)
+            configs.move(e, irrepos, wrap, accept)
+            wf.updateinternals(e, irrepos, wrap=wrap, mask=accept)
             acc[e] = np.mean(accept)
 
         # weights
         elocold = eloc.copy()
-        energydat = accumulators[ekey[0]](configs, wf)
+        energydat = accumulators[ekey[0]](configs.configs, wf)
         eloc = energydat[ekey[1]]
         tdamp = limit_timestep(
             weights, eloc, elocold, eref, branchcut_start, branchcut_stop
@@ -139,7 +142,7 @@ def dmc_propagate(
         avg = {}
         for k, accumulator in accumulators.items():
             if k != ekey[0]:
-                dat = accumulator(configs, wf)
+                dat = accumulator(configs.configs, wf)
             else:
                 dat = energydat
             for m, res in dat.items():
@@ -209,14 +212,12 @@ def branch(configs, weights):
 
       weights: (nconfig,) all weights are equal to average weight
     """
-    nconfig = configs.shape[0]
+    nconfig = configs.configs.shape[0]
     wtot = np.sum(weights)
     probability = np.cumsum(weights / wtot)
     base=np.random.rand()
-    #newinds = np.searchsorted(probability, np.random.random(nconfig))
     newinds = np.searchsorted(probability, (base + np.arange(nconfig)/nconfig)%1.0 )
-    #print(newinds)
-    configs = configs[newinds]
+    configs.resample(newinds)
     weights.fill(wtot / nconfig)
     return configs, weights
 
@@ -273,7 +274,7 @@ def rundmc(
       weights: The final weights from this calculation
       
     """
-    nconfig, nelec = configs.shape[0:2]
+    nconfig, nelec = configs.configs.shape[0:2]
     if weights is None:
         weights = np.ones(nconfig)
 
@@ -319,7 +320,7 @@ def rundmc(
         )
         df_=pd.DataFrame(df_)
         df_['eref']=eref
-        print(df_)
+        #print(df_)
         df.append(df_)
         eref = df_[ekey[0]+ekey[1]].values[-1]-feedback*np.log(np.mean(weights))
         configs, weights = branch(configs, weights)

@@ -2,7 +2,7 @@
 import numpy as np
 from copy import copy
 from pyqmc.mc import initial_guess
-
+from sys import stdout
 
 class TBDMAccumulator:
     """ Return the tbdm as an array with indices rho[spin][i][j][k][l] = < c^+_{spin,i} c^+_{spin,k} c_{spin,l} c_{spin,j} > .
@@ -103,12 +103,13 @@ class TBDMAccumulator:
         for step in range(self._nstep):
             e1 = np.random.choice(self._electrons1)
             e2 = np.random.choice(self._electrons2[self._electrons2!=e1]) # Cannot repeat electron
-
+            #print('step=%d; e1=%d; e2=%d;'%(step,e1,e2))
+            
             points = np.concatenate([self._extra_config, configs[:, e1, :], configs[:, e2, :]])
             ao = self._mol.eval_gto("GTOval_sph", points)
             borb = ao.dot(self._orb_coeff)
 
-            # Orbital evaluations at extra coordinate.
+            # Orbital evaluations at extra coordinates.
             borb_aux = borb[0:naux, :]
             fsum = np.sum(borb_aux[0:naux,:] * borb_aux[0:naux,:], axis=1)
             norm = borb_aux[0:naux,:] * borb_aux[0:naux,:] / fsum[:, np.newaxis]
@@ -120,18 +121,22 @@ class TBDMAccumulator:
             # It would be faster to implement a wf.testvalue_2body()
             auxassignments1 = np.random.randint(0, int(naux/2), size=configs.shape[0])
             auxassignments2 = np.random.randint(int(naux/2), naux, size=configs.shape[0])
-            #print('ass1',auxassignments1)
-            #print('ass2',auxassignments2)
+            #print('ass1:',auxassignments1)
+            #print('ass2:',auxassignments2)
+            #print('_extra_config[ass1]:',self._extra_config[auxassignments1, :])
+            #print('_extra_config[ass2]:',self._extra_config[auxassignments2, :])
+            #stdout.flush()
             wfratio1 = wf.testvalue(e1, self._extra_config[auxassignments1, :])
             wf_aux = copy(wf)
             #print('Warning: Shallow copy.')
             wf_aux.updateinternals(e1, self._extra_config[auxassignments1, :])
             wfratio2 = wf_aux.testvalue(e2, self._extra_config[auxassignments2, :])
-            wfratio = wfratio1 * wfratio2
+            wfratio = np.nan_to_num(wfratio1) * np.nan_to_num(wfratio2)
             
-            print('wfratio1:\n',wfratio1)
-            print('wfratio2:\n',wfratio2)
-            print('wfratio:\n',wfratio)
+            #print('wfratio1:\n',wfratio1)
+            #print('wfratio2:\n',wfratio2)
+            #print('wfratio:\n',wfratio)
+            #stdout.flush()
             #print((borb_aux[auxassignments1, :] / fsum[auxassignments1, np.newaxis]).shape)
             #print((borb_aux[auxassignments2, :] / fsum[auxassignments2, np.newaxis]).shape)
             #print(borb_configs1.shape)
@@ -198,82 +203,8 @@ def normalize_tbdm(tbdm, norm):
 
 
 
-if __name__ == "__main__":
-
-    import numpy as np
-    from pyscf import gto, scf, lo
-    from numpy.linalg import solve
-    from pyqmc import PySCFSlaterUHF
-    from pyqmc.mc import initial_guess, vmc
-    from pyqmc.accumulators import EnergyAccumulator
-    from pandas import DataFrame
-
-    mol = gto.M(
-        atom="Li 0. 0. 0.; Li 0. 0. 1.5", basis="minao", unit="bohr", verbose=4
-    )
-    mf = scf.RHF(mol).run()
-
-    # Lowdin orthogonalized AO basis.
-    lowdin = lo.orth_ao(mol, "lowdin")
-
-    # MOs in the Lowdin basis.
-    mo = solve(lowdin, mf.mo_coeff)
-
-    # make AO to localized orbital coefficients.
-    mfobdm = mf.make_rdm1(mo, mf.mo_occ)
-
-    ### Test TBDM calculation.
-    nconf = 25
-    nsteps = 400
-    tbdm_steps = 4
-    warmup = 15
-    wf = PySCFSlaterUHF(mol, mf)
-    configs = initial_guess(mol, nconf)
-    energy = EnergyAccumulator(mol)
-    tbdm = TBDMAccumulator(mol=mol, orb_coeff=lowdin, nstep=tbdm_steps)
-    tbdm_upup = TBDMAccumulator(mol=mol, orb_coeff=lowdin, nstep=tbdm_steps, spin=[0,0])
-    tbdm_updw = TBDMAccumulator(mol=mol, orb_coeff=lowdin, nstep=tbdm_steps, spin=[0,1])
-    tbdm_dwup = TBDMAccumulator(mol=mol, orb_coeff=lowdin, nstep=tbdm_steps, spin=[1,0])
-    tbdm_dwdw = TBDMAccumulator(mol=mol, orb_coeff=lowdin, nstep=tbdm_steps, spin=[1,1])
-
-    
-    print('tbdm._mol:\n',tbdm._mol)
-    print('tbdm._orb_coeff:\n',tbdm._orb_coeff)
-    print('tbdm._nstep:\n',tbdm._nstep)
-    print('tbdm._tstep:\n',tbdm._tstep)
-    print('tbdm._extra_config:\n',tbdm._extra_config.shape)
-    print('tbdm._electrons1:\n',tbdm._electrons1)
-    print('tbdm._electrons2:\n',tbdm._electrons2)
-
-    print('tbdm_upup._electrons1:\n',tbdm_upup._electrons1)
-    print('tbdm_upup._electrons2:\n',tbdm_upup._electrons2)
-
-    print('tbdm_updw._electrons1:\n',tbdm_updw._electrons1)
-    print('tbdm_updw._electrons2:\n',tbdm_updw._electrons2)
-
-    print('tbdm_dwup._electrons1:\n',tbdm_dwup._electrons1)
-    print('tbdm_dwup._electrons2:\n',tbdm_dwup._electrons2)
-
-    print('tbdm_dwdw._electrons1:\n',tbdm_dwdw._electrons1)
-    print('tbdm_dwdw._electrons2:\n',tbdm_dwdw._electrons2)
 
 
-    ****************** NaN showing up ********************
-    
-    print('VMC...')
-    df, coords = vmc(
-        wf,
-        configs,
-        nsteps=nsteps,
-        accumulators={
-            "energy": energy,
-            "tbdm": tbdm,
-            "tbdm_upup": tbdm_upup,
-            "tbdm_updw": tbdm_updw,
-            "tbdm_dwup": tbdm_dwup,
-            "tbdm_dwdw": tbdm_dwdw,
-        },
-    )
-    df = DataFrame(df)
-    print(df)
-    exit()
+
+
+

@@ -7,23 +7,27 @@ class OpenConfigs:
         self.configs = configs
         self.dist = RawDistance()
 
-    def make_irreducible(self, vec):
-        """ 
-          Input: a (nconfig, 3) vector 
-          Output: a tuple with the same vector and None, with no extra information
-        """
-        return (vec,None)
+    def electron(self, e):
+        return OpenConfigs(self.configs[:, e])
 
-    def move(self, e, vec, not_used, accept):
+    def make_irreducible(self, e, vec):
+        """ 
+          Input: 
+            e: unused electron index
+            vec: a (nconfig, 3) vector 
+          Output: OpenConfigs object with just one electron
+        """
+        return OpenConfigs(vec)
+
+    def move(self, e, new, accept):
         """
         Change coordinates of one electron
         Args:
           e: int, electron index
-          vec: (nconfig, 3) new coordinates
-          not_used: not used, same interface as PeriodicConfigs
+          vec: OpenConfigs with (nconfig, 3) new coordinates
           accept: (nconfig,) boolean for which configs to update
         """
-        self.configs[accept,e,:] = vec[accept,:]
+        self.configs[accept,e,:] = new.configs[accept,:]
 
     def resample(self, newinds):
         """
@@ -40,24 +44,27 @@ class PeriodicConfigs:
         self.lvecs = lattice_vectors
         self.dist = MinimalImageDistance(lattice_vectors)
 
-    def make_irreducible(self, vec):
+    def electron(self, e):
+        return PeriodicConfigs(self.configs[:,e], self.lvecs, wrap=self.wrap[:,e])
+        
+    def make_irreducible(self, e, vec):
         """ 
          Input: a (nconfig, 3) vector 
          Output: a tuple with the wrapped vector and the number of wraps
         """
-        return enforce_pbc(self.lvecs, vec)
+        epos, wrap = enforce_pbc(self.lvecs, vec)
+        return PeriodicConfigs(epos, self.lvecs, wrap=wrap+self.wrap[:,e])
 
-    def move(self, e, vec, wrap, accept):
+    def move(self, e, new, accept):
         """
         Change coordinates of one electron
         Args:
           e: int, electron index
-          vec: (nconfig, 3) new coordinates
-          wrap: (nconfig, 3) number of times to wrap electron back into the cell to get to new configs 
+          new: PeriodicConfigs with (nconfig, 3) new coordinates
           accept: (nconfig,) boolean for which configs to update
         """
-        self.configs[accept,e,:] = vec[accept,:]
-        self.wrap[accept,e,:] += wrap[accept,:]
+        self.configs[accept,e,:] = new.configs[accept,:]
+        self.wrap[accept,e,:] = new.wrap[accept,:]
 
     def resample(self, newinds):
         """

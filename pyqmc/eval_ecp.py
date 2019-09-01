@@ -193,12 +193,12 @@ def ecp(mol, configs, wf):
     """
     Returns the ECP value, summed over all the electrons and atoms.
     """
-    nconf, nelec = configs.shape[0:2]
+    nconf, nelec = configs.configs.shape[0:2]
     ecp_tot = np.zeros(nconf)
     if mol._ecp != {}:
         for e in range(nelec):
             for at in range(len(mol._atom)):
-                ecp_tot += ecp_ea(mol, configs, wf, e, at)
+                ecp_tot += ecp_ea(mol, configs.configs, wf, e, at)
     return ecp_tot
 
 

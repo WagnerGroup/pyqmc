@@ -6,12 +6,11 @@ from pyqmc.distance import RawDistance
 
 
 def ee_energy(configs):
-    ne = configs.shape[1]
+    ne = configs.configs.shape[1]
     if ne == 1:
-        return np.zeros(configs.shape[0])
-    ee = np.zeros(configs.shape[0])
-    d = RawDistance()
-    ee, ij = d.dist_matrix(configs)
+        return np.zeros(configs.configs.shape[0])
+    ee = np.zeros(configs.configs.shape[0])
+    ee, ij = configs.dist.dist_matrix(configs.configs)
     ee = np.linalg.norm(ee, axis=2)
     return np.sum(1.0 / ee, axis=1)
 
@@ -19,7 +18,7 @@ def ee_energy(configs):
 def ei_energy(mol, configs):
     ei = 0.0
     for c, coord in zip(mol.atom_charges(), mol.atom_coords()):
-        delta = configs - coord[np.newaxis, np.newaxis, :]
+        delta = configs.configs - coord[np.newaxis, np.newaxis, :]
         deltar = np.sqrt(np.sum(delta ** 2, axis=2))
         ei += -c * np.sum(1.0 / deltar, axis=1)
     return ei
@@ -44,11 +43,10 @@ def get_ecp(mol, configs, wf):
 
 
 def kinetic(configs, wf):
-    nconf = configs.shape[0]
+    nconf, nelec, ndim = configs.configs.shape
     ke = np.zeros(nconf)
-    nelec = configs.shape[1]
     for e in range(nelec):
-        ke += -0.5 * wf.laplacian(e, configs[:, e, :])
+        ke += -0.5 * np.real(wf.laplacian(e, configs.electron(e)))
     return ke
 
 

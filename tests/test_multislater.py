@@ -20,6 +20,7 @@ def test():
     """
     mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="cc-pvtz", unit="bohr", spin=0)
     for mf in [scf.RHF(mol).run(), scf.ROHF(mol).run(), scf.UHF(mol).run()]:
+        #Test same number of elecs
         mc = mcscf.CASCI(mf,ncas=4,nelecas=(1,1))
         mc.kernel()
         wf = MultiSlater(mol, mf, mc)
@@ -34,7 +35,24 @@ def test():
         assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon
         assert testwf.test_wf_laplacian(wf, epos, delta=1e-5)[0] < epsilon
         assert testwf.test_wf_pgradient(wf, epos, delta=1e-5)[0] < epsilon
-        
+
+        #Test different number of elecs
+        mc = mcscf.CASCI(mf,ncas=4,nelecas=(2,0))
+        mc.kernel()
+        wf = MultiSlater(mol, mf, mc)
+
+        epsilon = 1e-5
+        nconf = 10
+        nelec = np.sum(mol.nelec)
+        epos = np.random.randn(nconf, nelec, 3)
+      
+        for k, item in testwf.test_updateinternals(wf, epos).items():
+            assert item < epsilon
+        assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon
+        assert testwf.test_wf_laplacian(wf, epos, delta=1e-5)[0] < epsilon
+        assert testwf.test_wf_pgradient(wf, epos, delta=1e-5)[0] < epsilon
+
+        #Quick VMC test
         nconf = 5000
         nsteps = 100
         warmup = 30

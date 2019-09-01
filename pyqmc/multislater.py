@@ -32,7 +32,7 @@ class MultiSlater:
     def __init__(self, mol, mf, mc):
         self.parameters = {}
         self._mol = mol
-        self._nelec = tuple(mol.nelec)
+        self._nelec = (mc.nelecas[0] + mc.ncore, mc.nelecas[1] + mc.ncore)
         self._copy_ci(mc)
 
         if len(mf.mo_occ.shape) == 2:
@@ -81,7 +81,7 @@ class MultiSlater:
         self.parameters['det_coeff'] = np.array(detwt) 
         self._det_occup = occup #Spin, [Ndet_up_unique, Ndet_dn_unique]
         self._det_map = np.array(map_dets) #Spin, N_det
-
+    
     def recompute(self, configs):
         """This computes the value from scratch. Returns the logarithm of the wave function as
         (phase,logdet). If the wf is real, phase will be +/- 1."""

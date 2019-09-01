@@ -84,10 +84,10 @@ class MinimalImageDistance(RawDistance):
         )
         if orthogonal:
             self.dist_i = self.orthogonal_dist_i
-            print("Orthogonal lattics vectors")
+            #print("Orthogonal lattics vectors")
         else:
             self.dist_i = self.general_dist_i
-            print("Non-orthogonal lattics vectors")
+            #print("Non-orthogonal lattics vectors")
         self._latvec = latvec
         self._invvec = np.linalg.inv(latvec)
         # list of all 26 neighboring cells

@@ -20,7 +20,7 @@ def test():
     """
     mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="cc-pvtz", unit="bohr", spin=0)
     for mf in [scf.RHF(mol).run(), scf.ROHF(mol).run(), scf.UHF(mol).run()]:
-        mc = mcscf.CASCI(mf,ncas=3,nelecas=(1,1))
+        mc = mcscf.CASCI(mf,ncas=4,nelecas=(1,1))
         mc.kernel()
         wf = MultiSlater(mol, mf, mc)
 
@@ -46,7 +46,6 @@ def test():
         df = pd.DataFrame(df)
         en = np.mean(df["energytotal"][warmup:])
         err = np.std(df["energytotal"][warmup:]) / np.sqrt(nsteps - warmup)
-        print(en, err, mc.e_tot)
         assert en - mc.e_tot < 10 * err
   
 if __name__ == "__main__":

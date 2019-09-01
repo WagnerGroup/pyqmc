@@ -49,18 +49,19 @@ class JastrowSpin:
     def recompute(self, configs):
         """ """
         u = 0.0
-        self._configscurrent = configs.copy()
+        configsc = configs.configs.copy()
+        self._configscurrent = configsc
         elec = self._mol.nelec
-        nconfig = configs.shape[0]
+        nconfig = configsc.shape[0]
         nexpand = len(self.b_basis)
         aexpand = len(self.a_basis)
         self._bvalues = np.zeros((nconfig, nexpand, 3))
         self._avalues = np.zeros((nconfig, self._mol.natm, aexpand, 2))
 
         nup = elec[0]
-        d1, ij = self._dist.dist_matrix(configs[:, :nup, :])
-        d2, ij = self._dist.pairwise(configs[:, :nup, :], configs[:, nup:, :])
-        d3, ij = self._dist.dist_matrix(configs[:, nup:, :])
+        d1, ij = self._dist.dist_matrix(configsc[:, :nup, :])
+        d2, ij = self._dist.pairwise(configsc[:, :nup, :], configsc[:, nup:, :])
+        d3, ij = self._dist.dist_matrix(configsc[:, nup:, :])
 
         d1 = d1.reshape((-1, 3))
         d2 = d2.reshape((-1, 3))
@@ -70,16 +71,16 @@ class JastrowSpin:
         r3 = np.linalg.norm(d3, axis=1)
 
         # Package the electron-ion distances into a 1d array
-        di1 = np.zeros((configs.shape[0], self._mol.natm, nup, 3))
-        di2 = np.zeros((configs.shape[0], self._mol.natm, configs.shape[1] - nup, 3))
+        di1 = np.zeros((configsc.shape[0], self._mol.natm, nup, 3))
+        di2 = np.zeros((configsc.shape[0], self._mol.natm, configsc.shape[1] - nup, 3))
 
         for e in range(nup):
             di1[:, :, e, :] = self._dist.dist_i(
-                self._mol.atom_coords(), configs[:, e, :]
+                self._mol.atom_coords(), configsc[:, e, :]
             )
-        for e in range(nup, configs.shape[1]):
+        for e in range(nup, configsc.shape[1]):
             di2[:, :, e - nup, :] = self._dist.dist_i(
-                self._mol.atom_coords(), configs[:, e, :]
+                self._mol.atom_coords(), configsc[:, e, :]
             )
 
         # print(di1.shape)
@@ -91,23 +92,23 @@ class JastrowSpin:
         # Update bvalues according to spin case
         for i, b in enumerate(self.b_basis):
             self._bvalues[:, i, 0] = np.sum(
-                b.value(d1, r1).reshape((configs.shape[0], -1)), axis=1
+                b.value(d1, r1).reshape((configsc.shape[0], -1)), axis=1
             )
             self._bvalues[:, i, 1] = np.sum(
-                b.value(d2, r2).reshape((configs.shape[0], -1)), axis=1
+                b.value(d2, r2).reshape((configsc.shape[0], -1)), axis=1
             )
             self._bvalues[:, i, 2] = np.sum(
-                b.value(d3, r3).reshape((configs.shape[0], -1)), axis=1
+                b.value(d3, r3).reshape((configsc.shape[0], -1)), axis=1
             )
 
         # Update avalues according to spin case
         for i, a in enumerate(self.a_basis):
             self._avalues[:, :, i, 0] = np.sum(
-                a.value(di1, ri1).reshape((configs.shape[0], self._mol.natm, -1)),
+                a.value(di1, ri1).reshape((configsc.shape[0], self._mol.natm, -1)),
                 axis=2,
             )
             self._avalues[:, :, i, 1] = np.sum(
-                a.value(di2, ri2).reshape((configs.shape[0], self._mol.natm, -1)),
+                a.value(di2, ri2).reshape((configsc.shape[0], self._mol.natm, -1)),
                 axis=2,
             )
 
@@ -116,7 +117,7 @@ class JastrowSpin:
 
         return (1, u)
 
-    def updateinternals(self, e, epos, mask=None):
+    def updateinternals(self, e, epos, wrap=None, mask=None):
         """ Update a, b, and c sums. """
         if mask is None:
             mask = [True] * self._configscurrent.shape[0]
@@ -285,7 +286,7 @@ class JastrowSpin:
 
         return delta
 
-    def testvalue(self, e, epos):
+    def testvalue(self, e, epos, wrap=None):
         b_val = np.sum(
             self._get_deltab(e, epos) * self.parameters["bcoeff"], axis=(2, 1)
         )

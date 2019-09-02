@@ -8,7 +8,7 @@ Wave function objects
 .. py:function:: __init__()
 
     Initialize the wave function parameters. 
-    This can be just about anything, but do not allocate walker-specific memory here.
+    This can be just about anything, but do not allocate walker-specific memory here. 
 
 
 .. py:function:: recompute(configs)

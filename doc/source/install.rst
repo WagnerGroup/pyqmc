@@ -1,25 +1,23 @@
 Installation instructions
 **********************************
 
-The code requires a few libraries, which can be installed from pip as
+
+Pip 
+-------------------------------
+
+The package and the dependencies can be installed by running in the directory which holds the `setup.py` file. 
 
 .. code-block:: bash
 
-  pip install numpy scipy pandas pyscf
+  pip install -e . 
 
-
-To install, clone from github:
-
-.. code-block:: bash
-
-  git clone https://github.com/WagnerGroup/pyqmc.git
-
-
-Then set your PYTHONPATH
+GitHub
+--------------------------------
 
 .. code-block:: bash
 
-  export PYTHONPATH="/path/to/pyqmc":$PYTHONPATH
+    git clone https://github.com/WagnerGroup/pyqmc.git
+    export PYTHONPATH:$PYTHONPATH:/path/to/pyqmc
 
 
 

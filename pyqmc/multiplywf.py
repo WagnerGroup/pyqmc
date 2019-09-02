@@ -59,9 +59,9 @@ class MultiplyWF:
         v2 = self.wf2.recompute(configs)
         return v1[0] * v2[0], v1[1] + v2[1]
 
-    def updateinternals(self, e, epos, wrap=None, mask=None):
-        self.wf1.updateinternals(e, epos, wrap=wrap, mask=mask)
-        self.wf2.updateinternals(e, epos, wrap=wrap, mask=mask)
+    def updateinternals(self, e, epos, mask=None):
+        self.wf1.updateinternals(e, epos, mask=mask)
+        self.wf2.updateinternals(e, epos, mask=mask)
 
     def value(self):
         v1 = self.wf1.value()
@@ -71,8 +71,8 @@ class MultiplyWF:
     def gradient(self, e, epos):
         return self.wf1.gradient(e, epos) + self.wf2.gradient(e, epos)
 
-    def testvalue(self, e, epos, wrap=[0,0,0]):
-        return self.wf1.testvalue(e, epos, wrap=wrap) * self.wf2.testvalue(e, epos, wrap=wrap)
+    def testvalue(self, e, epos):
+        return self.wf1.testvalue(e, epos) * self.wf2.testvalue(e, epos)
 
     def laplacian(self, e, epos):
         # This is a place where we might want to specialize a vgl function

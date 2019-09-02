@@ -1,4 +1,5 @@
 import numpy as np
+import copy
 
 """
 v_l object. c*r^{n-2}*exp{-e*r^2} 
@@ -78,8 +79,8 @@ def get_r_ea(mol, configs, e, at):
     Returns:
       epos-apos, electron-atom distances
     """
-    epos = configs[:, e, :]
-    nconf = configs.shape[0]
+    epos = configs.configs[:, e, :]
+    nconf = configs.configs.shape[0]
     apos = np.outer(
         np.ones(nconf), np.array(mol._atom[at][1])
     )  # nconf x 3 array, position of atom at
@@ -90,7 +91,7 @@ def get_r_ea_i(mol, epos_rot, e, at):
     """
     Returns a nconf x naip x 3 array, distances between the rotated electron (e) and the atom at
     Parameters:
-      epos_rot: rotated positions of electron e, nconf x naip x 3
+      epos_rot: configs object with rotated positions of electron e, nconf x naip x 3
     Returns:
       epos_rot-apos, (rotated) electron-atom distances
     """
@@ -100,14 +101,14 @@ def get_r_ea_i(mol, epos_rot, e, at):
     )  # position of the atom, broadcasted into nconf x naip x 3
     for aip in range(naip):
         apos[:, aip, :] = np.outer(np.ones(nconf), np.array(mol._atom[at][1]))
-    return epos_rot - apos
+    return epos_rot- apos
 
 
 def get_v_l(mol, configs, e, at):
     """
     Returns list of the l's, and a nconf x nl array, v_l values for each l: l= 0,1,2,...,-1
     """
-    nconf = configs.shape[0]
+    nconf = configs.configs.shape[0]
     at_name = mol._atom[at][0]
     r_ea = np.linalg.norm(get_r_ea(mol, configs, e, at), axis=1)
     vl = generate_ecp_functors(mol._ecp[at_name][1])
@@ -118,14 +119,15 @@ def get_v_l(mol, configs, e, at):
     return vl.keys(), v_l
 
 
-def get_wf_ratio(wf, epos_rot, e):
+def get_wf_ratio(wf, configs, epos_rot, e):
     """
     Returns a nconf x naip array, which is the Psi(r_e(i))/Psi(r_e) values
     """
     nconf, naip = epos_rot.shape[0:2]
     wf_ratio = np.zeros([nconf, naip])
     for aip in range(naip):
-        wf_ratio[:, aip] = wf.testvalue(e, epos_rot[:, aip, :])
+        epos = configs.make_irreducible(e, epos_rot[:,aip,:])
+        wf_ratio[:, aip] = wf.testvalue(e, epos)
     return wf_ratio
 
 
@@ -181,7 +183,7 @@ def ecp_ea(mol, configs, wf, e, at):
 
     weights, epos_rot = get_rot(mol, configs, e, at, naip)
     P_l = get_P_l(mol, configs, weights, epos_rot, l_list, e, at)
-    ratio = get_wf_ratio(wf, epos_rot, e)
+    ratio = get_wf_ratio(wf, configs, epos_rot, e)
     ecp_val = np.einsum("ij,ik,ijk->i", ratio, v_l, P_l)
     # compute the local part
     local_l = -1
@@ -198,7 +200,7 @@ def ecp(mol, configs, wf):
     if mol._ecp != {}:
         for e in range(nelec):
             for at in range(len(mol._atom)):
-                ecp_tot += ecp_ea(mol, configs.configs, wf, e, at)
+                ecp_tot += ecp_ea(mol, configs, wf, e, at)
     return ecp_tot
 
 
@@ -213,7 +215,7 @@ def get_rot(mol, configs, e, at, naip):
       epos_rot: positions of the rotated electron, nconf x naip x 3
       
     """
-    nconf = configs.shape[0]
+    nconf = configs.configs.shape[0]
     apos = np.outer(np.ones(nconf), np.array(mol._atom[at][1]))
 
     r_ea_vec = get_r_ea(mol, configs, e, at)
@@ -266,7 +268,7 @@ def get_rot(mol, configs, e, at, naip):
             d1[i + 7] = np.pi - tha
             d2[i + 7] = (rk2 + 1) * fi0
 
-    epos_rot = np.zeros([nconf, naip, 3])
+    epos_rot = np.zeros((nconf, naip, 3))
     for aip in range(naip):
         for d in range(3):
             epos_rot[:, aip, d] = apos[:, d] + r_ea * (

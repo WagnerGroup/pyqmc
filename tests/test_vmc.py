@@ -10,7 +10,6 @@ from pyscf import lib, gto, scf
 
 from pyqmc.slateruhf import PySCFSlaterUHF
 from pyqmc.accumulators import EnergyAccumulator
-from pyqmc.coord import OpenConfigs
 
 
 def test_vmc():
@@ -32,7 +31,7 @@ def test_vmc():
         (PySCFSlaterUHF(mol, mf_uhf), mf_uhf),
     ]:
 
-        coords = OpenConfigs(initial_guess(mol, nconf))
+        coords = initial_guess(mol, nconf)
         df, coords = vmc(
             wf, coords, nsteps=nsteps, accumulators={"energy": EnergyAccumulator(mol)}
         )
@@ -61,14 +60,14 @@ def test_accumulator():
     mf = scf.RHF(mol).run()
     nconf = 5000
     wf = PySCFSlaterUHF(mol, mf)
-    coords = OpenConfigs(initial_guess(mol, nconf))
+    coords = initial_guess(mol, nconf)
 
     df, coords = vmc(
         wf, coords, nsteps=30, accumulators={"energy": EnergyAccumulator(mol)}
     )
     df = pd.DataFrame(df)
     eaccum = EnergyAccumulator(mol)
-    eaccum_energy = eaccum(coords.configs, wf)
+    eaccum_energy = eaccum(coords, wf)
     df = pd.DataFrame(df)
     print(df["energytotal"][29] == np.average(eaccum_energy["total"]))
 

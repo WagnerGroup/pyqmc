@@ -26,6 +26,7 @@ def initial_guess(mol, nconfig, r=1.0):
      the atoms.
     
     """
+    from pyqmc.coord import OpenConfigs, PeriodicConfigs
     nelec = np.sum(mol.nelec)
     epos = np.zeros((nconfig, nelec, 3))
     wts = mol.atom_charges()
@@ -60,7 +61,10 @@ def initial_guess(mol, nconfig, r=1.0):
             ]  # assign remaining electrons
 
     epos += r * np.random.randn(*epos.shape)  # random shifts from atom positions
-
+    if hasattr(mol, 'a'):
+        epos = PeriodicConfigs(epos, mol.a)
+    else:
+        epos = OpenConfigs(epos)
     return epos
 
 

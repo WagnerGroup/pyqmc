@@ -24,38 +24,75 @@ class PySCFSlaterUHF:
           mf:
           twist: (3,) array-like. k=pi*twist, real-valued twists are integer
         """
-        self.occ = np.asarray(mf.mo_occ > 0.9)
+        self.occ = np.asarray(mf.mo_occ) > 0.9
         self.parameters = {}
-        #self.twist = np.array(twist)
         if np.linalg.norm(twist)==0:
-            self.get_twist_phase = lambda wrap : 1
-            self.get_full_phase = lambda wrap, i0, i1 : 1
+            print("Gamma point")
+            self.single_twist = lambda e, c : 1
+            self.single_twist_mask = lambda e, c, m : 1
+            self.all_twist = lambda c, i0, i1 : 1
         else:
             assert hasattr(mol, "a"), "twist can only be nonzero for a periodic system"
-            if (np.mod(twist, 1)==0).all(): # real kpt
-                get_twist = lambda wrap : np.prod((-1)**np.dot(wrap, twist), axis=1)
+            if (np.abs(twist-np.rint(twist))<1e-14).all(): # real kpt
+                get_twist = lambda wrap : (-1)**np.dot(wrap, twist)
+                print("real kpt", twist)
             else: 
-                get_twist = lambda wrap : np.prod(
-                        np.exp(1j*np.pi*np.dot(wrap, twist)), axis=1
-                    )
-            def get_full_twist(configs, ind0, ind1):
-                return np.prod(get_twist(configs.wrap[:, ind0 : ind1, :]), axis=1)
-            self.get_twist_phase = get_twist
-            self.get_full_phase = get_full_twist
+                get_twist = lambda wrap : np.exp(1j*np.pi*np.dot(wrap, twist))
+                print("cplx kpt", twist - np.array([1,0,1]), np.mod(twist, 1.))
+
+            def get_full_twist(c, i0, i1):
+                self.wrap[:, i0 : i1] = c.wrap[:, i0 : i1]
+                return np.prod(get_twist(c.wrap[:, i0 : i1]), axis=1)
+
+            def get_single_twist(e, c, mask=None):
+                twist = get_twist(c.wrap-self.wrap[:,e]) 
+                if mask is not None:
+                    twist = twist[mask]
+                return twist
+
+            self.single_twist = lambda e, c : get_twist(c.wrap-self.wrap[:,e])
+            self.single_twist_mask = lambda e, c, m : get_twist(c.wrap[m]-self.wrap[m,e])
+            self.all_twist = lambda c, i0, i1 : np.prod(
+                get_twist(c.wrap[:, i0 : i1, :]), axis=1
+            )
             
 
         # Determine if we're initializing from an RHF or UHF object...
-        if len(mf.mo_occ.shape) == 2:
-            self.parameters["mo_coeff_alpha"] = mf.mo_coeff[0][:, self.occ[0]]
-            self.parameters["mo_coeff_beta"] = mf.mo_coeff[1][:, self.occ[1]]
-        else:
-            self.parameters["mo_coeff_alpha"] = mf.mo_coeff[
-                :, np.asarray(mf.mo_occ > 0.9)
-            ]
-            self.parameters["mo_coeff_beta"] = mf.mo_coeff[
-                :, np.asarray(mf.mo_occ > 1.1)
-            ]
+        if hasattr(mf, "kpts"):
+            kind = np.where(np.linalg.norm(
+                  np.dot(mf.kpts, mol.a.T) - np.array(twist) * np.pi, axis=1
+            ) < 1e-12)[0][0]
+            if len(np.asarray(mf.mo_occ).shape) == 3:
+                self.parameters["mo_coeff_alpha"] = np.real_if_close(
+                    mf.mo_coeff[0][kind][:, self.occ[0, kind]], tol=1e4
+                )
+                self.parameters["mo_coeff_beta"] = np.real_if_close(
+                    mf.mo_coeff[1][kind][:, self.occ[1, kind]], tol=1e4
+                )
+            else:
+                self.parameters["mo_coeff_alpha"] = np.real_if_close(
+                    mf.mo_coeff[kind][:, np.asarray(mf.mo_occ[kind] > 0.9)], tol=1e4
+                )
+                self.parameters["mo_coeff_beta"] = np.real_if_close(
+                    mf.mo_coeff[kind][:, np.asarray(mf.mo_occ[kind] > 1.1)], tol=1e4
+                )
 
+        else:
+            if len(mf.mo_occ.shape) == 2:
+                self.parameters["mo_coeff_alpha"] = mf.mo_coeff[0][:, self.occ[0]]
+                self.parameters["mo_coeff_beta"] = mf.mo_coeff[1][:, self.occ[1]]
+            else:
+                self.parameters["mo_coeff_alpha"] = mf.mo_coeff[
+                    :, np.asarray(mf.mo_occ > 0.9)
+                ]
+                self.parameters["mo_coeff_beta"] = mf.mo_coeff[
+                    :, np.asarray(mf.mo_occ > 1.1)
+                ]
+
+        if np.iscomplexobj(np.concatenate([p.ravel() for p in self.parameters.values()])) or np.linalg.norm(twist)!=0:
+            self.get_phase = lambda x : np.exp(2j*np.pi*np.angle(x))
+        else:
+            self.get_phase = np.sign
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
         self._mol = mol
         self._nelec = tuple(mol.nelec)
@@ -65,12 +102,12 @@ class PySCFSlaterUHF:
         """This computes the value from scratch. Returns the logarithm of the wave function as
         (phase,logdet). If the wf is real, phase will be +/- 1."""
         nconf, nelec, ndim = configs.configs.shape
+        self.wrap = np.zeros((configs.configs.shape)) # only needed for PBC
         mycoords = configs.configs.reshape((nconf * nelec, ndim))
-        ao = self._mol.eval_gto(self.pbc_str + "GTOval_sph", mycoords).reshape(
-            (nconf, nelec, -1)
-        )
+        ao = np.real_if_close(self._mol.eval_gto(
+              self.pbc_str + "GTOval_sph", mycoords
+        ).reshape((nconf, nelec, -1)), tol=1e4)
             
-
         self._aovals = ao
         self._dets = []
         self._inverse = []
@@ -85,29 +122,30 @@ class PySCFSlaterUHF:
                 )
             # This could be done faster; we are doubling our effort here.
             phase, mag = np.linalg.slogdet(mo)
-            phase *= self.get_full_phase(
+            phase *= self.all_twist(
                 configs, s * self._nelec[0], self._nelec[0] + s * self._nelec[1]
             ) 
             self._dets.append((phase,mag))
             self._inverse.append(np.linalg.inv(mo))
-            # Apply twist to phase
-        
+            # Apply twist to phase 
 
         return self.value()
 
-    def updateinternals(self, e, epos, wrap=None, mask=None):
+    def updateinternals(self, e, epos, mask=None):
         """Update any internals given that electron e moved to epos. mask is a Boolean array 
         which allows us to update only certain walkers"""
         s = int(e >= self._nelec[0])
         if mask is None:
-            mask = [True] * epos.shape[0]
+            mask = [True] * epos.configs.shape[0]
         eeff = e - s * self._nelec[0]
-        ao = self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos)
+        ao = np.real_if_close(
+            self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs), tol=1e4
+        )
         mo = ao.dot(self.parameters[self._coefflookup[s]])
         ratio, self._inverse[s][mask, :, :] = sherman_morrison_row(
             eeff, self._inverse[s][mask, :, :], mo[mask, :]
         )
-        ratio *= self.get_twist_phase(wrap)
+        ratio *= self.single_twist_mask(e, epos, mask)
         self._updateval(ratio, s, mask)
 
     ### not state-changing functions
@@ -117,7 +155,7 @@ class PySCFSlaterUHF:
         return self._dets[0][0] * self._dets[1][0], self._dets[0][1] + self._dets[1][1]
 
     def _updateval(self, ratio, s, mask):
-        self._dets[s][0][mask] *= np.sign(ratio)  # will not work for complex!
+        self._dets[s][0][mask] *= self.get_phase(ratio)  # will not work for complex!
         self._dets[s][1][mask] += np.log(np.abs(ratio))
 
     def _testrow(self, e, vec):
@@ -133,35 +171,47 @@ class PySCFSlaterUHF:
         ratio = np.einsum("ij,ij->i", vec, self._inverse[s][:, i, :])
         return ratio
 
+    def old_gradient(self, e, epos):
+        """ Compute the gradient of the log wave function 
+        Note that this can be called even if the internals have not been updated for electron e,
+        if epos differs from the current position of electron e."""
+        s = int(e >= self._nelec[0])
+        aograd = self._mol.eval_gto("GTOval_ip_sph", epos.configs)
+        mograd = aograd.dot(self.parameters[self._coefflookup[s]])
+        ratios = [self._testrow(e, x) for x in mograd]
+        return np.asarray(ratios) / self.testvalue(e, epos)[np.newaxis, :]
+
     def gradient(self, e, epos):
         """ Compute the gradient of the log wave function 
         Note that this can be called even if the internals have not been updated for electron e,
         if epos differs from the current position of electron e."""
         s = int(e >= self._nelec[0])
-        aograd = self._mol.eval_gto(self.pbc_str + "GTOval_ip_sph", epos)
+        aograd = np.real_if_close(
+            self._mol.eval_gto("GTOval_sph_deriv1", epos.configs), tol=1e4
+        )
         mograd = aograd.dot(self.parameters[self._coefflookup[s]])
-        ratios = [self._testrow(e, x) for x in mograd]
-        return np.asarray(ratios) / self.testvalue(e, epos)[np.newaxis, :]
+        ratios = np.asarray([self._testrow(e, x) for x in mograd])
+        return ratios[1:] / ratios[:1]
 
     def laplacian(self, e, epos):
-        """ Compute the laplacian Psi/ Psi. """
         s = int(e >= self._nelec[0])
-        # aograd=self._mol.eval_gto(self.pbc_str+'GTOval_sph_deriv2',epos)
-        aolap = np.sum(
-            self._mol.eval_gto(self.pbc_str + "GTOval_sph_deriv2", epos)[[4, 7, 9]],
-            axis=0,
-        )
-        molap = aolap.dot(self.parameters[self._coefflookup[s]])
-        ratios = self._testrow(e, molap)
-        return ratios / self.testvalue(e, epos)
-
-    def testvalue(self, e, epos, wrap=[0,0,0]):
+        ao = np.real_if_close(self._mol.eval_gto(
+              self.pbc_str + "GTOval_sph_deriv2", epos.configs
+        )[[0, 4, 7, 9]], tol=1e4)
+        mo = np.dot([ao[0],ao[1:].sum(axis=0)], self.parameters[self._coefflookup[s]])
+        ratios = self._testrow(e, mo[1])
+        testvalue = self._testrow(e, mo[0])
+        return ratios / testvalue
+        
+    def testvalue(self, e, epos):
         """ return the ratio between the current wave function and the wave function if 
         electron e's position is replaced by epos"""
         s = int(e >= self._nelec[0])
-        ao = self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos)
+        ao = np.real_if_close(
+            self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs), tol=1e4
+        )
         mo = ao.dot(self.parameters[self._coefflookup[s]])
-        return self._testrow(e, mo) * self.get_twist_phase(wrap)
+        return self._testrow(e, mo) * self.single_twist(e, epos)
 
     def pgradient(self):
         """Compute the parameter gradient of Psi. 

@@ -96,7 +96,7 @@ def dmc_propagate(
     nconfig, nelec = configs.configs.shape[0:2]
     wf.recompute(configs)
 
-    eloc = accumulators[ekey[0]](configs.configs, wf)[ekey[1]]
+    eloc = accumulators[ekey[0]](configs, wf)[ekey[1]]
     # eref_mean = np.mean(weights * eloc) / np.mean(weights)
     # eref = eref_mean
     df = []
@@ -104,13 +104,13 @@ def dmc_propagate(
         acc = np.zeros(nelec)
         for e in range(nelec):
             # Propose move
-            grad = drift_limiter(wf.gradient(e, configs.configs[:, e, :]).T, tstep)
+            grad = drift_limiter(wf.gradient(e, configs.electron(e)).T, tstep)
             gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconfig, 3))
             eposnew = configs.configs[:, e, :] + gauss + grad
-            irrepos, wrap = configs.make_irreducible(eposnew)
+            newepos = configs.make_irreducible(e, eposnew)
 
             # Compute reverse move
-            new_grad = drift_limiter(wf.gradient(e, irrepos).T, tstep)
+            new_grad = drift_limiter(wf.gradient(e, newepos).T, tstep)
             forward = np.sum(gauss ** 2, axis=1)
             backward = np.sum((gauss + grad + new_grad) ** 2, axis=1)
             #forward = np.sum((configs[:, e, :] + grad - eposnew) ** 2, axis=1)
@@ -118,18 +118,18 @@ def dmc_propagate(
             t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
 
             # Acceptance -- fixed-node: reject if wf changes sign
-            wfratio = wf.testvalue(e, irrepos, wrap=wrap)
+            wfratio = wf.testvalue(e, newepos)
             ratio = wfratio ** 2 * t_prob
             accept = ratio * np.sign(wfratio) > np.random.rand(nconfig)
 
             # Update wave function
-            configs.move(e, irrepos, wrap, accept)
-            wf.updateinternals(e, irrepos, wrap=wrap, mask=accept)
+            configs.move(e, newepos, accept)
+            wf.updateinternals(e, newepos, mask=accept)
             acc[e] = np.mean(accept)
 
         # weights
         elocold = eloc.copy()
-        energydat = accumulators[ekey[0]](configs.configs, wf)
+        energydat = accumulators[ekey[0]](configs, wf)
         eloc = energydat[ekey[1]]
         tdamp = limit_timestep(
             weights, eloc, elocold, eref, branchcut_start, branchcut_stop
@@ -142,7 +142,7 @@ def dmc_propagate(
         avg = {}
         for k, accumulator in accumulators.items():
             if k != ekey[0]:
-                dat = accumulator(configs.configs, wf)
+                dat = accumulator(configs, wf)
             else:
                 dat = energydat
             for m, res in dat.items():

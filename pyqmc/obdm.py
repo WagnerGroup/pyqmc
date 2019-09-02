@@ -55,7 +55,7 @@ class OBDMAccumulator:
         self._mol = mol
         # self._extra_config = np.random.normal(scale=tstep,size=3) # not zero to avoid sitting on top of atom.
         nelec = sum(self._mol.nelec)
-        self._extra_config = initial_guess(mol, int(naux / nelec) + 1).reshape(-1, 3)
+        self._extra_config = initial_guess(mol, int(naux / nelec) + 1).configs.reshape(-1, 3)
 
         self._nstep = nstep
 
@@ -67,12 +67,13 @@ class OBDMAccumulator:
     def __call__(self, configs, wf):
         """ Quantities from equation (9) of DOI:10.1063/1.4793531"""
 
+        nconf = configs.configs.shape[0]
         results = {
             "value": np.zeros(
-                (configs.shape[0], self._orb_coeff.shape[1], self._orb_coeff.shape[1])
+                (nconf, self._orb_coeff.shape[1], self._orb_coeff.shape[1])
             ),
-            "norm": np.zeros((configs.shape[0], self._orb_coeff.shape[1])),
-            "acceptance": np.zeros(configs.shape[0]),
+            "norm": np.zeros((nconf, self._orb_coeff.shape[1])),
+            "acceptance": np.zeros(nconf),
         }
         acceptance = 0
         naux = self._extra_config.shape[0]
@@ -81,7 +82,7 @@ class OBDMAccumulator:
         for step in range(self._nstep):
             e = np.random.choice(self._electrons)
 
-            points = np.concatenate([self._extra_config, configs[:, e, :]])
+            points = np.concatenate([self._extra_config, configs.configs[:, e, :]])
             ao = self._mol.eval_gto("GTOval_sph", points)
             borb = ao.dot(self._orb_coeff)
 
@@ -91,8 +92,9 @@ class OBDMAccumulator:
             norm = borb_aux * borb_aux / fsum[:, np.newaxis]
             borb_configs = borb[naux:, :]
 
-            auxassignments = np.random.randint(0, naux, size=configs.shape[0])
-            wfratio = wf.testvalue(e, self._extra_config[auxassignments, :])
+            auxassignments = np.random.randint(0, naux, size=nconf)
+            epos = configs.make_irreducible(e, self._extra_config[auxassignments])
+            wfratio = wf.testvalue(e, epos)
 
             orbratio = np.einsum(
                 "ij,ik->ijk",

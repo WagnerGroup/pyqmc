@@ -26,6 +26,7 @@ def initial_guess(mol, nconfig, r=1.0):
      the atoms.
     
     """
+    from pyqmc.coord import OpenConfigs, PeriodicConfigs
     nelec = np.sum(mol.nelec)
     epos = np.zeros((nconfig, nelec, 3))
     wts = mol.atom_charges()
@@ -60,7 +61,10 @@ def initial_guess(mol, nconfig, r=1.0):
             ]  # assign remaining electrons
 
     epos += r * np.random.randn(*epos.shape)  # random shifts from atom positions
-
+    if hasattr(mol, 'a'):
+        epos = PeriodicConfigs(epos, mol.a)
+    else:
+        epos = OpenConfigs(epos)
     return epos
 
 
@@ -123,34 +127,34 @@ def vmc(
         acc = []
         for e in range(nelec):
             # Propose move
-            grad = limdrift(wf.gradient(e, configs.configs[:, e, :]).T)
+            grad = limdrift(np.real(wf.gradient(e, configs.electron(e)).T))
             gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconf, 3))
             newcoorde = configs.configs[:,e,:] + gauss + grad*tstep
-            irrcoorde, wrap = configs.make_irreducible(newcoorde )
+            newcoorde = configs.make_irreducible(e, newcoorde )
 
             # Compute reverse move
-            new_grad = limdrift(wf.gradient(e, irrcoorde).T)
+            new_grad = limdrift(np.real(wf.gradient(e, newcoorde).T))
             forward = np.sum(gauss ** 2, axis=1)
             backward = np.sum((gauss + tstep * (grad + new_grad)) ** 2, axis=1)
 
             # Acceptance
             t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
-            ratio = np.multiply(wf.testvalue(e, irrcoorde, wrap) ** 2, t_prob)
+            ratio = np.multiply(wf.testvalue(e, newcoorde ) ** 2, t_prob)
             accept = ratio > np.random.rand(nconf)
 
             # Update wave function
-            configs.move(e, irrcoorde, wrap, accept)
-            wf.updateinternals(e, irrcoorde, wrap=wrap, mask=accept)
+            configs.move(e, newcoorde, accept)
+            wf.updateinternals(e, newcoorde, mask=accept)
             acc.append(np.mean(accept))
         avg = {}
         for k, accumulator in accumulators.items():
-            dat = accumulator.avg(configs.configs, wf)
+            dat = accumulator.avg(configs, wf)
             for m, res in dat.items():
                 # print(m,res.nbytes/1024/1024)
                 avg[k + m] = res  # np.mean(res,axis=0)
         avg["acceptance"] = np.mean(acc)
         avg["step"] = stepoffset + step
-        avg["nconfig"] = configs.configs.shape[0]
+        avg["nconfig"] = nconf
         df.append(avg)
     return df, configs
 

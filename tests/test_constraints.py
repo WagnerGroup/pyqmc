@@ -5,6 +5,7 @@ import numpy as np
 from pyscf import lib, gto, scf, mcscf
 from pyqmc import default_msj
 from pyqmc.accumulators import LinearTransform
+from pyqmc.coord import OpenConfigs
 
 def test():
     #Default multi-Slater wave function
@@ -27,7 +28,7 @@ def test():
         old_parms['wf2bcoeff'][0]) == 0
 
     #Test serialize gradients 
-    configs = np.random.randn(10, 4, 3)
+    configs = OpenConfigs(np.random.randn(10, 4, 3))
     wf.recompute(configs)
     pgrad = wf.pgradient()
     pgrad_serial = lt.serialize_gradients(pgrad)

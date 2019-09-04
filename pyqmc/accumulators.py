@@ -6,11 +6,13 @@ class EnergyAccumulator:
     """returns energy of each configuration in a dictionary. 
   Keys and their meanings can be found in energy.energy """
 
-    def __init__(self, mol):
+    def __init__(self, mol, cutoff=None):
         self.mol = mol
+        if(cutoff is None): cutoff = 1e7
+        else: self.cutoff = cutoff
 
     def __call__(self, configs, wf):
-        return energy(self.mol, configs, wf)
+        return energy(self.mol, configs, wf, self.cutoff)
 
     def avg(self, configs, wf):
         d = {}

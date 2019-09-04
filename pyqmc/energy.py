@@ -38,8 +38,8 @@ def ii_energy(mol):
     return iitot
 
 
-def get_ecp(mol, configs, wf):
-    return eval_ecp.ecp(mol, configs, wf)
+def get_ecp(mol, configs, wf, cutoff):
+    return eval_ecp.ecp(mol, configs, wf, cutoff)
 
 
 def kinetic(configs, wf):
@@ -50,7 +50,7 @@ def kinetic(configs, wf):
     return ke
 
 
-def energy(mol, configs, wf):
+def energy(mol, configs, wf, cutoff):
     """Compute the local energy of a set of configurations.
     
     Args:
@@ -65,7 +65,7 @@ def energy(mol, configs, wf):
       """
     ee = ee_energy(configs)
     ei = ei_energy(mol, configs)
-    ecp_val = get_ecp(mol, configs, wf)
+    ecp_val = get_ecp(mol, configs, wf, cutoff)
     ii = ii_energy(mol)
     ke = kinetic(configs, wf)
     # print(ke,ee,ei,ii)

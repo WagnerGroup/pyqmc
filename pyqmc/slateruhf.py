@@ -213,6 +213,19 @@ class PySCFSlaterUHF:
         mo = ao.dot(self.parameters[self._coefflookup[s]])
         return self._testrow(e, mo) * self.single_twist(e, epos)
 
+    def testvalue_mask(self, e, epos, mask):
+        """ return the ratio between the current wave function and the wave function if 
+        electron e's position is replaced by epos with a configuration mask"""
+        s = int(e >= self._nelec[0])
+        ao = np.real_if_close(
+            self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs), tol=1e4
+        )
+        mo = ao.dot(self.parameters[self._coefflookup[s]])
+        ratio = np.einsum(
+            "ij,ij->i", mo, self._inverse[s][mask, :, e - s * self._nelec[0]]
+        )
+        return ratio * self.single_twist_mask(e, epos, mask)
+
     def pgradient(self):
         """Compute the parameter gradient of Psi. 
         Returns d_p \Psi/\Psi as a dictionary of numpy arrays,

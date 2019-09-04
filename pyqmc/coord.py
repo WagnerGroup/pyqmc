@@ -10,6 +10,9 @@ class OpenConfigs:
     def electron(self, e):
         return OpenConfigs(self.configs[:, e])
 
+    def mask(self, mask):
+        return OpenConfigs(self.configs[mask])
+
     def make_irreducible(self, e, vec):
         """ 
           Input: 
@@ -66,13 +69,17 @@ class PeriodicConfigs:
     def electron(self, e):
         return PeriodicConfigs(self.configs[:,e], self.lvecs, wrap=self.wrap[:,e])
         
+    def mask(self, mask):
+        return PeriodicConfigs(self.configs[mask], self.lvecs, wrap=self.wrap[mask])
+
     def make_irreducible(self, e, vec):
         """ 
          Input: a (nconfig, 3) vector 
          Output: a tuple with the wrapped vector and the number of wraps
         """
         epos, wrap = enforce_pbc(self.lvecs, vec)
-        return PeriodicConfigs(epos, self.lvecs, wrap=wrap+self.wrap[:,e])
+        currentwrap = self.wrap if len(self.wrap.shape)==2 else self.wrap[:,e]
+        return PeriodicConfigs(epos, self.lvecs, wrap=wrap+currentwrap)
 
     def move(self, e, new, accept):
         """

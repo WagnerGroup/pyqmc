@@ -151,11 +151,16 @@ class MultiSlater:
         ratios = np.einsum('idj,idj->id',vec, self._inverse[s][mask,:,:,e-s*self._nelec[0]])
         numer = np.einsum('id,di->i',
             ratios[:,self._det_map[s]]*self.parameters["det_coeff"][np.newaxis,:],
-            self._dets[0][0,:,self._det_map[0]]*self._dets[1][0,:,self._det_map[1]]*\
-            np.exp(self._dets[0][1,:,self._det_map[0]] + self._dets[1][1,:,self._det_map[1]]))
+            self._dets[0][0,:,self._det_map[0]][:,mask]*\
+            self._dets[1][0,:,self._det_map[1]][:,mask]*\
+            np.exp(
+              self._dets[0][1,:,self._det_map[0]][:,mask]+\
+              self._dets[1][1,:,self._det_map[1]][:,mask]
+            )
+        )
         
         curr_val = self.value()
-        denom = (curr_val[0]*np.exp(curr_val[1]))
+        denom = (curr_val[0][mask]*np.exp(curr_val[1][mask]))
         return numer/denom
 
     def gradient(self, e, epos):
@@ -171,6 +176,17 @@ class MultiSlater:
       
         ratios = np.asarray([self._testrow(e, x) for x in mograd_vals])
         return ratios[1:] / ratios[:1]
+
+    def gradient_laplacian(self, e, epos):
+        s = int(e >= self._nelec[0])
+        ao = np.real_if_close(self._mol.eval_gto(
+              self.pbc_str + "GTOval_sph_deriv2", epos.configs
+        )[[0, 1, 2, 3, 4, 7, 9]], tol=1e4)
+        ao = np.concatenate([ao[0:4], ao[4:].sum(axis=0, keepdims=True)])
+        mo = np.dot(ao, self.parameters[self._coefflookup[s]])
+        mo_vals = mo[:,:,self._det_occup[s]]
+        ratios = np.asarray([self._testrow(e, x) for x in mo_vals])
+        return ratios[1:-1] / ratios[:1], ratios[-1]/ratios[0]
 
     def laplacian(self, e, epos):
         """ Compute the laplacian Psi/ Psi. """

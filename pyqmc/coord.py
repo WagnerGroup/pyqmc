@@ -47,7 +47,7 @@ class OpenConfigs:
         """
         return [OpenConfigs(c) for c in np.split(self.configs, npartitions)]
 
-    def gather(self, configslist):
+    def join(self, configslist):
         """
         Merge configs into this object to collect from parallelization
         Args:
@@ -106,7 +106,7 @@ class PeriodicConfigs:
         wlist = np.split(self.wrap, npartitions)
         return [PeriodicConfigs(c, self.lvecs, w) for c,w in zip(clist, wlist)]
     
-    def gather(self, configslist):
+    def join(self, configslist):
         """
         Merge configs into this object to collect from parallelization
         Args:

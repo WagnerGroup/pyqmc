@@ -55,7 +55,7 @@ def distvmc(
             coord[i] = res[1]
         print("epoch", epoch, "finished", flush=True)
 
-    coords.gather(coord)
+    coords.join(coord)
 
     return alldata, coords
 
@@ -138,7 +138,7 @@ def distdmc_propagate(wf, configs, weights, *args, client, npartitions=None, **k
     import pandas as pd
 
     allresults = [r.result() for r in allruns]
-    configs.gather([x[1] for x in allresults])
+    configs.join([x[1] for x in allresults])
     coordret = configs
     weightret = np.vstack([x[2] for x in allresults])
     df = pd.concat([pd.DataFrame(x[0]) for x in allresults])

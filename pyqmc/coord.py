@@ -7,8 +7,10 @@ class OpenConfigs:
         self.configs = configs
         self.dist = RawDistance()
 
-    def electron(self, e):
-        return OpenConfigs(self.configs[:, e])
+    def electron(self, e, mask=None):
+        if mask is None:
+            mask = [True]*self.configs.shape[0]
+        return OpenConfigs(self.configs[mask, e])
 
     def make_irreducible(self, e, vec):
         """ 
@@ -63,8 +65,10 @@ class PeriodicConfigs:
         self.lvecs = lattice_vectors
         self.dist = MinimalImageDistance(lattice_vectors)
 
-    def electron(self, e):
-        return PeriodicConfigs(self.configs[:,e], self.lvecs, wrap=self.wrap[:,e])
+    def electron(self, e, mask=None):
+        if mask is None:
+            mask = [True]*self.configs.shape[0]
+        return PeriodicConfigs(self.configs[mask,e], self.lvecs, wrap=self.wrap[mask,e])
         
     def make_irreducible(self, e, vec):
         """ 
@@ -72,7 +76,8 @@ class PeriodicConfigs:
          Output: a tuple with the wrapped vector and the number of wraps
         """
         epos, wrap = enforce_pbc(self.lvecs, vec)
-        return PeriodicConfigs(epos, self.lvecs, wrap=wrap+self.wrap[:,e])
+        currentwrap = self.wrap if len(self.wrap.shape)==2 else self.wrap[:,e]
+        return PeriodicConfigs(epos, self.lvecs, wrap=wrap+currentwrap)
 
     def move(self, e, new, accept):
         """

@@ -144,7 +144,7 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
     # print('normerror', normerror, np.log10(normerror))
     return (maxerror, normerror)
 
-def test_wf_grad_and_lap(wf, configs):
+def test_wf_gradient_laplacian(wf, configs):
     nconf, nelec = configs.configs.shape[0:2]
     wf.recompute(configs)
     maxerror = 0
@@ -161,7 +161,7 @@ def test_wf_grad_and_lap(wf, configs):
         grad[e] = wf.gradient(e, configs.electron(e))
         ts1 = time.time()
         tt0 = time.time()
-        andgrad[e], andlap[:, e] = wf.grad_and_lap(e, configs.electron(e))
+        andgrad[e], andlap[:, e] = wf.gradient_laplacian(e, configs.electron(e))
         tt1 = time.time()
         tsep += ts1-ts0
         ttog += tt1-tt0
@@ -183,6 +183,7 @@ def test_wf_grad_and_lap(wf, configs):
 
 if __name__ == "__main__":
     from pyscf import lib, gto, scf
+    import pyqmc
     from pyqmc.slateruhf import PySCFSlaterUHF
     #from pyqmc.jastrow import Jastrow2B
     from pyqmc.coord import OpenConfigs
@@ -197,7 +198,7 @@ if __name__ == "__main__":
     df = []
     for i in range(5):
         configs = OpenConfigs(np.random.randn(18000, np.sum(mol.nelec), 3))
-        res = test_wf_grad_and_lap(wf, configs)
+        res = test_wf_gradient_laplacian(wf, configs)
         for d in res:
             d.update({"step":i})
         df.extend(res)

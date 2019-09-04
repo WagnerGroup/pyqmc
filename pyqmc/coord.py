@@ -7,10 +7,11 @@ class OpenConfigs:
         self.configs = configs
         self.dist = RawDistance()
 
-    def electron(self, e, mask=None):
-        if mask is None:
-            mask = [True]*self.configs.shape[0]
-        return OpenConfigs(self.configs[mask, e])
+    def electron(self, e):
+        return OpenConfigs(self.configs[:, e])
+
+    def mask(self, mask):
+        return OpenConfigs(self.configs[mask])
 
     def make_irreducible(self, e, vec):
         """ 
@@ -65,11 +66,12 @@ class PeriodicConfigs:
         self.lvecs = lattice_vectors
         self.dist = MinimalImageDistance(lattice_vectors)
 
-    def electron(self, e, mask=None):
-        if mask is None:
-            mask = [True]*self.configs.shape[0]
-        return PeriodicConfigs(self.configs[mask,e], self.lvecs, wrap=self.wrap[mask,e])
+    def electron(self, e):
+        return PeriodicConfigs(self.configs[:,e], self.lvecs, wrap=self.wrap[:,e])
         
+    def mask(self, mask):
+        return PeriodicConfigs(self.configs[mask], self.lvecs, wrap=self.wrap[mask])
+
     def make_irreducible(self, e, vec):
         """ 
          Input: a (nconfig, 3) vector 

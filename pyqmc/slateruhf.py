@@ -193,7 +193,7 @@ class PySCFSlaterUHF:
         testvalue = self._testrow(e, mo[0])
         return ratios / testvalue
         
-    def grad_and_lap(self, e, epos):
+    def gradient_laplacian(self, e, epos):
         s = int(e >= self._nelec[0])
         ao = np.real_if_close(self._mol.eval_gto(
               self.pbc_str + "GTOval_sph_deriv2", epos.configs

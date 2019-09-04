@@ -8,7 +8,7 @@ class EnergyAccumulator:
 
     def __init__(self, mol, cutoff=None):
         self.mol = mol
-        if(cutoff is None): cutoff = 1e7
+        if(cutoff is None): self.cutoff = 1e7
         else: self.cutoff = cutoff
 
     def __call__(self, configs, wf):

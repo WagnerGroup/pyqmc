@@ -149,22 +149,22 @@ def test_wf_grad_and_lap(wf, configs):
     wf.recompute(configs)
     maxerror = 0
     lap = np.zeros(configs.configs.shape[:2])
-    grad = np.zeros(configs.configs.shape)
+    grad = np.zeros(configs.configs.shape).transpose((1,2,0))
     andlap = np.zeros(configs.configs.shape[:2])
-    andgrad = np.zeros(configs.configs.shape)
+    andgrad = np.zeros(configs.configs.shape).transpose((1,2,0))
     
     tsep = 0
     ttog = 0
     for e in range(nelec):
-        t0 = time.time()
-        g, andlap[:, e] = wf.grad_and_lap(e, configs.electron(e))
-        andgrad[:, e, :]  = g.T
-        t1 = time.time()
+        ts0 = time.time()
         lap[:, e] = wf.laplacian(e, configs.electron(e))
-        grad[:, e, :] = wf.gradient(e, configs.electron(e)).T
-        t2 = time.time()
-        tsep += t2-t1
-        ttog += t1-t0
+        grad[e] = wf.gradient(e, configs.electron(e))
+        ts1 = time.time()
+        tt0 = time.time()
+        andgrad[e], andlap[:, e] = wf.grad_and_lap(e, configs.electron(e))
+        tt1 = time.time()
+        tsep += ts1-ts0
+        ttog += tt1-tt0
         rmae_grad = np.mean(np.abs((andgrad - grad) / grad))
         rmae_lap = np.mean(np.abs((andlap - lap) / lap))
         norm_grad = np.linalg.norm((andgrad - grad) / grad)
@@ -189,14 +189,14 @@ if __name__ == "__main__":
     import time
     import pandas as pd
 
-    mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="cc-pvtz", unit="bohr")
-    mf = scf.RHF(mol).run()
+    mol = gto.M(atom="Li 0. 0. 0.; Li 0. 0. 1.5", basis="cc-pvtz", unit="bohr")
+    mf = scf.UHF(mol).run()
     wf = PySCFSlaterUHF(mol, mf)
 
     # wf=Jastrow2B(10,mol)
     df = []
     for i in range(5):
-        configs = OpenConfigs(np.random.randn(1000, 4, 3))
+        configs = OpenConfigs(np.random.randn(18000, np.sum(mol.nelec), 3))
         res = test_wf_grad_and_lap(wf, configs)
         for d in res:
             d.update({"step":i})
@@ -204,8 +204,8 @@ if __name__ == "__main__":
     print("testing gradient: errors\n", pd.DataFrame(df)) 
     quit()
     for i in range(5):
-        configs = OpenConfigs(np.random.randn(10, 4, 3))
+        configs = OpenConfigs(np.random.randn(10, np.sum(mol.nelec), 3))
         print("testing gradient: errors", test_wf_gradient(wf, configs, delta=1e-5))
     for i in range(5):
-        configs = OpenConfigs(np.random.randn(10, 4, 3))
+        configs = OpenConfigs(np.random.randn(10, np.sum(mol.nelec), 3))
         print("testing laplacian: errors", test_wf_laplacian(wf, configs, delta=1e-5))

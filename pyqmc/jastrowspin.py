@@ -219,7 +219,7 @@ class JastrowSpin:
         return g, delta + np.sum(g ** 2, axis=0)
 
     def laplacian(self, e, epos):
-        return gradient_laplacian(e, epos)[1]
+        return self.gradient_laplacian(e, epos)[1]
 
     def _get_deltab(self, e, epos):
         """

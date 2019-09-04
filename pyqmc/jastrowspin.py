@@ -218,20 +218,23 @@ class JastrowSpin:
         g = self.gradient(e, epos)
         return delta + np.sum(g ** 2, axis=0)
 
-    def _get_deltab(self, e, epos):
+    def _get_deltab(self, e, epos, mask_configs=None):
         """
         here we will evaluate the b's for a given electron (both the old and new)
         and work out the updated value. This allows us to save a lot of memory
         """
+        if(mask_configs is None): mask_configs = [True]*self._configscurrent.shape[0]
+        
         nconf = epos.configs.shape[0]
         ne = self._configscurrent.shape[1]
         nup = self._mol.nelec[0]
         mask = [True] * ne
         mask[e] = False
-        tmpconfigs = self._configscurrent[:, mask, :]
+        tmpconfigs = self._configscurrent[mask_configs,:,:]
+        tmpconfigs = tmpconfigs[:, mask, :]
 
         dnew = self._dist.dist_i(tmpconfigs, epos.configs)
-        dold = self._dist.dist_i(tmpconfigs, self._configscurrent[:, e, :])
+        dold = self._dist.dist_i(tmpconfigs, self._configscurrent[mask_configs, e, :])
 
         eup = int(e < nup)
         edown = int(e >= nup)
@@ -262,17 +265,18 @@ class JastrowSpin:
             )
         return delta
 
-    def _get_deltaa(self, e, epos):
+    def _get_deltaa(self, e, epos, mask=None):
         """
         here we will evaluate the a's for a given electron (both the old and new)
         and work out the updated value. This allows us to save a lot of memory
         """
+        if(mask is None): mask = [True]*self._configscurrent.shape[0]
         nconf = epos.configs.shape[0]
         ni = self._mol.natm
         nup = self._mol.nelec[0]
         dnew = self._dist.dist_i(self._mol.atom_coords(), epos.configs).reshape((-1, 3))
         dold = self._dist.dist_i(
-            self._mol.atom_coords(), self._configscurrent[:, e, :]
+            self._mol.atom_coords(), self._configscurrent[mask, e, :]
         ).reshape((-1, 3))
         delta = np.zeros((nconf, ni, len(self.a_basis), 2))
 
@@ -286,12 +290,12 @@ class JastrowSpin:
 
         return delta
 
-    def testvalue(self, e, epos, wrap=None):
+    def testvalue(self, e, epos, mask=None):
         b_val = np.sum(
-            self._get_deltab(e, epos) * self.parameters["bcoeff"], axis=(2, 1)
+            self._get_deltab(e, epos, mask) * self.parameters["bcoeff"], axis=(2, 1)
         )
         a_val = np.einsum(
-            "ijkl,jkl->i", self._get_deltaa(e, epos), self.parameters["acoeff"]
+            "ijkl,jkl->i", self._get_deltaa(e, epos, mask), self.parameters["acoeff"]
         )
         return np.exp(b_val + a_val)
 

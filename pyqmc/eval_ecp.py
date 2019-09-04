@@ -127,7 +127,7 @@ def get_wf_ratio(wf, configs, epos_rot, e, mask):
     wf_ratio = np.zeros([nconf, naip])
     for aip in range(naip):
         epos = configs.make_irreducible(e, epos_rot[:,aip,:])
-        wf_ratio[:, aip] = wf.testvalue_mask(e, epos, mask)
+        wf_ratio[:, aip] = wf.testvalue(e, epos, mask=mask)
     return wf_ratio
 
 

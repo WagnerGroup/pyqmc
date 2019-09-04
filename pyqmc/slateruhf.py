@@ -158,11 +158,12 @@ class PySCFSlaterUHF:
         self._dets[s][0][mask] *= self.get_phase(ratio)  # will not work for complex!
         self._dets[s][1][mask] += np.log(np.abs(ratio))
 
-    def _testrow(self, e, vec):
+    def _testrow(self, e, vec, mask=None):
         """vec is a nconfig,nmo vector which replaces row e"""
         s = int(e >= self._nelec[0])
+        if(mask is None): mask = [True]*self._inverse[s].shape[0]
         ratio = np.einsum(
-            "ij,ij->i", vec, self._inverse[s][:, :, e - s * self._nelec[0]]
+            "ij,ij->i", vec, self._inverse[s][mask, :, e - s * self._nelec[0]]
         )
         return ratio
 
@@ -203,7 +204,7 @@ class PySCFSlaterUHF:
         ratios = np.asarray([self._testrow(e, x) for x in mo])
         return ratios[1:-1] / ratios[:1], ratios[-1]/ratios[0]
         
-    def testvalue(self, e, epos):
+    def testvalue(self, e, epos, mask=None):
         """ return the ratio between the current wave function and the wave function if 
         electron e's position is replaced by epos"""
         s = int(e >= self._nelec[0])
@@ -211,20 +212,7 @@ class PySCFSlaterUHF:
             self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs), tol=1e4
         )
         mo = ao.dot(self.parameters[self._coefflookup[s]])
-        return self._testrow(e, mo) * self.single_twist(e, epos)
-
-    def testvalue_mask(self, e, epos, mask):
-        """ return the ratio between the current wave function and the wave function if 
-        electron e's position is replaced by epos with a configuration mask"""
-        s = int(e >= self._nelec[0])
-        ao = np.real_if_close(
-            self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs), tol=1e4
-        )
-        mo = ao.dot(self.parameters[self._coefflookup[s]])
-        ratio = np.einsum(
-            "ij,ij->i", mo, self._inverse[s][mask, :, e - s * self._nelec[0]]
-        )
-        return ratio * self.single_twist_mask(e, epos, mask)
+        return self._testrow(e, mo, mask) * self.single_twist_mask(e, epos, mask)
 
     def pgradient(self):
         """Compute the parameter gradient of Psi. 

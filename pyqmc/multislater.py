@@ -143,11 +143,12 @@ class MultiSlater:
         self._dets[s][0,mask,:] *= np.sign(ratio) 
         self._dets[s][1,mask,:] += np.log(np.abs(ratio))
         
-    def _testrow(self, e, vec):
+    def _testrow(self, e, vec, mask=None):
         """vec is a nconfig,nmo vector which replaces row e"""
         s = int(e >= self._nelec[0])
+        if(mask is None): mask = [True]*self._inverse[s].shape[0]
         
-        ratios = np.einsum('idj,idj->id',vec, self._inverse[s][:,:,:,e-s*self._nelec[0]])
+        ratios = np.einsum('idj,idj->id',vec, self._inverse[s][mask,:,:,e-s*self._nelec[0]])
         numer = np.einsum('id,di->i',
             ratios[:,self._det_map[s]]*self.parameters["det_coeff"][np.newaxis,:],
             self._dets[0][0,:,self._det_map[0]]*self._dets[1][0,:,self._det_map[1]]*\
@@ -183,7 +184,7 @@ class MultiSlater:
 
         return molap_vals / testvalue
     
-    def testvalue(self, e, epos):
+    def testvalue(self, e, epos, mask=None):
         """ return the ratio between the current wave function and the wave function if 
         electron e's position is replaced by epos"""
         s = int(e >= self._nelec[0])
@@ -192,8 +193,8 @@ class MultiSlater:
         )
         mo = ao.dot(self.parameters[self._coefflookup[s]])
         mo_vals = mo[:,self._det_occup[s]]
-        return self._testrow(e, mo_vals)
-    
+        return self._testrow(e, mo_vals, mask)
+
     def pgradient(self):
         """Compute the parameter gradient of Psi. 
         Returns d_p \Psi/\Psi as a dictionary of numpy arrays,

@@ -179,7 +179,7 @@ class JastrowSpin:
 
         return delta
 
-    def laplacian(self, e, epos):
+    def gradient_laplacian(self, e, epos):
         """ """
         nconf = epos.configs.shape[0]
         nup = self._mol.nelec[0]
@@ -216,7 +216,10 @@ class JastrowSpin:
                 delta += np.sum(c[edown] * lap_slice, axis=1)
 
         g = self.gradient(e, epos)
-        return delta + np.sum(g ** 2, axis=0)
+        return g, delta + np.sum(g ** 2, axis=0)
+
+    def laplacian(self, e, epos):
+        return gradient_laplacian(e, epos)[1]
 
     def _get_deltab(self, e, epos):
         """

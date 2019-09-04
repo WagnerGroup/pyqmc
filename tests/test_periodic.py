@@ -77,14 +77,13 @@ def runtest(mol, mf, kind):
     warmup = 10
     start = time.time()
     df, coords = pyqmc.vmc(
-        wf, coords, nsteps=128+warmup, tstep=1, accumulators={"energy": pyqmc.accumulators.EnergyAccumulator(mol)}, verbose=False,
+        wf, coords, nsteps=30+warmup, tstep=1, accumulators={"energy": pyqmc.accumulators.EnergyAccumulator(mol)}, verbose=False,
     )
     print("VMC time", time.time()-start)
     df = pd.DataFrame(df)
-    reblocked = optimally_reblocked(df["energyke"][warmup:])
-    print("VMC kinetic energy:\n", reblocked)
-    vmcke, err = reblocked['mean'],reblocked['standard error']
-    #print('VMC kinetic energy: {0} $\pm$ {1}'.format(vmcke, err))
+    dfke = df["energyke"][warmup:]
+    vmcke, err = dfke.mean(), dfke.std()/np.sqrt(len(dfke))
+    print('VMC kinetic energy: {0} $\pm$ {1}'.format(vmcke, err))
     
     assert np.abs(vmcke-pyscfke) < 5 * err, \
         "energy diff not within 5 sigma ({0:.6f}): energies \n{1} \n{2}".format(5 * err, vmcke, pyscfke)

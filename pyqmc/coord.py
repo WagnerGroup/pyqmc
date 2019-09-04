@@ -37,6 +37,25 @@ class OpenConfigs:
         """
         self.configs = self.configs[newinds]
 
+    def split(self, npartitions):
+        """
+        Split configs into npartitions new configs objects for parallelization
+        Args:
+          npartitions: int, number of partitions to divide configs into
+        Returns:
+          configslist: list of new configs objects
+        """
+        return [OpenConfigs(c) for c in np.split(self.configs, npartitions)]
+
+    def join(self, configslist):
+        """
+        Merge configs into this object to collect from parallelization
+        Args:
+          configslist: list of OpenConfigs objects; total number of configs must match
+        """
+        self.configs[:] = np.concatenate([c.configs for c in configslist], axis=0)[:]
+
+
 class PeriodicConfigs: 
     def __init__(self, configs, lattice_vectors, wrap=None):
         self.configs = configs
@@ -74,6 +93,27 @@ class PeriodicConfigs:
         """
         self.configs = self.configs[newinds]
         self.wrap = self.wrap[newinds]
+
+    def split(self, npartitions):
+        """
+        Split configs into npartitions new configs objects for parallelization
+        Args:
+          npartitions: int, number of partitions to divide configs into
+        Returns:
+          configslist: list of new configs objects
+        """
+        clist = np.split(self.configs, npartitions)
+        wlist = np.split(self.wrap, npartitions)
+        return [PeriodicConfigs(c, self.lvecs, w) for c,w in zip(clist, wlist)]
+    
+    def join(self, configslist):
+        """
+        Merge configs into this object to collect from parallelization
+        Args:
+          configslist: list of OpenConfigs objects; total number of configs must match
+        """
+        self.configs[:] = np.concatenate([c.configs for c in configslist], axis=0)[:]
+        self.wrap[:] = np.concatenate([c.wrap for c in configslist], axis=0)[:]
 
 
 def test():

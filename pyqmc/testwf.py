@@ -144,21 +144,68 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
     # print('normerror', normerror, np.log10(normerror))
     return (maxerror, normerror)
 
+def test_wf_grad_and_lap(wf, configs):
+    nconf, nelec = configs.configs.shape[0:2]
+    wf.recompute(configs)
+    maxerror = 0
+    lap = np.zeros(configs.configs.shape[:2])
+    grad = np.zeros(configs.configs.shape).transpose((1,2,0))
+    andlap = np.zeros(configs.configs.shape[:2])
+    andgrad = np.zeros(configs.configs.shape).transpose((1,2,0))
+    
+    tsep = 0
+    ttog = 0
+    for e in range(nelec):
+        ts0 = time.time()
+        lap[:, e] = wf.laplacian(e, configs.electron(e))
+        grad[e] = wf.gradient(e, configs.electron(e))
+        ts1 = time.time()
+        tt0 = time.time()
+        andgrad[e], andlap[:, e] = wf.grad_and_lap(e, configs.electron(e))
+        tt1 = time.time()
+        tsep += ts1-ts0
+        ttog += tt1-tt0
+        rmae_grad = np.mean(np.abs((andgrad - grad) / grad))
+        rmae_lap = np.mean(np.abs((andlap - lap) / lap))
+        norm_grad = np.linalg.norm((andgrad - grad) / grad)
+        norm_lap =  np.linalg.norm((andlap - lap) / lap)
+
+    print('separate', tsep)
+    print('together', ttog)
+
+    d = []
+    d.append({"error": rmae_grad, "deriv": "grad", "type":"mae"})
+    d.append({"error": rmae_lap, "deriv": "lap", "type":"mae"})
+    d.append({"error": norm_grad, "deriv": "grad", "type":"norm"})
+    d.append({"error": norm_lap, "deriv": "lap", "type":"norm"})
+    return d
+
 
 if __name__ == "__main__":
     from pyscf import lib, gto, scf
-    from pyqmc.slater import PySCFSlaterRHF
-    from pyqmc.jastrow import Jastrow2B
+    from pyqmc.slateruhf import PySCFSlaterUHF
+    #from pyqmc.jastrow import Jastrow2B
     from pyqmc.coord import OpenConfigs
+    import time
+    import pandas as pd
 
-    mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="cc-pvtz", unit="bohr")
-    mf = scf.RHF(mol).run()
-    wf = PySCFSlaterRHF(10, mol, mf)
+    mol = gto.M(atom="Li 0. 0. 0.; Li 0. 0. 1.5", basis="cc-pvtz", unit="bohr")
+    mf = scf.UHF(mol).run()
+    wf = PySCFSlaterUHF(mol, mf)
 
     # wf=Jastrow2B(10,mol)
+    df = []
     for i in range(5):
-        configs = OpenConfigs(np.random.randn(10, 4, 3))
+        configs = OpenConfigs(np.random.randn(18000, np.sum(mol.nelec), 3))
+        res = test_wf_grad_and_lap(wf, configs)
+        for d in res:
+            d.update({"step":i})
+        df.extend(res)
+    print("testing gradient: errors\n", pd.DataFrame(df)) 
+    quit()
+    for i in range(5):
+        configs = OpenConfigs(np.random.randn(10, np.sum(mol.nelec), 3))
         print("testing gradient: errors", test_wf_gradient(wf, configs, delta=1e-5))
     for i in range(5):
-        configs = OpenConfigs(np.random.randn(10, 4, 3))
+        configs = OpenConfigs(np.random.randn(10, np.sum(mol.nelec), 3))
         print("testing laplacian: errors", test_wf_laplacian(wf, configs, delta=1e-5))

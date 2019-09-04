@@ -171,16 +171,6 @@ class PySCFSlaterUHF:
         ratio = np.einsum("ij,ij->i", vec, self._inverse[s][:, i, :])
         return ratio
 
-    def old_gradient(self, e, epos):
-        """ Compute the gradient of the log wave function 
-        Note that this can be called even if the internals have not been updated for electron e,
-        if epos differs from the current position of electron e."""
-        s = int(e >= self._nelec[0])
-        aograd = self._mol.eval_gto("GTOval_ip_sph", epos.configs)
-        mograd = aograd.dot(self.parameters[self._coefflookup[s]])
-        ratios = [self._testrow(e, x) for x in mograd]
-        return np.asarray(ratios) / self.testvalue(e, epos)[np.newaxis, :]
-
     def gradient(self, e, epos):
         """ Compute the gradient of the log wave function 
         Note that this can be called even if the internals have not been updated for electron e,
@@ -202,6 +192,16 @@ class PySCFSlaterUHF:
         ratios = self._testrow(e, mo[1])
         testvalue = self._testrow(e, mo[0])
         return ratios / testvalue
+        
+    def grad_and_lap(self, e, epos):
+        s = int(e >= self._nelec[0])
+        ao = np.real_if_close(self._mol.eval_gto(
+              self.pbc_str + "GTOval_sph_deriv2", epos.configs
+        )[[0, 1, 2, 3, 4, 7, 9]], tol=1e4)
+        ao = np.concatenate([ao[0:4], ao[4:].sum(axis=0, keepdims=True)])
+        mo = np.dot(ao, self.parameters[self._coefflookup[s]])
+        ratios = np.asarray([self._testrow(e, x) for x in mo])
+        return ratios[1:-1] / ratios[:1], ratios[-1]/ratios[0]
         
     def testvalue(self, e, epos):
         """ return the ratio between the current wave function and the wave function if 

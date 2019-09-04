@@ -35,7 +35,7 @@ def distvmc(
         npartitions = sum([x for x in client.nthreads().values()])
     allruns = []
     niterations = int(nsteps / nsteps_per)
-    coord = np.split(coords, npartitions)
+    coord = coords.split(npartitions)
     alldata = []
     for epoch in range(niterations):
         wfs = []
@@ -55,7 +55,7 @@ def distvmc(
             coord[i] = res[1]
         print("epoch", epoch, "finished", flush=True)
 
-    coords = np.asarray(np.concatenate(coord))
+    coords.gather(coord)
 
     return alldata, coords
 
@@ -84,7 +84,7 @@ def dist_lm_sampler(wf, configs, params, pgrad_acc, npartitions=None, client=Non
     if npartitions is None:
         npartitions = sum([x for x in client.nthreads().values()])
 
-    configspart = np.split(configs, npartitions)
+    configspart = configs.split(npartitions)
     allruns = []
     for p in range(npartitions):
         allruns.append(client.submit(lm_sampler, wf, configspart[p], params, pgrad_acc))
@@ -125,7 +125,7 @@ def distdmc_propagate(wf, configs, weights, *args, client, npartitions=None, **k
     if npartitions is None:
         npartitions = sum([x for x in client.nthreads().values()])
 
-    coord = np.split(configs, npartitions)
+    coord = configs.split(npartitions)
     weight = np.split(weights, npartitions)
     allruns = []
     for nodeconfigs, nodeweight in zip(coord, weight):
@@ -138,7 +138,8 @@ def distdmc_propagate(wf, configs, weights, *args, client, npartitions=None, **k
     import pandas as pd
 
     allresults = [r.result() for r in allruns]
-    coordret = np.vstack([x[1] for x in allresults])
+    configs.gather([x[1] for x in allresults])
+    coordret = configs
     weightret = np.vstack([x[2] for x in allresults])
     df = pd.concat([pd.DataFrame(x[0]) for x in allresults])
     notavg = ["weight", "weightvar", "weightmin", "weightmax", "acceptance", "step"]

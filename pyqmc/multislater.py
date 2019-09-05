@@ -42,6 +42,7 @@ class MultiSlater:
             self.parameters["mo_coeff_alpha"] = mf.mo_coeff[:, :mc.ncas + mc.ncore]
             self.parameters["mo_coeff_beta"] = mf.mo_coeff[:, :mc.ncas + mc.ncore]
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
+        self.pbc_str = "PBC" if hasattr(mol, "a") else ""
 
     def _copy_ci(self, mc):
         """       
@@ -86,19 +87,16 @@ class MultiSlater:
         """This computes the value from scratch. Returns the logarithm of the wave function as
         (phase,logdet). If the wf is real, phase will be +/- 1."""
         
-        mycoords = configs.reshape(
-            (configs.shape[0] * configs.shape[1], configs.shape[2])
-        )
-        ao = self._mol.eval_gto("GTOval_sph", mycoords).reshape(
-            (configs.shape[0], configs.shape[1], -1)
-        )
+        nconf, nelec, ndim = configs.configs.shape
+        mycoords = configs.configs.reshape((nconf * nelec, ndim))
+        ao = np.real_if_close(self._mol.eval_gto(
+              self.pbc_str + "GTOval_sph", mycoords
+        ).reshape((nconf, nelec, -1)), tol=1e4)
 
         self._aovals = ao
         self._dets = []
         self._inverse = []
         for s in [0,1]:
-            det_val = []
-            det_inv = []
             mo = ao[:, self._nelec[0]*s: self._nelec[0] + self._nelec[1]*s, :].dot(
                 self.parameters[self._coefflookup[s]]
             )
@@ -114,9 +112,11 @@ class MultiSlater:
         
         s = int(e >= self._nelec[0])
         if mask is None:
-            mask = [True] * epos.shape[0]
+            mask = [True] * epos.configs.shape[0]
         eeff = e - s * self._nelec[0]
-        ao = self._mol.eval_gto("GTOval_sph", epos)
+        ao = np.real_if_close(
+            self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs), tol=1e4
+        )
         mo = ao.dot(self.parameters[self._coefflookup[s]])
         
         mo_vals = mo[:,self._det_occup[s]]
@@ -162,27 +162,34 @@ class MultiSlater:
         Note that this can be called even if the internals have not been updated for electron e,
         if epos differs from the current position of electron e."""
         s = int(e >= self._nelec[0])
-        aograd = self._mol.eval_gto("GTOval_ip_sph", epos)
+        aograd = np.real_if_close(
+            self._mol.eval_gto("GTOval_sph_deriv1", epos.configs), tol=1e4
+        )
         mograd = aograd.dot(self.parameters[self._coefflookup[s]])
         mograd_vals = mograd[:,:,self._det_occup[s]]
       
-        ratios = [self._testrow(e, x) for x in mograd_vals]
-        return np.asarray(ratios)/self.testvalue(e, epos)[np.newaxis, :]
+        ratios = np.asarray([self._testrow(e, x) for x in mograd_vals])
+        return ratios[1:] / ratios[:1]
 
     def laplacian(self, e, epos):
         """ Compute the laplacian Psi/ Psi. """
         s = int(e >= self._nelec[0])
-        aolap = np.sum(self._mol.eval_gto("GTOval_sph_deriv2", epos)[[4, 7, 9]], axis=0)
-        molap = aolap.dot(self.parameters[self._coefflookup[s]])
-        molap_vals = molap[:,self._det_occup[s]]
+        ao = np.real_if_close(self._mol.eval_gto(
+              self.pbc_str + "GTOval_sph_deriv2", epos.configs
+        )[[0, 4, 7, 9]], tol=1e4)
+        molap = np.dot([ao[0],ao[1:].sum(axis=0)], self.parameters[self._coefflookup[s]])
+        molap_vals = self._testrow(e, molap[1][:,self._det_occup[s]])
+        testvalue = self._testrow(e, molap[0][:,self._det_occup[s]])
 
-        return self._testrow(e, molap_vals)/self.testvalue(e, epos)
+        return molap_vals / testvalue
     
     def testvalue(self, e, epos):
         """ return the ratio between the current wave function and the wave function if 
         electron e's position is replaced by epos"""
         s = int(e >= self._nelec[0])
-        ao = self._mol.eval_gto("GTOval_sph", epos)
+        ao = np.real_if_close(
+            self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs), tol=1e4
+        )
         mo = ao.dot(self.parameters[self._coefflookup[s]])
         mo_vals = mo[:,self._det_occup[s]]
         return self._testrow(e, mo_vals)

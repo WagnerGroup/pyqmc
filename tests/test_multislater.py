@@ -11,6 +11,7 @@ import pyqmc.testwf as testwf
 from pyqmc.mc import vmc, initial_guess
 from pyqmc.accumulators import EnergyAccumulator
 from pyqmc.multislater import MultiSlater
+from pyqmc.coord import OpenConfigs
 
 def test():
     """ 
@@ -28,7 +29,7 @@ def test():
         epsilon = 1e-5
         nconf = 10
         nelec = np.sum(mol.nelec)
-        epos = np.random.randn(nconf, nelec, 3)
+        epos = OpenConfigs(np.random.randn(nconf, nelec, 3))
       
         for k, item in testwf.test_updateinternals(wf, epos).items():
             assert item < epsilon
@@ -44,7 +45,7 @@ def test():
         epsilon = 1e-5
         nconf = 10
         nelec = np.sum(mol.nelec)
-        epos = np.random.randn(nconf, nelec, 3)
+        epos = OpenConfigs(np.random.randn(nconf, nelec, 3))
       
         for k, item in testwf.test_updateinternals(wf, epos).items():
             assert item < epsilon

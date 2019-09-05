@@ -1,4 +1,5 @@
 import numpy as np
+import copy
 
 
 def test_updateinternals(wf, configs):
@@ -12,17 +13,18 @@ def test_updateinternals(wf, configs):
 
     """
 
-    ne = configs.shape[1]
+    nconf, ne, ndim = configs.configs.shape
     delta = 1e-2
-    updatevstest = np.zeros((ne, configs.shape[0]))
-    recomputevstest = np.zeros((ne, configs.shape[0]))
-    recomputevsupdate = np.zeros((ne, configs.shape[0]))
+    updatevstest = np.zeros((ne, nconf))
+    recomputevstest = np.zeros((ne, nconf))
+    recomputevsupdate = np.zeros((ne, nconf))
     for e in range(ne):
         val1 = wf.recompute(configs)
-        configs[:, e, :] += delta
-        ratio = wf.testvalue(e, configs[:, e, :])
-        wf.updateinternals(e, configs[:, e, :])
+        epos = configs.make_irreducible(e, configs.configs[:,e,:] + delta)
+        ratio = wf.testvalue(e, epos)
+        wf.updateinternals(e, epos)
         update = wf.value()
+        configs.move(e, epos, [True]*nconf)
         recompute = wf.recompute(configs)
         updatevstest[e, :] = update[0] / val1[0] * np.exp(update[1] - val1[1]) - ratio
         recomputevsupdate[e, :] = update[0] / val1[0] * np.exp(
@@ -53,19 +55,18 @@ def test_wf_gradient(wf, configs, delta=1e-5):
     wf.gradient(e,epos) should return grad ln Psi(epos), while keeping all the other electrons at current position. epos may be different from the current position of electron e
     
     """
-    nconf, nelec = configs.shape[0:2]
+    nconf, nelec = configs.configs.shape[0:2]
     wf.recompute(configs)
     maxerror = 0
-    grad = np.zeros(configs.shape)
-    numeric = np.zeros(configs.shape)
+    grad = np.zeros(configs.configs.shape)
+    numeric = np.zeros(configs.configs.shape)
     for e in range(nelec):
-        grad[:, e, :] = wf.gradient(e, configs[:, e, :]).T
+        grad[:, e, :] = wf.gradient(e, configs.electron(e)).T
         for d in range(0, 3):
-            configsnew = configs.copy()
-            configsnew[:, e, d] += delta
-            plusval = wf.testvalue(e, configsnew[:, e, :])
-            configsnew[:, e, d] -= 2 * delta
-            minuval = wf.testvalue(e, configsnew[:, e, :])
+            epos = configs.make_irreducible(e, configs.configs[:,e,:] + delta * np.eye(3)[d])
+            plusval = wf.testvalue(e, epos)
+            epos = configs.make_irreducible(e, configs.configs[:,e,:] - delta * np.eye(3)[d])
+            minuval = wf.testvalue(e, epos)
             numeric[:, e, d] = (plusval - minuval) / (2 * delta)
     maxerror = np.amax(np.abs(grad - numeric))
     normerror = np.mean(np.abs(grad - numeric))
@@ -84,7 +85,7 @@ def test_wf_pgradient(wf, configs, delta=1e-5):
         flt = wf.parameters[k].reshape(-1)
         # print(flt.shape,wf.parameters[k].shape,gradient[k].shape)
         nparms = len(flt)
-        numgrad = np.zeros((configs.shape[0], nparms))
+        numgrad = np.zeros((configs.configs.shape[0], nparms))
         for i, c in enumerate(flt):
             flt[i] += delta
             wf.parameters[k] = flt.reshape(wf.parameters[k].shape)
@@ -119,23 +120,22 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
     wf.gradient(e,epos) should return grad ln Psi(epos), while keeping all the other electrons at current position. epos may be different from the current position of electron e
     wf.laplacian(e,epos) should behave the same as gradient, except lap(\Psi(epos))/Psi(epos)
     """
-    nconf, nelec = configs.shape[0:2]
+    nconf, nelec = configs.configs.shape[0:2]
     wf.recompute(configs)
     maxerror = 0
-    lap = np.zeros(configs.shape[:2])
-    numeric = np.zeros(configs.shape[:2])
+    lap = np.zeros(configs.configs.shape[:2])
+    numeric = np.zeros(configs.configs.shape[:2])
 
     for e in range(nelec):
-        lap[:, e] = wf.laplacian(e, configs[:, e, :])
+        lap[:, e] = wf.laplacian(e, configs.electron(e))
 
         for d in range(0, 3):
-            configsnew = configs.copy()
-            configsnew[:, e, d] += delta
-            plusval = wf.testvalue(e, configsnew[:, e, :])
-            plusgrad = wf.gradient(e, configsnew[:, e, :])[d] * plusval
-            configsnew[:, e, d] -= 2 * delta
-            minuval = wf.testvalue(e, configsnew[:, e, :])
-            minugrad = wf.gradient(e, configsnew[:, e, :])[d] * minuval
+            epos = configs.make_irreducible(e, configs.configs[:,e,:] + delta * np.eye(3)[d])
+            plusval = wf.testvalue(e, epos)
+            plusgrad = wf.gradient(e, epos)[d] * plusval
+            epos = configs.make_irreducible(e, configs.configs[:,e,:] - delta * np.eye(3)[d])
+            minuval = wf.testvalue(e, epos)
+            minugrad = wf.gradient(e, epos)[d] * minuval
             numeric[:, e] += (plusgrad - minugrad) / (2 * delta)
 
     maxerror = np.amax(np.abs(lap - numeric))
@@ -149,6 +149,7 @@ if __name__ == "__main__":
     from pyscf import lib, gto, scf
     from pyqmc.slater import PySCFSlaterRHF
     from pyqmc.jastrow import Jastrow2B
+    from pyqmc.coord import OpenConfigs
 
     mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="cc-pvtz", unit="bohr")
     mf = scf.RHF(mol).run()
@@ -156,8 +157,8 @@ if __name__ == "__main__":
 
     # wf=Jastrow2B(10,mol)
     for i in range(5):
-        configs = np.random.randn(10, 4, 3)
+        configs = OpenConfigs(np.random.randn(10, 4, 3))
         print("testing gradient: errors", test_wf_gradient(wf, configs, delta=1e-5))
     for i in range(5):
-        configs = np.random.randn(10, 4, 3)
+        configs = OpenConfigs(np.random.randn(10, 4, 3))
         print("testing laplacian: errors", test_wf_laplacian(wf, configs, delta=1e-5))

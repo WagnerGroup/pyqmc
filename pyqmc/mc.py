@@ -26,6 +26,7 @@ def initial_guess(mol, nconfig, r=1.0):
      the atoms.
     
     """
+    from pyqmc.coord import OpenConfigs, PeriodicConfigs
     nelec = np.sum(mol.nelec)
     epos = np.zeros((nconfig, nelec, 3))
     wts = mol.atom_charges()
@@ -60,7 +61,10 @@ def initial_guess(mol, nconfig, r=1.0):
             ]  # assign remaining electrons
 
     epos += r * np.random.randn(*epos.shape)  # random shifts from atom positions
-
+    if hasattr(mol, 'a'):
+        epos = PeriodicConfigs(epos, mol.a)
+    else:
+        epos = OpenConfigs(epos)
     return epos
 
 
@@ -83,7 +87,7 @@ def limdrift(g, cutoff=1):
 
 
 def vmc(
-    wf, coords, nsteps=100, tstep=0.5, accumulators=None, verbose=False, stepoffset=0
+    wf, configs, nsteps=100, tstep=0.5, accumulators=None, verbose=False, stepoffset=0
 ):
     """Run a Monte Carlo sample of a given wave function.
 
@@ -91,22 +95,22 @@ def vmc(
       wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as 
       anything (such as laplacian() ) used by accumulators
       
-      coords: Initial electron coordinates
+      configs: Initial electron coordinates
 
       nsteps: Number of VMC steps to propagate
 
       tstep: Time step for move proposals. Only affects efficiency.
 
-      accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If None, then the coordinates will only be propagated with acceptance information.
+      accumulators: A dictionary of functor objects that take in (configs,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If None, then the coordinates will only be propagated with acceptance information.
       
       verbose: Print out step information 
 
       stepoffset: If continuing a run, what to start the step numbering at.
 
-    Returns: (df,coords)
+    Returns: (df,configs)
        df: A list of dictionaries nstep long that contains all results from the accumulators. These are averaged across all walkers.
 
-       coords: The final coordinates from this calculation.
+       configs: The final coordinates from this calculation.
        
     """
     if accumulators is None:
@@ -114,56 +118,52 @@ def vmc(
         if verbose:
             print("WARNING: running VMC with no accumulators")
 
-    nconf = coords.shape[0]
-    nelec = coords.shape[1]
+    nconf, nelec, ndim = configs.configs.shape
     df = []
-    wf.recompute(coords)
+    wf.recompute(configs)
     for step in range(nsteps):
         if verbose:
             print("step", step)
         acc = []
         for e in range(nelec):
             # Propose move
-            grad = limdrift(wf.gradient(e, coords[:, e, :]).T)
-            newcoorde = (
-                coords[:, e, :]
-                + np.random.normal(scale=np.sqrt(tstep), size=(nconf, 3))
-                + grad * tstep
-            )
+            grad = limdrift(np.real(wf.gradient(e, configs.electron(e)).T))
+            gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconf, 3))
+            newcoorde = configs.configs[:,e,:] + gauss + grad*tstep
+            newcoorde = configs.make_irreducible(e, newcoorde )
 
             # Compute reverse move
-            new_grad = limdrift(wf.gradient(e, newcoorde).T)
-            forward = np.sum((coords[:, e, :] + tstep * grad - newcoorde) ** 2, axis=1)
-            backward = np.sum(
-                (newcoorde + tstep * new_grad - coords[:, e, :]) ** 2, axis=1
-            )
+            new_grad = limdrift(np.real(wf.gradient(e, newcoorde).T))
+            forward = np.sum(gauss ** 2, axis=1)
+            backward = np.sum((gauss + tstep * (grad + new_grad)) ** 2, axis=1)
 
             # Acceptance
             t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
-            ratio = np.multiply(wf.testvalue(e, newcoorde) ** 2, t_prob)
+            ratio = np.multiply(wf.testvalue(e, newcoorde ) ** 2, t_prob)
             accept = ratio > np.random.rand(nconf)
 
             # Update wave function
-            coords[accept, e, :] = newcoorde[accept, :]
-            wf.updateinternals(e, coords[:, e, :], accept)
+            configs.move(e, newcoorde, accept)
+            wf.updateinternals(e, newcoorde, mask=accept)
             acc.append(np.mean(accept))
         avg = {}
         for k, accumulator in accumulators.items():
-            dat = accumulator.avg(coords, wf)
+            dat = accumulator.avg(configs, wf)
             for m, res in dat.items():
                 # print(m,res.nbytes/1024/1024)
                 avg[k + m] = res  # np.mean(res,axis=0)
         avg["acceptance"] = np.mean(acc)
         avg["step"] = stepoffset + step
-        avg["nconfig"] = coords.shape[0]
+        avg["nconfig"] = nconf
         df.append(avg)
-    return df, coords
+    return df, configs
 
 
 def test():
     from pyscf import lib, gto, scf
     from pyqmc.slater import PySCFSlaterRHF
     from pyqmc.accumulators import EnergyAccumulator
+    from pyqmc.coords import OpenConfigs
     import pandas as pd
 
     mol = gto.M(

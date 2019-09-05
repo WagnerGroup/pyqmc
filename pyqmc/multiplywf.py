@@ -60,8 +60,8 @@ class MultiplyWF:
         return v1[0] * v2[0], v1[1] + v2[1]
 
     def updateinternals(self, e, epos, mask=None):
-        self.wf1.updateinternals(e, epos, mask)
-        self.wf2.updateinternals(e, epos, mask)
+        self.wf1.updateinternals(e, epos, mask=mask)
+        self.wf2.updateinternals(e, epos, mask=mask)
 
     def value(self):
         v1 = self.wf1.value()

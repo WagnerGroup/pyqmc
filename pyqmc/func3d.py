@@ -274,7 +274,7 @@ class ExpCuspFunction:
             3 + self.parameters["gamma"]
         )
         func[y > 1] = 0.0
-        return func
+        return func * self.parameters["rcut"]
 
     def gradient(self, rvec):
         """
@@ -295,7 +295,7 @@ class ExpCuspFunction:
                 / (self.parameters["rcut"] * r)
             )
         )[mask]
-        return func
+        return func * self.parameters["rcut"]
 
     def laplacian(self, rvec):
         """
@@ -337,7 +337,7 @@ class ExpCuspFunction:
             )
             * (rvec ** 2)
         )[mask]
-        return func
+        return func * self.parameters["rcut"]
 
     def pgradient(self, rvec):
         """ Returns gradient of self.value with respect all parameters
@@ -350,17 +350,23 @@ class ExpCuspFunction:
         y = r / self.parameters["rcut"]
         mask = y <= 1
         func = {"rcut": np.zeros(r.shape), "gamma": np.zeros(r.shape)}
-        func["rcut"][mask] = -(
-            -r
-            / self.parameters["rcut"] ** 2
-            * (1 - 2 * y + y ** 2)
-            / (1 + self.parameters["gamma"] * (y - y ** 2 + y ** 3 / 3)) ** 2
-        )[mask]
-        func["gamma"][mask] = -(
-            -(y - y ** 2 + y ** 3 / 3) ** 2
-            / (1 + self.parameters["gamma"] * (y - y ** 2 + y ** 3 / 3)) ** 2
-            - 1 / (3 + self.parameters["gamma"]) ** 2
-        )[mask]
+        func["rcut"][mask] = (
+            -(
+                -r
+                / self.parameters["rcut"] ** 2
+                * (1 - 2 * y + y ** 2)
+                / (1 + self.parameters["gamma"] * (y - y ** 2 + y ** 3 / 3)) ** 2
+            )[mask]
+            * self.parameters["rcut"]
+        )
+        func["gamma"][mask] = (
+            -(
+                -(y - y ** 2 + y ** 3 / 3) ** 2
+                / (1 + self.parameters["gamma"] * (y - y ** 2 + y ** 3 / 3)) ** 2
+                - 1 / (3 + self.parameters["gamma"]) ** 2
+            )[mask]
+            * self.parameters["rcut"]
+        )
         return func
 
 

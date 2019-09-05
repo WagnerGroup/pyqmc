@@ -113,8 +113,8 @@ def dmc_propagate(
             new_grad = drift_limiter(wf.gradient(e, newepos).T, tstep)
             forward = np.sum(gauss ** 2, axis=1)
             backward = np.sum((gauss + grad + new_grad) ** 2, axis=1)
-            #forward = np.sum((configs[:, e, :] + grad - eposnew) ** 2, axis=1)
-            #backward = np.sum((eposnew + new_grad - configs[:, e, :]) ** 2, axis=1)
+            # forward = np.sum((configs[:, e, :] + grad - eposnew) ** 2, axis=1)
+            # backward = np.sum((eposnew + new_grad - configs[:, e, :]) ** 2, axis=1)
             t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
 
             # Acceptance -- fixed-node: reject if wf changes sign
@@ -215,8 +215,8 @@ def branch(configs, weights):
     nconfig = configs.configs.shape[0]
     wtot = np.sum(weights)
     probability = np.cumsum(weights / wtot)
-    base=np.random.rand()
-    newinds = np.searchsorted(probability, (base + np.arange(nconfig)/nconfig)%1.0 )
+    base = np.random.rand()
+    newinds = np.searchsorted(probability, (base + np.arange(nconfig) / nconfig) % 1.0)
     configs.resample(newinds)
     weights.fill(wtot / nconfig)
     return configs, weights
@@ -226,7 +226,7 @@ def rundmc(
     wf,
     configs,
     weights=None,
-    tstep=.01,
+    tstep=0.01,
     nsteps=1000,
     branchtime=5,
     stepoffset=0,
@@ -278,7 +278,6 @@ def rundmc(
     if weights is None:
         weights = np.ones(nconfig)
 
-
     npropagate = int(np.ceil(nsteps / branchtime))
     df = []
 
@@ -297,7 +296,7 @@ def rundmc(
         drift_limiter=drift_limiter,
         **kwargs,
     )
-    df_=pd.DataFrame(df_)
+    df_ = pd.DataFrame(df_)
     eref = df_[ekey[0] + ekey[1]][0]
     esigma = np.abs(eref) / 100
     for step in range(npropagate):
@@ -316,12 +315,12 @@ def rundmc(
             accumulators=accumulators,
             ekey=ekey,
             drift_limiter=drift_limiter,
-            **kwargs
+            **kwargs,
         )
-        df_=pd.DataFrame(df_)
-        df_['eref']=eref
-        #print(df_)
+        df_ = pd.DataFrame(df_)
+        df_["eref"] = eref
+        # print(df_)
         df.append(df_)
-        eref = df_[ekey[0]+ekey[1]].values[-1]-feedback*np.log(np.mean(weights))
+        eref = df_[ekey[0] + ekey[1]].values[-1] - feedback * np.log(np.mean(weights))
         configs, weights = branch(configs, weights)
     return pd.concat(df).reset_index(), configs, weights

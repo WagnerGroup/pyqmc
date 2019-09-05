@@ -25,28 +25,29 @@ class LinearTransform:
     terms optimized. A dict freeze can be used to freeze
     certain wf parameters. 
     """
+
     def __init__(self, parameters, to_opt=None, freeze=None):
         if to_opt is None:
             self.to_opt = list(parameters.keys())
         else:
             self.to_opt = to_opt
-        
+
         if freeze is None:
             freeze = {}
             for i, k in enumerate(parameters):
                 freeze[k] = np.zeros(parameters[k].shape).astype(bool)
-            self.frozen = freeze       
-        else: 
+            self.frozen = freeze
+        else:
             self.frozen = freeze
 
         self.frozen_parms = {}
         for k in self.to_opt:
             mask = self.frozen[k]
-            self.frozen_parms[k] = np.ma.array(parameters[k],mask=~mask)
+            self.frozen_parms[k] = np.ma.array(parameters[k], mask=~mask)
 
         self.shapes = np.array([parameters[k].shape for k in self.to_opt])
         self.slices = np.array([np.prod(s) for s in self.shapes])
-    
+
     def serialize_parameters(self, parameters):
         """Convert the dictionary to a linear list
         of gradients
@@ -54,9 +55,7 @@ class LinearTransform:
         params = []
         for k in self.to_opt:
             mask = self.frozen[k]
-            params.append(
-              np.ma.array(parameters[k],mask=mask).compressed()
-            )
+            params.append(np.ma.array(parameters[k], mask=mask).compressed())
         return np.concatenate(params)
 
     def serialize_gradients(self, pgrad):
@@ -65,10 +64,8 @@ class LinearTransform:
         """
         grads = []
         for k in self.to_opt:
-            mask = np.repeat(self.frozen[k][np.newaxis,:],
-                pgrad[k].shape[0],axis=0)
-            mask_grads = np.ma.array(pgrad[k],
-                mask = mask).reshape(pgrad[k].shape[0],-1)
+            mask = np.repeat(self.frozen[k][np.newaxis, :], pgrad[k].shape[0], axis=0)
+            mask_grads = np.ma.array(pgrad[k], mask=mask).reshape(pgrad[k].shape[0], -1)
             grads.append(np.ma.compress_cols(mask_grads))
         return np.concatenate(grads, axis=1)
 
@@ -80,7 +77,7 @@ class LinearTransform:
         for i, k in enumerate(self.to_opt):
             mask = self.frozen[k].flatten()
             n_p = np.sum(~mask)
-            
+
             flat_parms = np.zeros(self.slices[i])
             flat_parms[mask] = self.frozen_parms[k].compressed()
             flat_parms[~mask] = parameters[n : n + n_p]

@@ -183,6 +183,17 @@ class MultiSlater:
 
         return molap_vals / testvalue
     
+    def gradient_laplacian(self, e, epos):
+        s = int(e >= self._nelec[0])
+        ao = np.real_if_close(self._mol.eval_gto(
+              self.pbc_str + "GTOval_sph_deriv2", epos.configs
+        )[[0, 1, 2, 3, 4, 7, 9]], tol=1e4)
+        ao = np.concatenate([ao[0:4], ao[4:].sum(axis=0, keepdims=True)])
+        mo = np.dot(ao, self.parameters[self._coefflookup[s]])
+        mo_vals = mo[:,:,self._det_occup[s]]
+        ratios = np.asarray([self._testrow(e, x) for x in mo_vals])
+        return ratios[1:-1] / ratios[:1], ratios[-1]/ratios[0]
+
     def testvalue(self, e, epos):
         """ return the ratio between the current wave function and the wave function if 
         electron e's position is replaced by epos"""

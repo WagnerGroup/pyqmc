@@ -8,8 +8,10 @@ class EnergyAccumulator:
 
     def __init__(self, mol, threshold=None):
         self.mol = mol
-        if(threshold is None): self.threshold = 10
-        else: self.threshold = threshold
+        if threshold is None:
+            self.threshold = 10
+        else:
+            self.threshold = threshold
 
     def __call__(self, configs, wf):
         return energy(self.mol, configs, wf, self.threshold)

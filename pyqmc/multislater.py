@@ -159,28 +159,32 @@ class MultiSlater:
         return wf_sign, wf_val
 
     def _updateval(self, ratio, s, mask):
-        self._dets[s][0,mask,:] *= np.sign(ratio) 
-        self._dets[s][1,mask,:] += np.log(np.abs(ratio))
-        
+        self._dets[s][0, mask, :] *= np.sign(ratio)
+        self._dets[s][1, mask, :] += np.log(np.abs(ratio))
+
     def _testrow(self, e, vec, mask=None):
         """vec is a nconfig,nmo vector which replaces row e"""
         s = int(e >= self._nelec[0])
-        if(mask is None): mask = [True]*vec.shape[0]
-        
-        ratios = np.einsum('idj,idj->id',vec, self._inverse[s][mask,:,:,e-s*self._nelec[0]])
-        numer = np.einsum('id,di->i',
-            ratios[:,self._det_map[s]]*self.parameters["det_coeff"][np.newaxis,:],
-            self._dets[0][0,:,self._det_map[0]][:,mask]*\
-            self._dets[1][0,:,self._det_map[1]][:,mask]*\
-            np.exp(
-              self._dets[0][1,:,self._det_map[0]][:,mask]+\
-              self._dets[1][1,:,self._det_map[1]][:,mask]
-            )
+        if mask is None:
+            mask = [True] * vec.shape[0]
+
+        ratios = np.einsum(
+            "idj,idj->id", vec, self._inverse[s][mask, :, :, e - s * self._nelec[0]]
         )
-        
+        numer = np.einsum(
+            "id,di->i",
+            ratios[:, self._det_map[s]] * self.parameters["det_coeff"][np.newaxis, :],
+            self._dets[0][0, :, self._det_map[0]][:, mask]
+            * self._dets[1][0, :, self._det_map[1]][:, mask]
+            * np.exp(
+                self._dets[0][1, :, self._det_map[0]][:, mask]
+                + self._dets[1][1, :, self._det_map[1]][:, mask]
+            ),
+        )
+
         curr_val = self.value()
-        denom = (curr_val[0][mask]*np.exp(curr_val[1][mask]))
-        return numer/denom
+        denom = curr_val[0][mask] * np.exp(curr_val[1][mask])
+        return numer / denom
 
     def gradient(self, e, epos):
         """ Compute the gradient of the log wave function 
@@ -212,7 +216,7 @@ class MultiSlater:
         testvalue = self._testrow(e, molap[0][:, self._det_occup[s]])
 
         return molap_vals / testvalue
-    
+
     def gradient_laplacian(self, e, epos):
         s = int(e >= self._nelec[0])
         ao = np.real_if_close(
@@ -226,17 +230,18 @@ class MultiSlater:
         mo_vals = mo[:, :, self._det_occup[s]]
         ratios = np.asarray([self._testrow(e, x) for x in mo_vals])
         return ratios[1:-1] / ratios[:1], ratios[-1] / ratios[0]
-    
+
     def testvalue(self, e, epos, mask=None):
         """ return the ratio between the current wave function and the wave function if 
         electron e's position is replaced by epos"""
         s = int(e >= self._nelec[0])
-        if(mask is None): mask = [True]*epos.shape[0]
+        if mask is None:
+            mask = [True] * epos.configs.shape[0]
         ao = np.real_if_close(
             self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs[mask]), tol=1e4
         )
         mo = ao.dot(self.parameters[self._coefflookup[s]])
-        mo_vals = mo[:,self._det_occup[s]]
+        mo_vals = mo[:, self._det_occup[s]]
         return self._testrow(e, mo_vals, mask)
 
     def pgradient(self):

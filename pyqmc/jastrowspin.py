@@ -231,9 +231,10 @@ class JastrowSpin:
         nup = self._mol.nelec[0]
         mask = [True] * ne
         mask[e] = False
-        if(mask_configs is None): mask_configs = [True]*nconf
-        
-        tmpconfigs = self._configscurrent[mask_configs,:,:]
+        if mask_configs is None:
+            mask_configs = [True] * nconf
+
+        tmpconfigs = self._configscurrent[mask_configs, :, :]
         tmpconfigs = tmpconfigs[:, mask, :]
 
         dnew = self._dist.dist_i(tmpconfigs, epos.configs[mask_configs])
@@ -259,7 +260,9 @@ class JastrowSpin:
         delta = np.zeros((nconf_mask, len(self.b_basis), 3))
         for i, b in enumerate(self.b_basis):
             delta[:, i, edown] += np.sum(
-                (b.value(dnewup, rnewup) - b.value(doldup, roldup)).reshape(nconf_mask, -1),
+                (b.value(dnewup, rnewup) - b.value(doldup, roldup)).reshape(
+                    nconf_mask, -1
+                ),
                 axis=1,
             )
             delta[:, i, 1 + edown] += np.sum(
@@ -278,9 +281,12 @@ class JastrowSpin:
         nconf = epos.configs.shape[0]
         ni = self._mol.natm
         nup = self._mol.nelec[0]
-        if(mask is None): mask = [True]*nconf
-        
-        dnew = self._dist.dist_i(self._mol.atom_coords(), epos.configs[mask]).reshape((-1, 3))
+        if mask is None:
+            mask = [True] * nconf
+
+        dnew = self._dist.dist_i(self._mol.atom_coords(), epos.configs[mask]).reshape(
+            (-1, 3)
+        )
         dold = self._dist.dist_i(
             self._mol.atom_coords(), self._configscurrent[mask, e, :]
         ).reshape((-1, 3))
@@ -312,4 +318,3 @@ class JastrowSpin:
         For the derivatives of basis functions, we will have to compute the derivative
         of all the b's and redo the sums, similar to recompute() """
         return {"bcoeff": self._bvalues, "acoeff": self._avalues}
-

@@ -72,8 +72,9 @@ class MultiplyWF:
         return self.wf1.gradient(e, epos) + self.wf2.gradient(e, epos)
 
     def testvalue(self, e, epos, mask=None):
-        return self.wf1.testvalue(e, epos, mask=mask) *\
-        self.wf2.testvalue(e, epos, mask=mask)
+        return self.wf1.testvalue(e, epos, mask=mask) * self.wf2.testvalue(
+            e, epos, mask=mask
+        )
 
     def laplacian(self, e, epos):
         # This is a place where we might want to specialize a vgl function
@@ -81,7 +82,7 @@ class MultiplyWF:
         # Should check to see if that's a limiting factor or not.
         # We typically need the laplacian only for the energy, which is uncommonly
         # evaluated.
-        
+
         g1, l1 = self.wf1.gradient_laplacian(e, epos)
         g2, l2 = self.wf2.gradient_laplacian(e, epos)
         return l1 + l2 + 2 * np.sum(g1 * g2, axis=0)

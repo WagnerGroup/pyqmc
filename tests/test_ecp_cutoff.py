@@ -15,12 +15,12 @@ def test_ecp():
        C 1 0 0 
     ''', ecp="bfd", basis="bfd_vtz")
     mf = scf.RHF(mol).run()
-    nconf = 10000
+    nconf = 1000
     coords = initial_guess(mol, nconf)
     thresholds = [1e15,100,50,20,10,5,1]
     label = ['S','J','SJ']
     ind = 0
-    for wf in [#PySCFSlaterUHF(mol, mf),
+    for wf in [PySCFSlaterUHF(mol, mf),
                JastrowSpin(mol),
                MultiplyWF(PySCFSlaterUHF(mol,mf),JastrowSpin(mol))]:
       wf.recompute(coords)

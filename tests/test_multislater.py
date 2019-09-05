@@ -69,20 +69,6 @@ def test():
         assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon
         assert testwf.test_wf_laplacian(wf, epos, delta=1e-5)[0] < epsilon
         assert testwf.test_wf_pgradient(wf, epos, delta=1e-5)[0] < epsilon
-
-        #Quick VMC test
-        nconf = 5000
-        nsteps = 100
-        warmup = 30
-        coords = initial_guess(mol, nconf)
-        df, coords = vmc(
-            wf, coords, nsteps=nsteps, accumulators={"energy": EnergyAccumulator(mol)}
-        )
-
-        df = pd.DataFrame(df)
-        en = np.mean(df["energytotal"][warmup:])
-        err = np.std(df["energytotal"][warmup:]) / np.sqrt(nsteps - warmup)
-        assert en - mc.e_tot < 10 * err
   
 if __name__ == "__main__":
     test()

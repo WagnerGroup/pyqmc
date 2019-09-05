@@ -128,7 +128,7 @@ def get_wf_ratio(wf, configs, epos_rot, e, mask):
     for aip in range(naip):
         epos = configs.make_irreducible(e, epos_rot[:, aip, :])
         #Want to remove this, but kept in because Jastrow is messy
-        if(mask.ndim > 1): wf_ratio[:, aip] = wf.testvalue(e, epos, mask)
+        if(mask.sum() > 0): wf_ratio[:, aip] = wf.testvalue(e, epos, mask)
     return wf_ratio
 
 def get_P_l(mol, configs, weights, epos_rot, l_list, e, at):

@@ -172,26 +172,33 @@ def get_P_l(mol, configs, weights, epos_rot, l_list, e, at):
 #########################################################################
 
 
-def ecp_ea(mol, configs, wf, e, at, mask):
+def ecp_ea(mol, configs, wf, e, at, threshold):
     """ 
     Returns the ECP value between electron e and atom at, local+nonlocal.
     """
+    ecp_val = np.zeros(configs.configs.shape[0])
     l_list, v_l = get_v_l(mol, configs, e, at)
+    
+    mask, prob = ecp_mask(v_l, threshold)
+    masked_v_l = v_l[mask]
+    masked_v_l[:,:-1] /= prob[mask, np.newaxis]
+    masked_configs = configs.mask(mask)
+    
     naip = 6
     if len(l_list) > 2:
         naip = 12
 
-    weights, epos_rot = get_rot(mol, configs, e, at, naip)
-    P_l = get_P_l(mol, configs, weights, epos_rot, l_list, e, at)
-    ratio = get_wf_ratio(wf, configs, epos_rot, e, mask)
-    ecp_val = np.einsum("ij,ik,ijk->i", ratio, v_l, P_l)
+    weights, epos_rot = get_rot(mol, masked_configs, e, at, naip)
+    P_l = get_P_l(mol, masked_configs, weights, epos_rot, l_list, e, at)
+    ratio = get_wf_ratio(wf, masked_configs, epos_rot, e, mask)
+    ecp_val[mask] = np.einsum("ij,ik,ijk->i", ratio, masked_v_l, P_l)
     # compute the local part
     local_l = -1
     ecp_val += v_l[:, local_l]
     return ecp_val
 
 
-def ecp(mol, configs, wf, cutoff):
+def ecp(mol, configs, wf, threshold):
     """
     Returns the ECP value, summed over all the electrons and atoms.
     """
@@ -200,12 +207,19 @@ def ecp(mol, configs, wf, cutoff):
     if mol._ecp != {}:
         for e in range(nelec):
             for at in range(len(mol._atom)):
-                r = get_r_ea(mol,configs,e,at)
-                mask = (r[:,0]**2 + r[:,1]**2 + r[:,2]**2) < cutoff**2
-                masked_configs = configs.mask(mask)
-                ecp_tot[mask] += ecp_ea(mol, masked_configs, wf, e, at, mask)
+                ecp_tot += ecp_ea(mol, configs, wf, e, at, threshold)
     return ecp_tot
 
+def ecp_mask(v_l, threshold):
+    """
+    Returns a mask for configurations sized nconf
+    based on values of v_l. Also returns acceptance probabilities
+    """
+    l = 2*np.arange(v_l.shape[1]-1) + 1
+    prob = np.dot(v_l[:,:-1],threshold*(2*l + 1))
+    prob = np.minimum(np.ones(prob.shape),prob)
+    accept = prob > np.random.uniform(low=0, high=1, size=prob.shape)
+    return accept, prob
 
 #################### Quadrature Rules ############################
 def get_rot(mol, configs, e, at, naip):

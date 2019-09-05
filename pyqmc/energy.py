@@ -50,7 +50,7 @@ def kinetic(configs, wf):
     return ke
 
 
-def energy(mol, configs, wf, cutoff):
+def energy(mol, configs, wf, threshold):
     """Compute the local energy of a set of configurations.
     
     Args:
@@ -65,7 +65,7 @@ def energy(mol, configs, wf, cutoff):
       """
     ee = ee_energy(configs)
     ei = ei_energy(mol, configs)
-    ecp_val = get_ecp(mol, configs, wf, cutoff)
+    ecp_val = get_ecp(mol, configs, wf, threshold)
     ii = ii_energy(mol)
     ke = kinetic(configs, wf)
     # print(ke,ee,ei,ii)

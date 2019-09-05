@@ -20,11 +20,11 @@ def test_updateinternals(wf, configs):
     recomputevsupdate = np.zeros((ne, nconf))
     for e in range(ne):
         val1 = wf.recompute(configs)
-        epos = configs.make_irreducible(e, configs.configs[:,e,:] + delta)
+        epos = configs.make_irreducible(e, configs.configs[:, e, :] + delta)
         ratio = wf.testvalue(e, epos)
         wf.updateinternals(e, epos)
         update = wf.value()
-        configs.move(e, epos, [True]*nconf)
+        configs.move(e, epos, [True] * nconf)
         recompute = wf.recompute(configs)
         updatevstest[e, :] = update[0] / val1[0] * np.exp(update[1] - val1[1]) - ratio
         recomputevsupdate[e, :] = update[0] / val1[0] * np.exp(
@@ -63,9 +63,13 @@ def test_wf_gradient(wf, configs, delta=1e-5):
     for e in range(nelec):
         grad[:, e, :] = wf.gradient(e, configs.electron(e)).T
         for d in range(0, 3):
-            epos = configs.make_irreducible(e, configs.configs[:,e,:] + delta * np.eye(3)[d])
+            epos = configs.make_irreducible(
+                e, configs.configs[:, e, :] + delta * np.eye(3)[d]
+            )
             plusval = wf.testvalue(e, epos)
-            epos = configs.make_irreducible(e, configs.configs[:,e,:] - delta * np.eye(3)[d])
+            epos = configs.make_irreducible(
+                e, configs.configs[:, e, :] - delta * np.eye(3)[d]
+            )
             minuval = wf.testvalue(e, epos)
             numeric[:, e, d] = (plusval - minuval) / (2 * delta)
     maxerror = np.amax(np.abs(grad - numeric))
@@ -130,10 +134,14 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
         lap[:, e] = wf.laplacian(e, configs.electron(e))
 
         for d in range(0, 3):
-            epos = configs.make_irreducible(e, configs.configs[:,e,:] + delta * np.eye(3)[d])
+            epos = configs.make_irreducible(
+                e, configs.configs[:, e, :] + delta * np.eye(3)[d]
+            )
             plusval = wf.testvalue(e, epos)
             plusgrad = wf.gradient(e, epos)[d] * plusval
-            epos = configs.make_irreducible(e, configs.configs[:,e,:] - delta * np.eye(3)[d])
+            epos = configs.make_irreducible(
+                e, configs.configs[:, e, :] - delta * np.eye(3)[d]
+            )
             minuval = wf.testvalue(e, epos)
             minugrad = wf.gradient(e, epos)[d] * minuval
             numeric[:, e] += (plusgrad - minugrad) / (2 * delta)
@@ -144,15 +152,16 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
     # print('normerror', normerror, np.log10(normerror))
     return (maxerror, normerror)
 
-def test_wf_grad_and_lap(wf, configs):
+
+def test_wf_gradient_laplacian(wf, configs):
     nconf, nelec = configs.configs.shape[0:2]
     wf.recompute(configs)
     maxerror = 0
     lap = np.zeros(configs.configs.shape[:2])
-    grad = np.zeros(configs.configs.shape).transpose((1,2,0))
+    grad = np.zeros(configs.configs.shape).transpose((1, 2, 0))
     andlap = np.zeros(configs.configs.shape[:2])
-    andgrad = np.zeros(configs.configs.shape).transpose((1,2,0))
-    
+    andgrad = np.zeros(configs.configs.shape).transpose((1, 2, 0))
+
     tsep = 0
     ttog = 0
     for e in range(nelec):
@@ -161,30 +170,32 @@ def test_wf_grad_and_lap(wf, configs):
         grad[e] = wf.gradient(e, configs.electron(e))
         ts1 = time.time()
         tt0 = time.time()
-        andgrad[e], andlap[:, e] = wf.grad_and_lap(e, configs.electron(e))
+        andgrad[e], andlap[:, e] = wf.gradient_laplacian(e, configs.electron(e))
         tt1 = time.time()
-        tsep += ts1-ts0
-        ttog += tt1-tt0
+        tsep += ts1 - ts0
+        ttog += tt1 - tt0
         rmae_grad = np.mean(np.abs((andgrad - grad) / grad))
         rmae_lap = np.mean(np.abs((andlap - lap) / lap))
         norm_grad = np.linalg.norm((andgrad - grad) / grad)
-        norm_lap =  np.linalg.norm((andlap - lap) / lap)
+        norm_lap = np.linalg.norm((andlap - lap) / lap)
 
-    print('separate', tsep)
-    print('together', ttog)
+    print("separate", tsep)
+    print("together", ttog)
 
     d = []
-    d.append({"error": rmae_grad, "deriv": "grad", "type":"mae"})
-    d.append({"error": rmae_lap, "deriv": "lap", "type":"mae"})
-    d.append({"error": norm_grad, "deriv": "grad", "type":"norm"})
-    d.append({"error": norm_lap, "deriv": "lap", "type":"norm"})
+    d.append({"error": rmae_grad, "deriv": "grad", "type": "mae"})
+    d.append({"error": rmae_lap, "deriv": "lap", "type": "mae"})
+    d.append({"error": norm_grad, "deriv": "grad", "type": "norm"})
+    d.append({"error": norm_lap, "deriv": "lap", "type": "norm"})
     return d
 
 
 if __name__ == "__main__":
     from pyscf import lib, gto, scf
+    import pyqmc
     from pyqmc.slateruhf import PySCFSlaterUHF
-    #from pyqmc.jastrow import Jastrow2B
+
+    # from pyqmc.jastrow import Jastrow2B
     from pyqmc.coord import OpenConfigs
     import time
     import pandas as pd
@@ -197,11 +208,11 @@ if __name__ == "__main__":
     df = []
     for i in range(5):
         configs = OpenConfigs(np.random.randn(18000, np.sum(mol.nelec), 3))
-        res = test_wf_grad_and_lap(wf, configs)
+        res = test_wf_gradient_laplacian(wf, configs)
         for d in res:
-            d.update({"step":i})
+            d.update({"step": i})
         df.extend(res)
-    print("testing gradient: errors\n", pd.DataFrame(df)) 
+    print("testing gradient: errors\n", pd.DataFrame(df))
     quit()
     for i in range(5):
         configs = OpenConfigs(np.random.randn(10, np.sum(mol.nelec), 3))

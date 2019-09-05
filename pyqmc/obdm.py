@@ -55,7 +55,9 @@ class OBDMAccumulator:
         self._mol = mol
         # self._extra_config = np.random.normal(scale=tstep,size=3) # not zero to avoid sitting on top of atom.
         nelec = sum(self._mol.nelec)
-        self._extra_config = initial_guess(mol, int(naux / nelec) + 1).configs.reshape(-1, 3)
+        self._extra_config = initial_guess(mol, int(naux / nelec) + 1).configs.reshape(
+            -1, 3
+        )
 
         self._nstep = nstep
 

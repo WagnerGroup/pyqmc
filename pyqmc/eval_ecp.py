@@ -101,7 +101,7 @@ def get_r_ea_i(mol, epos_rot, e, at):
     )  # position of the atom, broadcasted into nconf x naip x 3
     for aip in range(naip):
         apos[:, aip, :] = np.outer(np.ones(nconf), np.array(mol._atom[at][1]))
-    return epos_rot- apos
+    return epos_rot - apos
 
 
 def get_v_l(mol, configs, e, at):

@@ -49,7 +49,7 @@ def distvmc(
             thiscoord,
             **{"nsteps": nsteps, "accumulators": accumulators},
         )
-        for i,r in enumerate(runs):
+        for i, r in enumerate(runs):
             res = r.result()
             alldata.extend(res[0])
             coord[i] = res[1]
@@ -93,15 +93,15 @@ def dist_lm_sampler(wf, configs, params, pgrad_acc, npartitions=None, client=Non
     for r in allruns:
         stepresults.append(r.result())
 
-    keys=stepresults[0][0].keys()
-    #This will be a list of dictionaries
-    final_results=[]
+    keys = stepresults[0][0].keys()
+    # This will be a list of dictionaries
+    final_results = []
     for p in range(len(params)):
-        df={}
+        df = {}
         for k in keys:
-            #print(k,flush=True)
-            #print(stepresults[0][p][k])
-            df[k]=np.concatenate([x[p][k] for x in stepresults],axis=0)
+            # print(k,flush=True)
+            # print(stepresults[0][p][k])
+            df[k] = np.concatenate([x[p][k] for x in stepresults], axis=0)
         final_results.append(df)
 
     return final_results

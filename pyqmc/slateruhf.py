@@ -27,7 +27,6 @@ class PySCFSlaterUHF:
         self.occ = np.asarray(mf.mo_occ) > 0.9
         self.parameters = {}
         if np.linalg.norm(twist)==0:
-            print("Gamma point")
             self.single_twist = lambda e, c : 1
             self.single_twist_mask = lambda e, c, m : 1
             self.all_twist = lambda c, i0, i1 : 1

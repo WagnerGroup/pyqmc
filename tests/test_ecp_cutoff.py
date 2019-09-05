@@ -10,15 +10,17 @@ import numpy as np
 import time
 
 def test_ecp():
-    mol = gto.M(atom="C 0. 0. 0.", ecp="bfd", basis="bfd_vtz")
+    mol = gto.M(atom=
+    '''C 0 0 0 
+       C 1 0 0 
+    ''', ecp="bfd", basis="bfd_vtz")
     mf = scf.RHF(mol).run()
     nconf = 10000
     coords = initial_guess(mol, nconf)
     thresholds = [1e15,100,50,20,10,5,1]
-    
     label = ['S','J','SJ']
     ind = 0
-    for wf in [PySCFSlaterUHF(mol, mf),
+    for wf in [#PySCFSlaterUHF(mol, mf),
                JastrowSpin(mol),
                MultiplyWF(PySCFSlaterUHF(mol,mf),JastrowSpin(mol))]:
       wf.recompute(coords)
@@ -32,11 +34,10 @@ def test_ecp():
           print('Threshold=',threshold, np.around(end - start, 2),'s')
     mc = mcscf.CASCI(mf,ncas=4,nelecas=(2,2))
     mc.kernel()
-
-    label = ['MS','MSJ']
+    
+    label = ['MS']
     ind = 0
-    for wf in [MultiSlater(mol,mf,mc),
-               MultiplyWF(MultiSlater(mol,mf,mc),JastrowSpin(mol))]:
+    for wf in [MultiSlater(mol,mf,mc)]:
       wf.recompute(coords)
       print(label[ind])
       ind += 1

@@ -226,17 +226,17 @@ class JastrowSpin:
         here we will evaluate the b's for a given electron (both the old and new)
         and work out the updated value. This allows us to save a lot of memory
         """
-        if(mask_configs is None): mask_configs = [True]*self._configscurrent.shape[0]
-        
         nconf = epos.configs.shape[0]
         ne = self._configscurrent.shape[1]
         nup = self._mol.nelec[0]
         mask = [True] * ne
         mask[e] = False
+        if(mask_configs is None): mask_configs = [True]*nconf
+        
         tmpconfigs = self._configscurrent[mask_configs,:,:]
         tmpconfigs = tmpconfigs[:, mask, :]
 
-        dnew = self._dist.dist_i(tmpconfigs, epos.configs)
+        dnew = self._dist.dist_i(tmpconfigs, epos.configs[mask_configs])
         dold = self._dist.dist_i(tmpconfigs, self._configscurrent[mask_configs, e, :])
 
         eup = int(e < nup)
@@ -254,15 +254,17 @@ class JastrowSpin:
         roldup = np.linalg.norm(doldup, axis=1)
         rolddown = np.linalg.norm(dolddown, axis=1)
 
-        delta = np.zeros((nconf, len(self.b_basis), 3))
+        nconf_mask = sum(mask_configs)
+
+        delta = np.zeros((nconf_mask, len(self.b_basis), 3))
         for i, b in enumerate(self.b_basis):
             delta[:, i, edown] += np.sum(
-                (b.value(dnewup, rnewup) - b.value(doldup, roldup)).reshape(nconf, -1),
+                (b.value(dnewup, rnewup) - b.value(doldup, roldup)).reshape(nconf_mask, -1),
                 axis=1,
             )
             delta[:, i, 1 + edown] += np.sum(
                 (b.value(dnewdown, rnewdown) - b.value(dolddown, rolddown)).reshape(
-                    nconf, -1
+                    nconf_mask, -1
                 ),
                 axis=1,
             )
@@ -273,15 +275,18 @@ class JastrowSpin:
         here we will evaluate the a's for a given electron (both the old and new)
         and work out the updated value. This allows us to save a lot of memory
         """
-        if(mask is None): mask = [True]*self._configscurrent.shape[0]
         nconf = epos.configs.shape[0]
         ni = self._mol.natm
         nup = self._mol.nelec[0]
-        dnew = self._dist.dist_i(self._mol.atom_coords(), epos.configs).reshape((-1, 3))
+        if(mask is None): mask = [True]*nconf
+        
+        dnew = self._dist.dist_i(self._mol.atom_coords(), epos.configs[mask]).reshape((-1, 3))
         dold = self._dist.dist_i(
             self._mol.atom_coords(), self._configscurrent[mask, e, :]
         ).reshape((-1, 3))
-        delta = np.zeros((nconf, ni, len(self.a_basis), 2))
+
+        nconf_mask = sum(mask)
+        delta = np.zeros((nconf_mask, ni, len(self.a_basis), 2))
 
         rnew = np.linalg.norm(dnew, axis=1)
         rold = np.linalg.norm(dold, axis=1)
@@ -289,37 +294,9 @@ class JastrowSpin:
         for i, a in enumerate(self.a_basis):
             delta[:, :, i, int(e >= nup)] += (
                 a.value(dnew, rnew) - a.value(dold, rold)
-            ).reshape((nconf, -1))
+            ).reshape((nconf_mask, -1))
 
         return delta
-
-    def _set_old(self, e, epos):
-        """
-        Set _a_old and _b_old
-        """
-        dold = self._dist.dist_i(
-            self._mol.atom_coords(), self._configscurrent[:, e, :]
-        ).reshape((-1, 3))
-        rold = np.linalg.norm(dold, axis=1)
-        self._a_old = a.value(dold, rold)
-
-        ne = self._configscurrent.shape[1]
-        nup = self._mol.nelec[0]
-        mask = [True] * ne
-        mask[e] = False
-        tmpconfigs = self._configscurrent[:,mask,:]
-
-        dold = self._dist.dist_i(tmpconfigs, self._configscurrent[mask_configs, e, :])
-        
-        eup = int(e < nup)
-        edown = int(e >= nup)
-        sep = nup - eup
-        doldup = dold[:, :sep, :].reshape((-1, 3))
-        dolddown = dold[:, sep:, :].reshape((-1, 3))
-
-        roldup = np.linalg.norm(doldup, axis=1)
-        rolddown = np.linalg.norm(dolddown, axis=1)
-        self._b_old = [b.value(doldup, roldup), b.value(dolddown, rolddown)]
 
     def testvalue(self, e, epos, mask=None):
         b_val = np.sum(

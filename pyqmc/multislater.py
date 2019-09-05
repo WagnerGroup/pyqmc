@@ -146,7 +146,7 @@ class MultiSlater:
     def _testrow(self, e, vec, mask=None):
         """vec is a nconfig,nmo vector which replaces row e"""
         s = int(e >= self._nelec[0])
-        if(mask is None): mask = [True]*self._inverse[s].shape[0]
+        if(mask is None): mask = [True]*vec.shape[0]
         
         ratios = np.einsum('idj,idj->id',vec, self._inverse[s][mask,:,:,e-s*self._nelec[0]])
         numer = np.einsum('id,di->i',
@@ -204,8 +204,9 @@ class MultiSlater:
         """ return the ratio between the current wave function and the wave function if 
         electron e's position is replaced by epos"""
         s = int(e >= self._nelec[0])
+        if(mask is None): mask = [True]*epos.shape[0]
         ao = np.real_if_close(
-            self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs), tol=1e4
+            self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs[mask]), tol=1e4
         )
         mo = ao.dot(self.parameters[self._coefflookup[s]])
         mo_vals = mo[:,self._det_occup[s]]

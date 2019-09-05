@@ -8,7 +8,6 @@ os.environ["OMP_NUM_THREADS"] = "1"
 import sys
 import numpy as np
 import pyqmc.testwf as testwf
-import pytest
 
 
 def test_wfs():

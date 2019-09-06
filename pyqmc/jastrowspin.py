@@ -231,44 +231,15 @@ class JastrowSpin:
         here we will evaluate the b's for a given electron (both the old and new)
         and work out the updated value. This allows us to save a lot of memory
         """
-        #nconf = epos.configs.shape[0]
         nconf, ne = self._configscurrent.configs.shape[:2]
         nup = self._mol.nelec[0]
-        #mask = [True] * ne
-        #mask[e] = False
-        #tmpconfigs = self._configscurrent[:, mask, :]
-
-        #dnew = self._dist.dist_i(tmpconfigs, epos.configs)
-        #dold = self._dist.dist_i(tmpconfigs, self._configscurrent[:, e, :])
 
         eup = int(e < nup)
         edown = int(e >= nup)
         not_e = np.arange(ne) != e 
         sep = nup - eup
-        ## This is the point at which we switch between up and down
-        ## We subtract eup because we have removed e from the set
-        #dnewup = dnew[:, :sep, :].reshape((-1, 3))
-        #dnewdown = dnew[:, sep:, :].reshape((-1, 3))
-        #doldup = dold[:, :sep, :].reshape((-1, 3))
-        #dolddown = dold[:, sep:, :].reshape((-1, 3))
-
-        #rnewup = np.linalg.norm(dnewup, axis=1)
-        #rnewdown = np.linalg.norm(dnewdown, axis=1)
-        #roldup = np.linalg.norm(doldup, axis=1)
-        #rolddown = np.linalg.norm(dolddown, axis=1)
 
         delta = np.zeros((nconf, len(self.b_basis), 3))
-        #for i, b in enumerate(self.b_basis):
-        #    delta[:, i, edown] += np.sum(
-        #        (b.value(dnewup, rnewup) - b.value(doldup, roldup)).reshape(nconf, -1),
-        #        axis=1,
-        #    )
-        #    delta[:, i, 1 + edown] += np.sum(
-        #        (b.value(dnewdown, rnewdown) - b.value(dolddown, rolddown)).reshape(
-        #            nconf, -1
-        #        ),
-        #        axis=1,
-        #    )
         deltab = self._get_b(e, epos) - self._b_old[e]
         delta[:, :, edown:edown+2] += deltab
             
@@ -282,20 +253,7 @@ class JastrowSpin:
         nconf = epos.configs.shape[0]
         ni = self._mol.natm
         nup = self._mol.nelec[0]
-        #dnew = self._dist.dist_i(self._mol.atom_coords(), epos.configs).reshape((-1, 3))
-        #dold = self._dist.dist_i(
-        #    self._mol.atom_coords(), self._configscurrent[:, e, :]
-        #).reshape((-1, 3))
         delta = np.zeros((nconf, ni, len(self.a_basis), 2))
-
-        #rnew = np.linalg.norm(dnew, axis=1)
-        #rold = np.linalg.norm(dold, axis=1)
-
-        #for i, a in enumerate(self.a_basis):
-        #    delta[:, :, i, int(e >= nup)] += (
-        #        a.value(dnew, rnew) - a.value(dold, rold)
-        #    ).reshape((nconf, -1))
-
         deltaa = self._get_a(e, epos) - self._a_old[e]
         delta[:, :, :, int(e >= nup)] += deltaa
         

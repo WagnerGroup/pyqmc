@@ -6,12 +6,9 @@ class EnergyAccumulator:
     """returns energy of each configuration in a dictionary. 
   Keys and their meanings can be found in energy.energy """
 
-    def __init__(self, mol, threshold=None):
+    def __init__(self, mol, threshold=10):
         self.mol = mol
-        if threshold is None:
-            self.threshold = 10
-        else:
-            self.threshold = threshold
+        self.threshold = threshold
 
     def __call__(self, configs, wf):
         return energy(self.mol, configs, wf, self.threshold)

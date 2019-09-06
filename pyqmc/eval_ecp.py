@@ -119,15 +119,17 @@ def get_v_l(mol, configs, e, at):
     return vl.keys(), v_l
 
 
-def get_wf_ratio(wf, configs, epos_rot, e):
+def get_wf_ratio(wf, configs, epos_rot, e, mask):
     """
     Returns a nconf x naip array, which is the Psi(r_e(i))/Psi(r_e) values
     """
-    nconf, naip = epos_rot.shape[0:2]
-    wf_ratio = np.zeros([nconf, naip])
+    naip = epos_rot.shape[1]
+    wf_ratio = np.zeros([mask.sum(), naip])
     for aip in range(naip):
         epos = configs.make_irreducible(e, epos_rot[:, aip, :])
-        wf_ratio[:, aip] = wf.testvalue(e, epos)
+        # Want to remove this, but kept in because Jastrow is messy
+        if mask.sum() > 0:
+            wf_ratio[:, aip] = wf.testvalue(e, epos, mask)
     return wf_ratio
 
 
@@ -172,26 +174,40 @@ def get_P_l(mol, configs, weights, epos_rot, l_list, e, at):
 #########################################################################
 
 
-def ecp_ea(mol, configs, wf, e, at):
+def ecp_ea(mol, configs, wf, e, at, threshold):
     """ 
     Returns the ECP value between electron e and atom at, local+nonlocal.
     """
+    nconf = configs.configs.shape[0]
+    ecp_val = np.zeros(nconf)
+
     l_list, v_l = get_v_l(mol, configs, e, at)
+    mask, prob = ecp_mask(v_l, threshold)
+    masked_v_l = v_l[mask]
+    masked_v_l[:, :-1] /= prob[mask, np.newaxis]
+    masked_configs = configs.mask(mask)
+
     naip = 6
     if len(l_list) > 2:
         naip = 12
 
-    weights, epos_rot = get_rot(mol, configs, e, at, naip)
-    P_l = get_P_l(mol, configs, weights, epos_rot, l_list, e, at)
-    ratio = get_wf_ratio(wf, configs, epos_rot, e)
-    ecp_val = np.einsum("ij,ik,ijk->i", ratio, v_l, P_l)
-    # compute the local part
+    # Use masked objects internally
+    weights, epos_rot = get_rot(mol, masked_configs, e, at, naip)
+    P_l = get_P_l(mol, masked_configs, weights, epos_rot, l_list, e, at)
+
+    # Expand externally
+    expanded_epos_rot = np.zeros((nconf, naip, 3))
+    expanded_epos_rot[mask] = epos_rot
+    ratio = get_wf_ratio(wf, configs, expanded_epos_rot, e, mask)
+
+    # Compute local and non-local parts
+    ecp_val[mask] = np.einsum("ij,ik,ijk->i", ratio, masked_v_l, P_l)
     local_l = -1
     ecp_val += v_l[:, local_l]
     return ecp_val
 
 
-def ecp(mol, configs, wf):
+def ecp(mol, configs, wf, threshold):
     """
     Returns the ECP value, summed over all the electrons and atoms.
     """
@@ -200,8 +216,20 @@ def ecp(mol, configs, wf):
     if mol._ecp != {}:
         for e in range(nelec):
             for at in range(len(mol._atom)):
-                ecp_tot += ecp_ea(mol, configs, wf, e, at)
+                ecp_tot += ecp_ea(mol, configs, wf, e, at, threshold)
     return ecp_tot
+
+
+def ecp_mask(v_l, threshold):
+    """
+    Returns a mask for configurations sized nconf
+    based on values of v_l. Also returns acceptance probabilities
+    """
+    l = 2 * np.arange(v_l.shape[1] - 1) + 1
+    prob = np.dot(np.abs(v_l[:, :-1]), threshold * (2 * l + 1))
+    prob = np.minimum(np.ones(prob.shape), prob)
+    accept = prob > np.random.uniform(low=0, high=1, size=prob.shape)
+    return accept, prob
 
 
 #################### Quadrature Rules ############################

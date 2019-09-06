@@ -52,10 +52,10 @@ class JastrowSpin:
         aexpand = len(self.a_basis)
         self._bvalues = np.zeros((nconf, nexpand, 3))
         self._avalues = np.zeros((nconf, self._mol.natm, aexpand, 2))
-        self._a_old = np.zeros((nelec, nconf, self._mol.natm, aexpand))
-        self._b_old = np.zeros((nelec, nconf, nexpand, 2))
+        self._a_partial = np.zeros((nelec, nconf, self._mol.natm, aexpand))
+        self._b_partial = np.zeros((nelec, nconf, nexpand, 2))
         for e in range(nelec):
-            self._set_old(e)
+            self._set_partials(e)
 
         nup = self._mol.nelec[0]
         d1, ij = configs.dist.dist_matrix(configs.configs[:, :nup])
@@ -107,15 +107,15 @@ class JastrowSpin:
         self._bvalues[mask, :, :] += self._get_deltab(e, epos)[mask, :, :]
         self._avalues[mask, :, :, :] += self._get_deltaa(e, epos)[mask, :, :, :]
         self._configscurrent.move(e, epos, mask)
-        self._set_old(e)
+        self._set_partials(e)
 
-    def _set_old(self, e):
-        self._a_old[e] = self._get_a(e, self._configscurrent.electron(e))
-        self._b_old[e] = self._get_b(e, self._configscurrent.electron(e))
+    def _set_partials(self, e):
+        self._a_partial[e] = self._get_a(e, self._configscurrent.electron(e))
+        self._b_partial[e] = self._get_b(e, self._configscurrent.electron(e))
 
     def _get_a(self, e, epos, mask=None):
         """ 
-        Set _a_old and _b_old
+        Set _a_partial and _b_partial
         """
         if mask is None:
             mask = [True] * epos.configs.shape[0]
@@ -239,7 +239,7 @@ class JastrowSpin:
         sep = nup - eup
 
         delta = np.zeros((nconf, len(self.b_basis), 3))
-        deltab = self._get_b(e, epos) - self._b_old[e]
+        deltab = self._get_b(e, epos) - self._b_partial[e]
         delta[:, :, edown:edown+2] += deltab
             
         return delta
@@ -253,7 +253,7 @@ class JastrowSpin:
         ni = self._mol.natm
         nup = self._mol.nelec[0]
         delta = np.zeros((nconf, ni, len(self.a_basis), 2))
-        deltaa = self._get_a(e, epos) - self._a_old[e]
+        deltaa = self._get_a(e, epos) - self._a_partial[e]
         delta[:, :, :, int(e >= nup)] += deltaa
         
         return delta

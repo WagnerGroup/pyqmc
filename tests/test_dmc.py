@@ -20,7 +20,7 @@ def test():
     from pyqmc.dmc import limdrift, rundmc
     from pyqmc.mc import vmc
     from pyqmc.accumulators import EnergyAccumulator
-    from pyqmc.func3d import ExpCuspFunction
+    from pyqmc.func3d import CutoffCuspFunction
     from pyqmc.multiplywf import MultiplyWF
     from pyqmc.coord import OpenConfigs
     import pandas as pd
@@ -31,7 +31,7 @@ def test():
     configs = OpenConfigs(np.random.randn(nconf, 1, 3))
     wf1 = PySCFSlaterUHF(mol, mf)
     wf = wf1
-    wf2 = JastrowSpin(mol, a_basis=[ExpCuspFunction(5, 0.2)], b_basis=[])
+    wf2 = JastrowSpin(mol, a_basis=[CutoffCuspFunction(5, 0.2)], b_basis=[])
     wf2.parameters["acoeff"] = np.asarray([[[-1.0, 0]]])
     wf = MultiplyWF(wf1, wf2)
 

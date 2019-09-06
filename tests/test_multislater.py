@@ -83,6 +83,6 @@ def test():
         en = np.mean(df["energytotal"][warmup:])
         err = np.std(df["energytotal"][warmup:]) / np.sqrt(nsteps - warmup)
         assert en - mc.e_tot < 10 * err
-  
+
 if __name__ == "__main__":
     test()

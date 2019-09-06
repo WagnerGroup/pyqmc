@@ -37,15 +37,20 @@ def test_wfs():
     ]:
         for k in wf.parameters:
             wf.parameters[k] = np.random.rand(*wf.parameters[k].shape)
-        for fname,func in zip(['gradient', 'laplacian', 'pgradient'],
-                         [testwf.test_wf_gradient, testwf.test_wf_laplacian, testwf.test_wf_pgradient]):
+        for fname, func in zip(
+            ["gradient", "laplacian", "pgradient"],
+            [
+                testwf.test_wf_gradient,
+                testwf.test_wf_laplacian,
+                testwf.test_wf_pgradient,
+            ],
+        ):
             err = []
             for delta in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8]:
                 err.append(func(wf, epos, delta)[0])
-            print(fname,err)
-            assert(min(err) < epsilon)
-                
-        
+            print(fname, err)
+            assert min(err) < epsilon
+
         for k, item in testwf.test_updateinternals(wf, epos).items():
             assert item < epsilon
 

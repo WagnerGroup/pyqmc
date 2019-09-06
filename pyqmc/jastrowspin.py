@@ -178,17 +178,15 @@ class JastrowSpin:
         So we need to compute the gradient of the b's for these indices.
         Note that we need to compute distances between electron position given and the current electron distances.
         We will need this for laplacian() as well"""
-        nconf = epos.configs.shape[0]
-        ne = self._configscurrent.configs.shape[1]
+        nconf, ne = self._configscurrent.configs.shape[:2]
         nup = self._mol.nelec[0]
-        dnew = epos.dist.dist_i(self._configscurrent.configs, epos.configs)
+
+        # Get e-e and e-ion distances
+        not_e = np.arange(ne) != e 
+        dnew = epos.dist.dist_i(self._configscurrent.configs, epos.configs)[:, not_e]
         dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
 
-        not_e = [True] * ne
-        not_e[e] = False
-        dnew = dnew[:, not_e, :]
-
-        delta = np.zeros((3, nconf))
+        grad = np.zeros((3, nconf))
 
         # Check if selected electron is spin up or down
         eup = int(e < nup)
@@ -198,47 +196,44 @@ class JastrowSpin:
         dnewdown = dnew[:, nup - eup :, :] # Other electron is spin down
 
         for c, b in zip(self.parameters["bcoeff"], self.b_basis):
-            delta += (c[edown] * np.sum(b.gradient(dnewup), axis=1).T)
-            delta += (c[1 + edown] * np.sum(b.gradient(dnewdown), axis=1).T)
+            grad += (c[edown] * np.sum(b.gradient(dnewup), axis=1).T)
+            grad += (c[1 + edown] * np.sum(b.gradient(dnewdown), axis=1).T)
 
         for c, a in zip(self.parameters["acoeff"].transpose()[edown], self.a_basis):
-            delta += np.einsum('j,ijk->ki', c, a.gradient(dinew))
+            grad += np.einsum('j,ijk->ki', c, a.gradient(dinew))
 
-        return delta
+        return grad
 
     def gradient_laplacian(self, e, epos):
         """ """
-        nconf = epos.configs.shape[0]
+        nconf, ne = self._configscurrent.configs.shape[:2]
         nup = self._mol.nelec[0]
-        ne = self._configscurrent.configs.shape[1]
 
-        # Get and break up eedist_i
-        dnew = epos.dist.dist_i(self._configscurrent.configs, epos.configs)
-        mask = [True] * ne
-        mask[e] = False
-        dnew = dnew[:, mask, :]
+        # Get e-e and e-ion distances
+        not_e = np.arange(ne) != e
+        dnew = epos.dist.dist_i(self._configscurrent.configs, epos.configs)[:, not_e]
+        dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
 
         eup = int(e < nup)
         edown = int(e >= nup)
         dnewup = dnew[:, : nup - eup, :] # Other electron is spin up
         dnewdown = dnew[:, nup - eup :, :] # Other electron is spin down
 
-        # Electron-ion distances
-        dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
-
-        delta = np.zeros(nconf)
+        grad = np.zeros((3, nconf))
+        lap = np.zeros(nconf) 
+        # a-value component
+        for c, a in zip(self.parameters["acoeff"].transpose()[edown], self.a_basis):
+            grad += np.einsum('j,ijk->ki', c, a.gradient(dinew))
+            lap += np.einsum('j,ijk->i', c, a.laplacian(dinew))
 
         # b-value component
         for c, b in zip(self.parameters["bcoeff"], self.b_basis):
-            delta += c[edown] * np.sum(b.laplacian(dnewup), axis=(1,2))
-            delta += c[1 + edown] * np.sum(b.laplacian(dnewdown), axis=(1,2))
+            grad += (c[edown] * np.sum(b.gradient(dnewup), axis=1).T)
+            grad += (c[1 + edown] * np.sum(b.gradient(dnewdown), axis=1).T)
+            lap += c[edown] * np.sum(b.laplacian(dnewup), axis=(1,2))
+            lap += c[1 + edown] * np.sum(b.laplacian(dnewdown), axis=(1,2))
 
-        # a-value component
-        for c, a in zip(self.parameters["acoeff"].transpose()[edown], self.a_basis):
-            delta += np.einsum('j,ijk->i', c, a.laplacian(dinew))
-
-        g = self.gradient(e, epos)
-        return g, delta + np.sum(g ** 2, axis=0)
+        return grad, lap + np.sum(grad ** 2, axis=0)
 
     def laplacian(self, e, epos):
         return self.gradient_laplacian(e, epos)[1]

@@ -20,6 +20,7 @@ def test_wfs():
     from pyqmc.jastrowspin import JastrowSpin
     from pyqmc.multiplywf import MultiplyWF
     from pyqmc.coord import OpenConfigs
+    import pyqmc
 
     mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="cc-pvtz", unit="bohr")
     mf = scf.RHF(mol).run()
@@ -27,7 +28,7 @@ def test_wfs():
     mf_uhf = scf.UHF(mol).run()
     epsilon = 1e-5
     nconf = 10
-    epos = OpenConfigs(np.random.randn(nconf, 4, 3))
+    epos = pyqmc.initial_guess(mol, nconf) 
     for wf in [
         JastrowSpin(mol),
         MultiplyWF(PySCFSlaterUHF(mol, mf), JastrowSpin(mol)),

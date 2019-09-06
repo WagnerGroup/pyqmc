@@ -106,7 +106,7 @@ class MinimalImageDistance(RawDistance):
         dists = np.linalg.norm(d1all, axis=-1)
         mininds = np.argmin(dists, axis=0)
         cinds, einds = np.meshgrid(
-            *[np.arange(n) for n in configs.shape[:2]], indexing="ij"
+            *[np.arange(n) for n in mininds.shape[:2]], indexing="ij"
         )
         return d1all[mininds, cinds, einds]
 

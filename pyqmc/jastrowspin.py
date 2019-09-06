@@ -200,16 +200,9 @@ class JastrowSpin:
         for c, b in zip(self.parameters["bcoeff"], self.b_basis):
             delta += (c[edown] * np.sum(b.gradient(dnewup), axis=1).T)
             delta += (c[1 + edown] * np.sum(b.gradient(dnewdown), axis=1).T)
-            """
-        for c,a in zip(self.parameters['acoeff'],self.a_basis):
-            delta+=np.einsum('j,ijk->ki', c[:,edown], a.gradient(dinew).reshape(nconf,-1,3))
 
-            """
-        for i in range(self._mol.natm):
-            for c, a in zip(self.parameters["acoeff"][i], self.a_basis):
-                grad_all = a.gradient(dinew)
-                grad_slice = grad_all[:, i, :]
-                delta += c[edown] * grad_slice.T
+        for c, a in zip(self.parameters["acoeff"].transpose()[edown], self.a_basis):
+            delta += np.einsum('j,ijk->ki', c, a.gradient(dinew))
 
         return delta
 
@@ -240,11 +233,9 @@ class JastrowSpin:
             delta += c[edown] * np.sum(b.laplacian(dnewup), axis=(1,2))
             delta += c[1 + edown] * np.sum(b.laplacian(dnewdown), axis=(1,2))
 
-        for i in range(self._mol.natm):
-            for c, a in zip(self.parameters["acoeff"][i], self.a_basis):
-                lap_all = a.laplacian(dinew)
-                lap_slice = lap_all[:, i, :]
-                delta += np.sum(c[edown] * lap_slice, axis=1)
+        # a-value component
+        for c, a in zip(self.parameters["acoeff"].transpose()[edown], self.a_basis):
+            delta += np.einsum('j,ijk->i', c, a.laplacian(dinew))
 
         g = self.gradient(e, epos)
         return g, delta + np.sum(g ** 2, axis=0)

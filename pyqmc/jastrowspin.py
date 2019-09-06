@@ -109,7 +109,7 @@ class JastrowSpin:
         """
         if mask is None:
             mask = [True] * epos.configs.shape[0]
-        d = epos.dist.dist_i( self._mol.atom_coords(), epos.configs[mask])
+        d = epos.dist.dist_i(self._mol.atom_coords(), epos.configs[mask])
         r = np.linalg.norm(d, axis=-1)
         return np.stack([a.value(d, r) for a in self.a_basis], axis=-1)
 
@@ -119,13 +119,13 @@ class JastrowSpin:
         ne = np.sum(self._mol.nelec)
         nup = self._mol.nelec[0]
         sep = nup - int(e < nup)
-        not_e = np.arange(ne) != e 
+        not_e = np.arange(ne) != e
         d = epos.dist.dist_i(
-            self._configscurrent.configs[mask][:,not_e], epos.configs[mask]
-        ) 
+            self._configscurrent.configs[mask][:, not_e], epos.configs[mask]
+        )
         r = np.linalg.norm(d, axis=-1)
-        b_all_e = np.stack( [b.value(d, r) for b in self.b_basis], axis=-1)
-        up, down = b_all_e[:,:sep].sum(axis=1), b_all_e[:,sep:].sum(axis=1)
+        b_all_e = np.stack([b.value(d, r) for b in self.b_basis], axis=-1)
+        up, down = b_all_e[:, :sep].sum(axis=1), b_all_e[:, sep:].sum(axis=1)
         return np.stack([up, down], axis=-1)
 
     def _get_deltaa(self, e, epos):
@@ -139,7 +139,7 @@ class JastrowSpin:
         delta = np.zeros((nconf, ni, len(self.a_basis), 2))
         deltaa = self._get_a(e, epos) - self._a_partial[e]
         delta[:, :, :, int(e >= nup)] += deltaa
-        
+
         return delta
 
     def _get_deltab(self, e, epos):
@@ -152,13 +152,13 @@ class JastrowSpin:
 
         eup = int(e < nup)
         edown = int(e >= nup)
-        not_e = np.arange(ne) != e 
+        not_e = np.arange(ne) != e
         sep = nup - eup
 
         delta = np.zeros((nconf, len(self.b_basis), 3))
         deltab = self._get_b(e, epos) - self._b_partial[e]
-        delta[:, :, edown:edown+2] += deltab
-            
+        delta[:, :, edown : edown + 2] += deltab
+
         return delta
 
     def value(self):
@@ -178,7 +178,7 @@ class JastrowSpin:
         nup = self._mol.nelec[0]
 
         # Get e-e and e-ion distances
-        not_e = np.arange(ne) != e 
+        not_e = np.arange(ne) != e
         dnew = epos.dist.dist_i(self._configscurrent.configs, epos.configs)[:, not_e]
         dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
 
@@ -195,7 +195,7 @@ class JastrowSpin:
             grad += c[1 + edown] * np.sum(bgrad[:, sep:], axis=1).T
 
         for c, a in zip(self.parameters["acoeff"].transpose()[edown], self.a_basis):
-            grad += np.einsum('j,ijk->ki', c, a.gradient(dinew))
+            grad += np.einsum("j,ijk->ki", c, a.gradient(dinew))
 
         return grad
 
@@ -214,11 +214,11 @@ class JastrowSpin:
         sep = nup - eup
 
         grad = np.zeros((3, nconf))
-        lap = np.zeros(nconf) 
+        lap = np.zeros(nconf)
         # a-value component
         for c, a in zip(self.parameters["acoeff"].transpose()[edown], self.a_basis):
-            grad += np.einsum('j,ijk->ki', c, a.gradient(dinew))
-            lap += np.einsum('j,ijk->i', c, a.laplacian(dinew))
+            grad += np.einsum("j,ijk->ki", c, a.gradient(dinew))
+            lap += np.einsum("j,ijk->i", c, a.laplacian(dinew))
 
         # b-value component
         for c, b in zip(self.parameters["bcoeff"], self.b_basis):
@@ -226,8 +226,8 @@ class JastrowSpin:
             blap = b.laplacian(dnew)
             grad += c[edown] * np.sum(bgrad[:, :sep], axis=1).T
             grad += c[1 + edown] * np.sum(bgrad[:, sep:], axis=1).T
-            lap += c[edown] * np.sum(blap[:, :sep], axis=(1,2))
-            lap += c[1 + edown] * np.sum(blap[:, sep:], axis=(1,2))
+            lap += c[edown] * np.sum(blap[:, :sep], axis=(1, 2))
+            lap += c[1 + edown] * np.sum(blap[:, sep:], axis=(1, 2))
 
         return grad, lap + np.sum(grad ** 2, axis=0)
 

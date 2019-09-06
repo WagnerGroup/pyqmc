@@ -27,6 +27,7 @@ def initial_guess(mol, nconfig, r=1.0):
     
     """
     from pyqmc.coord import OpenConfigs, PeriodicConfigs
+
     nelec = np.sum(mol.nelec)
     epos = np.zeros((nconfig, nelec, 3))
     wts = mol.atom_charges()
@@ -61,7 +62,7 @@ def initial_guess(mol, nconfig, r=1.0):
             ]  # assign remaining electrons
 
     epos += r * np.random.randn(*epos.shape)  # random shifts from atom positions
-    if hasattr(mol, 'a'):
+    if hasattr(mol, "a"):
         epos = PeriodicConfigs(epos, mol.a)
     else:
         epos = OpenConfigs(epos)
@@ -129,8 +130,8 @@ def vmc(
             # Propose move
             grad = limdrift(np.real(wf.gradient(e, configs.electron(e)).T))
             gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconf, 3))
-            newcoorde = configs.configs[:,e,:] + gauss + grad*tstep
-            newcoorde = configs.make_irreducible(e, newcoorde )
+            newcoorde = configs.configs[:, e, :] + gauss + grad * tstep
+            newcoorde = configs.make_irreducible(e, newcoorde)
 
             # Compute reverse move
             new_grad = limdrift(np.real(wf.gradient(e, newcoorde).T))
@@ -139,7 +140,7 @@ def vmc(
 
             # Acceptance
             t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
-            ratio = np.multiply(wf.testvalue(e, newcoorde ) ** 2, t_prob)
+            ratio = np.multiply(wf.testvalue(e, newcoorde) ** 2, t_prob)
             accept = ratio > np.random.rand(nconf)
 
             # Update wave function

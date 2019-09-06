@@ -39,9 +39,9 @@ def test_vmc():
         df = pd.DataFrame(df)
         en = np.mean(df["energytotal"][warmup:])
         err = np.std(df["energytotal"][warmup:]) / np.sqrt(nsteps - warmup)
-        assert (
-            en - mf.energy_tot() < 10 * err
-        ), "pyscf {0}, vmc {1}, err {2}".format(en, mf.enery_tot(), err)
+        assert en - mf.energy_tot() < 10 * err, "pyscf {0}, vmc {1}, err {2}".format(
+            en, mf.enery_tot(), err
+        )
 
 
 def test_accumulator():

@@ -3,6 +3,7 @@ from pyqmc.distance import MinimalImageDistance, RawDistance
 from pyqmc.pbc import enforce_pbc
 import copy
 
+
 class OpenConfigs:
     def __init__(self, configs):
         self.configs = configs
@@ -31,7 +32,7 @@ class OpenConfigs:
           vec: OpenConfigs with (nconfig, 3) new coordinates
           accept: (nconfig,) boolean for which configs to update
         """
-        self.configs[accept,e,:] = new.configs[accept,:]
+        self.configs[accept, e, :] = new.configs[accept, :]
 
     def resample(self, newinds):
         """
@@ -59,11 +60,11 @@ class OpenConfigs:
         """
         self.configs[:] = np.concatenate([c.configs for c in configslist], axis=0)[:]
 
-    def copy(self): 
+    def copy(self):
         return copy.deepcopy(self)
 
 
-class PeriodicConfigs: 
+class PeriodicConfigs:
     def __init__(self, configs, lattice_vectors, wrap=None):
         self.configs = configs
         self.wrap = np.zeros(configs.shape) if wrap is None else wrap
@@ -71,8 +72,8 @@ class PeriodicConfigs:
         self.dist = MinimalImageDistance(lattice_vectors)
 
     def electron(self, e):
-        return PeriodicConfigs(self.configs[:,e], self.lvecs, wrap=self.wrap[:,e])
-        
+        return PeriodicConfigs(self.configs[:, e], self.lvecs, wrap=self.wrap[:, e])
+
     def mask(self, mask):
         return PeriodicConfigs(self.configs[mask], self.lvecs, wrap=self.wrap[mask])
 
@@ -82,8 +83,8 @@ class PeriodicConfigs:
          Output: a tuple with the wrapped vector and the number of wraps
         """
         epos, wrap = enforce_pbc(self.lvecs, vec)
-        currentwrap = self.wrap if len(self.wrap.shape)==2 else self.wrap[:,e]
-        return PeriodicConfigs(epos, self.lvecs, wrap=wrap+currentwrap)
+        currentwrap = self.wrap if len(self.wrap.shape) == 2 else self.wrap[:, e]
+        return PeriodicConfigs(epos, self.lvecs, wrap=wrap + currentwrap)
 
     def move(self, e, new, accept):
         """
@@ -93,8 +94,8 @@ class PeriodicConfigs:
           new: PeriodicConfigs with (nconfig, 3) new coordinates
           accept: (nconfig,) boolean for which configs to update
         """
-        self.configs[accept,e,:] = new.configs[accept,:]
-        self.wrap[accept,e,:] = new.wrap[accept,:]
+        self.configs[accept, e, :] = new.configs[accept, :]
+        self.wrap[accept, e, :] = new.wrap[accept, :]
 
     def resample(self, newinds):
         """
@@ -115,8 +116,8 @@ class PeriodicConfigs:
         """
         clist = np.split(self.configs, npartitions)
         wlist = np.split(self.wrap, npartitions)
-        return [PeriodicConfigs(c, self.lvecs, w) for c,w in zip(clist, wlist)]
-    
+        return [PeriodicConfigs(c, self.lvecs, w) for c, w in zip(clist, wlist)]
+
     def join(self, configslist):
         """
         Merge configs into this object to collect from parallelization
@@ -126,7 +127,7 @@ class PeriodicConfigs:
         self.configs[:] = np.concatenate([c.configs for c in configslist], axis=0)[:]
         self.wrap[:] = np.concatenate([c.wrap for c in configslist], axis=0)[:]
 
-    def copy(self): 
+    def copy(self):
         return copy.deepcopy(self)
 
 
@@ -135,54 +136,62 @@ def test():
     import pyqmc
     import pandas as pd
 
-    L = 4 
+    L = 4
     mol = gto.M(
-        atom = '''H     {0}      {0}      {0}'''.format(0.0),
-        basis='sto-3g',
-        a = np.eye(3)*L,
+        atom="""H     {0}      {0}      {0}""".format(0.0),
+        basis="sto-3g",
+        a=np.eye(3) * L,
         spin=1,
-        unit='bohr',
+        unit="bohr",
     )
     mf = scf.UKS(mol)
     mf.xc = "pbe"
     mf = mf.density_fit().run()
-    wf = pyqmc.PySCFSlaterUHF(mol, mf) 
+    wf = pyqmc.PySCFSlaterUHF(mol, mf)
 
     #####################################
     ## evaluate KE in PySCF
     #####################################
-    ke_mat = mol.pbc_intor('int1e_kin', hermi=1, kpts=np.array([0,0,0]))
-    dm = mf.make_rdm1() 
-    pyscfke = np.einsum('ij,ji',ke_mat, dm[0])
-    print('PySCF kinetic energy: {0}'.format(pyscfke))
+    ke_mat = mol.pbc_intor("int1e_kin", hermi=1, kpts=np.array([0, 0, 0]))
+    dm = mf.make_rdm1()
+    pyscfke = np.einsum("ij,ji", ke_mat, dm[0])
+    print("PySCF kinetic energy: {0}".format(pyscfke))
 
     #####################################
     ## evaluate KE integral on grid
     #####################################
     X = np.linspace(0, 1, 20, endpoint=False)
-    XYZ = np.meshgrid(X, X, X, indexing='ij')
-    pts = [np.outer(p.ravel(), mol.a[i]) for i,p in enumerate(XYZ)]
-    coords = np.sum(pts, axis=0).reshape((-1,1,3))
-    
+    XYZ = np.meshgrid(X, X, X, indexing="ij")
+    pts = [np.outer(p.ravel(), mol.a[i]) for i, p in enumerate(XYZ)]
+    coords = np.sum(pts, axis=0).reshape((-1, 1, 3))
+
     phase, logdet = wf.recompute(coords)
-    psi = phase*np.exp(logdet)
-    lap = wf.laplacian(0, coords.reshape((-1,3)))
-    gridke = np.sum(-0.5*lap*psi**2)/np.sum(psi**2)
-    print('grid kinetic energy: {0}'.format(gridke))
+    psi = phase * np.exp(logdet)
+    lap = wf.laplacian(0, coords.reshape((-1, 3)))
+    gridke = np.sum(-0.5 * lap * psi ** 2) / np.sum(psi ** 2)
+    print("grid kinetic energy: {0}".format(gridke))
 
     #####################################
     ## evaluate KE integral with VMC
     #####################################
-    coords = pyqmc.initial_guess(mol, 600, .7)
+    coords = pyqmc.initial_guess(mol, 600, 0.7)
     coords = PeriodicConfigs(coords, mol.a)
     warmup = 10
     df, coords = pyqmc.vmc(
-        wf, coords, nsteps=128+warmup, tstep=L*0.6, accumulators={"energy": pyqmc.accumulators.EnergyAccumulator(mol)}
+        wf,
+        coords,
+        nsteps=128 + warmup,
+        tstep=L * 0.6,
+        accumulators={"energy": pyqmc.accumulators.EnergyAccumulator(mol)},
     )
     df = pd.DataFrame(df)
     reblocked = pyqmc.reblock.optimally_reblocked(df["energyke"][warmup:])
-    print('VMC kinetic energy: {0} $\pm$ {1}'.format(reblocked['mean'],reblocked['standard error']))
+    print(
+        "VMC kinetic energy: {0} $\pm$ {1}".format(
+            reblocked["mean"], reblocked["standard error"]
+        )
+    )
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     test()

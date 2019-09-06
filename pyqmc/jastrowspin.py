@@ -59,21 +59,17 @@ class JastrowSpin:
 
         # electron-electron distances
         nup = self._mol.nelec[0]
-        d1, ij = configs.dist.dist_matrix(configs.configs[:, :nup])
-        d2, ij = configs.dist.pairwise(
+        d_upup, ij = configs.dist.dist_matrix(configs.configs[:, :nup])
+        d_updown, ij = configs.dist.pairwise(
             configs.configs[:, :nup], configs.configs[:, nup:]
         )
-        d3, ij = configs.dist.dist_matrix(configs.configs[:, nup:])
-
-        r1 = np.linalg.norm(d1, axis=-1)
-        r2 = np.linalg.norm(d2, axis=-1)
-        r3 = np.linalg.norm(d3, axis=-1)
+        d_downdown, ij = configs.dist.dist_matrix(configs.configs[:, nup:])
 
         # Update bvalues according to spin case
-        for i, b in enumerate(self.b_basis):
-            self._bvalues[:, i, 0] = np.sum(b.value(d1, r1), axis=1)
-            self._bvalues[:, i, 1] = np.sum(b.value(d2, r2), axis=1)
-            self._bvalues[:, i, 2] = np.sum(b.value(d3, r3), axis=1)
+        for j, d in enumerate([d_upup, d_updown, d_downdown]):
+            r = np.linalg.norm(d, axis=-1)
+            for i, b in enumerate(self.b_basis):
+                self._bvalues[:, i, j] = np.sum(b.value(d, r), axis=1)
 
         # Package the electron-ion distances into a 1d array
         di = np.zeros((nelec, nconf, self._mol.natm, 3))

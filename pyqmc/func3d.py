@@ -243,7 +243,7 @@ class PolyPadeFunction:
         return pderiv
 
 
-class ExpCuspFunction:
+class CutoffCuspFunction:
     r"""
     :math:`b(r) = -\frac{p(r/r_{cut})}{1+\gamma*p(r/r_{cut})} + \frac{1}{3+\gamma}` 
     where 

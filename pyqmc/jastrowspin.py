@@ -81,7 +81,6 @@ class JastrowSpin:
                 self._mol.atom_coords(), configs.configs[:, e, :]
             )
 
-        # print(di1.shape)
         ri1 = np.linalg.norm(di1, axis=-1)
         ri2 = np.linalg.norm(di2, axis=-1)
 

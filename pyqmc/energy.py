@@ -38,8 +38,8 @@ def ii_energy(mol):
     return iitot
 
 
-def get_ecp(mol, configs, wf, cutoff):
-    return eval_ecp.ecp(mol, configs, wf, cutoff)
+def get_ecp(mol, configs, wf, threshold):
+    return eval_ecp.ecp(mol, configs, wf, threshold)
 
 
 def kinetic(configs, wf):

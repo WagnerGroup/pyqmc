@@ -94,28 +94,27 @@ class JastrowSpin:
         """ Update a, b, and c sums. """
         if mask is None:
             mask = [True] * epos.configs.shape[0]
-        self._bvalues[mask, :, :] += self._get_deltab(e, epos)[mask, :, :]
-        self._avalues[mask, :, :, :] += self._get_deltaa(e, epos)[mask, :, :, :]
+        self._bvalues[mask, :, :] += self._get_deltab(e, epos, mask)
+        self._avalues[mask, :, :, :] += self._get_deltaa(e, epos, mask)
         self._configscurrent.move(e, epos, mask)
-        self._set_partial_sums(e)
+        self._set_partial_sums(e, mask)
 
-    def _set_partial_sums(self, e):
-        self._a_partial[e] = self._get_a(e, self._configscurrent.electron(e))
-        self._b_partial[e] = self._get_b(e, self._configscurrent.electron(e))
+    def _set_partial_sums(self, e, mask=None):
+        if mask is None:
+            mask = [True] * self._configscurrent.configs.shape[0]
+        epos = self._configscurrent.electron(e)
+        self._a_partial[e, mask] = self._get_a(e, epos, mask)
+        self._b_partial[e, mask] = self._get_b(e, epos, mask)
 
-    def _get_a(self, e, epos, mask=None):
+    def _get_a(self, e, epos, mask):
         """ 
         Set _a_partial and _b_partial
         """
-        if mask is None:
-            mask = [True] * epos.configs.shape[0]
         d = epos.dist.dist_i(self._mol.atom_coords(), epos.configs[mask])
         r = np.linalg.norm(d, axis=-1)
         return np.stack([a.value(d, r) for a in self.a_basis], axis=-1)
 
-    def _get_b(self, e, epos, mask=None):
-        if mask is None:
-            mask = [True] * epos.configs.shape[0]
+    def _get_b(self, e, epos, mask):
         ne = np.sum(self._mol.nelec)
         nup = self._mol.nelec[0]
         sep = nup - int(e < nup)
@@ -128,7 +127,7 @@ class JastrowSpin:
         up, down = b_all_e[:, :sep].sum(axis=1), b_all_e[:, sep:].sum(axis=1)
         return np.stack([up, down], axis=-1)
 
-    def _get_deltaa(self, e, epos):
+    def _get_deltaa(self, e, epos, mask):
         """
         here we will evaluate the a's for a given electron (both the old and new)
         and work out the updated value. This allows us to save a lot of memory
@@ -136,27 +135,23 @@ class JastrowSpin:
         nconf = epos.configs.shape[0]
         ni = self._mol.natm
         nup = self._mol.nelec[0]
-        delta = np.zeros((nconf, ni, len(self.a_basis), 2))
-        deltaa = self._get_a(e, epos) - self._a_partial[e]
+        delta = np.zeros((np.sum(mask), ni, len(self.a_basis), 2))
+        deltaa = self._get_a(e, epos, mask) - self._a_partial[e, mask]
         delta[:, :, :, int(e >= nup)] += deltaa
 
         return delta
 
-    def _get_deltab(self, e, epos):
+    def _get_deltab(self, e, epos, mask):
         """
         here we will evaluate the b's for a given electron (both the old and new)
         and work out the updated value. This allows us to save a lot of memory
         """
-        nconf, ne = self._configscurrent.configs.shape[:2]
-        nup = self._mol.nelec[0]
-
-        eup = int(e < nup)
+        ne = self._configscurrent.configs.shape[1]
+        nup = self._mol.nelec[0] 
         edown = int(e >= nup)
-        not_e = np.arange(ne) != e
-        sep = nup - eup
 
-        delta = np.zeros((nconf, len(self.b_basis), 3))
-        deltab = self._get_b(e, epos) - self._b_partial[e]
+        delta = np.zeros((np.sum(mask), len(self.b_basis), 3))
+        deltab = self._get_b(e, epos, mask) - self._b_partial[e, mask]
         delta[:, :, edown : edown + 2] += deltab
 
         return delta
@@ -234,12 +229,14 @@ class JastrowSpin:
     def laplacian(self, e, epos):
         return self.gradient_laplacian(e, epos)[1]
 
-    def testvalue(self, e, epos):
+    def testvalue(self, e, epos, mask=None):
+        if mask is None:
+            mask = [True] * epos.configs.shape[0]
         b_val = np.sum(
-            self._get_deltab(e, epos) * self.parameters["bcoeff"], axis=(2, 1)
+            self._get_deltab(e, epos, mask) * self.parameters["bcoeff"], axis=(2, 1)
         )
         a_val = np.einsum(
-            "ijkl,jkl->i", self._get_deltaa(e, epos), self.parameters["acoeff"]
+            "ijkl,jkl->i", self._get_deltaa(e, epos, mask), self.parameters["acoeff"]
         )
         return np.exp(b_val + a_val)
 
@@ -248,50 +245,3 @@ class JastrowSpin:
         For the derivatives of basis functions, we will have to compute the derivative
         of all the b's and redo the sums, similar to recompute() """
         return {"bcoeff": self._bvalues, "acoeff": self._avalues}
-
-
-def test():
-    from pyscf import lib, gto, scf
-
-    np.random.seed(10)
-
-    mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="cc-pvtz", unit="bohr")
-    l = dir(mol)
-    nconf = 20
-    configs = np.random.randn(nconf, np.sum(mol.nelec), 3)
-
-    abasis = [GaussianFunction(0.2), GaussianFunction(0.4)]
-    bbasis = [GaussianFunction(0.2), GaussianFunction(0.4)]
-    jastrow = JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
-    jastrow.parameters["bcoeff"] = np.random.random(jastrow.parameters["bcoeff"].shape)
-    jastrow.parameters["acoeff"] = np.random.random(jastrow.parameters["acoeff"].shape)
-    import pyqmc.testwf as testwf
-
-    for key, val in testwf.test_updateinternals(jastrow, configs).items():
-        print(key, val)
-
-    print()
-    for delta in [1e-3, 1e-4, 1e-5, 1e-6, 1e-7]:
-        print(
-            "delta",
-            delta,
-            "Testing gradient",
-            testwf.test_wf_gradient(jastrow, configs, delta=delta),
-        )
-        print(
-            "delta",
-            delta,
-            "Testing laplacian",
-            testwf.test_wf_laplacian(jastrow, configs, delta=delta),
-        )
-        print(
-            "delta",
-            delta,
-            "Testing pgradient",
-            testwf.test_wf_pgradient(jastrow, configs, delta=delta),
-        )
-        print()
-
-
-if __name__ == "__main__":
-    test()

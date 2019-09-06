@@ -8,7 +8,6 @@ os.environ["OMP_NUM_THREADS"] = "1"
 import sys
 import numpy as np
 import pyqmc.testwf as testwf
-import pytest
 
 
 def test_wfs():
@@ -21,6 +20,7 @@ def test_wfs():
     from pyqmc.jastrowspin import JastrowSpin
     from pyqmc.multiplywf import MultiplyWF
     from pyqmc.coord import OpenConfigs
+    import pyqmc
 
     mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="cc-pvtz", unit="bohr")
     mf = scf.RHF(mol).run()
@@ -28,7 +28,7 @@ def test_wfs():
     mf_uhf = scf.UHF(mol).run()
     epsilon = 1e-5
     nconf = 10
-    epos = OpenConfigs(np.random.randn(nconf, 4, 3))
+    epos = pyqmc.initial_guess(mol, nconf) 
     for wf in [
         JastrowSpin(mol),
         MultiplyWF(PySCFSlaterUHF(mol, mf), JastrowSpin(mol)),
@@ -38,10 +38,15 @@ def test_wfs():
     ]:
         for k in wf.parameters:
             wf.parameters[k] = np.random.rand(*wf.parameters[k].shape)
-        assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon
-        assert testwf.test_wf_laplacian(wf, epos, delta=1e-5)[0] < epsilon
-        assert testwf.test_wf_pgradient(wf, epos, delta=1e-5)[0] < epsilon
-
+        for fname,func in zip(['gradient', 'laplacian', 'pgradient'],
+                         [testwf.test_wf_gradient, testwf.test_wf_laplacian, testwf.test_wf_pgradient]):
+            err = []
+            for delta in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8]:
+                err.append(func(wf, epos, delta)[0])
+            print(fname,err)
+            assert(min(err) < epsilon)
+                
+        
         for k, item in testwf.test_updateinternals(wf, epos).items():
             assert item < epsilon
 
@@ -54,7 +59,7 @@ def test_func3d():
         PadeFunction,
         PolyPadeFunction,
         GaussianFunction,
-        ExpCuspFunction,
+        CutoffCuspFunction,
         test_func3d_gradient,
         test_func3d_laplacian,
     )
@@ -62,7 +67,7 @@ def test_func3d():
     test_functions = {
         "Pade": PadeFunction(0.2),
         "PolyPade": PolyPadeFunction(2.0, 1.5),
-        "ExpCusp": ExpCuspFunction(2.0, 1.5),
+        "CutoffCusp": CutoffCuspFunction(2.0, 1.5),
         "Gaussian": GaussianFunction(0.4),
     }
     delta = 1e-6

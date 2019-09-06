@@ -4,6 +4,7 @@ from pyqmc.pbc import enforce_pbc
 import copy
 
 
+
 class OpenConfigs:
     def __init__(self, configs):
         self.configs = configs

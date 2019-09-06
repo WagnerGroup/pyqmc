@@ -6,7 +6,7 @@ from pyqmc.multiplywf import MultiplyWF
 from pyqmc.jastrowspin import JastrowSpin
 
 from pyqmc.accumulators import EnergyAccumulator, PGradTransform, LinearTransform
-from pyqmc.func3d import PadeFunction, GaussianFunction, ExpCuspFunction
+from pyqmc.func3d import PadeFunction, GaussianFunction, CutoffCuspFunction
 from pyqmc.optvariance import optvariance
 from pyqmc.optsr import gradient_descent
 from pyqmc.linemin import line_minimization
@@ -18,7 +18,7 @@ def slater_jastrow(mol, mf, abasis=None, bbasis=None):
         abasis = [GaussianFunction(0.8), GaussianFunction(1.6), GaussianFunction(3.2)]
     if bbasis is None:
         bbasis = [
-            ExpCuspFunction(2.0, 1.5),
+            CutoffCuspFunction(2.0, 1.5),
             GaussianFunction(0.8),
             GaussianFunction(1.6),
             GaussianFunction(3.2),
@@ -52,7 +52,7 @@ def default_jastrow(mol):
 
     abasis = [GaussianFunction(0.8), GaussianFunction(1.6), GaussianFunction(3.2)]
     bbasis = [
-        ExpCuspFunction(2.0, 1.5),
+        CutoffCuspFunction(2.0, 1.5),
         GaussianFunction(0.8),
         GaussianFunction(1.6),
         GaussianFunction(3.2),

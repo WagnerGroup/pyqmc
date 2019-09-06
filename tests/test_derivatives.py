@@ -66,7 +66,7 @@ def test_func3d():
     test_functions = {
         "Pade": PadeFunction(0.2),
         "PolyPade": PolyPadeFunction(2.0, 1.5),
-        "ExpCusp": CutoffCuspFunction(2.0, 1.5),
+        "CutoffCusp": CutoffCuspFunction(2.0, 1.5),
         "Gaussian": GaussianFunction(0.4),
     }
     delta = 1e-6

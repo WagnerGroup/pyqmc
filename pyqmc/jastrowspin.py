@@ -132,6 +132,39 @@ class JastrowSpin:
         up, down = b_all_e[:,:sep].sum(axis=1), b_all_e[:,sep:].sum(axis=1)
         return np.stack([up, down], axis=-1)
 
+    def _get_deltaa(self, e, epos):
+        """
+        here we will evaluate the a's for a given electron (both the old and new)
+        and work out the updated value. This allows us to save a lot of memory
+        """
+        nconf = epos.configs.shape[0]
+        ni = self._mol.natm
+        nup = self._mol.nelec[0]
+        delta = np.zeros((nconf, ni, len(self.a_basis), 2))
+        deltaa = self._get_a(e, epos) - self._a_partial[e]
+        delta[:, :, :, int(e >= nup)] += deltaa
+        
+        return delta
+
+    def _get_deltab(self, e, epos):
+        """
+        here we will evaluate the b's for a given electron (both the old and new)
+        and work out the updated value. This allows us to save a lot of memory
+        """
+        nconf, ne = self._configscurrent.configs.shape[:2]
+        nup = self._mol.nelec[0]
+
+        eup = int(e < nup)
+        edown = int(e >= nup)
+        not_e = np.arange(ne) != e 
+        sep = nup - eup
+
+        delta = np.zeros((nconf, len(self.b_basis), 3))
+        deltab = self._get_b(e, epos) - self._b_partial[e]
+        delta[:, :, edown:edown+2] += deltab
+            
+        return delta
+
     def value(self):
         """Compute the current log value of the wavefunction"""
         u = np.sum(self._bvalues * self.parameters["bcoeff"], axis=(2, 1))
@@ -218,39 +251,6 @@ class JastrowSpin:
 
     def laplacian(self, e, epos):
         return self.gradient_laplacian(e, epos)[1]
-
-    def _get_deltab(self, e, epos):
-        """
-        here we will evaluate the b's for a given electron (both the old and new)
-        and work out the updated value. This allows us to save a lot of memory
-        """
-        nconf, ne = self._configscurrent.configs.shape[:2]
-        nup = self._mol.nelec[0]
-
-        eup = int(e < nup)
-        edown = int(e >= nup)
-        not_e = np.arange(ne) != e 
-        sep = nup - eup
-
-        delta = np.zeros((nconf, len(self.b_basis), 3))
-        deltab = self._get_b(e, epos) - self._b_partial[e]
-        delta[:, :, edown:edown+2] += deltab
-            
-        return delta
-
-    def _get_deltaa(self, e, epos):
-        """
-        here we will evaluate the a's for a given electron (both the old and new)
-        and work out the updated value. This allows us to save a lot of memory
-        """
-        nconf = epos.configs.shape[0]
-        ni = self._mol.natm
-        nup = self._mol.nelec[0]
-        delta = np.zeros((nconf, ni, len(self.a_basis), 2))
-        deltaa = self._get_a(e, epos) - self._a_partial[e]
-        delta[:, :, :, int(e >= nup)] += deltaa
-        
-        return delta
 
     def testvalue(self, e, epos):
         b_val = np.sum(

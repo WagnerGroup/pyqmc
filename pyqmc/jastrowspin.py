@@ -191,13 +191,12 @@ class JastrowSpin:
         # Check if selected electron is spin up or down
         eup = int(e < nup)
         edown = int(e >= nup)
-
-        dnewup = dnew[:, : nup - eup, :] # Other electron is spin up
-        dnewdown = dnew[:, nup - eup :, :] # Other electron is spin down
+        sep = nup - eup
 
         for c, b in zip(self.parameters["bcoeff"], self.b_basis):
-            grad += (c[edown] * np.sum(b.gradient(dnewup), axis=1).T)
-            grad += (c[1 + edown] * np.sum(b.gradient(dnewdown), axis=1).T)
+            bgrad = b.gradient(dnew)
+            grad += c[edown] * np.sum(bgrad[:, :sep], axis=1).T
+            grad += c[1 + edown] * np.sum(bgrad[:, sep:], axis=1).T
 
         for c, a in zip(self.parameters["acoeff"].transpose()[edown], self.a_basis):
             grad += np.einsum('j,ijk->ki', c, a.gradient(dinew))
@@ -216,8 +215,7 @@ class JastrowSpin:
 
         eup = int(e < nup)
         edown = int(e >= nup)
-        dnewup = dnew[:, : nup - eup, :] # Other electron is spin up
-        dnewdown = dnew[:, nup - eup :, :] # Other electron is spin down
+        sep = nup - eup
 
         grad = np.zeros((3, nconf))
         lap = np.zeros(nconf) 
@@ -228,10 +226,12 @@ class JastrowSpin:
 
         # b-value component
         for c, b in zip(self.parameters["bcoeff"], self.b_basis):
-            grad += (c[edown] * np.sum(b.gradient(dnewup), axis=1).T)
-            grad += (c[1 + edown] * np.sum(b.gradient(dnewdown), axis=1).T)
-            lap += c[edown] * np.sum(b.laplacian(dnewup), axis=(1,2))
-            lap += c[1 + edown] * np.sum(b.laplacian(dnewdown), axis=(1,2))
+            bgrad = b.gradient(dnew)
+            blap = b.laplacian(dnew)
+            grad += c[edown] * np.sum(bgrad[:, :sep], axis=1).T
+            grad += c[1 + edown] * np.sum(bgrad[:, sep:], axis=1).T
+            lap += c[edown] * np.sum(blap[:, :sep], axis=(1,2))
+            lap += c[1 + edown] * np.sum(blap[:, sep:], axis=(1,2))
 
         return grad, lap + np.sum(grad ** 2, axis=0)
 

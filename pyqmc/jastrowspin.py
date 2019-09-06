@@ -55,8 +55,9 @@ class JastrowSpin:
         self._a_partial = np.zeros((nelec, nconf, self._mol.natm, aexpand))
         self._b_partial = np.zeros((nelec, nconf, nexpand, 2))
         for e in range(nelec):
-            self._set_partials(e)
+            self._set_partial_sums(e)
 
+        # electron-electron distances
         nup = self._mol.nelec[0]
         d1, ij = configs.dist.dist_matrix(configs.configs[:, :nup])
         d2, ij = configs.dist.pairwise(
@@ -68,32 +69,25 @@ class JastrowSpin:
         r2 = np.linalg.norm(d2, axis=-1)
         r3 = np.linalg.norm(d3, axis=-1)
 
-        # Package the electron-ion distances into a 1d array
-        di1 = np.zeros((nconf, self._mol.natm, nup, 3))
-        di2 = np.zeros((nconf, self._mol.natm, nelec - nup, 3))
-
-        for e in range(nup):
-            di1[:, :, e, :] = configs.dist.dist_i(
-                self._mol.atom_coords(), configs.configs[:, e, :]
-            )
-        for e in range(nup, nelec):
-            di2[:, :, e - nup, :] = configs.dist.dist_i(
-                self._mol.atom_coords(), configs.configs[:, e, :]
-            )
-
-        ri1 = np.linalg.norm(di1, axis=-1)
-        ri2 = np.linalg.norm(di2, axis=-1)
-
         # Update bvalues according to spin case
         for i, b in enumerate(self.b_basis):
             self._bvalues[:, i, 0] = np.sum(b.value(d1, r1), axis=1)
             self._bvalues[:, i, 1] = np.sum(b.value(d2, r2), axis=1)
             self._bvalues[:, i, 2] = np.sum(b.value(d3, r3), axis=1)
 
+        # Package the electron-ion distances into a 1d array
+        di = np.zeros((nelec, nconf, self._mol.natm, 3))
+        for e in range(nelec):
+            di[e] = configs.dist.dist_i(
+                self._mol.atom_coords(), configs.configs[:, e, :]
+            )
+        ri = np.linalg.norm(di, axis=-1)
+
         # Update avalues according to spin case
         for i, a in enumerate(self.a_basis):
-            self._avalues[:, :, i, 0] = np.sum(a.value(di1, ri1), axis=2,)
-            self._avalues[:, :, i, 1] = np.sum(a.value(di2, ri2), axis=2,)
+            avals = a.value(di, ri)
+            self._avalues[:, :, i, 0] = np.sum(avals[:nup], axis=0)
+            self._avalues[:, :, i, 1] = np.sum(avals[nup:], axis=0)
 
         u = np.sum(self._bvalues * self.parameters["bcoeff"], axis=(2, 1))
         u += np.einsum("ijkl,jkl->i", self._avalues, self.parameters["acoeff"])
@@ -107,9 +101,9 @@ class JastrowSpin:
         self._bvalues[mask, :, :] += self._get_deltab(e, epos)[mask, :, :]
         self._avalues[mask, :, :, :] += self._get_deltaa(e, epos)[mask, :, :, :]
         self._configscurrent.move(e, epos, mask)
-        self._set_partials(e)
+        self._set_partial_sums(e)
 
-    def _set_partials(self, e):
+    def _set_partial_sums(self, e):
         self._a_partial[e] = self._get_a(e, self._configscurrent.electron(e))
         self._b_partial[e] = self._get_b(e, self._configscurrent.electron(e))
 

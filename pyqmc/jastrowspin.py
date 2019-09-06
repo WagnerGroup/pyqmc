@@ -147,7 +147,7 @@ class JastrowSpin:
         and work out the updated value. This allows us to save a lot of memory
         """
         ne = self._configscurrent.configs.shape[1]
-        nup = self._mol.nelec[0] 
+        nup = self._mol.nelec[0]
         edown = int(e >= nup)
 
         delta = np.zeros((np.sum(mask), len(self.b_basis), 3))

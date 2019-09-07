@@ -112,7 +112,10 @@ class JastrowSpin:
         """
         d = epos.dist.dist_i(self._mol.atom_coords(), epos.configs[mask])
         r = np.linalg.norm(d, axis=-1)
-        return np.stack([a.value(d, r) for a in self.a_basis], axis=-1)
+        a_partial = np.zeros((np.sum(mask), *self._a_partial.shape[2:]))
+        for i, a in enumerate(self.a_basis):
+            a_partial[..., i] = a.value(d, r)
+        return a_partial
 
     def _get_b(self, e, epos, mask):
         ne = np.sum(self._mol.nelec)
@@ -123,9 +126,12 @@ class JastrowSpin:
             self._configscurrent.configs[mask][:, not_e], epos.configs[mask]
         )
         r = np.linalg.norm(d, axis=-1)
-        b_all_e = np.stack([b.value(d, r) for b in self.b_basis], axis=-1)
-        up, down = b_all_e[:, :sep].sum(axis=1), b_all_e[:, sep:].sum(axis=1)
-        return np.stack([up, down], axis=-1)
+        b_partial = np.zeros((np.sum(mask), *self._b_partial.shape[2:]))
+        for i, b in enumerate(self.b_basis):
+            bval = b.value(d, r)
+            b_partial[..., i, 0] = bval[:, : sep].sum(axis=1)
+            b_partial[..., i, 1] = bval[:, sep :].sum(axis=1)
+        return b_partial
 
     def _get_deltaa(self, e, epos, mask):
         """

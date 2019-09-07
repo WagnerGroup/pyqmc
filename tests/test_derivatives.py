@@ -38,12 +38,12 @@ def test_wfs():
     ]:
         for k in wf.parameters:
             wf.parameters[k] = np.random.rand(*wf.parameters[k].shape)
-        for fname,func in zip(['gradient', 'laplacian', 'pgradient'],
+        for fname, func in zip(['gradient', 'laplacian', 'pgradient'],
                          [testwf.test_wf_gradient, testwf.test_wf_laplacian, testwf.test_wf_pgradient]):
             err = []
             for delta in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8]:
                 err.append(func(wf, epos, delta)[0])
-            print(fname,err)
+            print(fname, min(err))
             assert(min(err) < epsilon)
                 
         
@@ -74,8 +74,11 @@ def test_func3d():
     epsilon = 1e-5
 
     for name, func in test_functions.items():
-        assert test_func3d_gradient(func, delta=delta)[0] < epsilon
-        assert test_func3d_laplacian(func, delta=delta)[0] < epsilon
+        grad = test_func3d_gradient(func, delta=delta)[0]
+        lap =  test_func3d_laplacian(func, delta=delta)[0]
+        print(name, grad, lap)
+        assert  grad < epsilon
+        assert lap < epsilon
 
 
 if __name__ == "__main__":

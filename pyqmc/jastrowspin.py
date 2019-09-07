@@ -103,10 +103,10 @@ class JastrowSpin:
         if mask is None:
             mask = [True] * self._configscurrent.configs.shape[0]
         epos = self._configscurrent.electron(e)
-        self._a_partial[e, mask] = self._get_a(e, epos, mask)
-        self._b_partial[e, mask] = self._get_b(e, epos, mask)
+        self._a_partial[e, mask] = self._get_a_partial(e, epos, mask)
+        self._b_partial[e, mask] = self._get_b_partial(e, epos, mask)
 
-    def _get_a(self, e, epos, mask):
+    def _get_a_partial(self, e, epos, mask):
         """ 
         Set _a_partial and _b_partial
         """
@@ -117,7 +117,7 @@ class JastrowSpin:
             a_partial[..., i] = a.value(d, r)
         return a_partial
 
-    def _get_b(self, e, epos, mask):
+    def _get_b_partial(self, e, epos, mask):
         ne = np.sum(self._mol.nelec)
         nup = self._mol.nelec[0]
         sep = nup - int(e < nup)
@@ -142,7 +142,7 @@ class JastrowSpin:
         ni = self._mol.natm
         nup = self._mol.nelec[0]
         delta = np.zeros((np.sum(mask), ni, len(self.a_basis), 2))
-        deltaa = self._get_a(e, epos, mask) - self._a_partial[e, mask]
+        deltaa = self._get_a_partial(e, epos, mask) - self._a_partial[e, mask]
         delta[:, :, :, int(e >= nup)] += deltaa
 
         return delta
@@ -157,7 +157,7 @@ class JastrowSpin:
         edown = int(e >= nup)
 
         delta = np.zeros((np.sum(mask), len(self.b_basis), 3))
-        deltab = self._get_b(e, epos, mask) - self._b_partial[e, mask]
+        deltab = self._get_b_partial(e, epos, mask) - self._b_partial[e, mask]
         delta[:, :, edown : edown + 2] += deltab
 
         return delta

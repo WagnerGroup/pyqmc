@@ -26,6 +26,7 @@ class PySCFSlaterUHF:
         """
         self.occ = np.asarray(mf.mo_occ) > 0.9
         self.parameters = {}
+        self.gto_tol = 1e4
         if np.linalg.norm(twist) == 0:
             self.single_twist = lambda e, c: 1
             self.single_twist_mask = lambda e, c, m: 1
@@ -67,17 +68,19 @@ class PySCFSlaterUHF:
             )[0][0]
             if len(np.asarray(mf.mo_occ).shape) == 3:
                 self.parameters["mo_coeff_alpha"] = np.real_if_close(
-                    mf.mo_coeff[0][kind][:, self.occ[0, kind]], tol=1e4
+                    mf.mo_coeff[0][kind][:, self.occ[0, kind]], tol=self.gto_tol
                 )
                 self.parameters["mo_coeff_beta"] = np.real_if_close(
-                    mf.mo_coeff[1][kind][:, self.occ[1, kind]], tol=1e4
+                    mf.mo_coeff[1][kind][:, self.occ[1, kind]], tol=self.gto_tol
                 )
             else:
                 self.parameters["mo_coeff_alpha"] = np.real_if_close(
-                    mf.mo_coeff[kind][:, np.asarray(mf.mo_occ[kind] > 0.9)], tol=1e4
+                    mf.mo_coeff[kind][:, np.asarray(mf.mo_occ[kind] > 0.9)],
+                    tol=self.gto_tol,
                 )
                 self.parameters["mo_coeff_beta"] = np.real_if_close(
-                    mf.mo_coeff[kind][:, np.asarray(mf.mo_occ[kind] > 1.1)], tol=1e4
+                    mf.mo_coeff[kind][:, np.asarray(mf.mo_occ[kind] > 1.1)],
+                    tol=self.gto_tol,
                 )
 
         else:
@@ -116,7 +119,7 @@ class PySCFSlaterUHF:
             self._mol.eval_gto(self.pbc_str + "GTOval_sph", mycoords).reshape(
                 (nconf, nelec, -1)
             ),
-            tol=1e4,
+            tol=self.gto_tol,
         )
 
         self._aovals = ao
@@ -150,7 +153,8 @@ class PySCFSlaterUHF:
             mask = [True] * epos.configs.shape[0]
         eeff = e - s * self._nelec[0]
         ao = np.real_if_close(
-            self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs), tol=1e4
+            self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs),
+            tol=self.gto_tol,
         )
         mo = ao.dot(self.parameters[self._coefflookup[s]])
         ratio, self._inverse[s][mask, :, :] = sherman_morrison_row(
@@ -190,7 +194,7 @@ class PySCFSlaterUHF:
         if epos differs from the current position of electron e."""
         s = int(e >= self._nelec[0])
         aograd = np.real_if_close(
-            self._mol.eval_gto("GTOval_sph_deriv1", epos.configs), tol=1e4
+            self._mol.eval_gto("GTOval_sph_deriv1", epos.configs), tol=self.gto_tol
         )
         mograd = aograd.dot(self.parameters[self._coefflookup[s]])
         ratios = np.asarray([self._testrow(e, x) for x in mograd])
@@ -202,7 +206,7 @@ class PySCFSlaterUHF:
             self._mol.eval_gto(self.pbc_str + "GTOval_sph_deriv2", epos.configs)[
                 [0, 4, 7, 9]
             ],
-            tol=1e4,
+            tol=self.gto_tol,
         )
         mo = np.dot([ao[0], ao[1:].sum(axis=0)], self.parameters[self._coefflookup[s]])
         ratios = self._testrow(e, mo[1])
@@ -215,7 +219,7 @@ class PySCFSlaterUHF:
             self._mol.eval_gto(self.pbc_str + "GTOval_sph_deriv2", epos.configs)[
                 [0, 1, 2, 3, 4, 7, 9]
             ],
-            tol=1e4,
+            tol=self.gto_tol,
         )
         ao = np.concatenate([ao[0:4], ao[4:].sum(axis=0, keepdims=True)])
         mo = np.dot(ao, self.parameters[self._coefflookup[s]])
@@ -229,7 +233,8 @@ class PySCFSlaterUHF:
         if mask is None:
             mask = [True] * epos.configs.shape[0]
         ao = np.real_if_close(
-            self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs[mask]), tol=1e4
+            self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs[mask]),
+            tol=self.gto_tol,
         )
         mo = ao.dot(self.parameters[self._coefflookup[s]])
         return self._testrow(e, mo, mask) * self.single_twist_mask(e, epos, mask)

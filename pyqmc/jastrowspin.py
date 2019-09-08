@@ -52,18 +52,11 @@ class JastrowSpin:
         configsc = configs.configs.copy()
         self._configscurrent = configsc
         elec = self._mol.nelec
-        nconfig, nelec = configs.configs.shape[:2]
+        nconfig = configsc.shape[0]
         nexpand = len(self.b_basis)
         aexpand = len(self.a_basis)
         self._bvalues = np.zeros((nconfig, nexpand, 3))
         self._avalues = np.zeros((nconfig, self._mol.natm, aexpand, 2))
-        self._a_partial = np.zeros((nelec, nconfig, self._mol.natm, aexpand))
-        self._b_partial = np.zeros((nelec, nconfig, nexpand, 2)) 
-        notmask = [True] * nconfig
-        for e in range(nelec):
-            epos = configs.electron(e)
-            self._a_partial[e] = self._a_update(e, epos, notmask)
-            self._b_partial[e] = self._b_update(e, epos, notmask)
 
         nup = elec[0]
         d1, ij = self._dist.dist_matrix(configsc[:, :nup, :])
@@ -128,44 +121,9 @@ class JastrowSpin:
         """ Update a, b, and c sums. """
         if mask is None:
             mask = [True] * self._configscurrent.shape[0]
-        edown = int(e >= self._mol.nelec[0])
-        aupdate = self._a_update(e, epos, mask)
-        bupdate = self._b_update(e, epos, mask)
-        self._avalues[mask, :, :, edown] += aupdate - self._a_partial[e, mask]
-        self._bvalues[mask, :, edown:edown+2] += bupdate - self._b_partial[e, mask]
-        self._a_partial[e, mask] = aupdate
-        self._b_partial[e, mask] = bupdate
+        self._bvalues[mask, :, :] += self._get_deltab(e, epos)[mask, :, :]
+        self._avalues[mask, :, :, :] += self._get_deltaa(e, epos)[mask, :, :, :]
         self._configscurrent[mask, e, :] = epos.configs[mask, :]
-
-    def _a_update(self, e, epos, mask):
-        """
-          Calculate a (e-ion) partial sums
-        """
-        d = epos.dist.dist_i(self._mol.atom_coords(), epos.configs[mask])
-        r = np.linalg.norm(d, axis=-1)
-        a_partial = np.zeros((np.sum(mask), *self._a_partial.shape[2:]))
-        for i, a in enumerate(self.a_basis):
-            a_partial[..., i] = a.value(d, r)
-        return a_partial
-
-    def _b_update(self, e, epos, mask):
-        """
-          Calculate b (e-e) partial sums
-        """
-        ne = np.sum(self._mol.nelec)
-        nup = self._mol.nelec[0]
-        sep = nup - int(e < nup)
-        not_e = np.arange(ne) != e
-        d = epos.dist.dist_i(
-            self._configscurrent[mask][:, not_e], epos.configs[mask]
-        )
-        r = np.linalg.norm(d, axis=-1)
-        b_partial = np.zeros((np.sum(mask), *self._b_partial.shape[2:]))
-        for i, b in enumerate(self.b_basis):
-            bval = b.value(d, r)
-            b_partial[..., i, 0] = bval[:, : sep].sum(axis=1)
-            b_partial[..., i, 1] = bval[:, sep :].sum(axis=1)
-        return b_partial
 
     def value(self):
         """Compute the current log value of the wavefunction"""
@@ -263,15 +221,95 @@ class JastrowSpin:
     def laplacian(self, e, epos):
         return self.gradient_laplacian(e, epos)[1]
 
-    def testvalue(self, e, epos, mask=None):
+    def _get_deltab(self, e, epos, mask_configs=None):
+        """
+        here we will evaluate the b's for a given electron (both the old and new)
+        and work out the updated value. This allows us to save a lot of memory
+        """
+        nconf = epos.configs.shape[0]
+        ne = self._configscurrent.shape[1]
+        nup = self._mol.nelec[0]
+        mask = [True] * ne
+        mask[e] = False
+        if mask_configs is None:
+            mask_configs = [True] * nconf
+
+        tmpconfigs = self._configscurrent[mask_configs, :, :]
+        tmpconfigs = tmpconfigs[:, mask, :]
+
+        dnew = self._dist.dist_i(tmpconfigs, epos.configs[mask_configs])
+        dold = self._dist.dist_i(tmpconfigs, self._configscurrent[mask_configs, e, :])
+
+        eup = int(e < nup)
+        edown = int(e >= nup)
+        # This is the point at which we switch between up and down
+        # We subtract eup because we have removed e from the set
+        sep = nup - eup
+        dnewup = dnew[:, :sep, :].reshape((-1, 3))
+        dnewdown = dnew[:, sep:, :].reshape((-1, 3))
+        doldup = dold[:, :sep, :].reshape((-1, 3))
+        dolddown = dold[:, sep:, :].reshape((-1, 3))
+
+        rnewup = np.linalg.norm(dnewup, axis=1)
+        rnewdown = np.linalg.norm(dnewdown, axis=1)
+        roldup = np.linalg.norm(doldup, axis=1)
+        rolddown = np.linalg.norm(dolddown, axis=1)
+
+        nconf_mask = sum(mask_configs)
+
+        delta = np.zeros((nconf_mask, len(self.b_basis), 3))
+        for i, b in enumerate(self.b_basis):
+            delta[:, i, edown] += np.sum(
+                (b.value(dnewup, rnewup) - b.value(doldup, roldup)).reshape(
+                    nconf_mask, -1
+                ),
+                axis=1,
+            )
+            delta[:, i, 1 + edown] += np.sum(
+                (b.value(dnewdown, rnewdown) - b.value(dolddown, rolddown)).reshape(
+                    nconf_mask, -1
+                ),
+                axis=1,
+            )
+        return delta
+
+    def _get_deltaa(self, e, epos, mask=None):
+        """
+        here we will evaluate the a's for a given electron (both the old and new)
+        and work out the updated value. This allows us to save a lot of memory
+        """
+        nconf = epos.configs.shape[0]
+        ni = self._mol.natm
+        nup = self._mol.nelec[0]
         if mask is None:
-            mask = [True] * epos.configs.shape[0]
-        edown = int(e >= self._mol.nelec[0])
-        deltaa = self._a_update(e, epos, mask) - self._a_partial[e, mask]
-        a_val = np.einsum("ijk,jk->i", deltaa, self.parameters["acoeff"][..., edown])
-        deltab = self._b_update(e, epos, mask) - self._b_partial[e, mask]
-        b_val = np.einsum("ijk,jk->i",
-            deltab, self.parameters["bcoeff"][..., edown:edown+2],
+            mask = [True] * nconf
+
+        dnew = self._dist.dist_i(self._mol.atom_coords(), epos.configs[mask]).reshape(
+            (-1, 3)
+        )
+        dold = self._dist.dist_i(
+            self._mol.atom_coords(), self._configscurrent[mask, e, :]
+        ).reshape((-1, 3))
+
+        nconf_mask = sum(mask)
+        delta = np.zeros((nconf_mask, ni, len(self.a_basis), 2))
+
+        rnew = np.linalg.norm(dnew, axis=1)
+        rold = np.linalg.norm(dold, axis=1)
+
+        for i, a in enumerate(self.a_basis):
+            delta[:, :, i, int(e >= nup)] += (
+                a.value(dnew, rnew) - a.value(dold, rold)
+            ).reshape((nconf_mask, -1))
+
+        return delta
+
+    def testvalue(self, e, epos, mask=None):
+        b_val = np.sum(
+            self._get_deltab(e, epos, mask) * self.parameters["bcoeff"], axis=(2, 1)
+        )
+        a_val = np.einsum(
+            "ijkl,jkl->i", self._get_deltaa(e, epos, mask), self.parameters["acoeff"]
         )
         return np.exp(b_val + a_val)
 

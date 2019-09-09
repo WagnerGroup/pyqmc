@@ -26,7 +26,6 @@ def test_updateinternals(wf, configs):
         ratio = wf.testvalue(e, epos)
         wf.updateinternals(e, epos)
         update = wf.value()
-        u2 = wfcopy.value()
         configs.move(e, epos, [True] * nconf)
         recompute = wfcopy.recompute(configs)
         updatevstest[e, :] = update[0] / val1[0] * np.exp(update[1] - val1[1]) - ratio

@@ -8,7 +8,7 @@ class JastrowSpin:
     1 body and 2 body jastrow factor
     """
 
-    def __init__(self, mol, a_basis=None, b_basis=None, dist=RawDistance()):
+    def __init__(self, mol, a_basis=None, b_basis=None):
         """
         Args:
 
@@ -17,8 +17,6 @@ class JastrowSpin:
         a_basis : list of func3d objects that comprise the electron-ion basis
 
         b_basis : list of func3d objects that comprise the electron-electron basis
-
-        dist: a distance calculator
 
         """
         if b_basis is None:
@@ -42,7 +40,6 @@ class JastrowSpin:
         self.parameters = {}
         self._nelec = np.sum(mol.nelec)
         self._mol = mol
-        self._dist = dist
         self.parameters["bcoeff"] = np.zeros((nexpand, 3))
         self.parameters["acoeff"] = np.zeros((self._mol.natm, aexpand, 2))
 
@@ -80,9 +77,9 @@ class JastrowSpin:
             self._b_partial[e] = self._b_update(e, epos, notmask)
 
         nup = elec[0]
-        d1, ij = self._dist.dist_matrix(configs.configs[:, :nup, :])
-        d2, ij = self._dist.pairwise(configs.configs[:, :nup, :], configs.configs[:, nup:, :])
-        d3, ij = self._dist.dist_matrix(configs.configs[:, nup:, :])
+        d1, ij = configs.dist.dist_matrix(configs.configs[:, :nup, :])
+        d2, ij = configs.dist.pairwise(configs.configs[:, :nup, :], configs.configs[:, nup:, :])
+        d3, ij = configs.dist.dist_matrix(configs.configs[:, nup:, :])
 
         d1 = d1.reshape((-1, 3))
         d2 = d2.reshape((-1, 3))
@@ -96,11 +93,11 @@ class JastrowSpin:
         di2 = np.zeros((nconfig, self._mol.natm, nelec - nup, 3))
 
         for e in range(nup):
-            di1[:, :, e, :] = self._dist.dist_i(
+            di1[:, :, e, :] = configs.dist.dist_i(
                 self._mol.atom_coords(), configs.configs[:, e, :]
             )
         for e in range(nup, nelec):
-            di2[:, :, e - nup, :] = self._dist.dist_i(
+            di2[:, :, e - nup, :] = configs.dist.dist_i(
                 self._mol.atom_coords(), configs.configs[:, e, :]
             )
 
@@ -248,8 +245,8 @@ class JastrowSpin:
         nconf = epos.configs.shape[0]
         nconf, ne = self._configscurrent.configs.shape[:2]
         nup = self._mol.nelec[0]
-        dnew = self._dist.dist_i(self._configscurrent.configs, epos.configs)
-        dinew = self._dist.dist_i(self._mol.atom_coords(), epos.configs)
+        dnew = epos.dist.dist_i(self._configscurrent.configs, epos.configs)
+        dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
         dinew = dinew.reshape(-1, 3)
 
         mask = [True] * ne
@@ -293,7 +290,7 @@ class JastrowSpin:
         nconf, ne = self._configscurrent.configs.shape[:2]
 
         # Get and break up eedist_i
-        dnew = self._dist.dist_i(self._configscurrent.configs, epos.configs)
+        dnew = epos.dist.dist_i(self._configscurrent.configs, epos.configs)
         mask = [True] * ne
         mask[e] = False
         dnew = dnew[:, mask, :]
@@ -304,7 +301,7 @@ class JastrowSpin:
         dnewdown = dnew[:, nup - eup :, :].reshape(-1, 3)  # Other electron is spin down
 
         # Electron-ion distances
-        dinew = self._dist.dist_i(self._mol.atom_coords(), epos.configs)
+        dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
         dinew = dinew.reshape(-1, 3)
 
         delta = np.zeros(nconf)

@@ -18,14 +18,17 @@ def test_updateinternals(wf, configs):
     updatevstest = np.zeros((ne, nconf))
     recomputevstest = np.zeros((ne, nconf))
     recomputevsupdate = np.zeros((ne, nconf))
+    wfcopy = copy.copy(wf)
+    val1 = wf.recompute(configs)
     for e in range(ne):
-        val1 = wf.recompute(configs)
+        #val1 = wf.recompute(configs)
         epos = configs.make_irreducible(e, configs.configs[:, e, :] + delta)
         ratio = wf.testvalue(e, epos)
         wf.updateinternals(e, epos)
         update = wf.value()
+        u2 = wfcopy.value()
         configs.move(e, epos, [True] * nconf)
-        recompute = wf.recompute(configs)
+        recompute = wfcopy.recompute(configs)
         updatevstest[e, :] = update[0] / val1[0] * np.exp(update[1] - val1[1]) - ratio
         recomputevsupdate[e, :] = update[0] / val1[0] * np.exp(
             update[1] - val1[1]
@@ -33,11 +36,12 @@ def test_updateinternals(wf, configs):
         recomputevstest[e, :] = (
             recompute[0] / val1[0] * np.exp(recompute[1] - val1[1]) - ratio
         )
+        val1 = recompute
 
     return {
-        "updatevstest": np.max(updatevstest),
-        "recomputevstest": np.max(recomputevstest),
-        "recomputevsupdate": np.max(recomputevsupdate),
+        "updatevstest": np.max(np.abs(updatevstest)),
+        "recomputevstest": np.max(np.abs(recomputevstest)),
+        "recomputevsupdate": np.max(np.abs(recomputevsupdate)),
     }
 
 

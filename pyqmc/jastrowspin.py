@@ -81,12 +81,9 @@ class JastrowSpin:
         d2, ij = configs.dist.pairwise(configs.configs[:, :nup, :], configs.configs[:, nup:, :])
         d3, ij = configs.dist.dist_matrix(configs.configs[:, nup:, :])
 
-        d1 = d1.reshape((-1, 3))
-        d2 = d2.reshape((-1, 3))
-        d3 = d3.reshape((-1, 3))
-        r1 = np.linalg.norm(d1, axis=1)
-        r2 = np.linalg.norm(d2, axis=1)
-        r3 = np.linalg.norm(d3, axis=1)
+        r1 = np.linalg.norm(d1, axis=-1)
+        r2 = np.linalg.norm(d2, axis=-1)
+        r3 = np.linalg.norm(d3, axis=-1)
 
         # Package the electron-ion distances into a 1d array
         di1 = np.zeros((nconfig, self._mol.natm, nup, 3))
@@ -102,31 +99,29 @@ class JastrowSpin:
             )
 
         # print(di1.shape)
-        di1 = di1.reshape((-1, 3))
-        di2 = di2.reshape((-1, 3))
-        ri1 = np.linalg.norm(di1, axis=1)
-        ri2 = np.linalg.norm(di2, axis=1)
+        ri1 = np.linalg.norm(di1, axis=-1)
+        ri2 = np.linalg.norm(di2, axis=-1)
 
         # Update bvalues according to spin case
         for i, b in enumerate(self.b_basis):
             self._bvalues[:, i, 0] = np.sum(
-                b.value(d1, r1).reshape((nconfig, -1)), axis=1
+                b.value(d1, r1), axis=1
             )
             self._bvalues[:, i, 1] = np.sum(
-                b.value(d2, r2).reshape((nconfig, -1)), axis=1
+                b.value(d2, r2), axis=1
             )
             self._bvalues[:, i, 2] = np.sum(
-                b.value(d3, r3).reshape((nconfig, -1)), axis=1
+                b.value(d3, r3), axis=1
             )
 
         # Update avalues according to spin case
         for i, a in enumerate(self.a_basis):
             self._avalues[:, :, i, 0] = np.sum(
-                a.value(di1, ri1).reshape((nconfig, self._mol.natm, -1)),
+                a.value(di1, ri1),
                 axis=2,
             )
             self._avalues[:, :, i, 1] = np.sum(
-                a.value(di2, ri2).reshape((nconfig, self._mol.natm, -1)),
+                a.value(di2, ri2),
                 axis=2,
             )
 
@@ -247,7 +242,6 @@ class JastrowSpin:
         nup = self._mol.nelec[0]
         dnew = epos.dist.dist_i(self._configscurrent.configs, epos.configs)
         dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
-        dinew = dinew.reshape(-1, 3)
 
         mask = [True] * ne
         mask[e] = False
@@ -259,16 +253,16 @@ class JastrowSpin:
         eup = int(e < nup)
         edown = int(e >= nup)
 
-        dnewup = dnew[:, : nup - eup, :].reshape(-1, 3)  # Other electron is spin up
-        dnewdown = dnew[:, nup - eup :, :].reshape(-1, 3)  # Other electron is spin down
+        dnewup = dnew[:, : nup - eup, :]  # Other electron is spin up
+        dnewdown = dnew[:, nup - eup :, :]  # Other electron is spin down
 
         for c, b in zip(self.parameters["bcoeff"], self.b_basis):
             delta += (
-                c[edown] * np.sum(b.gradient(dnewup).reshape(nconf, -1, 3), axis=1).T
+                c[edown] * np.sum(b.gradient(dnewup), axis=1).T
             )
             delta += (
                 c[1 + edown]
-                * np.sum(b.gradient(dnewdown).reshape(nconf, -1, 3), axis=1).T
+                * np.sum(b.gradient(dnewdown), axis=1).T
             )
             """
         for c,a in zip(self.parameters['acoeff'],self.a_basis):
@@ -277,7 +271,7 @@ class JastrowSpin:
             """
         for i in range(self._mol.natm):
             for c, a in zip(self.parameters["acoeff"][i], self.a_basis):
-                grad_all = a.gradient(dinew).reshape(nconf, -1, 3)
+                grad_all = a.gradient(dinew)
                 grad_slice = grad_all[:, i, :]
                 delta += c[edown] * grad_slice.T
 
@@ -297,12 +291,11 @@ class JastrowSpin:
 
         eup = int(e < nup)
         edown = int(e >= nup)
-        dnewup = dnew[:, : nup - eup, :].reshape(-1, 3)  # Other electron is spin up
-        dnewdown = dnew[:, nup - eup :, :].reshape(-1, 3)  # Other electron is spin down
+        dnewup = dnew[:, : nup - eup, :]  # Other electron is spin up
+        dnewdown = dnew[:, nup - eup :, :]  # Other electron is spin down
 
         # Electron-ion distances
         dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
-        dinew = dinew.reshape(-1, 3)
 
         delta = np.zeros(nconf)
 
@@ -315,7 +308,7 @@ class JastrowSpin:
 
         for i in range(self._mol.natm):
             for c, a in zip(self.parameters["acoeff"][i], self.a_basis):
-                lap_all = a.laplacian(dinew).reshape(nconf, -1, 3)
+                lap_all = a.laplacian(dinew)
                 lap_slice = lap_all[:, i, :]
                 delta += np.sum(c[edown] * lap_slice, axis=1)
 

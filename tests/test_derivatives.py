@@ -48,6 +48,7 @@ def test_wfs():
                 
         
         for k, item in testwf.test_updateinternals(wf, epos).items():
+            print(k,item)
             assert item < epsilon
 
 

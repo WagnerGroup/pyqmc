@@ -104,26 +104,14 @@ class JastrowSpin:
 
         # Update bvalues according to spin case
         for i, b in enumerate(self.b_basis):
-            self._bvalues[:, i, 0] = np.sum(
-                b.value(d1, r1), axis=1
-            )
-            self._bvalues[:, i, 1] = np.sum(
-                b.value(d2, r2), axis=1
-            )
-            self._bvalues[:, i, 2] = np.sum(
-                b.value(d3, r3), axis=1
-            )
+            self._bvalues[:, i, 0] = np.sum( b.value(d1, r1), axis=1)
+            self._bvalues[:, i, 1] = np.sum( b.value(d2, r2), axis=1)
+            self._bvalues[:, i, 2] = np.sum( b.value(d3, r3), axis=1)
 
         # Update avalues according to spin case
         for i, a in enumerate(self.a_basis):
-            self._avalues[:, :, i, 0] = np.sum(
-                a.value(di1, ri1),
-                axis=2,
-            )
-            self._avalues[:, :, i, 1] = np.sum(
-                a.value(di2, ri2),
-                axis=2,
-            )
+            self._avalues[:, :, i, 0] = np.sum( a.value(di1, ri1), axis=2,)
+            self._avalues[:, :, i, 1] = np.sum( a.value(di2, ri2), axis=2,)
 
         u = np.sum(self._bvalues * self.parameters["bcoeff"], axis=(2, 1))
         u += np.einsum("ijkl,jkl->i", self._avalues, self.parameters["acoeff"])
@@ -333,9 +321,6 @@ class JastrowSpin:
         deltaa = self._a_update(e, epos, mask) - self._a_partial[e, mask]
         a_val = np.einsum("ijk,jk->i", deltaa, self.parameters["acoeff"][..., edown])
         deltab = self._b_update(e, epos, mask) - self._b_partial[e, mask]
-        #for i in range(len(self.b_basis)):
-            #print('b.value', self._b_partial[e, mask, i])
-        #print('deltab', deltab)
         b_val = np.einsum("ijk,jk->i",
             deltab, self.parameters["bcoeff"][:, edown:edown+2],
         )

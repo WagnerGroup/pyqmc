@@ -62,21 +62,20 @@ class JastrowSpin:
         """
         u = 0.0
         self._configscurrent = configs.copy()
-        elec = self._mol.nelec
-        nconfig, nelec = configs.configs.shape[:2]
+        nconf, nelec = configs.configs.shape[:2]
         nexpand = len(self.b_basis)
         aexpand = len(self.a_basis)
-        self._bvalues = np.zeros((nconfig, nexpand, 3))
-        self._avalues = np.zeros((nconfig, self._mol.natm, aexpand, 2))
-        self._a_partial = np.zeros((nelec, nconfig, self._mol.natm, aexpand))
-        self._b_partial = np.zeros((nelec, nconfig, nexpand, 2)) 
-        notmask = [True] * nconfig
+        self._bvalues = np.zeros((nconf, nexpand, 3))
+        self._avalues = np.zeros((nconf, self._mol.natm, aexpand, 2))
+        self._a_partial = np.zeros((nelec, nconf, self._mol.natm, aexpand))
+        self._b_partial = np.zeros((nelec, nconf, nexpand, 2)) 
+        notmask = [True] * nconf
         for e in range(nelec):
             epos = configs.electron(e)
             self._a_partial[e] = self._a_update(e, epos, notmask)
             self._b_partial[e] = self._b_update(e, epos, notmask)
 
-        nup = elec[0]
+        nup = self._mol.nelec[0]
         d1, ij = configs.dist.dist_matrix(configs.configs[:, :nup, :])
         d2, ij = configs.dist.pairwise(configs.configs[:, :nup, :], configs.configs[:, nup:, :])
         d3, ij = configs.dist.dist_matrix(configs.configs[:, nup:, :])
@@ -86,8 +85,8 @@ class JastrowSpin:
         r3 = np.linalg.norm(d3, axis=-1)
 
         # Package the electron-ion distances into a 1d array
-        di1 = np.zeros((nconfig, self._mol.natm, nup, 3))
-        di2 = np.zeros((nconfig, self._mol.natm, nelec - nup, 3))
+        di1 = np.zeros((nconf, self._mol.natm, nup, 3))
+        di2 = np.zeros((nconf, self._mol.natm, nelec - nup, 3))
 
         for e in range(nup):
             di1[:, :, e, :] = configs.dist.dist_i(
@@ -163,10 +162,10 @@ class JastrowSpin:
               epos: configs object for electron e
               mask: mask over configs axis, only return values for configs where mask==True. b_partial_e might have a smaller configs axis than epos, _configscurrent, and _b_partial because of the mask.
         """
-        ne = np.sum(self._mol.nelec)
+        nelec = np.sum(self._mol.nelec)
         nup = self._mol.nelec[0]
         sep = nup - int(e < nup)
-        not_e = np.arange(ne) != e
+        not_e = np.arange(nelec) != e
         d = epos.dist.dist_i(
             self._configscurrent.configs[mask][:, not_e], epos.configs[mask]
         )
@@ -189,10 +188,10 @@ class JastrowSpin:
               epos: configs object for electron e
               mask: mask over configs axis, only return values for configs where mask==True. b_partial_e might have a smaller configs axis than epos, _configscurrent, and _b_partial because of the mask.
         """
-        ne = np.sum(self._mol.nelec)
+        nelec = np.sum(self._mol.nelec)
         nup = self._mol.nelec[0]
         sep = nup - int(e < nup)
-        not_e = np.arange(ne) != e
+        not_e = np.arange(nelec) != e
         edown = int(e >= nup)
         d = epos.dist.dist_i(
             self._configscurrent.configs[mask][:, not_e], epos.configs[mask]
@@ -226,16 +225,16 @@ class JastrowSpin:
         Note that we need to compute distances between electron position given and the current electron distances.
         We will need this for laplacian() as well"""
         nconf = epos.configs.shape[0]
-        nconf, ne = self._configscurrent.configs.shape[:2]
+        nconf, nelec = self._configscurrent.configs.shape[:2]
         nup = self._mol.nelec[0]
         dnew = epos.dist.dist_i(self._configscurrent.configs, epos.configs)
         dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
 
-        mask = [True] * ne
-        mask[e] = False
-        dnew = dnew[:, mask, :]
+        not_e = [True] * nelec
+        not_e[e] = False
+        dnew = dnew[:, not_e, :]
 
-        delta = np.zeros((3, nconf))
+        grad = np.zeros((3, nconf))
 
         # Check if selected electron is spin up or down
         eup = int(e < nup)
@@ -245,10 +244,10 @@ class JastrowSpin:
         dnewdown = dnew[:, nup - eup :, :]  # Other electron is spin down
 
         for c, b in zip(self.parameters["bcoeff"], self.b_basis):
-            delta += (
+            grad += (
                 c[edown] * np.sum(b.gradient(dnewup), axis=1).T
             )
-            delta += (
+            grad += (
                 c[1 + edown]
                 * np.sum(b.gradient(dnewdown), axis=1).T
             )
@@ -261,21 +260,21 @@ class JastrowSpin:
             for c, a in zip(self.parameters["acoeff"][i], self.a_basis):
                 grad_all = a.gradient(dinew)
                 grad_slice = grad_all[:, i, :]
-                delta += c[edown] * grad_slice.T
+                grad += c[edown] * grad_slice.T
 
-        return delta
+        return grad
 
     def gradient_laplacian(self, e, epos):
         """ """
         nconf = epos.configs.shape[0]
         nup = self._mol.nelec[0]
-        nconf, ne = self._configscurrent.configs.shape[:2]
+        nconf, nelec = self._configscurrent.configs.shape[:2]
 
         # Get and break up eedist_i
         dnew = epos.dist.dist_i(self._configscurrent.configs, epos.configs)
-        mask = [True] * ne
-        mask[e] = False
-        dnew = dnew[:, mask, :]
+        not_e = [True] * nelec
+        not_e[e] = False
+        dnew = dnew[:, not_e, :]
 
         eup = int(e < nup)
         edown = int(e >= nup)
@@ -285,12 +284,12 @@ class JastrowSpin:
         # Electron-ion distances
         dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
 
-        delta = np.zeros(nconf)
+        lap = np.zeros(nconf)
 
         # b-value component
         for c, b in zip(self.parameters["bcoeff"], self.b_basis):
-            delta += c[edown] * np.sum(b.laplacian(dnewup).reshape(nconf, -1), axis=1)
-            delta += c[1 + edown] * np.sum(
+            lap += c[edown] * np.sum(b.laplacian(dnewup).reshape(nconf, -1), axis=1)
+            lap += c[1 + edown] * np.sum(
                 b.laplacian(dnewdown).reshape(nconf, -1), axis=1
             )
 
@@ -298,10 +297,10 @@ class JastrowSpin:
             for c, a in zip(self.parameters["acoeff"][i], self.a_basis):
                 lap_all = a.laplacian(dinew)
                 lap_slice = lap_all[:, i, :]
-                delta += np.sum(c[edown] * lap_slice, axis=1)
+                lap += np.sum(c[edown] * lap_slice, axis=1)
 
-        g = self.gradient(e, epos)
-        return g, delta + np.sum(g ** 2, axis=0)
+        grad = self.gradient(e, epos)
+        return grad, lap + np.sum(grad ** 2, axis=0)
 
     def laplacian(self, e, epos):
         return self.gradient_laplacian(e, epos)[1]

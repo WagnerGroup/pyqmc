@@ -1,10 +1,18 @@
-import pyblock
 import pandas as pd
 import numpy as np
-from scipy.stats import sem
 
+def optimally_reblocked(data):
+    """
+        Find optimal reblocking of input data. Takes in pandas
+        DataFrame of raw data to reblock, returns DataFrame
+        of reblocked data.
+    """
+    opt = opt_block(data)
+    reblocked_data = reblock(data, np.amax(opt))
+    return reblocked_data
 
-def optimally_reblocked(data):  # , cols):
+def optimally_reblocked_pyblock(data):  # , cols):
+    import pyblock
     """
         Uses pyblock to find optimal reblocking of input data. Takes in pandas
         DataFrame of raw data and selected columns to reblock, returns DataFrame
@@ -16,11 +24,56 @@ def optimally_reblocked(data):  # , cols):
     reblocked_data["reblocks"] = reblocks
     return reblocked_data
 
+def reblock(df, n, c): 
+    start = time.time()
+    newdf = df.copy()
+    if c is not None:
+        newdf = newdf[c]
+    for i in range(n):
+        m = newdf.shape[0]
+        lasteven = m - int(m%2==1)
+        newdf = (newdf[:lasteven:2]+newdf[1::2].values)/2
+    return newdf
+
+def opt_block(df):
+    """
+    Finds optimal block size for each variable in a dataset
+    df is a dataframe where each row is a sample and each column is a calculated quantity
+    reblock each column over samples to find the best block size
+    Returns optimal_block, a 1D array with the optimal size for each column in df
+    """
+    start = time.time()
+    newdf = df.copy()
+    iblock = 0
+    ndata, nvariables = tuple(df.shape[:2])
+    optimal_block = np.array([float('NaN')]*nvariables)
+    serr0 = df.sem(axis=0).values
+    print('serr0.shape',serr0.shape, time.time()-start)
+    print('ndata',ndata, time.time()-start)
+    statslist = []
+    while(newdf.shape[0]>1):
+        serr = newdf.sem(axis=0).values
+        serrerr = serr/(2*(newdf.shape[0]-1))**.5
+        statslist.append((iblock, serr.copy()))
+
+        n = newdf.shape[0]
+        print(iblock, n, time.time()-start)
+        lasteven = n - int(n%2==1)
+        newdf = (newdf[:lasteven:2]+newdf[1::2].values)/2
+        iblock += 1
+    for iblock, serr in reversed(statslist):
+        B3 = 2**(3*iblock)
+        inds = np.where(B3 >= 2*ndata*(serr/serr0)**4)[0]
+        optimal_block[inds] = iblock
+        print(iblock, len(inds), time.time()-start)
+
+  return optimal_block
 
 def test_reblocking():
     """
         Tests reblocking against known distribution.
     """
+    from scipy.stats import sem
 
     def corr_data(N, L):
         """

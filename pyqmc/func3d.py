@@ -5,14 +5,14 @@ Collection of 3d function objects. Each has a dictionary parameters, which corre
 to any variational parameters the funtion has.
 
 They should implement the following functions, all of which take input value x.
-x should be of dimension (nconf,3).
+x should be of dimension (nconf,...,3).
 
 value(x):
     returns f(x)
 gradient(x)
-    returns grad f(x) (nconf,3)
+    returns grad f(x) (nconf,...,3)
 laplacian(x)
-    returns diagonals of Hessian (nconf,3)
+    returns diagonals of Hessian (nconf,...,3)
 pgradient(x)
     returns dp f(x) as a dictionary corresponding to the keys of self.parameters
 """
@@ -32,46 +32,45 @@ class GaussianFunction:
     def value(self, x, r):
         """Returns function exp(-exponent*r^2).
         Parameters:
-          x: (nconfig,3) vector
+          x: (nconfig,...,3) vector
         Returns:
-          func: (nconfig,) vector
+          func: (nconfig,...) vector
         """
-        # r2=np.sum(x**2,axis=1)
         return np.exp(-self.parameters["exponent"] * r * r)
 
     def gradient(self, x):
         """Returns gradient of function.
         Parameters:
-          x: (nconfig,3) vector
+          x: (nconfig,...,3) vector
         Returns:
-          grad: (nconfig,3) vector
+          grad: (nconfig,...,3) vector
         """
-        r = np.linalg.norm(x, axis=1)
+        r = np.linalg.norm(x, axis=-1)
 
         v = self.value(x, r)
-        return -2 * self.parameters["exponent"] * x * v[:, np.newaxis]
+        return -2 * self.parameters["exponent"] * x * v[..., np.newaxis]
 
     def laplacian(self, x):
         """Returns laplacian of function.
         Parameters:
-          x: (nconfig,3) vector
+          x: (nconfig,...,3) vector
         Returns:
-          grad: (nconfig,3) vector (components of laplacian d^2/dx_i^2 separately)
+          grad: (nconfig,...,3) vector (components of laplacian d^2/dx_i^2 separately)
         """
-        r = np.linalg.norm(x, axis=1)
+        r = np.linalg.norm(x, axis=-1)
 
         v = self.value(x, r)
         alpha = self.parameters["exponent"]
-        return (4 * alpha * alpha * x * x - 2 * alpha) * v[:, np.newaxis]
+        return (4 * alpha * alpha * x * x - 2 * alpha) * v[..., np.newaxis]
 
     def pgradient(self, x):
         """Returns parameters gradient.
         Parameters:
-          x: (nconfig,3) vector
+          x: (nconfig,...,3) vector
         Returns:
           pgrad: dictionary {'exponent':d/dexponent}
         """
-        r2 = np.sum(x ** 2, axis=1)
+        r2 = np.sum(x ** 2, axis=-1)
         return {"exponent": -r2 * np.exp(-self.parameters["exponent"] * r2)}
 
 
@@ -159,8 +158,8 @@ class PolyPadeFunction:
     def value(self, rvec, r):
         """Returns 
         Parameters:
-          rvec: (nconf,3) 
-          r: (nconf,) 
+          rvec: (nconf,...,3) 
+          r: (nconf,...) 
               magnitude of rvec
         Returns:
           func: (1-p(r/rcut))/(1+beta*p(r/rcut))
@@ -174,9 +173,9 @@ class PolyPadeFunction:
     def gradient(self, rvec):
         """
         Parameters:
-          rvec: (nconf,3) 
+          rvec: (nconf,...,3) 
         Returns:
-          grad: (nconf,3)
+          grad: (nconf,...,3)
         """
         r = np.linalg.norm(rvec, axis=-1, keepdims=True)
         z = r / self.parameters["rcut"]
@@ -191,9 +190,9 @@ class PolyPadeFunction:
     def laplacian(self, rvec):
         """
         Parameters:
-          rvec: (nconf,3) 
+          rvec: (nconf,...,3) 
         Returns:
-          lapl: (nconf,3) 
+          lapl: (nconf,...,3) 
               returns components of laplacian d^2/dx_i^2 separately
         """
         r = np.linalg.norm(rvec, axis=-1, keepdims=True)
@@ -226,7 +225,7 @@ class PolyPadeFunction:
     def pgradient(self, rvec):
         """ Returns gradient of self.value with respect to all parameters
         Parameters:
-          rvec: (nconf,3) 
+          rvec: (nconf,...,3) 
         Returns:
           paramderivs: dictionary {'rcut':d/drcut,'beta':d/dbeta}
         """
@@ -260,11 +259,10 @@ class CutoffCuspFunction:
     def value(self, rvec, r):
         """Returns 
         Parameters:
-          rvec: (nconf,3) vector
+          rvec: (nconf,...,3) vector
         Returns:
           func: p(r/rcut)/(1+gamma*p(r/rcut))
         """
-        # r = np.linalg.norm(rvec, axis=-1)
         y = r / self.parameters["rcut"]
         # mask=y<=1
         # func=np.zeros(r.shape)
@@ -279,7 +277,7 @@ class CutoffCuspFunction:
     def gradient(self, rvec):
         """
         Parameters:
-          rvec: (nconf,3) vector
+          rvec: (nconf,...,3) vector
         Returns:
           grad: has same dimensions as rvec 
         """
@@ -300,7 +298,7 @@ class CutoffCuspFunction:
     def laplacian(self, rvec):
         """
         Parameters:
-          rvec: (nconf,3) vector
+          rvec: (nconf,...,3) vector
         Returns:
           lapl: has same dimensions as rvec, because returns components of laplacian d^2/dx_i^2 separately
         """
@@ -342,7 +340,7 @@ class CutoffCuspFunction:
     def pgradient(self, rvec):
         """ Returns gradient of self.value with respect all parameters
         Parameters:
-          rvec: (nconf,3) vector
+          rvec: (nconf,...,3) vector
         Returns:
           paramderivs: dictionary {'rcut':d/drcut,'gamma':d/dgamma}
         """
@@ -376,11 +374,11 @@ def test_func3d_gradient(bf, delta=1e-5):
     numeric = np.zeros(rvec.shape)
     for d in range(3):
         pos = rvec.copy()
-        pos[:, d] += delta
+        pos[..., d] += delta
         plusval = bf.value(pos, np.linalg.norm(pos, axis=1))
-        pos[:, d] -= 2 * delta
+        pos[..., d] -= 2 * delta
         minuval = bf.value(pos, np.linalg.norm(pos, axis=1))
-        numeric[:, d] = (plusval - minuval) / (2 * delta)
+        numeric[..., d] = (plusval - minuval) / (2 * delta)
     maxerror = np.amax(np.abs(grad - numeric))
     normerror = np.linalg.norm(grad - numeric)
     return (maxerror, normerror)
@@ -392,11 +390,11 @@ def test_func3d_laplacian(bf, delta=1e-5):
     numeric = np.zeros(rvec.shape)
     for d in range(3):
         pos = rvec.copy()
-        pos[:, d] += delta
-        plusval = bf.gradient(pos)[:, d]
-        pos[:, d] -= 2 * delta
-        minuval = bf.gradient(pos)[:, d]
-        numeric[:, d] = (plusval - minuval) / (2 * delta)
+        pos[..., d] += delta
+        plusval = bf.gradient(pos)[..., d]
+        pos[..., d] -= 2 * delta
+        minuval = bf.gradient(pos)[..., d]
+        numeric[..., d] = (plusval - minuval) / (2 * delta)
     maxerror = np.amax(np.abs(lap - numeric))
     normerror = np.linalg.norm(lap - numeric)
     return (maxerror, normerror)

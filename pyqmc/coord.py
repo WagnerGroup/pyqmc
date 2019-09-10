@@ -1,6 +1,7 @@
 import numpy as np
 from pyqmc.distance import MinimalImageDistance, RawDistance
 from pyqmc.pbc import enforce_pbc
+import copy
 
 
 class OpenConfigs:
@@ -58,6 +59,9 @@ class OpenConfigs:
           configslist: list of OpenConfigs objects; total number of configs must match
         """
         self.configs[:] = np.concatenate([c.configs for c in configslist], axis=0)[:]
+
+    def copy(self): 
+        return copy.deepcopy(self)
 
 
 class PeriodicConfigs:
@@ -122,6 +126,9 @@ class PeriodicConfigs:
         """
         self.configs[:] = np.concatenate([c.configs for c in configslist], axis=0)[:]
         self.wrap[:] = np.concatenate([c.wrap for c in configslist], axis=0)[:]
+
+    def copy(self): 
+        return copy.deepcopy(self)
 
 
 def test():

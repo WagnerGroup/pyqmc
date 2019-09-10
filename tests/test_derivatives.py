@@ -63,6 +63,7 @@ def test_func3d():
         CutoffCuspFunction,
         test_func3d_gradient,
         test_func3d_laplacian,
+        test_func3d_gradient_laplacian,
     )
 
     test_functions = {
@@ -77,11 +78,14 @@ def test_func3d():
     for name, func in test_functions.items():
         grad = test_func3d_gradient(func, delta=delta)[0]
         lap =  test_func3d_laplacian(func, delta=delta)[0]
-        print(name, grad, lap)
-        assert  grad < epsilon
+        andg, andl = test_func3d_gradient_laplacian(func)
+        print(name, grad, lap, "both:", andg, andl)
+        assert grad < epsilon
         assert lap < epsilon
+        assert andg < epsilon
+        assert andl < epsilon
 
 
 if __name__ == "__main__":
-    test_wfs()
+    #test_wfs()
     test_func3d()

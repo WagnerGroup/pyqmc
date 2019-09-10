@@ -75,42 +75,33 @@ class JastrowSpin:
             self._a_partial[e] = self._a_update(e, epos, notmask)
             self._b_partial[e] = self._b_update(e, epos, notmask)
 
+        # electron-electron distances
         nup = self._mol.nelec[0]
-        d1, ij = configs.dist.dist_matrix(configs.configs[:, :nup, :])
-        d2, ij = configs.dist.pairwise(configs.configs[:, :nup, :], configs.configs[:, nup:, :])
-        d3, ij = configs.dist.dist_matrix(configs.configs[:, nup:, :])
-
-        r1 = np.linalg.norm(d1, axis=-1)
-        r2 = np.linalg.norm(d2, axis=-1)
-        r3 = np.linalg.norm(d3, axis=-1)
-
-        # Package the electron-ion distances into a 1d array
-        di1 = np.zeros((nconf, self._mol.natm, nup, 3))
-        di2 = np.zeros((nconf, self._mol.natm, nelec - nup, 3))
-
-        for e in range(nup):
-            di1[:, :, e, :] = configs.dist.dist_i(
-                self._mol.atom_coords(), configs.configs[:, e, :]
-            )
-        for e in range(nup, nelec):
-            di2[:, :, e - nup, :] = configs.dist.dist_i(
-                self._mol.atom_coords(), configs.configs[:, e, :]
-            )
-
-        # print(di1.shape)
-        ri1 = np.linalg.norm(di1, axis=-1)
-        ri2 = np.linalg.norm(di2, axis=-1)
+        d_upup, ij = configs.dist.dist_matrix(configs.configs[:, :nup])
+        d_updown, ij = configs.dist.pairwise(
+            configs.configs[:, :nup], configs.configs[:, nup:]
+        )
+        d_downdown, ij = configs.dist.dist_matrix(configs.configs[:, nup:])
 
         # Update bvalues according to spin case
-        for i, b in enumerate(self.b_basis):
-            self._bvalues[:, i, 0] = np.sum( b.value(d1, r1), axis=1)
-            self._bvalues[:, i, 1] = np.sum( b.value(d2, r2), axis=1)
-            self._bvalues[:, i, 2] = np.sum( b.value(d3, r3), axis=1)
+        for j, d in enumerate([d_upup, d_updown, d_downdown]):
+            r = np.linalg.norm(d, axis=-1)
+            for i, b in enumerate(self.b_basis):
+                self._bvalues[:, i, j] = np.sum(b.value(d, r), axis=1)
+
+        # electron-ion distances 
+        di = np.zeros((nelec, nconf, self._mol.natm, 3))
+        for e in range(nelec):
+            di[e] = configs.dist.dist_i(
+                self._mol.atom_coords(), configs.configs[:, e, :]
+            )
+        ri = np.linalg.norm(di, axis=-1)
 
         # Update avalues according to spin case
         for i, a in enumerate(self.a_basis):
-            self._avalues[:, :, i, 0] = np.sum( a.value(di1, ri1), axis=2,)
-            self._avalues[:, :, i, 1] = np.sum( a.value(di2, ri2), axis=2,)
+            avals = a.value(di, ri)
+            self._avalues[:, :, i, 0] = np.sum(avals[:nup], axis=0)
+            self._avalues[:, :, i, 1] = np.sum(avals[nup:], axis=0)
 
         u = np.sum(self._bvalues * self.parameters["bcoeff"], axis=(2, 1))
         u += np.einsum("ijkl,jkl->i", self._avalues, self.parameters["acoeff"])
@@ -224,15 +215,13 @@ class JastrowSpin:
         So we need to compute the gradient of the b's for these indices.
         Note that we need to compute distances between electron position given and the current electron distances.
         We will need this for laplacian() as well"""
-        nconf = epos.configs.shape[0]
         nconf, nelec = self._configscurrent.configs.shape[:2]
         nup = self._mol.nelec[0]
-        dnew = epos.dist.dist_i(self._configscurrent.configs, epos.configs)
-        dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
 
-        not_e = [True] * nelec
-        not_e[e] = False
-        dnew = dnew[:, not_e, :]
+        # Get e-e and e-ion distances
+        not_e = np.arange(nelec) != e
+        dnew = epos.dist.dist_i(self._configscurrent.configs, epos.configs)[:, not_e]
+        dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
 
         grad = np.zeros((3, nconf))
 
@@ -240,66 +229,45 @@ class JastrowSpin:
         eup = int(e < nup)
         edown = int(e >= nup)
 
-        dnewup = dnew[:, : nup - eup, :]  # Other electron is spin up
-        dnewdown = dnew[:, nup - eup :, :]  # Other electron is spin down
-
         for c, b in zip(self.parameters["bcoeff"], self.b_basis):
-            grad += (
-                c[edown] * np.sum(b.gradient(dnewup), axis=1).T
-            )
-            grad += (
-                c[1 + edown]
-                * np.sum(b.gradient(dnewdown), axis=1).T
-            )
-            """
-        for c,a in zip(self.parameters['acoeff'],self.a_basis):
-            delta+=np.einsum('j,ijk->ki', c[:,edown], a.gradient(dinew).reshape(nconf,-1,3))
+            bgrad = b.gradient(dnew)
+            grad += c[edown] * np.sum(bgrad[:, :nup - eup], axis=1).T
+            grad += c[1 + edown] * np.sum(bgrad[:, nup - eup:], axis=1).T
 
-            """
-        for i in range(self._mol.natm):
-            for c, a in zip(self.parameters["acoeff"][i], self.a_basis):
-                grad_all = a.gradient(dinew)
-                grad_slice = grad_all[:, i, :]
-                grad += c[edown] * grad_slice.T
+        for c, a in zip(self.parameters["acoeff"].transpose()[edown], self.a_basis):
+            grad += np.einsum("j,ijk->ki", c, a.gradient(dinew))
 
         return grad
 
     def gradient_laplacian(self, e, epos):
         """ """
-        nconf = epos.configs.shape[0]
-        nup = self._mol.nelec[0]
         nconf, nelec = self._configscurrent.configs.shape[:2]
+        nup = self._mol.nelec[0]
 
-        # Get and break up eedist_i
-        dnew = epos.dist.dist_i(self._configscurrent.configs, epos.configs)
-        not_e = [True] * nelec
-        not_e[e] = False
-        dnew = dnew[:, not_e, :]
+        # Get e-e and e-ion distances
+        not_e = np.arange(nelec) != e 
+        dnew = epos.dist.dist_i(self._configscurrent.configs, epos.configs)[:, not_e]
+        dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
 
         eup = int(e < nup)
         edown = int(e >= nup)
-        dnewup = dnew[:, : nup - eup, :]  # Other electron is spin up
-        dnewdown = dnew[:, nup - eup :, :]  # Other electron is spin down
 
-        # Electron-ion distances
-        dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
-
+        grad = np.zeros((3, nconf))
         lap = np.zeros(nconf)
+        # a-value component
+        for c, a in zip(self.parameters["acoeff"].transpose()[edown], self.a_basis):
+            grad += np.einsum("j,ijk->ki", c, a.gradient(dinew))
+            lap += np.einsum("j,ijk->i", c, a.laplacian(dinew))
 
         # b-value component
         for c, b in zip(self.parameters["bcoeff"], self.b_basis):
-            lap += c[edown] * np.sum(b.laplacian(dnewup).reshape(nconf, -1), axis=1)
-            lap += c[1 + edown] * np.sum(
-                b.laplacian(dnewdown).reshape(nconf, -1), axis=1
-            )
+            bgrad = b.gradient(dnew)
+            blap = b.laplacian(dnew)
+            grad += c[edown] * np.sum(bgrad[:, :nup - eup], axis=1).T
+            grad += c[1 + edown] * np.sum(bgrad[:, nup - eup:], axis=1).T
+            lap += c[edown] * np.sum(blap[:, :nup - eup], axis=(1, 2))
+            lap += c[1 + edown] * np.sum(blap[:, nup - eup:], axis=(1, 2))
 
-        for i in range(self._mol.natm):
-            for c, a in zip(self.parameters["acoeff"][i], self.a_basis):
-                lap_all = a.laplacian(dinew)
-                lap_slice = lap_all[:, i, :]
-                lap += np.sum(c[edown] * lap_slice, axis=1)
-
-        grad = self.gradient(e, epos)
         return grad, lap + np.sum(grad ** 2, axis=0)
 
     def laplacian(self, e, epos):

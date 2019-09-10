@@ -21,7 +21,7 @@ def test_updateinternals(wf, configs):
     wfcopy = copy.copy(wf)
     val1 = wf.recompute(configs)
     for e in range(ne):
-        #val1 = wf.recompute(configs)
+        # val1 = wf.recompute(configs)
         epos = configs.make_irreducible(e, configs.configs[:, e, :] + delta)
         ratio = wf.testvalue(e, epos)
         wf.updateinternals(e, epos)

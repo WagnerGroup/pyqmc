@@ -60,7 +60,7 @@ class OpenConfigs:
         """
         self.configs[:] = np.concatenate([c.configs for c in configslist], axis=0)[:]
 
-    def copy(self): 
+    def copy(self):
         return copy.deepcopy(self)
 
 
@@ -127,7 +127,7 @@ class PeriodicConfigs:
         self.configs[:] = np.concatenate([c.configs for c in configslist], axis=0)[:]
         self.wrap[:] = np.concatenate([c.wrap for c in configslist], axis=0)[:]
 
-    def copy(self): 
+    def copy(self):
         return copy.deepcopy(self)
 
 

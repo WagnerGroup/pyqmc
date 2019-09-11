@@ -172,11 +172,11 @@ class PySCFSlaterUHF:
         s = int(e >= self._nelec[0])
         if mask is None:
             return np.einsum(
-                   "ij,ij->i", vec, self._inverse[s][:, :, e - s * self._nelec[0]]
+                   "i...j,ij->i...", vec, self._inverse[s][:, :, e - s * self._nelec[0]]
             )
 
         return np.einsum(
-            "ij,ij->i", vec, self._inverse[s][mask, :, e - s * self._nelec[0]]
+            "i...j,ij->i...", vec, self._inverse[s][mask, :, e - s * self._nelec[0]]
         )
 
     def _testcol(self, i, s, vec):
@@ -220,7 +220,12 @@ class PySCFSlaterUHF:
         s = int(e >= self._nelec[0])
         if mask is None:
             mask = [True] * epos.configs.shape[0]
-        ao = self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs[mask])
+        eposmask = epos.configs[mask]
+        if len(eposmask)==0:
+            return np.zeros(eposmask.shape[:2])
+        ao = self._mol.eval_gto(
+            self.pbc_str + "GTOval_sph", eposmask.reshape((-1,3))
+        ).reshape((*eposmask.shape[:-1], -1))
         mo = ao.dot(self.parameters[self._coefflookup[s]])
         a = self._testrow(e, mo, mask)
         b = self.single_twist_mask(e, epos, mask)

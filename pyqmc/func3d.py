@@ -210,7 +210,7 @@ class PolyPadeFunction:
         """
         r = np.linalg.norm(rvec, axis=-1)#, keepdims=True)
         z = r[..., np.newaxis] / self.parameters["rcut"]
-        mask = (z <= 1)[..., np.newaxis] * np.ones(rvec.shape).astype(bool)
+        mask = (z > 1) * np.ones(rvec.shape).astype(bool)
         p = z * z * (6 - 8 * z + 3 * z * z)
         dpdz = 12 * z * (z * z - 2 * z + 1)
         dbdp = -(1 + self.parameters["beta"]) / (1 + self.parameters["beta"] * p) ** 2
@@ -229,7 +229,7 @@ class PolyPadeFunction:
         """
         r = np.linalg.norm(rvec, axis=-1)#, keepdims=True)
         z = r[..., np.newaxis] / self.parameters["rcut"]
-        mask = (z <= 1) * np.ones(rvec.shape).astype(bool)
+        mask = (z > 1) * np.ones(rvec.shape).astype(bool)
         p = z * z * (6 - 8 * z + 3 * z * z)
         dbdp = -(1 + self.parameters["beta"]) / (1 + self.parameters["beta"] * p) ** 2
         dpdz = 12 * z * (z * z - 2 * z + 1)
@@ -263,19 +263,23 @@ class PolyPadeFunction:
         Returns:
           grad, lap: (nconfig,...,3) vectors (components of laplacian d^2/dx_i^2 separately)
         """
+        grad = np.zeros(rvec.shape)
         z = r[..., np.newaxis] / self.parameters["rcut"]
-        mask = (z <= 1) * np.ones(rvec.shape).astype(bool)
+        #z = r / self.parameters["rcut"]
+        mask = (z[..., 0] <= 1) #* np.ones(rvec.shape).astype(bool)
+        #r = r[mask[..., 0]]
+        r = r[mask, np.newaxis]
         z = z[mask]
+        rvec = rvec[mask]
         beta = self.parameters["beta"]
         p = z * z * (6 - 8 * z + 3 * z * z)
         dpdz = 12 * z * (z * z - 2 * z + 1)
         dbdp = -(1 + beta) / (1 + beta * p) ** 2
-        dzdx = rvec[mask] / (r[mask[..., 0]] * self.parameters["rcut"])
-        grad = np.zeros(rvec.shape)
+        dzdx = rvec / (r * self.parameters["rcut"])
         grad[mask] = dbdp * dpdz * dzdx
         d2pdz2_over_dpdz = (3 * z - 1) / (z * (z - 1))
         d2bdp2_over_dbdp = -2 * beta / (1 + beta * p)
-        d2zdx2_over_dzdx = (1 - (rvec[mask] / r[mask[..., 0]]) ** 2) / rvec[mask]
+        d2zdx2_over_dzdx = (1 - (rvec / r) ** 2) / rvec
         lap = grad.copy()
         lap[mask] *= (
                 d2bdp2_over_dbdp * dpdz * dzdx
@@ -368,7 +372,9 @@ class CutoffCuspFunction:
         r = np.linalg.norm(rvec, axis=-1)#, keepdims=True)
         y = r / self.parameters["rcut"]
         # dydr = 1/self.parameters['rcut']
-        mask = (y <= 1)[..., np.newaxis] * np.ones(rvec.shape).astype(bool)
+        mask = (y <= 1) #* np.ones(rvec.shape).astype(bool)
+        r = r[..., np.newaxis]
+        y = y[..., np.newaxis]
         func = np.zeros(rvec.shape)
         func[mask] = -(
             (
@@ -410,19 +416,22 @@ class CutoffCuspFunction:
         """
         rcut = self.parameters["rcut"]
         y = r / rcut
-        mask = (y <= 1)[..., np.newaxis] * np.ones(rvec.shape).astype(bool)
-        y = y[mask]
+        mask = (y <= 1) #* np.ones(rvec.shape).astype(bool)
+        r = r[mask, np.newaxis]
+        y = y[mask, np.newaxis]
         gamma = self.parameters["gamma"]
         a = 1 - 2 * y + y * y
         b = y - y * y + y ** 3 / 3
-        c = a / (1 + gamma * b) ** 2 / (rcut * r[mask])
+        c = a / (1 + gamma * b) ** 2 / (rcut * r)
         grad = np.zeros(rvec.shape)
+        lap = np.zeros(rvec.shape)
         grad[mask] = - rcut * c * rvec[mask]
-        lap[mask] = - rcut * c * rvec[mask] ** 2 * (
-              1
-              + 2 * (y - 1) / a / (rcut * r[mask]) 
-              - 1 / r[mask] ** 2
+        lap[mask] = - rcut * c * (
+              1 + rvec[mask] ** 2 * (
+              + 2 * (y - 1) / a / (rcut * r) 
+              - 1 / r ** 2
               - 2 * c * gamma * (1 + gamma * b)
+              )
             )
         return grad, lap
 
@@ -496,8 +505,8 @@ def test_func3d_gradient_laplacian(bf):
     grad = bf.gradient(rvec)
     lap = bf.laplacian(rvec)
     andgrad, andlap = bf.gradient_laplacian(rvec, r)
-    graderr = np.linalg.norm((grad - andgrad) / grad)
-    laperr = np.linalg.norm((lap - andlap) / lap)
+    graderr = np.linalg.norm((grad - andgrad)  )
+    laperr = np.linalg.norm((lap - andlap)  )
     return (graderr, laperr)
 
 

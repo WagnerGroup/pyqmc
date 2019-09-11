@@ -184,7 +184,14 @@ class PolyPadeFunction:
         dbdp = -(1 + self.parameters["beta"]) / (1 + self.parameters["beta"] * p) ** 2
         dzdx = rvec / (r * self.parameters["rcut"])
         func = dbdp * dpdz * dzdx
-        func[np.outer(z > 1, [True] * 3)] = 0
+
+        #func[np.outer(z > 1, [True] * 3)] = 0
+        mask = np.einsum(
+            'i...j,jk->i...k',
+            z > 1,
+            np.zeros(3,dtype=bool)[np.newaxis,:]
+        )
+        func[mask] = 0
         return func
 
     def laplacian(self, rvec):
@@ -219,7 +226,14 @@ class PolyPadeFunction:
                 + d2zdx2_over_dzdx
             )
         )
-        lapl[np.outer(z > 1, [True] * 3)] = 0
+
+        #lapl[np.outer(z > 1, [True] * 3)] = 0
+        mask = np.einsum(
+            'i...j,jk->i...k',
+            z > 1,
+            np.zeros(3,dtype=bool)[np.newaxis,:]
+        )
+        lapl[mask] = 0
         return lapl
 
     def pgradient(self, rvec):

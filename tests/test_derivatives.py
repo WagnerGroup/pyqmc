@@ -83,5 +83,5 @@ def test_func3d():
 
 
 if __name__ == "__main__":
-    test_wfs()
+    #test_wfs()
     test_func3d()

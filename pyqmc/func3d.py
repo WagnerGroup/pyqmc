@@ -369,15 +369,15 @@ class CutoffCuspFunction:
 
 
 def test_func3d_gradient(bf, delta=1e-5):
-    rvec = np.random.randn(150, 3)
+    rvec = np.random.randn(150,2,5,3) #Internal indices irrelevant
     grad = bf.gradient(rvec)
     numeric = np.zeros(rvec.shape)
     for d in range(3):
         pos = rvec.copy()
         pos[..., d] += delta
-        plusval = bf.value(pos, np.linalg.norm(pos, axis=1))
+        plusval = bf.value(pos, np.linalg.norm(pos, axis=-1))
         pos[..., d] -= 2 * delta
-        minuval = bf.value(pos, np.linalg.norm(pos, axis=1))
+        minuval = bf.value(pos, np.linalg.norm(pos, axis=-1))
         numeric[..., d] = (plusval - minuval) / (2 * delta)
     maxerror = np.amax(np.abs(grad - numeric))
     normerror = np.linalg.norm(grad - numeric)
@@ -385,7 +385,7 @@ def test_func3d_gradient(bf, delta=1e-5):
 
 
 def test_func3d_laplacian(bf, delta=1e-5):
-    rvec = np.random.randn(150, 3)
+    rvec = np.random.randn(150,2,5,3) #Internal indices irrelevant
     lap = bf.laplacian(rvec)
     numeric = np.zeros(rvec.shape)
     for d in range(3):

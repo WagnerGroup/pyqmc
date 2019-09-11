@@ -153,10 +153,9 @@ class JastrowSpin:
               epos: configs object for electron e
               mask: mask over configs axis, only return values for configs where mask==True. b_partial_e might have a smaller configs axis than epos, _configscurrent, and _b_partial because of the mask.
         """
-        nelec = np.sum(self._mol.nelec)
         nup = self._mol.nelec[0]
         sep = nup - int(e < nup)
-        not_e = np.arange(nelec) != e
+        not_e = np.arange(self._nelec) != e
         d = epos.dist.dist_i(
             self._configscurrent.configs[mask][:, not_e], epos.configs[mask]
         )
@@ -179,10 +178,9 @@ class JastrowSpin:
               epos: configs object for electron e
               mask: mask over configs axis, only return values for configs where mask==True. b_partial_e might have a smaller configs axis than epos, _configscurrent, and _b_partial because of the mask.
         """
-        nelec = np.sum(self._mol.nelec)
         nup = self._mol.nelec[0]
         sep = nup - int(e < nup)
-        not_e = np.arange(nelec) != e
+        not_e = np.arange(self._nelec) != e
         edown = int(e >= nup)
         d = epos.dist.dist_i(
             self._configscurrent.configs[mask][:, not_e], epos.configs[mask]

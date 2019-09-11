@@ -116,8 +116,8 @@ class PySCFSlaterUHF:
         self.wrap = np.zeros((configs.configs.shape))  # only needed for PBC
         mycoords = configs.configs.reshape((nconf * nelec, ndim))
         ao = self._mol.eval_gto(self.pbc_str + "GTOval_sph", mycoords).reshape(
-                (nconf, nelec, -1)
-            )
+            (nconf, nelec, -1)
+        )
 
         self._aovals = ao
         self._dets = []
@@ -172,7 +172,7 @@ class PySCFSlaterUHF:
         s = int(e >= self._nelec[0])
         if mask is None:
             return np.einsum(
-                   "i...j,ij->i...", vec, self._inverse[s][:, :, e - s * self._nelec[0]]
+                "i...j,ij->i...", vec, self._inverse[s][:, :, e - s * self._nelec[0]]
             )
 
         return np.einsum(
@@ -197,8 +197,8 @@ class PySCFSlaterUHF:
     def laplacian(self, e, epos):
         s = int(e >= self._nelec[0])
         ao = self._mol.eval_gto(self.pbc_str + "GTOval_sph_deriv2", epos.configs)[
-                [0, 4, 7, 9]
-            ]
+            [0, 4, 7, 9]
+        ]
         mo = np.dot([ao[0], ao[1:].sum(axis=0)], self.parameters[self._coefflookup[s]])
         ratios = self._testrow(e, mo[1])
         testvalue = self._testrow(e, mo[0])
@@ -207,8 +207,8 @@ class PySCFSlaterUHF:
     def gradient_laplacian(self, e, epos):
         s = int(e >= self._nelec[0])
         ao = self._mol.eval_gto(self.pbc_str + "GTOval_sph_deriv2", epos.configs)[
-                [0, 1, 2, 3, 4, 7, 9]
-            ]
+            [0, 1, 2, 3, 4, 7, 9]
+        ]
         ao = np.concatenate([ao[0:4], ao[4:].sum(axis=0, keepdims=True)])
         mo = np.dot(ao, self.parameters[self._coefflookup[s]])
         ratios = np.asarray([self._testrow(e, x) for x in mo])
@@ -221,10 +221,10 @@ class PySCFSlaterUHF:
         if mask is None:
             mask = [True] * epos.configs.shape[0]
         eposmask = epos.configs[mask]
-        if len(eposmask)==0:
+        if len(eposmask) == 0:
             return np.zeros(eposmask.shape[:2])
         ao = self._mol.eval_gto(
-            self.pbc_str + "GTOval_sph", eposmask.reshape((-1,3))
+            self.pbc_str + "GTOval_sph", eposmask.reshape((-1, 3))
         ).reshape((*eposmask.shape[:-1], -1))
         mo = ao.dot(self.parameters[self._coefflookup[s]])
         a = self._testrow(e, mo, mask)

@@ -60,7 +60,7 @@ class OpenConfigs:
         """
         self.configs[:] = np.concatenate([c.configs for c in configslist], axis=0)[:]
 
-    def copy(self): 
+    def copy(self):
         return copy.deepcopy(self)
 
 
@@ -84,7 +84,8 @@ class PeriodicConfigs:
         """
         epos, wrap = enforce_pbc(self.lvecs, vec)
         currentwrap = self.wrap if len(self.wrap.shape) == 2 else self.wrap[:, e]
-        if len(vec.shape)==3: currentwrap = currentwrap[:, np.newaxis]
+        if len(vec.shape) == 3:
+            currentwrap = currentwrap[:, np.newaxis]
         return PeriodicConfigs(epos, self.lvecs, wrap=wrap + currentwrap)
 
     def move(self, e, new, accept):
@@ -128,7 +129,7 @@ class PeriodicConfigs:
         self.configs[:] = np.concatenate([c.configs for c in configslist], axis=0)[:]
         self.wrap[:] = np.concatenate([c.wrap for c in configslist], axis=0)[:]
 
-    def copy(self): 
+    def copy(self):
         return copy.deepcopy(self)
 
 

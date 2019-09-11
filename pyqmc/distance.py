@@ -12,8 +12,8 @@ class RawDistance:
         """returns a list of electron-electron distances from an electron at position 'vec'
         configs will most likely be [nconfig,electron,dimension], and vec will be [nconfig,dimension]
         """
-        if len(vec.shape)==3: 
-            v = vec.transpose((1,0,2))[:, :, np.newaxis]
+        if len(vec.shape) == 3:
+            v = vec.transpose((1, 0, 2))[:, :, np.newaxis]
         else:
             v = vec[:, np.newaxis, :]
         return v - configs
@@ -105,26 +105,24 @@ class MinimalImageDistance(RawDistance):
         """returns a list of electron-electron distances from an electron at position 'vec'
         configs will most likely be [nconfig,electron,dimension], and vec will be [nconfig,dimension]
         """
-        if len(vec.shape)==3: 
-            v = vec.transpose((1,0,2))[:, :, np.newaxis]
+        if len(vec.shape) == 3:
+            v = vec.transpose((1, 0, 2))[:, :, np.newaxis]
         else:
             v = vec[:, np.newaxis, :]
         d1 = v - configs
-        shifts = self.shifts.reshape((-1, *[1]*(len(d1.shape)-1), 3))
+        shifts = self.shifts.reshape((-1, *[1] * (len(d1.shape) - 1), 3))
         d1all = d1[np.newaxis] + shifts
         dists = np.linalg.norm(d1all, axis=-1)
         mininds = np.argmin(dists, axis=0)
-        inds = np.meshgrid(
-            *[np.arange(n) for n in mininds.shape], indexing="ij"
-        )
+        inds = np.meshgrid(*[np.arange(n) for n in mininds.shape], indexing="ij")
         return d1all[(mininds, *inds)]
 
     def orthogonal_dist_i(self, configs, vec):
         """Like dist_i, but assuming lattice vectors are orthogonal
            It's about 10x faster than the general one checking all 27 lattice points
         """
-        if len(vec.shape)==3: 
-            v = vec.transpose((1,0,2))[:, :, np.newaxis]
+        if len(vec.shape) == 3:
+            v = vec.transpose((1, 0, 2))[:, :, np.newaxis]
         else:
             v = vec[:, np.newaxis, :]
         d1 = v - configs

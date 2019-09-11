@@ -79,12 +79,14 @@ def get_r_ea(mol, configs, e, at):
     Returns:
       epos-apos, electron-atom distances
     """
-    epos = configs.configs[:, e, :]
-    nconf = configs.configs.shape[0]
-    apos = np.outer(
-        np.ones(nconf), np.array(mol._atom[at][1])
-    )  # nconf x 3 array, position of atom at
-    return epos - apos
+    #epos = configs.configs[:, e, :]
+    #nconf = configs.configs.shape[0]
+    #apos = np.outer(
+    #    np.ones(nconf), np.array(mol._atom[at][1])
+    #)  # nconf x 3 array, position of atom at
+    #return epos - apos
+    apos = np.asarray(mol._atom[at][1])
+    return configs.dist.dist_i(apos, configs.configs[:, e, :]).reshape((-1, 3))
 
 
 def get_r_ea_i(mol, epos_rot, e, at):
@@ -95,13 +97,14 @@ def get_r_ea_i(mol, epos_rot, e, at):
     Returns:
       epos_rot-apos, (rotated) electron-atom distances
     """
-    nconf, naip = epos_rot.shape[0:2]
-    apos = np.zeros(
-        [nconf, naip, 3]
-    )  # position of the atom, broadcasted into nconf x naip x 3
-    for aip in range(naip):
-        apos[:, aip, :] = np.outer(np.ones(nconf), np.array(mol._atom[at][1]))
-    return epos_rot - apos
+    #nconf, naip = epos_rot.shape[0:2]
+    #apos = np.zeros(
+    #    [nconf, naip, 3]
+    #)  # position of the atom, broadcasted into nconf x naip x 3
+    #for aip in range(naip):
+    #    apos[:, aip, :] = np.outer(np.ones(nconf), np.array(mol._atom[at][1]))
+    #return epos_rot - apos
+    return epos_rot - np.array(mol._atom[at][1])[np.newaxis, np.newaxis]
 
 
 def get_v_l(mol, configs, e, at):
@@ -110,12 +113,12 @@ def get_v_l(mol, configs, e, at):
     """
     nconf = configs.configs.shape[0]
     at_name = mol._atom[at][0]
-    r_ea = np.linalg.norm(get_r_ea(mol, configs, e, at), axis=1)
+    r_ea = np.linalg.norm(get_r_ea(mol, configs, e, at), axis=-1)
     vl = generate_ecp_functors(mol._ecp[at_name][1])
     Lmax = len(vl)
     v_l = np.zeros([nconf, Lmax])
-    for l in vl.keys():  # -1,0,1,...
-        v_l[:, l] = vl[l](r_ea)
+    for l, func in vl.items():  # -1,0,1,...
+        v_l[:, l] = func(r_ea)
     return vl.keys(), v_l
 
 
@@ -124,12 +127,15 @@ def get_wf_ratio(wf, configs, epos_rot, e, mask):
     Returns a nconf x naip array, which is the Psi(r_e(i))/Psi(r_e) values
     """
     naip = epos_rot.shape[1]
-    wf_ratio = np.zeros([mask.sum(), naip])
-    for aip in range(naip):
-        epos = configs.make_irreducible(e, epos_rot[:, aip, :])
-        # Want to remove this, but kept in because Jastrow is messy
-        if mask.sum() > 0:
-            wf_ratio[:, aip] = wf.testvalue(e, epos, mask)
+    #wf_ratio = np.zeros([mask.sum(), naip])
+    #for aip in range(naip):
+    #    epos = configs.make_irreducible(e, epos_rot[:, aip, :])
+    #    # Want to remove this, but kept in because Jastrow is messy
+    #    if mask.sum() > 0:
+    #        wf_ratio[:, aip] = wf.testvalue(e, epos, mask)
+    epos = configs.make_irreducible(e, epos_rot)
+    wf_ratio = wf.testvalue(e, epos, mask)
+    
     return wf_ratio
 
 
@@ -149,24 +155,27 @@ def get_P_l(mol, configs, weights, epos_rot, l_list, e, at):
     P_l_val = np.zeros([nconf, naip, len(l_list)])
     r_ea = get_r_ea(mol, configs, e, at)  # nconf x 3
     r_ea_i = get_r_ea_i(mol, epos_rot, e, at)  # nconf x naip x 3
-    rdotR = np.zeros(r_ea_i.shape[0:2])  # nconf x naip
+    #rdotR = np.zeros(r_ea_i.shape[0:2])  # nconf x naip
 
     # get the cosine values
-    for aip in range(naip):
-        rdotR[:, aip] = (
-            r_ea[:, 0] * r_ea_i[:, aip, 0]
-            + r_ea[:, 1] * r_ea_i[:, aip, 1]
-            + r_ea[:, 2] * r_ea_i[:, aip, 2]
-        )
-        rdotR[:, aip] /= np.linalg.norm(r_ea, axis=1) * np.linalg.norm(
-            r_ea_i[:, aip, :], axis=1
-        )
+    #for aip in range(naip):
+    #    rdotR[:, aip] = (
+    #        r_ea[:, 0] * r_ea_i[:, aip, 0]
+    #        + r_ea[:, 1] * r_ea_i[:, aip, 1]
+    #        + r_ea[:, 2] * r_ea_i[:, aip, 2]
+    #    )
+    #    rdotR[:, aip] /= np.linalg.norm(r_ea, axis=1) * np.linalg.norm(
+    #        r_ea_i[:, aip, :], axis=1
+    #    )
     # print('cosine values',rdotR)
+    rdotR = np.einsum("ik,ijk->ij", r_ea, r_ea_i)
+    rdotR /= np.linalg.norm(r_ea, axis=1)[:, np.newaxis] 
+    rdotR /= np.linalg.norm(r_ea_i, axis=-1)
 
     # already included the factor (2l+1), and the integration weights here
     for l in l_list:
         P_l_val[:, :, l] = (
-            (2 * l + 1) * P_l(rdotR, l) * np.outer(np.ones(nconf), weights)
+            (2 * l + 1) * P_l(rdotR, l) * weights[np.newaxis] #np.outer(np.ones(nconf), weights)
         )
     return P_l_val
 
@@ -244,10 +253,10 @@ def get_rot(mol, configs, e, at, naip):
       
     """
     nconf = configs.configs.shape[0]
-    apos = np.outer(np.ones(nconf), np.array(mol._atom[at][1]))
+    apos = np.array(mol._atom[at][1])[np.newaxis, np.newaxis]
 
     r_ea_vec = get_r_ea(mol, configs, e, at)
-    r_ea = np.linalg.norm(r_ea_vec, axis=1)
+    r_ea = np.linalg.norm(r_ea_vec, axis=1)[:, np.newaxis, np.newaxis]
 
     # t and p are sampled randomly over a sphere around the atom
     t = np.random.uniform(low=0.0, high=np.pi, size=nconf)
@@ -255,20 +264,20 @@ def get_rot(mol, configs, e, at, naip):
 
     # rotated unit vectors:
     i_rot, j_rot, k_rot = (
-        np.zeros([nconf, 3]),
-        np.zeros([nconf, 3]),
-        np.zeros([nconf, 3]),
+        np.zeros([nconf, 1, 3]),
+        np.zeros([nconf, 1, 3]),
+        np.zeros([nconf, 1, 3]),
     )
-    i_rot[:, 0] = np.cos(p - np.pi / 2.0)
-    i_rot[:, 1] = np.sin(p - np.pi / 2.0)
-    j_rot[:, 0] = np.sin(t + np.pi / 2.0) * np.cos(p)
-    j_rot[:, 1] = np.sin(t + np.pi / 2.0) * np.sin(p)
-    j_rot[:, 2] = np.cos(t + np.pi / 2.0)
-    k_rot[:, 0] = np.sin(t) * np.cos(p)
-    k_rot[:, 1] = np.sin(t) * np.sin(p)
-    k_rot[:, 2] = np.cos(t)
+    i_rot[:, 0, 0] = np.cos(p - np.pi / 2.0)
+    i_rot[:, 0, 1] = np.sin(p - np.pi / 2.0)
+    j_rot[:, 0, 0] = np.sin(t + np.pi / 2.0) * np.cos(p)
+    j_rot[:, 0, 1] = np.sin(t + np.pi / 2.0) * np.sin(p)
+    j_rot[:, 0, 2] = np.cos(t + np.pi / 2.0)
+    k_rot[:, 0, 0] = np.sin(t) * np.cos(p)
+    k_rot[:, 0, 1] = np.sin(t) * np.sin(p)
+    k_rot[:, 0, 2] = np.cos(t)
 
-    d1, d2 = np.zeros(naip), np.zeros(naip)
+    d1, d2 = np.zeros((naip, 1)), np.zeros((naip, 1))
     if naip == 6:
         d1[1] = np.pi
 
@@ -296,14 +305,19 @@ def get_rot(mol, configs, e, at, naip):
             d1[i + 7] = np.pi - tha
             d2[i + 7] = (rk2 + 1) * fi0
 
-    epos_rot = np.zeros((nconf, naip, 3))
-    for aip in range(naip):
-        for d in range(3):
-            epos_rot[:, aip, d] = apos[:, d] + r_ea * (
-                np.sin(d1[aip]) * np.cos(d2[aip]) * i_rot[:, d]
-                + np.sin(d1[aip]) * np.sin(d2[aip]) * j_rot[:, d]
-                + np.cos(d1[aip]) * k_rot[:, d]
-            )
+    #epos_rot = np.zeros((nconf, naip, 3))
+    #for aip in range(naip):
+    #    for d in range(3):
+    #        epos_rot[:, aip, d] = apos[:, d] + r_ea * (
+    #            np.sin(d1[aip]) * np.cos(d2[aip]) * i_rot[:, d]
+    #            + np.sin(d1[aip]) * np.sin(d2[aip]) * j_rot[:, d]
+    #            + np.cos(d1[aip]) * k_rot[:, d]
+    #        )
+    epos_rot = apos + r_ea * (
+                i_rot * np.sin(d1) * np.cos(d2)
+              + j_rot * np.sin(d1) * np.sin(d2)
+              + k_rot * np.cos(d1)
+    )
     weights = 1.0 / naip * np.ones(naip)
 
     return weights, epos_rot

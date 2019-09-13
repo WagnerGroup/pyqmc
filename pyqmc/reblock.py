@@ -10,7 +10,7 @@ def optimally_reblocked(data):
     """
     opt = opt_block(data)
     n_reblock = int(np.amax(opt))
-    rb_data = reblock(data, n_reblock)
+    rb_data = reblock_by2(data, n_reblock)
     serr = rb_data.sem(axis=0)
     d = {
         "mean": rb_data.mean(axis=0),
@@ -36,7 +36,7 @@ def optimally_reblocked_pyblock(data):  # , cols):
     return reblocked_data
 
 
-def reblock(df, n, c=None):
+def reblock_by2(df, n, c=None):
     """
         Reblocks data according to “Error estimates on averages of correlated data”,
         H. Flyvbjerg, H.G. Petersen, J. Chem. Phys. 91, 461 (1989).
@@ -49,6 +49,14 @@ def reblock(df, n, c=None):
         lasteven = m - int(m % 2 == 1)
         newdf = (newdf[:lasteven:2] + newdf[1::2].values) / 2
     return newdf
+
+
+def reblock(df, nblocks):
+    size, nbig = np.divmod(len(df), nblocks)
+    groups = np.repeat(
+        np.arange(nblocks), [size + 1] * nbig + [size] * (nblocks - nbig)
+    )
+    return df.copy().groupby(groups).mean()
 
 
 def opt_block(df):
@@ -103,7 +111,7 @@ def test_reblocking():
     for c in cols:
         row = reblocked_data.loc[c]
         reblocks = reblocked_data["reblocks"].values[0]
-        std_err = sem(reblock(test_data, reblocks, c))
+        std_err = sem(reblock_by2(test_data, reblocks, c))
         std_err_err = std_err / np.sqrt(2 * (2 ** (n - reblocks) - 1))
 
         assert np.isclose(
@@ -115,6 +123,12 @@ def test_reblocking():
         assert np.isclose(
             row["standard error error"], std_err_err, 1e-10, 1e-12
         ), "Standard error errors are not equal"
+
+    statlist = ["mean", "sem", lambda x: x.sem() / np.sqrt(2 * (len(x) - 1))]
+    rb1 = reblock(test_data, len(test_data) // 4).agg(statlist).T
+    rb2 = reblock_by2(test_data, 2).agg(statlist).T
+    for c in rb1.columns:
+        assert np.isclose(rb1[c], rb2[c], 1e-10, 1e-12).all(), (c, rb1[c], rb2[c])
 
 
 if __name__ == "__main__":

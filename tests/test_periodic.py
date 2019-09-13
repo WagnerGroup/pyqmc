@@ -81,9 +81,9 @@ def runtest(mol, mf, kind):
     df = pd.DataFrame(df)
     dfke = reblock(df["energyke"][warmup:], 2)
     vmcke, err = dfke.mean(), dfke.sem()
-    print('VMC kinetic energy: {0} $\pm$ {1}'.format(vmcke, err))
+    print('VMC kinetic energy: {0} +- {1}'.format(vmcke, err))
     
-    assert np.abs(vmcke-pyscfke) < 4 * err, \
+    assert np.abs(vmcke-pyscfke) < 5 * err, \
         "energy diff not within 5 sigma ({0:.6f}): energies \n{1} \n{2}".format(5 * err, vmcke, pyscfke)
 
 

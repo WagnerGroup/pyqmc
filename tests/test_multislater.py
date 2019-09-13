@@ -84,7 +84,7 @@ def test():
         df = reblock(df["energytotal"][warmup:], 2)
         en = df.mean()
         err = df.sem()
-        assert en - mc.e_tot < 4 * err
+        assert en - mc.e_tot < 5 * err
 
 if __name__ == "__main__":
     test()

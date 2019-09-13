@@ -12,6 +12,7 @@ from pyqmc.mc import vmc, initial_guess
 from pyqmc.accumulators import EnergyAccumulator
 from pyqmc.multislater import MultiSlater
 from pyqmc.coord import OpenConfigs
+from pyqmc.reblock import reblock
 import pyqmc
 
 def test():
@@ -30,7 +31,7 @@ def test():
         epsilon = 1e-5
         nconf = 10
         nelec = np.sum(mol.nelec)
-        epos = OpenConfigs(np.random.randn(nconf, nelec, 3))
+        epos = initial_guess(mol, nconf)
       
         for k, item in testwf.test_updateinternals(wf, epos).items():
             assert item < epsilon
@@ -46,7 +47,7 @@ def test():
         epsilon = 1e-5
         nconf = 10
         nelec = np.sum(mol.nelec)
-        epos = OpenConfigs(np.random.randn(nconf, nelec, 3))
+        epos = initial_guess(mol, nconf)
       
         for k, item in testwf.test_updateinternals(wf, epos).items():
             assert item < epsilon
@@ -62,7 +63,7 @@ def test():
         epsilon = 1e-5
         nconf = 10
         nelec = np.sum(mol.nelec)
-        epos = OpenConfigs(np.random.randn(nconf, nelec, 3))
+        epos = initial_guess(mol, nconf)
       
         for k, item in testwf.test_updateinternals(wf, epos).items():
             assert item < epsilon
@@ -80,9 +81,10 @@ def test():
         )
 
         df = pd.DataFrame(df)
-        en = np.mean(df["energytotal"][warmup:])
-        err = np.std(df["energytotal"][warmup:]) / np.sqrt(nsteps - warmup)
-        assert en - mc.e_tot < 10 * err
+        df = reblock(df["energytotal"][warmup:], 2)
+        en = df.mean()
+        err = df.sem()
+        assert en - mc.e_tot < 4 * err
 
 if __name__ == "__main__":
     test()

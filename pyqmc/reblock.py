@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 
+
 def optimally_reblocked(data):
     """
         Find optimal reblocking of input data. Takes in pandas
@@ -11,15 +12,18 @@ def optimally_reblocked(data):
     n_reblock = int(np.amax(opt))
     rb_data = reblock(data, n_reblock)
     serr = rb_data.sem(axis=0)
-    d = {"mean": rb_data.mean(axis=0), 
-         "standard error": serr,
-         "standard error error": serr / np.sqrt(2 * (len(rb_data) - 1)),
-         "reblocks": n_reblock,
+    d = {
+        "mean": rb_data.mean(axis=0),
+        "standard error": serr,
+        "standard error error": serr / np.sqrt(2 * (len(rb_data) - 1)),
+        "reblocks": n_reblock,
     }
     return pd.DataFrame(d)
 
+
 def optimally_reblocked_pyblock(data):  # , cols):
     import pyblock
+
     """
         Uses pyblock to find optimal reblocking of input data. Takes in pandas
         DataFrame of raw data and selected columns to reblock, returns DataFrame
@@ -31,7 +35,8 @@ def optimally_reblocked_pyblock(data):  # , cols):
     reblocked_data["reblocks"] = reblocks
     return reblocked_data
 
-def reblock(df, n, c=None): 
+
+def reblock(df, n, c=None):
     """
         Reblocks data according to “Error estimates on averages of correlated data”,
         H. Flyvbjerg, H.G. Petersen, J. Chem. Phys. 91, 461 (1989).
@@ -41,9 +46,10 @@ def reblock(df, n, c=None):
         newdf = newdf[c]
     for i in range(n):
         m = newdf.shape[0]
-        lasteven = m - int(m%2==1)
-        newdf = (newdf[:lasteven:2]+newdf[1::2].values)/2
+        lasteven = m - int(m % 2 == 1)
+        newdf = (newdf[:lasteven:2] + newdf[1::2].values) / 2
     return newdf
+
 
 def opt_block(df):
     """
@@ -55,24 +61,25 @@ def opt_block(df):
     newdf = df.copy()
     iblock = 0
     ndata, nvariables = tuple(df.shape[:2])
-    optimal_block = np.array([float('NaN')]*nvariables)
+    optimal_block = np.array([float("NaN")] * nvariables)
     serr0 = df.sem(axis=0).values
     statslist = []
-    while(newdf.shape[0]>1):
+    while newdf.shape[0] > 1:
         serr = newdf.sem(axis=0).values
-        serrerr = serr/(2*(newdf.shape[0]-1))**.5
+        serrerr = serr / (2 * (newdf.shape[0] - 1)) ** 0.5
         statslist.append((iblock, serr.copy()))
 
         n = newdf.shape[0]
-        lasteven = n - int(n%2==1)
-        newdf = (newdf[:lasteven:2]+newdf[1::2].values)/2
+        lasteven = n - int(n % 2 == 1)
+        newdf = (newdf[:lasteven:2] + newdf[1::2].values) / 2
         iblock += 1
     for iblock, serr in reversed(statslist):
-        B3 = 2**(3*iblock)
-        inds = np.where(B3 >= 2*ndata*(serr/serr0)**4)[0]
+        B3 = 2 ** (3 * iblock)
+        inds = np.where(B3 >= 2 * ndata * (serr / serr0) ** 4)[0]
         optimal_block[inds] = iblock
 
     return optimal_block
+
 
 def test_reblocking():
     """

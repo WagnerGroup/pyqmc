@@ -184,7 +184,9 @@ class PolyPadeFunction:
         dbdp = -(1 + self.parameters["beta"]) / (1 + self.parameters["beta"] * p) ** 2
         dzdx = rvec / (r * self.parameters["rcut"])
         func = dbdp * dpdz * dzdx
-        func[z[...,0] > 1] = 0
+
+        mask = np.squeeze(z > 1, axis=-1)
+        func[mask] = 0
         return func
 
     def laplacian(self, rvec):
@@ -201,9 +203,6 @@ class PolyPadeFunction:
         dbdp = -(1 + self.parameters["beta"]) / (1 + self.parameters["beta"] * p) ** 2
         dpdz = 12 * z * (z * z - 2 * z + 1)
         dzdx = rvec / (r * self.parameters["rcut"])
-        # d2pdz2=12*(3*z*z-4*z+1)
-        # d2bdp2 = 2*self.parameters['beta']*(1+self.parameters['beta'])/(1+self.parameters['beta']*p)**3
-        # d2zdx2 = (1-(rvec/r)**2)/(r*self.parameters['rcut'])
         d2pdz2_over_dpdz = (3 * z - 1) / (z * (z - 1))
         d2bdp2_over_dbdp = (
             -2 * self.parameters["beta"] / (1 + self.parameters["beta"] * p)
@@ -219,7 +218,9 @@ class PolyPadeFunction:
                 + d2zdx2_over_dzdx
             )
         )
-        lapl[z[...,0] > 1] = 0
+
+        mask = np.squeeze(z > 1, axis=-1)
+        lapl[mask] = 0
         return lapl
 
     def pgradient(self, rvec):
@@ -369,15 +370,15 @@ class CutoffCuspFunction:
 
 
 def test_func3d_gradient(bf, delta=1e-5):
-    rvec = np.random.randn(150, 3)
+    rvec = np.random.randn(150, 5, 10, 3)  # Internal indices irrelevant
     grad = bf.gradient(rvec)
     numeric = np.zeros(rvec.shape)
     for d in range(3):
         pos = rvec.copy()
         pos[..., d] += delta
-        plusval = bf.value(pos, np.linalg.norm(pos, axis=1))
+        plusval = bf.value(pos, np.linalg.norm(pos, axis=-1))
         pos[..., d] -= 2 * delta
-        minuval = bf.value(pos, np.linalg.norm(pos, axis=1))
+        minuval = bf.value(pos, np.linalg.norm(pos, axis=-1))
         numeric[..., d] = (plusval - minuval) / (2 * delta)
     maxerror = np.amax(np.abs(grad - numeric))
     normerror = np.linalg.norm(grad - numeric)
@@ -385,7 +386,7 @@ def test_func3d_gradient(bf, delta=1e-5):
 
 
 def test_func3d_laplacian(bf, delta=1e-5):
-    rvec = np.random.randn(150, 3)
+    rvec = np.random.randn(150, 5, 10, 3)  # Internal indices irrelevant
     lap = bf.laplacian(rvec)
     numeric = np.zeros(rvec.shape)
     for d in range(3):

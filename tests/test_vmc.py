@@ -37,7 +37,7 @@ def test_vmc():
         )
 
         df = pd.DataFrame(df)
-        df = reblock(df["energytotal"][warmup:], 2)
+        df = reblock(df["energytotal"][warmup:], 20)
         en = df.mean()
         err = df.sem()
         assert (

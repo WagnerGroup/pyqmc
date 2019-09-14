@@ -81,7 +81,7 @@ def test():
         )
 
         df = pd.DataFrame(df)
-        df = reblock(df["energytotal"][warmup:], 2)
+        df = reblock(df["energytotal"][warmup:], 20)
         en = df.mean()
         err = df.sem()
         assert en - mc.e_tot < 5 * err

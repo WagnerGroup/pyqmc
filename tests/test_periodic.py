@@ -79,7 +79,7 @@ def runtest(mol, mf, kind):
     )
     print("VMC time", time.time()-start)
     df = pd.DataFrame(df)
-    dfke = reblock(df["energyke"][warmup:], 2)
+    dfke = reblock(df["energyke"][warmup:], 8)
     vmcke, err = dfke.mean(), dfke.sem()
     print('VMC kinetic energy: {0} +- {1}'.format(vmcke, err))
     

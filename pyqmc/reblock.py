@@ -61,6 +61,18 @@ def reblock_by2(df, ntimes, c=None):
     return newdf
 
 
+def reblock_summary(df, nblocks):
+    df = reblock(df, nblocks)
+    serr = df.sem()
+    d = {
+        "mean": df.mean(axis=0),
+        "standard error": serr,
+        "standard error error": serr / np.sqrt(2 * (len(df) - 1)),
+        "n_blocks": nblocks,
+    }
+    return pd.DataFrame(d)
+
+
 def opt_block(df):
     """
     Finds optimal block size for each variable in a dataset

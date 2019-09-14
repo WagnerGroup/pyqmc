@@ -36,7 +36,17 @@ def optimally_reblocked_pyblock(data):  # , cols):
     return reblocked_data
 
 
-def reblock_by2(df, n, c=None):
+def reblock(df, nblocks):
+    size, nbig = np.divmod(len(df), nblocks)
+    rbdf = {}
+    for col in df.columns:
+        vals = np.array_split(df[col].values, nblocks, axis=0)
+        rbdf[col] = [v.mean(axis=0) for v in vals]
+    return pd.DataFrame(rbdf)
+
+
+
+def reblock_by2(df, ntimes, c=None):
     """
         Reblocks data according to “Error estimates on averages of correlated data”,
         H. Flyvbjerg, H.G. Petersen, J. Chem. Phys. 91, 461 (1989).
@@ -44,19 +54,11 @@ def reblock_by2(df, n, c=None):
     newdf = df.copy()
     if c is not None:
         newdf = newdf[c]
-    for i in range(n):
+    for i in range(ntimes):
         m = newdf.shape[0]
         lasteven = m - int(m % 2 == 1)
         newdf = (newdf[:lasteven:2] + newdf[1::2].values) / 2
     return newdf
-
-
-def reblock(df, nblocks):
-    size, nbig = np.divmod(len(df), nblocks)
-    groups = np.repeat(
-        np.arange(nblocks), [size + 1] * nbig + [size] * (nblocks - nbig)
-    )
-    return df.copy().groupby(groups).mean()
 
 
 def opt_block(df):

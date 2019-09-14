@@ -45,7 +45,6 @@ def reblock(df, nblocks):
     return pd.DataFrame(rbdf)
 
 
-
 def reblock_by2(df, ntimes, c=None):
     """
         Reblocks data according to “Error estimates on averages of correlated data”,

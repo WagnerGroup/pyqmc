@@ -40,9 +40,9 @@ def test_vmc():
         df = reblock(df["energytotal"][warmup:], 20)
         en = df.mean()
         err = df.sem()
-        assert (
-            en - mf.energy_tot() < 5 * err
-        ), "pyscf {0}, vmc {1}, err {2}".format(en, mf.enery_tot(), err)
+        assert en - mf.energy_tot() < 5 * err, "pyscf {0}, vmc {1}, err {2}".format(
+            en, mf.enery_tot(), err
+        )
 
 
 def test_accumulator():

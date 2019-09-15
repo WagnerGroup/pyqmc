@@ -11,6 +11,7 @@ import pyqmc.testwf as testwf
 import pytest
 from pyqmc import reblock
 
+
 def test():
     """ Ensure that DMC obtains the exact result for a hydrogen atom """
     from pyscf import lib, gto, scf
@@ -47,7 +48,7 @@ def test():
     dfdmc, configs_, weights_ = rundmc(
         wf,
         configs,
-        nsteps=1000,
+        nsteps=1800,
         branchtime=5,
         accumulators={"energy": EnergyAccumulator(mol)},
         ekey=("energy", "total"),

@@ -21,21 +21,6 @@ def optimally_reblocked(data):
     return pd.DataFrame(d)
 
 
-def optimally_reblocked_pyblock(data):  # , cols):
-    import pyblock
-
-    """
-        Uses pyblock to find optimal reblocking of input data. Takes in pandas
-        DataFrame of raw data and selected columns to reblock, returns DataFrame
-        of reblocked data.
-    """
-    stats = pyblock.pd_utils.reblock(data)
-    reblocked_data = pyblock.pd_utils.reblock_summary(stats[1]).squeeze()
-    reblocks = pyblock.pd_utils.optimal_block(stats[1])
-    reblocked_data["reblocks"] = reblocks
-    return reblocked_data
-
-
 def _reblock(array, nblocks):
     vals = np.array_split(array, nblocks, axis=0)
     return [v.mean(axis=0) for v in vals]

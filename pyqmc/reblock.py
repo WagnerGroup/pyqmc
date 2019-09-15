@@ -36,13 +36,23 @@ def optimally_reblocked_pyblock(data):  # , cols):
     return reblocked_data
 
 
+def _reblock(array, nblocks):
+    vals = np.array_split(array, nblocks, axis=0)
+    return [v.mean(axis=0) for v in vals]
+
+
 def reblock(df, nblocks):
     size, nbig = np.divmod(len(df), nblocks)
-    rbdf = {}
-    for col in df.columns:
-        vals = np.array_split(df[col].values, nblocks, axis=0)
-        rbdf[col] = [v.mean(axis=0) for v in vals]
-    return pd.DataFrame(rbdf)
+    if isinstance(df, pd.Series):
+        return pd.Series(_reblock(df.values, nblocks))
+    elif isinstance(df, pd.DataFrame):
+        rbdf = {col:_reblock(df[col].values, nblocks) for col in df.columns}
+        return pd.DataFrame(rbdf)
+    elif isinstance(df, np.ndarray):
+        return _reblock(df)
+    else:
+        print("WARNING: can't reblock data of type", type(df), "-- not reblocking.")
+        return df
 
 
 def reblock_by2(df, ntimes, c=None):

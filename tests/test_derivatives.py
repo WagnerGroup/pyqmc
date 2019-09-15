@@ -26,7 +26,7 @@ def test_wfs():
     mf = scf.RHF(mol).run()
     mf_rohf = scf.ROHF(mol).run()
     mf_uhf = scf.UHF(mol).run()
-    epsilon = 1e-4
+    epsilon = 1e-5
     nconf = 10
     epos = pyqmc.initial_guess(mol, nconf) 
     for wf in [
@@ -37,7 +37,8 @@ def test_wfs():
         PySCFSlaterUHF(mol, mf_rohf),
     ]:
         for k in wf.parameters:
-            wf.parameters[k] = np.random.rand(*wf.parameters[k].shape)
+            if k != 'mo_coeff':
+                wf.parameters[k] = np.random.rand(*wf.parameters[k].shape)
         for fname, func in zip(['gradient', 'laplacian', 'pgradient'],
                          [testwf.test_wf_gradient, testwf.test_wf_laplacian, testwf.test_wf_pgradient]):
             err = []

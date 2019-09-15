@@ -9,8 +9,7 @@ import sys
 import numpy as np
 import pyqmc.testwf as testwf
 import pytest
-import pyblock.pd_utils as pyblock
-
+from pyqmc import reblock
 
 def test():
     """ Ensure that DMC obtains the exact result for a hydrogen atom """
@@ -63,12 +62,9 @@ def test():
     warmup = 200
     dfprod = dfdmc[dfdmc.step > warmup]
 
-    reblock = pyblock.reblock(dfprod[["energytotal", "energyei"]])
-    print(reblock[1])
-    dfoptimal = reblock[1][reblock[1][("energytotal", "optimal block")] != ""]
-    energy = dfoptimal[("energytotal", "mean")].values[0]
-    err = dfoptimal[("energytotal", "standard error")].values[0]
-    print("energy", energy, "+/-", err)
+    rb_summary = reblock.optimally_reblocked(dfprod[["energytotal", "energyei"]])
+    print(rb_summary)
+    energy, err = [rb_summary[v]["energytotal"] for v in ("mean", "standard error")]
     assert (
         np.abs(energy + 0.5) < 5 * err
     ), "energy not within {0} of -0.5: energy {1}".format(5 * err, np.mean(energy))

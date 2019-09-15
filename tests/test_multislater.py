@@ -12,6 +12,7 @@ from pyqmc.mc import vmc, initial_guess
 from pyqmc.accumulators import EnergyAccumulator
 from pyqmc.multislater import MultiSlater
 from pyqmc.coord import OpenConfigs
+from pyqmc.reblock import reblock
 import pyqmc
 
 def test():
@@ -27,62 +28,61 @@ def test():
         mc.kernel()
         wf = MultiSlater(mol, mf, mc)
 
-        epsilon = 1e-5
+        epsilon = 1e-4
+        delta = 1e-5
         nconf = 10
+
         nelec = np.sum(mol.nelec)
-        epos = OpenConfigs(np.random.randn(nconf, nelec, 3))
+        epos = initial_guess(mol, nconf)
       
         for k, item in testwf.test_updateinternals(wf, epos).items():
             assert item < epsilon
-        assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon
-        assert testwf.test_wf_laplacian(wf, epos, delta=1e-5)[0] < epsilon
-        assert testwf.test_wf_pgradient(wf, epos, delta=1e-5)[0] < epsilon
+        assert testwf.test_wf_gradient(wf, epos, delta=delta)[0] < epsilon
+        assert testwf.test_wf_laplacian(wf, epos, delta=delta)[0] < epsilon
+        assert testwf.test_wf_pgradient(wf, epos, delta=delta)[0] < epsilon
 
         #Test same number of elecs
         mc = mcscf.CASCI(mf,ncas=4,nelecas=(1,1))
         mc.kernel()
         wf = pyqmc.default_msj(mol, mf, mc)[0]
 
-        epsilon = 1e-5
-        nconf = 10
         nelec = np.sum(mol.nelec)
-        epos = OpenConfigs(np.random.randn(nconf, nelec, 3))
+        epos = initial_guess(mol, nconf)
       
         for k, item in testwf.test_updateinternals(wf, epos).items():
             assert item < epsilon
-        assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon
-        assert testwf.test_wf_laplacian(wf, epos, delta=1e-5)[0] < epsilon
-        assert testwf.test_wf_pgradient(wf, epos, delta=1e-5)[0] < epsilon
+        assert testwf.test_wf_gradient(wf, epos, delta=delta)[0] < epsilon
+        assert testwf.test_wf_laplacian(wf, epos, delta=delta)[0] < epsilon
+        assert testwf.test_wf_pgradient(wf, epos, delta=delta)[0] < epsilon
 
         #Test different number of elecs
         mc = mcscf.CASCI(mf,ncas=4,nelecas=(2,0))
         mc.kernel()
         wf = MultiSlater(mol, mf, mc)
 
-        epsilon = 1e-5
-        nconf = 10
         nelec = np.sum(mol.nelec)
-        epos = OpenConfigs(np.random.randn(nconf, nelec, 3))
+        epos = initial_guess(mol, nconf)
       
         for k, item in testwf.test_updateinternals(wf, epos).items():
             assert item < epsilon
-        assert testwf.test_wf_gradient(wf, epos, delta=1e-5)[0] < epsilon
-        assert testwf.test_wf_laplacian(wf, epos, delta=1e-5)[0] < epsilon
-        assert testwf.test_wf_pgradient(wf, epos, delta=1e-5)[0] < epsilon
+        assert testwf.test_wf_gradient(wf, epos, delta=delta)[0] < epsilon
+        assert testwf.test_wf_laplacian(wf, epos, delta=delta)[0] < epsilon
+        assert testwf.test_wf_pgradient(wf, epos, delta=delta)[0] < epsilon
 
         #Quick VMC test
-        nconf = 5000
+        nconf = 1000
         nsteps = 100
-        warmup = 30
+        warmup = 10
         coords = initial_guess(mol, nconf)
         df, coords = vmc(
             wf, coords, nsteps=nsteps, accumulators={"energy": EnergyAccumulator(mol)}
         )
 
         df = pd.DataFrame(df)
-        en = np.mean(df["energytotal"][warmup:])
-        err = np.std(df["energytotal"][warmup:]) / np.sqrt(nsteps - warmup)
-        assert en - mc.e_tot < 10 * err
+        df = reblock(df["energytotal"][warmup:], 20)
+        en = df.mean()
+        err = df.sem()
+        assert en - mc.e_tot < 5 * err
 
 if __name__ == "__main__":
     test()

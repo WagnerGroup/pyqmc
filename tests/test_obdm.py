@@ -66,7 +66,7 @@ def test():
     assert np.max(np.abs(obdm_est["obdm"] - mfobdm)) < 0.05
     print(obdm_est["obdm_up"].diagonal().round(3))
     print(obdm_est["obdm_down"].diagonal().round(3))
-    assert np.max(np.abs(obdm_est["obdm_up"] + obdm_est["obdm_down"] - mfobdm)) < 0.05
+    assert np.mean(np.abs(obdm_est["obdm_up"] + obdm_est["obdm_down"] - mfobdm)) < 0.05
 
 
 if __name__ == "__main__":

@@ -5,21 +5,25 @@ from pyscf.pbc import gto, scf
 from pyqmc.reblock import reblock
 import time
 
-def test_cubic(kind=0, nk=(1,1,1)): 
+def cubic_with_ecp(kind=0, nk=(1,1,1)): 
+    from pyscf.pbc.dft.multigrid import multigrid
+    start = time.time()
     L = 6.63
-    mol = gto.M(
+    mol = gto.Cell(
         atom = '''Li     {0}      {0}      {0}                
                   Li     {1}      {1}      {1}'''.format(0.0, L/2),
-        basis='bfd-vtz',
+        basis='bfd-vdz',
         ecp='bfd',
-        a = np.eye(3)*L,
         spin=0,
         unit='bohr',
     )
+    mol.exp_to_discard = 0.1
+    mol.build(a=np.eye(3)*L) 
     kpts = mol.make_kpts(nk)
     mf = scf.KUKS(mol, kpts)
     mf.xc = "pbe"
     #mf = mf.density_fit()
+    mf = multigrid(mf)
     mf = mf.run()
     runtest(mol, mf, kind)
 
@@ -90,7 +94,7 @@ def runtest(mol, mf, kind):
 
 if __name__=="__main__":
     kind = 0
-    nk = [2,2,2]
-    #test_cubic(kind, nk)
+    nk = [1,1,1]
+    cubic_with_ecp(kind, nk)
     #test_RKS(kind, nk)
     test_noncubic(kind, nk)

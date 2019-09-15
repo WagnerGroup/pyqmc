@@ -55,10 +55,11 @@ def distvmc(
             res = r.result()
             iterdata.extend(res[0])
             coord[i] = res[1]
+        
         alldata.extend(
             pd.DataFrame(iterdata)
             .groupby("step", as_index=False)
-            .mean()
+            .apply(lambda x: x.mean())
             .to_dict("records")
         )
         print("epoch", epoch, "finished", flush=True)

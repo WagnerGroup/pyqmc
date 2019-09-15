@@ -1,6 +1,7 @@
 import os
 import pyqmc
 import numpy as np
+import pandas as pd
 
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
@@ -47,12 +48,20 @@ def distvmc(
             pyqmc.vmc,
             wfs,
             thiscoord,
-            **{"nsteps": nsteps, "accumulators": accumulators},
+            **{"nsteps": nsteps_per, "accumulators": accumulators, "stepoffset": epoch},
         )
+        iterdata = []
         for i, r in enumerate(runs):
             res = r.result()
-            alldata.extend(res[0])
+            iterdata.extend(res[0])
             coord[i] = res[1]
+        
+        alldata.extend(
+            pd.DataFrame(iterdata)
+            .groupby("step", as_index=False)
+            .apply(lambda x: x.mean())
+            .to_dict("records")
+        )
         print("epoch", epoch, "finished", flush=True)
 
     coords.join(coord)

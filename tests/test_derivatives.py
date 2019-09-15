@@ -37,7 +37,8 @@ def test_wfs():
         PySCFSlaterUHF(mol, mf_rohf),
     ]:
         for k in wf.parameters:
-            wf.parameters[k] = np.random.rand(*wf.parameters[k].shape)
+            if k != 'mo_coeff':
+                wf.parameters[k] = np.random.rand(*wf.parameters[k].shape)
         for fname, func in zip(['gradient', 'laplacian', 'pgradient'],
                          [testwf.test_wf_gradient, testwf.test_wf_laplacian, testwf.test_wf_pgradient]):
             err = []

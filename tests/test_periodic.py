@@ -6,11 +6,12 @@ from pyqmc.reblock import reblock
 import time
 
 def test_cubic(kind=0, nk=(1,1,1)): 
-    L = 2 
+    L = 6.63
     mol = gto.M(
-        atom = '''H     {0}      {0}      {0}                
-                  H     {1}      {1}      {1}'''.format(0.0, L/2),
-        basis='sto-3g',
+        atom = '''Li     {0}      {0}      {0}                
+                  Li     {1}      {1}      {1}'''.format(0.0, L/2),
+        basis='bfd-vtz',
+        ecp='bfd',
         a = np.eye(3)*L,
         spin=0,
         unit='bohr',

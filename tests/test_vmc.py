@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from pyqmc.mc import vmc, initial_guess
 from pyscf import lib, gto, scf
-
+from pyqmc.reblock import reblock
 from pyqmc.slateruhf import PySCFSlaterUHF
 from pyqmc.accumulators import EnergyAccumulator
 
@@ -37,11 +37,12 @@ def test_vmc():
         )
 
         df = pd.DataFrame(df)
-        en = np.mean(df["energytotal"][warmup:])
-        err = np.std(df["energytotal"][warmup:]) / np.sqrt(nsteps - warmup)
-        assert (
-            en - mf.energy_tot() < 10 * err
-        ), "pyscf {0}, vmc {1}, err {2}".format(en, mf.enery_tot(), err)
+        df = reblock(df["energytotal"][warmup:], 20)
+        en = df.mean()
+        err = df.sem()
+        assert en - mf.energy_tot() < 5 * err, "pyscf {0}, vmc {1}, err {2}".format(
+            en, mf.enery_tot(), err
+        )
 
 
 def test_accumulator():

@@ -48,20 +48,35 @@ def default_multislater(mol, mf, mc):
 
 
 def default_jastrow(mol):
+    """         
+    Default 2-body jastrow from qwalk,
+    returns jastrow, to_opt and freeze
+    """
     import numpy as np
 
-    abasis = [GaussianFunction(0.8), GaussianFunction(1.6), GaussianFunction(3.2)]
-    bbasis = [
-        CutoffCuspFunction(2.0, 1.5),
-        GaussianFunction(0.8),
-        GaussianFunction(1.6),
-        GaussianFunction(3.2),
-    ]
-    wf = JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
-    wf.parameters["bcoeff"][0, [0, 1, 2]] = np.array([-0.25, -0.50, -0.25])
+    def expand_beta_qwalk(beta0, n):
+        """polypade expansion coefficients 
+        for n basis functions with first 
+        coeff beta0"""
+        beta = np.zeros(n)
+        beta[0] = beta0
+        beta1 = np.log(beta0 + 1.00001)
+        for i in range(1, n):
+            beta[i] = np.exp(beta1 + 1.6 * i) - 1
+        return beta
+
+    beta_abasis = expand_beta_qwalk(0.2, 4)
+    beta_bbasis = expand_beta_qwalk(0.5, 3)
+    abasis = [PolyPadeFunction(beta=beta_abasis[i], rcut=7.5) for i in range(4)]
+    bbasis = [CutoffCuspFunction(gamma=24, rcut=7.5)]
+    bbasis += [PolyPadeFunction(beta=beta_bbasis[i], rcut=7.5) for i in range(3)]
+
+    jastrow = JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
+    jastrow.parameters["bcoeff"][0, [0, 1, 2]] = np.array([-0.25, -0.50, -0.25])
+
     freeze = {}
-    freeze["acoeff"] = np.zeros(wf.parameters["acoeff"].shape).astype(bool)
-    freeze["bcoeff"] = np.zeros(wf.parameters["bcoeff"].shape).astype(bool)
+    freeze["acoeff"] = np.zeros(jastrow.parameters["acoeff"].shape).astype(bool)
+    freeze["bcoeff"] = np.zeros(jastrow.parameters["bcoeff"].shape).astype(bool)
     freeze["bcoeff"][0, [0, 1, 2]] = True  # Cusp conditions
     to_opt = ["acoeff", "bcoeff"]
     return wf, to_opt, freeze

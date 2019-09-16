@@ -70,6 +70,7 @@ def test_func3d():
         test_func3d_gradient,
         test_func3d_laplacian,
         test_func3d_gradient_laplacian,
+        test_func3d_pgradient,
     )
 
     test_functions = {
@@ -85,11 +86,15 @@ def test_func3d():
         grad = test_func3d_gradient(func, delta=delta)[0]
         lap = test_func3d_laplacian(func, delta=delta)[0]
         andg, andl = test_func3d_gradient_laplacian(func)
+        pgrad = test_func3d_pgradient(func, delta=1e-9)[0]
         print(name, grad, lap, "both:", andg, andl)
+        print(name, pgrad)
         assert grad < epsilon
         assert lap < epsilon
         assert andg < epsilon
         assert andl < epsilon
+        for k, v in pgrad.items():
+            assert v < epsilon, (name, k, v)
 
 
 if __name__ == "__main__":

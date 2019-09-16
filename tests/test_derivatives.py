@@ -28,7 +28,7 @@ def test_wfs():
     mf_uhf = scf.UHF(mol).run()
     epsilon = 1e-5
     nconf = 10
-    epos = pyqmc.initial_guess(mol, nconf) 
+    epos = pyqmc.initial_guess(mol, nconf)
     for wf in [
         JastrowSpin(mol),
         MultiplyWF(PySCFSlaterUHF(mol, mf), JastrowSpin(mol)),
@@ -37,18 +37,24 @@ def test_wfs():
         PySCFSlaterUHF(mol, mf_rohf),
     ]:
         for k in wf.parameters:
-            wf.parameters[k] = np.random.rand(*wf.parameters[k].shape)
-        for fname, func in zip(['gradient', 'laplacian', 'pgradient'],
-                         [testwf.test_wf_gradient, testwf.test_wf_laplacian, testwf.test_wf_pgradient]):
+            if k != "mo_coeff":
+                wf.parameters[k] = np.random.rand(*wf.parameters[k].shape)
+        for fname, func in zip(
+            ["gradient", "laplacian", "pgradient"],
+            [
+                testwf.test_wf_gradient,
+                testwf.test_wf_laplacian,
+                testwf.test_wf_pgradient,
+            ],
+        ):
             err = []
             for delta in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8]:
                 err.append(func(wf, epos, delta)[0])
             print(fname, min(err))
-            assert(min(err) < epsilon)
-                
-        
+            assert min(err) < epsilon
+
         for k, item in testwf.test_updateinternals(wf, epos).items():
-            print(k,item)
+            print(k, item)
             assert item < epsilon
 
 
@@ -77,7 +83,7 @@ def test_func3d():
 
     for name, func in test_functions.items():
         grad = test_func3d_gradient(func, delta=delta)[0]
-        lap =  test_func3d_laplacian(func, delta=delta)[0]
+        lap = test_func3d_laplacian(func, delta=delta)[0]
         andg, andl = test_func3d_gradient_laplacian(func)
         print(name, grad, lap, "both:", andg, andl)
         assert grad < epsilon

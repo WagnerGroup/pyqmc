@@ -6,7 +6,12 @@ from pyqmc.multiplywf import MultiplyWF
 from pyqmc.jastrowspin import JastrowSpin
 
 from pyqmc.accumulators import EnergyAccumulator, PGradTransform, LinearTransform
-from pyqmc.func3d import PadeFunction, GaussianFunction, CutoffCuspFunction
+from pyqmc.func3d import (
+    PolyPadeFunction,
+    PadeFunction,
+    GaussianFunction,
+    CutoffCuspFunction,
+)
 from pyqmc.optvariance import optvariance
 from pyqmc.optsr import gradient_descent
 from pyqmc.linemin import line_minimization

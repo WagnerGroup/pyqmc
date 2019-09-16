@@ -84,6 +84,8 @@ class PeriodicConfigs:
         """
         epos, wrap = enforce_pbc(self.lvecs, vec)
         currentwrap = self.wrap if len(self.wrap.shape) == 2 else self.wrap[:, e]
+        if len(vec.shape) == 3:
+            currentwrap = currentwrap[:, np.newaxis]
         return PeriodicConfigs(epos, self.lvecs, wrap=wrap + currentwrap)
 
     def move(self, e, new, accept):

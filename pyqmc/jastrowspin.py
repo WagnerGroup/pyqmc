@@ -138,7 +138,7 @@ class JastrowSpin:
         """
         d = epos.dist.dist_i(self._mol.atom_coords(), epos.configs[mask])
         r = np.linalg.norm(d, axis=-1)
-        a_partial_e = np.zeros((np.sum(mask), *self._a_partial.shape[2:]))
+        a_partial_e = np.zeros((*r.shape, self._a_partial.shape[3]))
         for k, a in enumerate(self.a_basis):
             a_partial_e[..., k] = a.value(d, r)
         return a_partial_e
@@ -161,11 +161,11 @@ class JastrowSpin:
             self._configscurrent.configs[mask][:, not_e], epos.configs[mask]
         )
         r = np.linalg.norm(d, axis=-1)
-        b_partial_e = np.zeros((np.sum(mask), *self._b_partial.shape[2:]))
+        b_partial_e = np.zeros((*r.shape[:-1], *self._b_partial.shape[2:]))
         for l, b in enumerate(self.b_basis):
             bval = b.value(d, r)
-            b_partial_e[:, l, 0] = bval[:, :sep].sum(axis=1)
-            b_partial_e[:, l, 1] = bval[:, sep:].sum(axis=1)
+            b_partial_e[..., l, 0] = bval[..., :sep].sum(axis=-1)
+            b_partial_e[..., l, 1] = bval[..., sep:].sum(axis=-1)
         return b_partial_e
 
     def _update_b_partial(self, e, epos, mask):
@@ -286,12 +286,17 @@ class JastrowSpin:
             mask = [True] * epos.configs.shape[0]
         edown = int(e >= self._mol.nelec[0])
         deltaa = self._a_update(e, epos, mask) - self._a_partial[e, mask]
-        a_val = np.einsum("ijk,jk->i", deltaa, self.parameters["acoeff"][..., edown])
+        a_val = np.einsum(
+            "...jk,jk->...", deltaa, self.parameters["acoeff"][..., edown]
+        )
         deltab = self._b_update(e, epos, mask) - self._b_partial[e, mask]
         b_val = np.einsum(
-            "ijk,jk->i", deltab, self.parameters["bcoeff"][:, edown : edown + 2]
+            "...jk,jk->...", deltab, self.parameters["bcoeff"][:, edown : edown + 2]
         )
-        return np.exp(b_val + a_val)
+        val = np.exp(b_val + a_val)
+        if len(val.shape) == 2:
+            val = val.T
+        return val
 
     def pgradient(self):
         """Given the b sums, this is pretty trivial for the coefficient derivatives.

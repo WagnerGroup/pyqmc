@@ -39,12 +39,12 @@ class MultiSlater:
         self._nelec = (mc.nelecas[0] + mc.ncore, mc.nelecas[1] + mc.ncore)
         self._copy_ci(mc)
 
-        if len(mf.mo_occ.shape) == 2:
-            self.parameters["mo_coeff_alpha"] = mf.mo_coeff[0][:, : mc.ncas + mc.ncore]
-            self.parameters["mo_coeff_beta"] = mf.mo_coeff[1][:, : mc.ncas + mc.ncore]
+        if mc.mo_coeff.shape[0] == 2:
+            self.parameters["mo_coeff_alpha"] = mc.mo_coeff[0][:, : mc.ncas + mc.ncore]
+            self.parameters["mo_coeff_beta"] = mc.mo_coeff[1][:, : mc.ncas + mc.ncore]
         else:
-            self.parameters["mo_coeff_alpha"] = mf.mo_coeff[:, : mc.ncas + mc.ncore]
-            self.parameters["mo_coeff_beta"] = mf.mo_coeff[:, : mc.ncas + mc.ncore]
+            self.parameters["mo_coeff_alpha"] = mc.mo_coeff[:, : mc.ncas + mc.ncore]
+            self.parameters["mo_coeff_beta"] = mc.mo_coeff[:, : mc.ncas + mc.ncore]
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
         self.pbc_str = "PBC" if hasattr(mol, "a") else ""
 

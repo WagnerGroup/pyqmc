@@ -79,7 +79,7 @@ def default_jastrow(mol):
     freeze["bcoeff"] = np.zeros(jastrow.parameters["bcoeff"].shape).astype(bool)
     freeze["bcoeff"][0, [0, 1, 2]] = True  # Cusp conditions
     to_opt = ["acoeff", "bcoeff"]
-    return wf, to_opt, freeze
+    return jastrow, to_opt, freeze
 
 
 def default_msj(mol, mf, mc):

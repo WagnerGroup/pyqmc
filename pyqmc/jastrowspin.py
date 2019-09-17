@@ -138,7 +138,7 @@ class JastrowSpin:
         """
         d = epos.dist.dist_i(self._mol.atom_coords(), epos.configs[mask])
         r = np.linalg.norm(d, axis=-1)
-        a_partial_e = np.zeros((np.sum(mask), *self._a_partial.shape[2:]))
+        a_partial_e = np.zeros((*r.shape, self._a_partial.shape[3]))
         for k, a in enumerate(self.a_basis):
             a_partial_e[..., k] = a.value(d, r)
         return a_partial_e
@@ -153,19 +153,18 @@ class JastrowSpin:
               epos: configs object for electron e
               mask: mask over configs axis, only return values for configs where mask==True. b_partial_e might have a smaller configs axis than epos, _configscurrent, and _b_partial because of the mask.
         """
-        nelec = np.sum(self._mol.nelec)
         nup = self._mol.nelec[0]
         sep = nup - int(e < nup)
-        not_e = np.arange(nelec) != e
+        not_e = np.arange(self._nelec) != e
         d = epos.dist.dist_i(
             self._configscurrent.configs[mask][:, not_e], epos.configs[mask]
         )
         r = np.linalg.norm(d, axis=-1)
-        b_partial_e = np.zeros((np.sum(mask), *self._b_partial.shape[2:]))
+        b_partial_e = np.zeros((*r.shape[:-1], *self._b_partial.shape[2:]))
         for l, b in enumerate(self.b_basis):
             bval = b.value(d, r)
-            b_partial_e[:, l, 0] = bval[:, :sep].sum(axis=1)
-            b_partial_e[:, l, 1] = bval[:, sep:].sum(axis=1)
+            b_partial_e[..., l, 0] = bval[..., :sep].sum(axis=-1)
+            b_partial_e[..., l, 1] = bval[..., sep:].sum(axis=-1)
         return b_partial_e
 
     def _update_b_partial(self, e, epos, mask):
@@ -179,10 +178,9 @@ class JastrowSpin:
               epos: configs object for electron e
               mask: mask over configs axis, only return values for configs where mask==True. b_partial_e might have a smaller configs axis than epos, _configscurrent, and _b_partial because of the mask.
         """
-        nelec = np.sum(self._mol.nelec)
         nup = self._mol.nelec[0]
         sep = nup - int(e < nup)
-        not_e = np.arange(nelec) != e
+        not_e = np.arange(self._nelec) != e
         edown = int(e >= nup)
         d = epos.dist.dist_i(
             self._configscurrent.configs[mask][:, not_e], epos.configs[mask]
@@ -222,6 +220,8 @@ class JastrowSpin:
         not_e = np.arange(nelec) != e
         dnew = epos.dist.dist_i(self._configscurrent.configs, epos.configs)[:, not_e]
         dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
+        rnew = np.linalg.norm(dnew, axis=-1)
+        rinew = np.linalg.norm(dinew, axis=-1)
 
         grad = np.zeros((3, nconf))
 
@@ -230,12 +230,12 @@ class JastrowSpin:
         edown = int(e >= nup)
 
         for c, b in zip(self.parameters["bcoeff"], self.b_basis):
-            bgrad = b.gradient(dnew)
-            grad += c[edown] * np.sum(bgrad[:, : nup - eup], axis=1).T
-            grad += c[1 + edown] * np.sum(bgrad[:, nup - eup :], axis=1).T
+            bgrad = b.gradient(dnew, rnew)
+            grad += c[edown] * np.sum(bgrad[:, :nup - eup], axis=1).T
+            grad += c[1 + edown] * np.sum(bgrad[:, nup - eup:], axis=1).T
 
         for c, a in zip(self.parameters["acoeff"].transpose()[edown], self.a_basis):
-            grad += np.einsum("j,ijk->ki", c, a.gradient(dinew))
+            grad += np.einsum("j,ijk->ki", c, a.gradient(dinew, rinew))
 
         return grad
 
@@ -248,6 +248,8 @@ class JastrowSpin:
         not_e = np.arange(nelec) != e
         dnew = epos.dist.dist_i(self._configscurrent.configs, epos.configs)[:, not_e]
         dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
+        rnew = np.linalg.norm(dnew, axis=-1)
+        rinew = np.linalg.norm(dinew, axis=-1)
 
         eup = int(e < nup)
         edown = int(e >= nup)
@@ -256,13 +258,13 @@ class JastrowSpin:
         lap = np.zeros(nconf)
         # a-value component
         for c, a in zip(self.parameters["acoeff"].transpose()[edown], self.a_basis):
-            grad += np.einsum("j,ijk->ki", c, a.gradient(dinew))
-            lap += np.einsum("j,ijk->i", c, a.laplacian(dinew))
+            g, l = a.gradient_laplacian(dinew, rinew)
+            grad += np.einsum("j,ijk->ki", c, g)
+            lap += np.einsum("j,ijk->i", c, l)
 
         # b-value component
         for c, b in zip(self.parameters["bcoeff"], self.b_basis):
-            bgrad = b.gradient(dnew)
-            blap = b.laplacian(dnew)
+            bgrad, blap = b.gradient_laplacian(dnew, rnew)
             grad += c[edown] * np.sum(bgrad[:, : nup - eup], axis=1).T
             grad += c[1 + edown] * np.sum(bgrad[:, nup - eup :], axis=1).T
             lap += c[edown] * np.sum(blap[:, : nup - eup], axis=(1, 2))
@@ -286,12 +288,17 @@ class JastrowSpin:
             mask = [True] * epos.configs.shape[0]
         edown = int(e >= self._mol.nelec[0])
         deltaa = self._a_update(e, epos, mask) - self._a_partial[e, mask]
-        a_val = np.einsum("ijk,jk->i", deltaa, self.parameters["acoeff"][..., edown])
+        a_val = np.einsum(
+            "...jk,jk->...", deltaa, self.parameters["acoeff"][..., edown]
+        )
         deltab = self._b_update(e, epos, mask) - self._b_partial[e, mask]
         b_val = np.einsum(
-            "ijk,jk->i", deltab, self.parameters["bcoeff"][:, edown : edown + 2]
+            "...jk,jk->...", deltab, self.parameters["bcoeff"][:, edown : edown + 2]
         )
-        return np.exp(b_val + a_val)
+        val = np.exp(b_val + a_val)
+        if len(val.shape) == 2:
+            val = val.T
+        return val
 
     def pgradient(self):
         """Given the b sums, this is pretty trivial for the coefficient derivatives.

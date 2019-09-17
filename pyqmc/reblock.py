@@ -31,7 +31,7 @@ def reblock(df, nblocks):
     if isinstance(df, pd.Series):
         return pd.Series(_reblock(df.values, nblocks))
     elif isinstance(df, pd.DataFrame):
-        rbdf = {col:_reblock(df[col].values, nblocks) for col in df.columns}
+        rbdf = {col: _reblock(df[col].values, nblocks) for col in df.columns}
         return pd.DataFrame(rbdf)
     elif isinstance(df, np.ndarray):
         return _reblock(df)

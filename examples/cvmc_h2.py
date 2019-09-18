@@ -1,18 +1,18 @@
+from pyqmc import dasktools
+from dask.distributed import Client, LocalCluster
 import pyqmc
 
+ncore = 2
+nconfig = 800
 
-def setuph2(r, obdm_steps=5):
-    from pyscf import gto, scf, lo
-    from pyqmc.accumulators import LinearTransform, EnergyAccumulator
-    from pyqmc.obdm import OBDMAccumulator
-    from pyqmc.cvmc import DescriptorFromOBDM, PGradDescriptor
-
-    import itertools
-
-    # ccECP from A. Annaberdiyev et al. Journal of Chemical Physics 149, 134108 (2018)
+def generate_wf():
+    from pyscf import gto, scf
+    import pyqmc
+    
+     # ccECP from A. Annaberdiyev et al. Journal of Chemical Physics 149, 134108 (2018)
     basis = {
         "H": gto.basis.parse(
-            """
+            """ 
     H S
 23.843185 0.00411490
 10.212443 0.01046440
@@ -23,9 +23,9 @@ def setuph2(r, obdm_steps=5):
 0.147217 0.37823130
 0.063055 0.11642410
 """
-        )
-    }
-    """
+        )   
+    }   
+    """ 
 H S
 0.040680 1.00000000
 H S
@@ -35,31 +35,37 @@ H P
 H P
 0.740212 1.00000000
 """
-    ecp = {
+    ecp = { 
         "H": gto.basis.parse_ecp(
-            """
+            """ 
     H nelec 0
 H ul
 1 21.24359508259891 1.00000000000000
 3 21.24359508259891 21.24359508259891
 2 21.77696655044365 -10.85192405303825
 """
-        )
-    }
+        )   
+    }   
 
     mol = gto.M(
-        atom=f"H 0. 0. 0.; H 0. 0. {r}", unit="bohr", basis=basis, ecp=ecp, verbose=5
+        atom=f"H 0. 0. 0.; H 0. 0. 1.1", unit="bohr", basis=basis, ecp=ecp, verbose=5
     )
     mf = scf.RHF(mol).run()
-    # lowdin = lo.orth_ao(mol, "lowdin")
+    wf = pyqmc.slater_jastrow(mol, mf) 
+    return mol, mf, wf
+
+def generate_constraints(mol, mf, wf):
+    from pyqmc.accumulators import LinearTransform, EnergyAccumulator
+    from pyqmc.obdm import OBDMAccumulator
+    from pyqmc.cvmc import DescriptorFromOBDM, PGradDescriptor
+    from pyscf import lo
+
     mo_occ = mf.mo_coeff[:, mf.mo_occ > 0]
     a = lo.iao.iao(mol, mo_occ)
     a = lo.vec_lowdin(a, mf.get_ovlp())
 
-    obdm_up = OBDMAccumulator(mol=mol, orb_coeff=a, nstep=obdm_steps, spin=0)
-    obdm_down = OBDMAccumulator(mol=mol, orb_coeff=a, nstep=obdm_steps, spin=1)
-
-    wf = pyqmc.slater_jastrow(mol, mf)
+    obdm_up = OBDMAccumulator(mol=mol, orb_coeff=a, nstep=5, spin=0)
+    obdm_down = OBDMAccumulator(mol=mol, orb_coeff=a, nstep=5, spin=1)
 
     descriptors = {
         "t": [[(1.0, (0, 1)), (1.0, (1, 0))], [(1.0, (0, 1)), (1.0, (1, 0))]],
@@ -76,53 +82,26 @@ H ul
         DescriptorFromOBDM(descriptors, norm=2.0),
     )
 
-    return {"wf": wf, "acc": acc, "mol": mol, "mf": mf, "descriptors": descriptors}
+    return acc, descriptors
 
-    # configs = pyqmc.initial_guess(mol, nconf)
-    # wf,df=optimize(wf,configs,acc,obj,forcing=forcing,
-    #        iters=10,tstep=0.1,datafile=datafile)
-    # print('final parameters',wf.parameters)
-    # return df,wf.parameters
+if __name__=="__main__":
+    cluster = LocalCluster(n_workers=ncore, threads_per_worker=1)
+    client = Client(cluster)
+    mol,mf,wf=generate_wf()
+    from pyqmc.mc import vmc
+    from pyqmc.dasktools import distvmc,line_minimization, optimize
+    from pyqmc.dmc import rundmc
+    from pyqmc import EnergyAccumulator
+    import pandas as pd
 
+    df,coords=distvmc(wf,pyqmc.initial_guess(mol,nconfig),client=client,nsteps_per=40,nsteps=40)
+    wf,datagrad,dataline=line_minimization(wf,coords,pyqmc.gradient_generator(mol,wf),client=client,maxiters=5)
 
-if __name__ == "__main__":
-    import parsl.config
-    from parsl.configs.exex_local import config
-    from pyqmc.parsltools import distvmc as vmc
-    from pyqmc.parsltools import clean_pyscf_objects
-    from pyqmc.linemin import line_minimization
-    from pyqmc.cvmc import optimize
-
-    # run VMC in parallel
-    r = 1.1
-
-    ncore = 4
-    sys = setuph2(r)
-    sys["mol"], sys["mf"] = clean_pyscf_objects(sys["mol"], sys["mf"])
-
-    config.executors[0].ranks_per_node = ncore
-    parsl.load(config)
-
-    # Set up calculation and
-    ncore = 2
-    nconf = 800
-    configs = pyqmc.initial_guess(sys["mol"], nconf)
-    df, configs = vmc(
-        sys["wf"], configs, accumulators={}, nsteps=40, nsteps_per=40, npartitions=ncore
-    )
-
-    wf, df = line_minimization(
-        sys["wf"],
-        configs,
-        pyqmc.gradient_generator(sys["mol"], sys["wf"]),
-        maxiters=5,
-        vmc=vmc,
-        vmcoptions=dict(npartitions=ncore, nsteps=100),
-    )
-
+    acc, descriptors = generate_constraints(mol, mf, wf)
+    
     forcing = {}
     obj = {}
-    for k in sys["descriptors"]:
+    for k in descriptors:
         forcing[k] = 0.0
         obj[k] = 0.0
 
@@ -134,14 +113,13 @@ if __name__ == "__main__":
     datafile = "saveh2.json"
 
     wf, df = optimize(
-        sys["wf"],
-        configs,
-        sys["acc"],
+        wf,
+        coords,
+        acc,
+        client=client,
         objective=obj,
         forcing=forcing,
         iters=50,
         tstep=0.1,
-        datafile=datafile,
-        vmc=vmc,
-        vmcoptions=dict(npartitions=ncore, nsteps=100),
+        datafile=datafile
     )

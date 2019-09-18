@@ -194,7 +194,6 @@ def line_minimization(
     newparms = pgrad_acc.transform.deserialize(x0)
     for k in newparms:
         wf.parameters[k] = newparms[k]
-
     return wf, datagrad, datatest
 
 

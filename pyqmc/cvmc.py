@@ -59,10 +59,10 @@ class PGradDescriptor:
     def _node_cut(self, configs, wf):
         """ Return true if a given configuration is within nodal_cutoff 
         of the node """
-        ne = configs.shape[1]
+        ne = configs.configs.shape[1]
         d2 = 0.0
         for e in range(ne):
-            d2 += np.sum(wf.gradient(e, configs[:, e, :]) ** 2, axis=0)
+            d2 += np.sum(wf.gradient(e, configs.electron(e)) ** 2, axis=0)
         r = 1.0 / (d2 * ne * ne)
         return r < self.nodal_cutoff ** 2
 
@@ -82,7 +82,7 @@ class PGradDescriptor:
         return d
 
     def avg(self, configs, wf):
-        nconf = configs.shape[0]
+        nconf = configs.configs.shape[0]
         pgrad = wf.pgradient()
         den = self.enacc(configs, wf)
         energy = den["total"]

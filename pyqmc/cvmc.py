@@ -119,9 +119,9 @@ def optimize(
     iters=10,
     tstep=0.5,
     npts=10,
-    datafile=None,
     vmc=None,
     vmcoptions=None,
+    datafile=None,
 ):
     """ 
     Args: 

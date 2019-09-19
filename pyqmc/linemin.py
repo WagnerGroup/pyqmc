@@ -155,12 +155,11 @@ def line_minimization(
                     "iter": it,
                 }
             )
-            print(
-                "descent step",
-                step,
-                dfs[-1]["en"],
-                "weight stddev",
-                np.std(data["weight"]),
+            print("descent step {:<15.10} {:<15.10} weight stddev {:<15.10}".format(
+                    step,
+                    dfs[-1]["en"],
+                    np.std(data["weight"])
+                ),
                 flush=True,
             )
 

@@ -93,10 +93,12 @@ if __name__=="__main__":
     from pyqmc.dmc import rundmc
     from pyqmc import EnergyAccumulator
     import pandas as pd
+    import time 
 
     df,coords=distvmc(wf,pyqmc.initial_guess(mol,nconfig),client=client,nsteps_per=40,nsteps=40)
+    start = time.time()
     wf,datagrad,dataline=line_minimization(wf,coords,pyqmc.gradient_generator(mol,wf),client=client,maxiters=5)
-
+    print(time.time() - start)
     acc, descriptors = generate_constraints(mol, mf, wf)
     
     forcing = {}

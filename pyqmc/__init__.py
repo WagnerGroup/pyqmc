@@ -15,7 +15,7 @@ from pyqmc.func3d import (
 from pyqmc.optvariance import optvariance
 from pyqmc.optsr import gradient_descent
 from pyqmc.linemin import line_minimization
-from pyqmc.cvmc import optimize
+from pyqmc.cvmc import cvmc 
 from pyqmc.dmc import rundmc
 
 

@@ -89,7 +89,7 @@ if __name__=="__main__":
     client = Client(cluster)
     mol,mf,wf=generate_wf()
     from pyqmc.mc import vmc
-    from pyqmc.dasktools import distvmc,line_minimization, optimize
+    from pyqmc.dasktools import distvmc, line_minimization, cvmc
     from pyqmc.dmc import rundmc
     from pyqmc import EnergyAccumulator
     import pandas as pd
@@ -114,7 +114,7 @@ if __name__=="__main__":
 
     datafile = "saveh2.json"
 
-    wf, df = optimize(
+    wf, df = cvmc(
         wf,
         coords,
         acc,

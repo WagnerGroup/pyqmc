@@ -128,7 +128,7 @@ def line_minimization(*args, client, **kwargs):
     return pyqmc.line_minimization(*args, vmc=distvmc, lm=dist_lm_sampler, **kwargs)
 
 
-def optimize(*args, client, **kwargs):
+def cvmc(*args, client, **kwargs):
     import pyqmc
 
     if "vmcoptions" not in kwargs:

@@ -118,5 +118,5 @@ def test_func3d():
     assert abs(l_both).sum() == 0
 
 if __name__ == "__main__":
-    #test_wfs()
+    test_wfs()
     test_func3d()

@@ -96,7 +96,27 @@ def test_func3d():
         for k, v in pgrad.items():
             assert v < epsilon, (name, k, v)
 
+   
+    #Check CutoffCusp does not diverge at r/rcut = 1 
+    rcut = 1.5
+    f = CutoffCuspFunction(2.0, rcut) 
+    gamma = 2.0
+    rc = 1.5
+    basis = CutoffCuspFunction(gamma, rc)
+    rvec = np.array([0,0,rc])[np.newaxis,:]
+    r = np.linalg.norm(rvec)[np.newaxis]
+
+    v = basis.value(rvec, r)
+    g = basis.gradient(rvec, r)
+    l = basis.laplacian(rvec, r)
+    g_both, l_both = basis.gradient_laplacian(rvec, r)
+
+    assert abs(v).sum() == 0
+    assert abs(g).sum() == 0
+    assert abs(l).sum() == 0
+    assert abs(g_both).sum() == 0
+    assert abs(l_both).sum() == 0
 
 if __name__ == "__main__":
-    test_wfs()
+    #test_wfs()
     test_func3d()

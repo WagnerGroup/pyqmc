@@ -355,31 +355,26 @@ class CutoffCuspFunction:
         rvec = rvec[mask]
         y = r / rcut
 
-        a = 1 - 2 * y + y * y 
-        b = y - y * y + y * y * y / 3 
+        a = 1 - 2 * y + y * y
+        b = y - y * y + y * y * y / 3
         c = a / (1 + gamma * b) ** 2
-        dfdy = -rcut * c 
-            
-        d2fd2y_numerator =\
-            18 * rcut * (y - 1) *\
-            (   
-              2 * gamma * y ** 3 - \
-              6 * gamma * y ** 2 + \
-              6 * gamma * y - \
-              3 * gamma - 3 
-            )   
-        d2fd2y_denominator =\
-            (   
-              gamma * y ** 3 - \
-              3 * gamma * y ** 2 + \
-              3 * gamma * y + 3 
-            ) ** 3
-        d2fd2y = d2fd2y_numerator/d2fd2y_denominator
+        dfdy = -rcut * c
+
+        d2fd2y_numerator = (
+            18
+            * rcut
+            * (y - 1)
+            * (2 * gamma * y ** 3 - 6 * gamma * y ** 2 + 6 * gamma * y - 3 * gamma - 3)
+        )
+        d2fd2y_denominator = (
+            gamma * y ** 3 - 3 * gamma * y ** 2 + 3 * gamma * y + 3
+        ) ** 3
+        d2fd2y = d2fd2y_numerator / d2fd2y_denominator
 
         dydx = rvec / (r * rcut)
-        d2yd2x = (1 - (rvec * rvec)/(r * r))/(r * rcut)
+        d2yd2x = (1 - (rvec * rvec) / (r * r)) / (r * rcut)
         lap[mask] = dfdy * d2yd2x + d2fd2y * (dydx) ** 2
-        return lap 
+        return lap
 
     def gradient_laplacian(self, rvec, r):
         """Returns gradient and laplacian of function.
@@ -400,29 +395,24 @@ class CutoffCuspFunction:
 
         a = 1 - 2 * y + y * y
         b = y - y * y + y * y * y / 3
-        c = a / (1 + gamma * b) ** 2 
+        c = a / (1 + gamma * b) ** 2
 
-        grad[mask] = - c * rvec / r
-        
-        dfdy = -rcut * c 
-        d2fd2y_numerator =\
-            18 * rcut * (y - 1) *\
-            (   
-              2 * gamma * y ** 3 - \
-              6 * gamma * y ** 2 + \
-              6 * gamma * y - \
-              3 * gamma - 3 
-            )   
-        d2fd2y_denominator =\
-            (   
-              gamma * y ** 3 - \
-              3 * gamma * y ** 2 + \
-              3 * gamma * y + 3 
-            ) ** 3
-        d2fd2y = d2fd2y_numerator/d2fd2y_denominator
+        grad[mask] = -c * rvec / r
+
+        dfdy = -rcut * c
+        d2fd2y_numerator = (
+            18
+            * rcut
+            * (y - 1)
+            * (2 * gamma * y ** 3 - 6 * gamma * y ** 2 + 6 * gamma * y - 3 * gamma - 3)
+        )
+        d2fd2y_denominator = (
+            gamma * y ** 3 - 3 * gamma * y ** 2 + 3 * gamma * y + 3
+        ) ** 3
+        d2fd2y = d2fd2y_numerator / d2fd2y_denominator
         dydx = rvec / (r * rcut)
-        d2yd2x = (1 - (rvec * rvec)/(r * r))/(r * rcut)
-        
+        d2yd2x = (1 - (rvec * rvec) / (r * r)) / (r * rcut)
+
         lap[mask] = dfdy * d2yd2x + d2fd2y * (dydx) ** 2
         return grad, lap
 

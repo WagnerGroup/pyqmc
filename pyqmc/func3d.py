@@ -357,12 +357,23 @@ class CutoffCuspFunction:
 
         a = 1 - 2 * y + y * y
         b = y - y * y + y * y * y / 3
-        c = a / (1 + gamma * b) ** 2 / (rcut * r)
+        c = a / (1 + gamma * b) ** 2
+        dfdy = -rcut * c
 
-        temp = 2 * (y - 1) / (a * rcut * r)
-        temp -= 1 / r ** 2
-        temp -= 2 * c * gamma * (1 + gamma * b)
-        lap[mask] = -rcut * c * (1 + rvec ** 2 * temp)
+        d2fd2y_numerator = (
+            18
+            * rcut
+            * (y - 1)
+            * (2 * gamma * y ** 3 - 6 * gamma * y ** 2 + 6 * gamma * y - 3 * gamma - 3)
+        )
+        d2fd2y_denominator = (
+            gamma * y ** 3 - 3 * gamma * y ** 2 + 3 * gamma * y + 3
+        ) ** 3
+        d2fd2y = d2fd2y_numerator / d2fd2y_denominator
+
+        dydx = rvec / (r * rcut)
+        d2yd2x = (1 - (rvec * rvec) / (r * r)) / (r * rcut)
+        lap[mask] = dfdy * d2yd2x + d2fd2y * (dydx) ** 2
         return lap
 
     def gradient_laplacian(self, rvec, r):
@@ -384,13 +395,25 @@ class CutoffCuspFunction:
 
         a = 1 - 2 * y + y * y
         b = y - y * y + y * y * y / 3
-        c = a / (1 + gamma * b) ** 2 / (rcut * r)
+        c = a / (1 + gamma * b) ** 2
 
-        grad[mask] = -rcut * c * rvec
-        temp = 2 * (y - 1) / (a * rcut * r)
-        temp -= 1 / r ** 2
-        temp -= 2 * c * gamma * (1 + gamma * b)
-        lap[mask] = -rcut * c * (1 + rvec ** 2 * temp)
+        grad[mask] = -c * rvec / r
+
+        dfdy = -rcut * c
+        d2fd2y_numerator = (
+            18
+            * rcut
+            * (y - 1)
+            * (2 * gamma * y ** 3 - 6 * gamma * y ** 2 + 6 * gamma * y - 3 * gamma - 3)
+        )
+        d2fd2y_denominator = (
+            gamma * y ** 3 - 3 * gamma * y ** 2 + 3 * gamma * y + 3
+        ) ** 3
+        d2fd2y = d2fd2y_numerator / d2fd2y_denominator
+        dydx = rvec / (r * rcut)
+        d2yd2x = (1 - (rvec * rvec) / (r * r)) / (r * rcut)
+
+        lap[mask] = dfdy * d2yd2x + d2fd2y * (dydx) ** 2
         return grad, lap
 
     def pgradient(self, rvec, r):

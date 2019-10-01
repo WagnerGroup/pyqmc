@@ -1,5 +1,5 @@
 import pyqmc
-
+import numpy as np
 
 def setuph2(r, obdm_steps=5):
     from pyscf import gto, scf, lo
@@ -51,7 +51,6 @@ H ul
         atom=f"H 0. 0. 0.; H 0. 0. {r}", unit="bohr", basis=basis, ecp=ecp, verbose=5
     )
     mf = scf.RHF(mol).run()
-    # lowdin = lo.orth_ao(mol, "lowdin")
     mo_occ = mf.mo_coeff[:, mf.mo_occ > 0]
     a = lo.iao.iao(mol, mo_occ)
     a = lo.vec_lowdin(a, mf.get_ovlp())
@@ -60,6 +59,18 @@ H ul
     obdm_down = OBDMAccumulator(mol=mol, orb_coeff=a, nstep=obdm_steps, spin=1)
 
     wf = pyqmc.slater_jastrow(mol, mf)
+
+
+    freeze = {}
+    for k in wf.parameters:
+        freeze[k] = np.zeros(wf.parameters[k].shape,dtype='bool')
+    print(freeze.keys())
+    print(wf.parameters['wf1mo_coeff_alpha'])
+    #this freezing allows us to easily go between bonding and 
+    # AFM configurations.
+    freeze['wf1mo_coeff_alpha'][0,0]=True
+    freeze['wf1mo_coeff_beta'][1,0]=True
+
 
     descriptors = {
         "t": [[(1.0, (0, 1)), (1.0, (1, 0))], [(1.0, (0, 1)), (1.0, (1, 0))]],
@@ -71,53 +82,39 @@ H ul
 
     acc = PGradDescriptor(
         EnergyAccumulator(mol),
-        LinearTransform(wf.parameters),
+        LinearTransform(wf.parameters, freeze=freeze),
         [obdm_up, obdm_down],
         DescriptorFromOBDM(descriptors, norm=2.0),
     )
 
     return {"wf": wf, "acc": acc, "mol": mol, "mf": mf, "descriptors": descriptors}
 
-    # configs = pyqmc.initial_guess(mol, nconf)
-    # wf,df=optimize(wf,configs,acc,obj,forcing=forcing,
-    #        iters=10,tstep=0.1,datafile=datafile)
-    # print('final parameters',wf.parameters)
-    # return df,wf.parameters
 
 
 if __name__ == "__main__":
-    import parsl.config
-    from parsl.configs.exex_local import config
-    from pyqmc.parsltools import distvmc as vmc
-    from pyqmc.parsltools import clean_pyscf_objects
-    from pyqmc.linemin import line_minimization
+    import pyqmc
+    import pyqmc.dasktools
+    from pyqmc.dasktools import distvmc as vmc
+    from pyqmc.dasktools import line_minimization
     from pyqmc.cvmc import optimize
-
-    # run VMC in parallel
+    from dask.distributed import Client, LocalCluster   
     r = 1.1
 
-    ncore = 4
-    sys = setuph2(r)
-    sys["mol"], sys["mf"] = clean_pyscf_objects(sys["mol"], sys["mf"])
-
-    config.executors[0].ranks_per_node = ncore
-    parsl.load(config)
-
-    # Set up calculation and
     ncore = 2
+    sys = setuph2(r)
+    cluster = LocalCluster(n_workers=ncore, threads_per_worker=1)
+    client = Client(cluster)
+
+    # Set up calculation
     nconf = 800
     configs = pyqmc.initial_guess(sys["mol"], nconf)
-    df, configs = vmc(
-        sys["wf"], configs, accumulators={}, nsteps=40, nsteps_per=40, npartitions=ncore
-    )
 
-    wf, df = line_minimization(
+    wf, dfgrad, dfline = line_minimization(
         sys["wf"],
         configs,
         pyqmc.gradient_generator(sys["mol"], sys["wf"]),
+        client=client,
         maxiters=5,
-        vmc=vmc,
-        vmcoptions=dict(npartitions=ncore, nsteps=100),
     )
 
     forcing = {}
@@ -127,7 +124,7 @@ if __name__ == "__main__":
         obj[k] = 0.0
 
     forcing["t"] = 0.5
-    forcing["trace"] = 0.5
+    forcing["trace"] = 1.0
     obj["t"] = 0.0
     obj["trace"] = 2.0
 
@@ -143,5 +140,5 @@ if __name__ == "__main__":
         tstep=0.1,
         datafile=datafile,
         vmc=vmc,
-        vmcoptions=dict(npartitions=ncore, nsteps=100),
+        vmcoptions=dict(client=client, nsteps=100),
     )

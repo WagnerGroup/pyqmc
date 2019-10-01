@@ -9,8 +9,8 @@ class DescriptorFromOBDM:
     """
 
     def __init__(self, mapping, norm=1.0):
-        """mapping should be a dictionary such that each descriptor has nret lists of weights and indices to add t
-        together
+        """mapping should be a dictionary such that each descriptor has 
+        nret lists of weights and indices to add together
         For example, 
         {'t': [ 
                  [ (1.0, (0,1)), 
@@ -59,10 +59,10 @@ class PGradDescriptor:
     def _node_cut(self, configs, wf):
         """ Return true if a given configuration is within nodal_cutoff 
         of the node """
-        ne = configs.shape[1]
+        ne = configs.configs.shape[1]
         d2 = 0.0
         for e in range(ne):
-            d2 += np.sum(wf.gradient(e, configs[:, e, :]) ** 2, axis=0)
+            d2 += np.sum(wf.gradient(e, configs.electron(e)) ** 2, axis=0)
         r = 1.0 / (d2 * ne * ne)
         return r < self.nodal_cutoff ** 2
 
@@ -82,7 +82,7 @@ class PGradDescriptor:
         return d
 
     def avg(self, configs, wf):
-        nconf = configs.shape[0]
+        nconf = configs.configs.shape[0]
         pgrad = wf.pgradient()
         den = self.enacc(configs, wf)
         energy = den["total"]
@@ -123,8 +123,8 @@ def optimize(
     vmc=None,
     vmcoptions=None,
 ):
-    """ 
-    Args: 
+    """
+    Args:
 
        wf : a wave function object
 
@@ -156,10 +156,6 @@ def optimize(
         dpH = np.mean(df["graddpH"])
         dEdp = dpH - dpavg * havg
 
-        # avgt=np.mean(df['gradavgt'])
-        # dpt=np.mean(df['graddpt'])
-        # dtdp=dpt-dpavg*avgt
-        # distfromobj=avgt-tobj
         qavg = {}
         qdp = {}
         distfromobj = 0.0
@@ -174,7 +170,7 @@ def optimize(
             distfromobj += distobj
             objfunc += force * distobj ** 2
 
-        print("energy", havg, "avg", qavg, "objective function", objfunc, flush=True)
+        #print("energy", havg, "avg", qavg, "objective function", objfunc, flush=True)
         dret = {
             "objderiv": objderiv,
             "energy": havg,
@@ -189,6 +185,7 @@ def optimize(
         return dret
 
     x0 = acc.transform.serialize_parameters(wf.parameters)
+   
     df = []
     for it in range(iters):
         grad = get_obj_deriv(x0)
@@ -196,6 +193,10 @@ def optimize(
         grad["tau"] = 0.0
         grad["iteration"] = it
         grad["parameters"] = x0.copy()
+        print(x0)
+        for k, force in forcing.items():
+            print(k, grad['avg'+k], grad['dp'+k])
+
         df.append(grad)
         taus = np.linspace(0, tstep, npts)
         taus[0] = -tstep / npts
@@ -203,8 +204,9 @@ def optimize(
         yfit = [grad["objfunc"]]
 
         for tau in taus:
-            print("+++++ tau ++++++", tau)
+            #print("+++++ tau ++++++", tau)
             x = x0 - tau * grad["objderiv"] / np.linalg.norm(grad["objderiv"])
+            print("x",x)
             gradnew = get_obj_deriv(x)
             xfit.append(tau)
             yfit.append(gradnew["objfunc"])
@@ -213,6 +215,8 @@ def optimize(
             gradnew["iteration"] = it
             gradnew["parameters"] = x.copy()
             df.append(gradnew)
+        for t, y in zip(xfit, yfit):
+            print(t, y)
 
         p = np.polyfit(xfit, yfit, 2)
         print("fitting", xfit, yfit)
@@ -233,7 +237,7 @@ def optimize(
         print("estimated minimum adjusted", est_min, flush=True)
 
         x0 = x0 - est_min * grad["objderiv"] / np.linalg.norm(grad["objderiv"])
-        if not datafile is None:
+        if datafile is not None:
             pd.DataFrame(df).to_json(datafile)
 
     for k, p in acc.transform.deserialize(x0).items():

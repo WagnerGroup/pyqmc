@@ -39,7 +39,7 @@ class MultiSlater:
         self._nelec = (mc.nelecas[0] + mc.ncore, mc.nelecas[1] + mc.ncore)
         self._copy_ci(mc)
 
-        if (len(mc.mo_coeff.shape)) == 3:
+        if len(mc.mo_coeff.shape) == 3:
             self.parameters["mo_coeff_alpha"] = mc.mo_coeff[0][:, : mc.ncas + mc.ncore]
             self.parameters["mo_coeff_beta"] = mc.mo_coeff[1][:, : mc.ncas + mc.ncore]
         else:

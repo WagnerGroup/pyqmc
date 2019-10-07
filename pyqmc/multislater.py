@@ -39,7 +39,7 @@ class MultiSlater:
         self._nelec = (mc.nelecas[0] + mc.ncore, mc.nelecas[1] + mc.ncore)
         self._copy_ci(mc)
 
-        if mc.mo_coeff.shape[0] == 2:
+        if (len(mc.mo_coeff.shape)) == 3:
             self.parameters["mo_coeff_alpha"] = mc.mo_coeff[0][:, : mc.ncas + mc.ncore]
             self.parameters["mo_coeff_beta"] = mc.mo_coeff[1][:, : mc.ncas + mc.ncore]
         else:
@@ -169,7 +169,9 @@ class MultiSlater:
             mask = [True] * vec.shape[0]
 
         ratios = np.einsum(
-            "i...dj,idj->i...d", vec, self._inverse[s][mask, :, :, e - s * self._nelec[0]]
+            "i...dj,idj->i...d",
+            vec,
+            self._inverse[s][mask, :, :, e - s * self._nelec[0]],
         )
         det_array = (
             self._dets[0][0, :, self._det_map[0]][:, mask]

@@ -305,30 +305,21 @@ class JastrowSpin:
         of all the b's and redo the sums, similar to recompute() """
         return {"bcoeff": self._bvalues, "acoeff": self._avalues}
 
-    def u_components(self, natom, r):
-        a_up_atm = []
-        a_dn_atm = []
-        u_onebody = {}
-        for atm in range(natom):
-            a_up = 0
-            a_dn = 0
-            for i, a in enumerate(self.a_basis):
-                a_value = a.value(None, r)
-                a_up += self.parameters["acoeff"][atm][i][0] * a_value
-                a_dn += self.parameters["acoeff"][atm][i][1] * a_value
-            a_up_atm.append(a_up)
-            a_dn_atm.append(a_dn)
-        u_onebody["up"], u_onebody["dn"] = a_up_atm, a_dn_atm
+    def u_components(self, r):
 
-        b_upup = 0
-        b_updn = 0
-        b_dndn = 0
-        u_twobody = {}
-        for i, b in enumerate(self.b_basis[1:], start=1):
-            b_value = b.value(None, r)
-            b_upup += self.parameters["bcoeff"][i][0] * b_value
-            b_updn += self.parameters["bcoeff"][i][1] * b_value
-            b_dndn += self.parameters["bcoeff"][i][2] * b_value
-        u_twobody["upup"], u_twobody["updn"], u_twobody["dndn"] = b_upup, b_updn, b_dndn
+        u_onebody = {"up": [], "dn": []}
+        a_value = list(map(lambda x: x.value(None, r), self.a_basis))
+        u_onebody["up"] = np.einsum(
+            "ij,jl->il", self.parameters["acoeff"][:, :, 0], a_value
+        )
+        u_onebody["dn"] = np.einsum(
+            "ij,jl->il", self.parameters["acoeff"][:, :, 1], a_value
+        )
+
+        u_twobody = {"upup": [], "updn": [], "dndn": []}
+        b_value = list(map(lambda x: x.value(None, r), self.b_basis[1:]))
+        u_twobody["upup"] = np.dot(self.parameters["bcoeff"][1:, 0], b_value)
+        u_twobody["updn"] = np.dot(self.parameters["bcoeff"][1:, 1], b_value)
+        u_twobody["dndn"] = np.dot(self.parameters["bcoeff"][1:, 2], b_value)
 
         return u_onebody, u_twobody

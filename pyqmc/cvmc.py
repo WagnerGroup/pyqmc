@@ -207,7 +207,8 @@ def optimize(
         xfit = []
         yfit = []
 
-        taus = np.linspace(-tstep/(npts-1), t, npts+1)
+        taus = np.linspace(0, tstep, npts+1)
+        taus[0] = -tstep/(npts - 1)
         params = [x0 - tau * grad["objderiv"] / np.linalg.norm(grad["objderiv"]) for tau in taus]
         stepsdata = lm(wf, configs, params, acc, **lmoptions)
 
@@ -218,7 +219,6 @@ def optimize(
             qdp = {}
             distfromobj = 0.0
             objfunc = en
-            print(list(data))
             for k, force in forcing.items():
                 qavg[k] = np.mean(data[k] * data["weight"]) / np.mean(data["weight"])
                 distobj = qavg[k] - objective[k]
@@ -302,7 +302,7 @@ def lm_cvmc(wf, configs, params, acc):
         rawweights = np.exp(2 * (psi - psi0))  # convert from log(|psi|) to |psi|**2
         
         df = acc.enacc(configs, wf)
-        dms = [evaluate(configs, wf) for evaluate in acc.dm_evaluators]
+        dms = [evaluate(configs, wf) for evaluate in acc.dm_evaluators] #This correlated sampling is incorrect
         descript = acc.descriptors(dms)
         for di, desc in descript.items():
           df[di] = desc

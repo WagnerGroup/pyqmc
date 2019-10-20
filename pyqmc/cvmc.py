@@ -234,6 +234,7 @@ def optimize(
                 "dist": distfromobj,
                 "objderiv": None,
                 "dEdp": None
+                "energy": en,
               }
 
             for k, avg in qavg.items():

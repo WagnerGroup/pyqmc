@@ -233,7 +233,7 @@ def optimize(
                 "objfunc": objfunc,
                 "dist": distfromobj,
                 "objderiv": None,
-                "dEdp": None
+                "dEdp": None,
                 "energy": en,
               }
 

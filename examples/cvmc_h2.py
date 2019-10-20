@@ -98,6 +98,7 @@ if __name__ == "__main__":
     from pyqmc.dasktools import line_minimization
     from pyqmc.cvmc import optimize
     from dask.distributed import Client, LocalCluster   
+    
     r = 1.1
 
     ncore = 2
@@ -128,8 +129,9 @@ if __name__ == "__main__":
     obj["t"] = 0.0
     obj["trace"] = 2.0
 
-    datafile = "saveh2.json"
-
+    datafile = "saveh2_corr.json"
+    import time 
+    start = time.time()
     wf, df = optimize(
         sys["wf"],
         configs,
@@ -142,3 +144,4 @@ if __name__ == "__main__":
         vmc=vmc,
         vmcoptions=dict(client=client, nsteps=100),
     )
+    print("FINAL RUNTIME: ", time.time() - start)

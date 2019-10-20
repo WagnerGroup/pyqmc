@@ -207,8 +207,7 @@ def optimize(
         xfit = []
         yfit = []
 
-        taus = np.linspace(0, tstep, npts)
-        taus[0] = -tstep / (npts - 1)
+        taus = np.linspace(-tstep/(npts-1), t, npts+1)
         params = [x0 - tau * grad["objderiv"] / np.linalg.norm(grad["objderiv"]) for tau in taus]
         stepsdata = lm(wf, configs, params, acc, **lmoptions)
 

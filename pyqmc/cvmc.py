@@ -294,6 +294,15 @@ def lm_cvmc(wf, configs, params, acc):
 
     data = []
     psi0 = wf.recompute(configs)[1]  # recompute gives logdet
+    
+    #Aggregate evaluator configurations
+    extra_configs_list = []
+    aux_list = []
+    for i, evaluate in enumerate(acc.dm_evaluators):
+        res = evaluate.get_extra_configs(configs)
+        extra_configs_list.append(res[0])
+        aux_list.append(res[1])
+    
     for p in params:
         newparms = acc.transform.deserialize(p)
         for k in newparms:
@@ -302,7 +311,7 @@ def lm_cvmc(wf, configs, params, acc):
         rawweights = np.exp(2 * (psi - psi0))  # convert from log(|psi|) to |psi|**2
         
         df = acc.enacc(configs, wf)
-        dms = [evaluate(configs, wf) for evaluate in acc.dm_evaluators] #This correlated sampling is incorrect
+        dms = [evaluate. call_with_configs(configs, wf, extra_configs_list[i], aux_list[i]) for i, evaluate in enumerate(acc.dm_evaluators)]
         descript = acc.descriptors(dms)
         for di, desc in descript.items():
           df[di] = desc

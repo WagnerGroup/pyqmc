@@ -66,7 +66,7 @@ class OBDMAccumulator:
                 mol, orb_coeff, self._extra_config, tstep
             )
 
-    def __call__(self, configs, wf, extra_configs=None):
+    def __call__(self, configs, wf):
         """ Quantities from equation (9) of DOI:10.1063/1.4793531"""
 
         nconf = configs.configs.shape[0]

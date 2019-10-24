@@ -217,20 +217,27 @@ def optimize(
 
             qavg = {}
             qdp = {}
-            distfromobj = 0.0
             objfunc = en
             for k, force in forcing.items():
-                qavg[k] = np.mean(data[k] * data["weight"]) / np.mean(data["weight"])
-                distobj = qavg[k] - objective[k]
-                objfunc += force * distobj ** 2
-            
+              
+                numerator = np.sum(data[k] * data["weight"])
+                denominator = np.sum(data["weight"])
+
+                objfunc += force *\
+                  (numerator ** 2 - np.sum((data[k] * data["weight"]) ** 2)) /\
+                  (denominator ** 2 - np.sum(data["weight"] ** 2)) #Quadratic term
+                
+                qavg[k] = numerator / denominator
+                objfunc -= 2 * force * qavg[k] * objective[k] #Linear term
+                objfunc += force * objective[k] ** 2          #Constant term
+
             dret =  {
                 "steptype": "line",
                 "tau": tau,
                 "iteration": it,
                 "parameters": params, 
                 "objfunc": objfunc,
-                "dist": distfromobj,
+                "dist": None,
                 "objderiv": None,
                 "dEdp": None,
                 "energy": en,

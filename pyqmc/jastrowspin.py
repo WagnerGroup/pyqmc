@@ -305,10 +305,13 @@ class JastrowSpin:
         of all the b's and redo the sums, similar to recompute() """
         return {"bcoeff": self._bvalues, "acoeff": self._avalues}
 
-    def u_components(self, r):
-
+    def u_components(self, rvec, r):
+        """Given positions rvec and their magnitudes r, returns 
+        dictionaries of the one-body and two-body Jastrow components.
+        Dictionaries are the spin components of U summed across the basis;
+        one-body also returns U for different atoms. """
         u_onebody = {"up": [], "dn": []}
-        a_value = list(map(lambda x: x.value(None, r), self.a_basis))
+        a_value = list(map(lambda x: x.value(rvec, r), self.a_basis))
         u_onebody["up"] = np.einsum(
             "ij,jl->il", self.parameters["acoeff"][:, :, 0], a_value
         )
@@ -317,7 +320,7 @@ class JastrowSpin:
         )
 
         u_twobody = {"upup": [], "updn": [], "dndn": []}
-        b_value = list(map(lambda x: x.value(None, r), self.b_basis[1:]))
+        b_value = list(map(lambda x: x.value(rvec, r), self.b_basis[1:]))
         u_twobody["upup"] = np.dot(self.parameters["bcoeff"][1:, 0], b_value)
         u_twobody["updn"] = np.dot(self.parameters["bcoeff"][1:, 1], b_value)
         u_twobody["dndn"] = np.dot(self.parameters["bcoeff"][1:, 2], b_value)

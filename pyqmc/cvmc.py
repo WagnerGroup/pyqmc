@@ -110,7 +110,7 @@ class PGradDescriptor:
         return d
 
 
-def optimize(
+def cvmc_optimize(
     wf,
     configs,
     acc,

@@ -128,7 +128,7 @@ def line_minimization(*args, client, **kwargs):
     kwargs["lmoptions"]["client"] = client
     return pyqmc.line_minimization(*args, vmc=distvmc, lm=dist_lm_sampler, **kwargs)
 
-def optimize(*args, client, **kwargs):
+def cvmc_optimize(*args, client, **kwargs):
     import pyqmc
     from pyqmc.cvmc import lm_cvmc
 
@@ -139,7 +139,7 @@ def optimize(*args, client, **kwargs):
     kwargs["vmcoptions"]["client"] = client
     kwargs["lmoptions"]["client"] = client
     kwargs["lmoptions"]["lm_sampler"] = lm_cvmc
-    return pyqmc.optimize(*args, vmc=distvmc, lm=dist_lm_sampler, **kwargs)
+    return pyqmc.cvmc_optimize(*args, vmc=distvmc, lm=dist_lm_sampler, **kwargs)
 
 def distdmc_propagate(wf, configs, weights, *args, client, npartitions=None, **kwargs):
     import pyqmc.dmc

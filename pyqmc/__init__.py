@@ -16,7 +16,7 @@ from pyqmc.optvariance import optvariance
 from pyqmc.optsr import gradient_descent
 from pyqmc.linemin import line_minimization
 from pyqmc.dmc import rundmc
-from pyqmc.cvmc import optimize
+from pyqmc.cvmc import cvmc_optimize
 
 def slater_jastrow(mol, mf, abasis=None, bbasis=None):
     if abasis is None:

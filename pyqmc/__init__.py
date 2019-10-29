@@ -18,6 +18,7 @@ from pyqmc.linemin import line_minimization
 from pyqmc.dmc import rundmc
 from pyqmc.cvmc import cvmc_optimize
 
+
 def slater_jastrow(mol, mf, abasis=None, bbasis=None):
     if abasis is None:
         abasis = [GaussianFunction(0.8), GaussianFunction(1.6), GaussianFunction(3.2)]

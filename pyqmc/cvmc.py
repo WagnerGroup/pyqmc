@@ -190,7 +190,7 @@ def cvmc_optimize(
         return dret
 
     x0 = acc.transform.serialize_parameters(wf.parameters)
-   
+
     df = []
     for it in range(iters):
         grad = get_obj_deriv(x0)
@@ -200,16 +200,19 @@ def cvmc_optimize(
         grad["parameters"] = x0.copy()
         print(x0)
         for k, force in forcing.items():
-            print(k, grad['avg'+k], grad['dp'+k])
+            print(k, grad["avg" + k], grad["dp" + k])
 
         df.append(grad)
 
         xfit = []
         yfit = []
 
-        taus = np.linspace(0, tstep, npts+1)
-        taus[0] = -tstep/(npts - 1)
-        params = [x0 - tau * grad["objderiv"] / np.linalg.norm(grad["objderiv"]) for tau in taus]
+        taus = np.linspace(0, tstep, npts + 1)
+        taus[0] = -tstep / (npts - 1)
+        params = [
+            x0 - tau * grad["objderiv"] / np.linalg.norm(grad["objderiv"])
+            for tau in taus
+        ]
         stepsdata = lm(wf, configs, params, acc, **lmoptions)
 
         for data, p, tau in zip(stepsdata, params, taus):
@@ -222,25 +225,27 @@ def cvmc_optimize(
                 numerator = np.sum(data[k] * data["weight"])
                 denominator = np.sum(data["weight"])
 
-                objfunc += force *\
-                  (numerator ** 2 - np.sum((data[k] * data["weight"]) ** 2)) /\
-                  (denominator ** 2 - np.sum(data["weight"] ** 2)) #Quadratic term
-                
-                qavg[k] = numerator / denominator
-                objfunc -= 2 * force * qavg[k] * objective[k] #Linear term
-                objfunc += force * objective[k] ** 2          #Constant term
+                objfunc += (
+                    force
+                    * (numerator ** 2 - np.sum((data[k] * data["weight"]) ** 2))
+                    / (denominator ** 2 - np.sum(data["weight"] ** 2))
+                )  # Quadratic term
 
-            dret =  {
+                qavg[k] = numerator / denominator
+                objfunc -= 2 * force * qavg[k] * objective[k]  # Linear term
+                objfunc += force * objective[k] ** 2  # Constant term
+
+            dret = {
                 "steptype": "line",
                 "tau": tau,
                 "iteration": it,
-                "parameters": params, 
+                "parameters": params,
                 "objfunc": objfunc,
                 "dist": None,
                 "objderiv": None,
                 "dEdp": None,
                 "energy": en,
-              }
+            }
 
             for k, avg in qavg.items():
                 dret["avg" + k] = avg
@@ -300,28 +305,31 @@ def lm_cvmc(wf, configs, params, acc):
 
     data = []
     psi0 = wf.recompute(configs)[1]  # recompute gives logdet
-    
-    #Aggregate evaluator configurations
+
+    # Aggregate evaluator configurations
     extra_configs = []
     auxassignments = []
     for i, evaluate in enumerate(acc.dm_evaluators):
         res = evaluate.get_extra_configs(configs)
         extra_configs.append(res[0])
         auxassignments.append(res[1])
-   
-    #Run the correlated evaluation
+
+    # Run the correlated evaluation
     for p in params:
         newparms = acc.transform.deserialize(p)
         for k in newparms:
             wf.parameters[k] = newparms[k]
         psi = wf.recompute(configs)[1]  # recompute gives logdet
         rawweights = np.exp(2 * (psi - psi0))  # convert from log(|psi|) to |psi|**2
-        
+
         df = acc.enacc(configs, wf)
-        dms = [evaluate(configs, wf, extra_configs[i], auxassignments[i]) for i, evaluate in enumerate(acc.dm_evaluators)]
+        dms = [
+            evaluate(configs, wf, extra_configs[i], auxassignments[i])
+            for i, evaluate in enumerate(acc.dm_evaluators)
+        ]
         descript = acc.descriptors(dms)
         for di, desc in descript.items():
-          df[di] = desc
+            df[di] = desc
         df["weight"] = rawweights
 
         data.append(df)

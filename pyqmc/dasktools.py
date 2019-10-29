@@ -69,7 +69,9 @@ def distvmc(
     return alldata, coords
 
 
-def dist_lm_sampler(wf, configs, params, pgrad_acc, npartitions=None, client=None, lm_sampler=None):
+def dist_lm_sampler(
+    wf, configs, params, pgrad_acc, npartitions=None, client=None, lm_sampler=None
+):
     """
     Evaluates accumulator on the same set of configs for correlated sampling of different wave function parameters.  Parallelized with parsl.
 
@@ -128,6 +130,7 @@ def line_minimization(*args, client, **kwargs):
     kwargs["lmoptions"]["client"] = client
     return pyqmc.line_minimization(*args, vmc=distvmc, lm=dist_lm_sampler, **kwargs)
 
+
 def cvmc_optimize(*args, client, **kwargs):
     import pyqmc
     from pyqmc.cvmc import lm_cvmc
@@ -140,6 +143,7 @@ def cvmc_optimize(*args, client, **kwargs):
     kwargs["lmoptions"]["client"] = client
     kwargs["lmoptions"]["lm_sampler"] = lm_cvmc
     return pyqmc.cvmc_optimize(*args, vmc=distvmc, lm=dist_lm_sampler, **kwargs)
+
 
 def distdmc_propagate(wf, configs, weights, *args, client, npartitions=None, **kwargs):
     import pyqmc.dmc

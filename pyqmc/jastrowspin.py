@@ -50,7 +50,7 @@ class JastrowSpin:
         \sum_{I, \alpha, k} c^{a}_{Ik\uparrow } a_{k}(r_{I\alpha}) + 
         \sum_{I, \beta, k}  c^{a}_{Ik\downarrow } a_{k}(r_{I\beta}) +
         \sum_{\alpha_1 < \alpha_2, l} c^{b}_{l\uparrow\uparrow} b^{l}(r_{\alpha_1\alpha_2}) + 
-        \sum_{\alpha, \beta, l} c^{b}_{l\uparrow\downarrow} b^{l}(r_{\beta_1\beta_2})
+        \sum_{\alpha, \beta, l} c^{b}_{l\uparrow\downarrow} b^{l}(r_{\alpha\beta})
         \sum_{\beta_1 < \beta_2, l} c^{b}_{l\downarrow\downarrow} b^{l}(r_{\beta_1\beta_2}) + 
         $$
         the indices are $I$ for ions, $k$ for one-body (a) basis, $l$ for two-body (b) basis, $\alpha$ for up electrons, and $\beta$ for down electrons. $c^a, c^b$ are the coeffecient arrays. $r_{ij}$ denotes the distance between particles $i$ and $j$.
@@ -105,7 +105,6 @@ class JastrowSpin:
 
         u = np.sum(self._bvalues * self.parameters["bcoeff"], axis=(2, 1))
         u += np.einsum("ijkl,jkl->i", self._avalues, self.parameters["acoeff"])
-
         return (1, u)
 
     def updateinternals(self, e, epos, wrap=None, mask=None):
@@ -231,8 +230,8 @@ class JastrowSpin:
 
         for c, b in zip(self.parameters["bcoeff"], self.b_basis):
             bgrad = b.gradient(dnew, rnew)
-            grad += c[edown] * np.sum(bgrad[:, :nup - eup], axis=1).T
-            grad += c[1 + edown] * np.sum(bgrad[:, nup - eup:], axis=1).T
+            grad += c[edown] * np.sum(bgrad[:, : nup - eup], axis=1).T
+            grad += c[1 + edown] * np.sum(bgrad[:, nup - eup :], axis=1).T
 
         for c, a in zip(self.parameters["acoeff"].transpose()[edown], self.a_basis):
             grad += np.einsum("j,ijk->ki", c, a.gradient(dinew, rinew))
@@ -265,11 +264,11 @@ class JastrowSpin:
         # b-value component
         for c, b in zip(self.parameters["bcoeff"], self.b_basis):
             bgrad, blap = b.gradient_laplacian(dnew, rnew)
+
             grad += c[edown] * np.sum(bgrad[:, : nup - eup], axis=1).T
             grad += c[1 + edown] * np.sum(bgrad[:, nup - eup :], axis=1).T
             lap += c[edown] * np.sum(blap[:, : nup - eup], axis=(1, 2))
             lap += c[1 + edown] * np.sum(blap[:, nup - eup :], axis=(1, 2))
-
         return grad, lap + np.sum(grad ** 2, axis=0)
 
     def laplacian(self, e, epos):
@@ -305,3 +304,25 @@ class JastrowSpin:
         For the derivatives of basis functions, we will have to compute the derivative
         of all the b's and redo the sums, similar to recompute() """
         return {"bcoeff": self._bvalues, "acoeff": self._avalues}
+
+    def u_components(self, rvec, r):
+        """Given positions rvec and their magnitudes r, returns 
+        dictionaries of the one-body and two-body Jastrow components.
+        Dictionaries are the spin components of U summed across the basis;
+        one-body also returns U for different atoms. """
+        u_onebody = {"up": [], "dn": []}
+        a_value = list(map(lambda x: x.value(rvec, r), self.a_basis))
+        u_onebody["up"] = np.einsum(
+            "ij,jl->il", self.parameters["acoeff"][:, :, 0], a_value
+        )
+        u_onebody["dn"] = np.einsum(
+            "ij,jl->il", self.parameters["acoeff"][:, :, 1], a_value
+        )
+
+        u_twobody = {"upup": [], "updn": [], "dndn": []}
+        b_value = list(map(lambda x: x.value(rvec, r), self.b_basis[1:]))
+        u_twobody["upup"] = np.dot(self.parameters["bcoeff"][1:, 0], b_value)
+        u_twobody["updn"] = np.dot(self.parameters["bcoeff"][1:, 1], b_value)
+        u_twobody["dndn"] = np.dot(self.parameters["bcoeff"][1:, 2], b_value)
+
+        return u_onebody, u_twobody

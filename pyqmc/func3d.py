@@ -201,14 +201,15 @@ class PolyPadeFunction:
           grad: (nconf,...,3)
         """
         grad = np.zeros(rvec.shape)
-        mask = r <= self.parameters["rcut"]
-        r = r[mask, np.newaxis]
+        mask = r > self.parameters["rcut"]
+        r = r[..., np.newaxis]
         z = r / self.parameters["rcut"]
         p = z * z * (6 - 8 * z + 3 * z * z)
         dpdz = 12 * z * (z * z - 2 * z + 1)
         dbdp = -(1 + self.parameters["beta"]) / (1 + self.parameters["beta"] * p) ** 2
-        dzdx = rvec[mask] / (r * self.parameters["rcut"])
-        grad[mask] = dbdp * dpdz * dzdx
+        dzdx = rvec / (r * self.parameters["rcut"])
+        grad = dbdp * dpdz * dzdx
+        grad[mask] = 0
         return grad
 
     def laplacian(self, rvec, r):
@@ -220,9 +221,9 @@ class PolyPadeFunction:
               returns components of laplacian d^2/dx_i^2 separately
         """
         lapl = np.zeros(rvec.shape)
-        mask = r <= self.parameters["rcut"]
-        r = r[mask, np.newaxis]
-        rvec = rvec[mask]
+        mask = r > self.parameters["rcut"]
+        r = r[..., np.newaxis]
+        rvec = rvec
         z = r / self.parameters["rcut"]
         beta = self.parameters["beta"]
 
@@ -234,9 +235,10 @@ class PolyPadeFunction:
         d2bdp2_over_dbdp = -2 * beta / (1 + beta * p)
         d2zdx2_over_dzdx = (1 - (rvec / r) ** 2) / rvec
         grad = dbdp * dpdz * dzdx
-        lapl[mask] = grad * (
+        lapl = grad * (
             d2bdp2_over_dbdp * dpdz * dzdx + d2pdz2_over_dpdz * dzdx + d2zdx2_over_dzdx
         )
+        lapl[mask] = 0
         return lapl
 
     def gradient_laplacian(self, rvec, r):
@@ -247,10 +249,9 @@ class PolyPadeFunction:
         Returns:
           grad, lap: (nconfig,...,3) vectors (components of laplacian d^2/dx_i^2 separately)
         """
-        grad = np.zeros(rvec.shape)
-        mask = r <= self.parameters["rcut"]
-        r = r[mask, np.newaxis]
-        rvec = rvec[mask]
+        mask = r > self.parameters["rcut"]
+        r = r[..., np.newaxis]
+        rvec = rvec
         z = r / self.parameters["rcut"]
         beta = self.parameters["beta"]
 
@@ -258,15 +259,16 @@ class PolyPadeFunction:
         dpdz = 12 * z * (z * z - 2 * z + 1)
         dbdp = -(1 + beta) / (1 + beta * p) ** 2
         dzdx = rvec / (r * self.parameters["rcut"])
-        grad[mask] = dbdp * dpdz * dzdx
+        grad = dbdp * dpdz * dzdx
         d2pdz2_over_dpdz = (3 * z - 1) / (z * (z - 1))
         d2bdp2_over_dbdp = -2 * beta / (1 + beta * p)
         d2zdx2_over_dzdx = (1 - (rvec / r) ** 2) / rvec
         lap = grad.copy()
-        lap[mask] *= (
+        lap *= (
             d2bdp2_over_dbdp * dpdz * dzdx + d2pdz2_over_dpdz * dzdx + d2zdx2_over_dzdx
         )
-
+        grad[mask] = 0
+        lap[mask] = 0
         return grad, lap
 
     def pgradient(self, rvec, r):
@@ -329,15 +331,16 @@ class CutoffCuspFunction:
         grad = np.zeros(rvec.shape)
         rcut = self.parameters["rcut"]
         gamma = self.parameters["gamma"]
-        mask = r <= rcut
-        r = r[mask, np.newaxis]
+        mask = r > rcut
+        r = r[..., np.newaxis]
         y = r / rcut
 
         a = 1 - 2 * y + y * y
         b = y - y * y + y * y * y / 3
         c = a / (1 + gamma * b) ** 2 / (rcut * r)
 
-        grad[mask] = -rvec[mask] * c * rcut
+        grad = -rvec * c * rcut
+        grad[mask] = 0
         return grad
 
     def laplacian(self, rvec, r):
@@ -350,30 +353,20 @@ class CutoffCuspFunction:
         lap = np.zeros(rvec.shape)
         rcut = self.parameters["rcut"]
         gamma = self.parameters["gamma"]
-        mask = r <= rcut
-        r = r[mask, np.newaxis]
-        rvec = rvec[mask]
+        mask = r > rcut
+        r = r[..., np.newaxis]
+        rvec = rvec
         y = r / rcut
 
         a = 1 - 2 * y + y * y
         b = y - y * y + y * y * y / 3
-        c = a / (1 + gamma * b) ** 2
-        dfdy = -rcut * c
+        c = 1 / (1 + gamma * b) ** 2 / (rcut * r)
 
-        d2fd2y_numerator = (
-            18
-            * rcut
-            * (y - 1)
-            * (2 * gamma * y ** 3 - 6 * gamma * y ** 2 + 6 * gamma * y - 3 * gamma - 3)
-        )
-        d2fd2y_denominator = (
-            gamma * y ** 3 - 3 * gamma * y ** 2 + 3 * gamma * y + 3
-        ) ** 3
-        d2fd2y = d2fd2y_numerator / d2fd2y_denominator
-
-        dydx = rvec / (r * rcut)
-        d2yd2x = (1 - (rvec * rvec) / (r * r)) / (r * rcut)
-        lap[mask] = dfdy * d2yd2x + d2fd2y * (dydx) ** 2
+        temp = 2 * (y - 1) / (rcut * r)
+        temp -= a / r ** 2
+        temp -= 2 * a * a * c * gamma * (1 + gamma * b)
+        lap = -rcut * c * (a + rvec ** 2 * temp)
+        lap[mask] = 0
         return lap
 
     def gradient_laplacian(self, rvec, r):
@@ -388,32 +381,22 @@ class CutoffCuspFunction:
         lap = np.zeros(rvec.shape)
         rcut = self.parameters["rcut"]
         gamma = self.parameters["gamma"]
-        mask = r <= rcut
-        r = r[mask, np.newaxis]
-        rvec = rvec[mask]
+        mask = r > rcut
+        r = r[..., np.newaxis]
+        rvec = rvec
         y = r / rcut
 
         a = 1 - 2 * y + y * y
         b = y - y * y + y * y * y / 3
-        c = a / (1 + gamma * b) ** 2
+        c = 1 / (1 + gamma * b) ** 2 / (rcut * r)
 
-        grad[mask] = -c * rvec / r
-
-        dfdy = -rcut * c
-        d2fd2y_numerator = (
-            18
-            * rcut
-            * (y - 1)
-            * (2 * gamma * y ** 3 - 6 * gamma * y ** 2 + 6 * gamma * y - 3 * gamma - 3)
-        )
-        d2fd2y_denominator = (
-            gamma * y ** 3 - 3 * gamma * y ** 2 + 3 * gamma * y + 3
-        ) ** 3
-        d2fd2y = d2fd2y_numerator / d2fd2y_denominator
-        dydx = rvec / (r * rcut)
-        d2yd2x = (1 - (rvec * rvec) / (r * r)) / (r * rcut)
-
-        lap[mask] = dfdy * d2yd2x + d2fd2y * (dydx) ** 2
+        grad = -rcut * a * c * rvec
+        temp = 2 * (y - 1) / (rcut * r)
+        temp -= a / r ** 2
+        temp -= 2 * a * a * c * gamma * (1 + gamma * b)
+        lap = -rcut * c * (a + rvec ** 2 * temp)
+        grad[mask] = 0
+        lap[mask] = 0
         return grad, lap
 
     def pgradient(self, rvec, r):

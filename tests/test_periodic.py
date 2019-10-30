@@ -1,26 +1,29 @@
 import numpy as np
-from pyqmc.distance import MinimalImageDistance, RawDistance
-from pyqmc.pbc import enforce_pbc
 import pyqmc
 import pandas as pd
 from pyscf.pbc import gto, scf
-from pyqmc.reblock import optimally_reblocked
+from pyqmc.reblock import reblock
 import time
 
-def test_cubic(kind=0, nk=(1,1,1)): 
-    L = 2 
-    mol = gto.M(
-        atom = '''H     {0}      {0}      {0}                
-                  H     {1}      {1}      {1}'''.format(0.0, L/2),
-        basis='sto-3g',
-        a = np.eye(3)*L,
+def cubic_with_ecp(kind=0, nk=(1,1,1)): 
+    from pyscf.pbc.dft.multigrid import multigrid
+    start = time.time()
+    L = 6.63
+    mol = gto.Cell(
+        atom = '''Li     {0}      {0}      {0}                
+                  Li     {1}      {1}      {1}'''.format(0.0, L/2),
+        basis='bfd-vdz',
+        ecp='bfd',
         spin=0,
         unit='bohr',
     )
+    mol.exp_to_discard = 0.1
+    mol.build(a=np.eye(3)*L) 
     kpts = mol.make_kpts(nk)
     mf = scf.KUKS(mol, kpts)
     mf.xc = "pbe"
     #mf = mf.density_fit()
+    mf = multigrid(mf)
     mf = mf.run()
     runtest(mol, mf, kind)
 
@@ -77,13 +80,13 @@ def runtest(mol, mf, kind):
     warmup = 10
     start = time.time()
     df, coords = pyqmc.vmc(
-        wf, coords, nsteps=30+warmup, tstep=1, accumulators={"energy": pyqmc.accumulators.EnergyAccumulator(mol)}, verbose=False,
+        wf, coords, nsteps=32+warmup, tstep=1, accumulators={"energy": pyqmc.accumulators.EnergyAccumulator(mol)}, verbose=False,
     )
     print("VMC time", time.time()-start)
     df = pd.DataFrame(df)
-    dfke = df["energyke"][warmup:]
-    vmcke, err = dfke.mean(), dfke.std()/np.sqrt(len(dfke))
-    print('VMC kinetic energy: {0} $\pm$ {1}'.format(vmcke, err))
+    dfke = reblock(df["energyke"][warmup:], 8)
+    vmcke, err = dfke.mean(), dfke.sem()
+    print('VMC kinetic energy: {0} +- {1}'.format(vmcke, err))
     
     assert np.abs(vmcke-pyscfke) < 5 * err, \
         "energy diff not within 5 sigma ({0:.6f}): energies \n{1} \n{2}".format(5 * err, vmcke, pyscfke)
@@ -91,7 +94,7 @@ def runtest(mol, mf, kind):
 
 if __name__=="__main__":
     kind = 0
-    nk = [2,2,2]
-    #test_cubic(kind, nk)
+    nk = [1,1,1]
+    cubic_with_ecp(kind, nk)
     #test_RKS(kind, nk)
     test_noncubic(kind, nk)

@@ -1,6 +1,7 @@
 import os
 import pyqmc
 import numpy as np
+import pandas as pd
 
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
@@ -47,12 +48,20 @@ def distvmc(
             pyqmc.vmc,
             wfs,
             thiscoord,
-            **{"nsteps": nsteps, "accumulators": accumulators},
+            **{"nsteps": nsteps_per, "accumulators": accumulators, "stepoffset": epoch},
         )
+        iterdata = []
         for i, r in enumerate(runs):
             res = r.result()
-            alldata.extend(res[0])
+            iterdata.extend(res[0])
             coord[i] = res[1]
+
+        alldata.extend(
+            pd.DataFrame(iterdata)
+            .groupby("step", as_index=False)
+            .apply(lambda x: x.mean())
+            .to_dict("records")
+        )
         print("epoch", epoch, "finished", flush=True)
 
     coords.join(coord)
@@ -60,7 +69,9 @@ def distvmc(
     return alldata, coords
 
 
-def dist_lm_sampler(wf, configs, params, pgrad_acc, npartitions=None, client=None):
+def dist_lm_sampler(
+    wf, configs, params, pgrad_acc, npartitions=None, client=None, lm_sampler=None
+):
     """
     Evaluates accumulator on the same set of configs for correlated sampling of different wave function parameters.  Parallelized with parsl.
 
@@ -79,7 +90,8 @@ def dist_lm_sampler(wf, configs, params, pgrad_acc, npartitions=None, client=Non
         data: list of dicts, one dict for each sample
             each dict contains arrays returned from pgrad_acc, weighted by psi**2/psi0**2 
     """
-    from pyqmc.linemin import lm_sampler
+    if lm_sampler is None:
+        from pyqmc.linemin import lm_sampler
 
     if npartitions is None:
         npartitions = sum([x for x in client.nthreads().values()])
@@ -117,6 +129,20 @@ def line_minimization(*args, client, **kwargs):
     kwargs["vmcoptions"]["client"] = client
     kwargs["lmoptions"]["client"] = client
     return pyqmc.line_minimization(*args, vmc=distvmc, lm=dist_lm_sampler, **kwargs)
+
+
+def cvmc_optimize(*args, client, **kwargs):
+    import pyqmc
+    from pyqmc.cvmc import lm_cvmc
+
+    if "vmcoptions" not in kwargs:
+        kwargs["vmcoptions"] = {}
+    if "lmoptions" not in kwargs:
+        kwargs["lmoptions"] = {}
+    kwargs["vmcoptions"]["client"] = client
+    kwargs["lmoptions"]["client"] = client
+    kwargs["lmoptions"]["lm_sampler"] = lm_cvmc
+    return pyqmc.cvmc_optimize(*args, vmc=distvmc, lm=dist_lm_sampler, **kwargs)
 
 
 def distdmc_propagate(wf, configs, weights, *args, client, npartitions=None, **kwargs):

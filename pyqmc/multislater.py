@@ -39,12 +39,12 @@ class MultiSlater:
         self._nelec = (mc.nelecas[0] + mc.ncore, mc.nelecas[1] + mc.ncore)
         self._copy_ci(mc)
 
-        if len(mf.mo_occ.shape) == 2:
-            self.parameters["mo_coeff_alpha"] = mf.mo_coeff[0][:, : mc.ncas + mc.ncore]
-            self.parameters["mo_coeff_beta"] = mf.mo_coeff[1][:, : mc.ncas + mc.ncore]
+        if len(mc.mo_coeff.shape) == 3:
+            self.parameters["mo_coeff_alpha"] = mc.mo_coeff[0][:, : mc.ncas + mc.ncore]
+            self.parameters["mo_coeff_beta"] = mc.mo_coeff[1][:, : mc.ncas + mc.ncore]
         else:
-            self.parameters["mo_coeff_alpha"] = mf.mo_coeff[:, : mc.ncas + mc.ncore]
-            self.parameters["mo_coeff_beta"] = mf.mo_coeff[:, : mc.ncas + mc.ncore]
+            self.parameters["mo_coeff_alpha"] = mc.mo_coeff[:, : mc.ncas + mc.ncore]
+            self.parameters["mo_coeff_beta"] = mc.mo_coeff[:, : mc.ncas + mc.ncore]
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
         self.pbc_str = "PBC" if hasattr(mol, "a") else ""
 
@@ -169,21 +169,29 @@ class MultiSlater:
             mask = [True] * vec.shape[0]
 
         ratios = np.einsum(
-            "idj,idj->id", vec, self._inverse[s][mask, :, :, e - s * self._nelec[0]]
+            "i...dj,idj->i...d",
+            vec,
+            self._inverse[s][mask, :, :, e - s * self._nelec[0]],
         )
-        numer = np.einsum(
-            "id,di->i",
-            ratios[:, self._det_map[s]] * self.parameters["det_coeff"][np.newaxis, :],
+        det_array = (
             self._dets[0][0, :, self._det_map[0]][:, mask]
             * self._dets[1][0, :, self._det_map[1]][:, mask]
             * np.exp(
                 self._dets[0][1, :, self._det_map[0]][:, mask]
                 + self._dets[1][1, :, self._det_map[1]][:, mask]
-            ),
+            )
+        )
+        numer = np.einsum(
+            "i...d,d,di->i...",
+            ratios[..., self._det_map[s]],
+            self.parameters["det_coeff"],
+            det_array,
         )
 
         curr_val = self.value()
         denom = curr_val[0][mask] * np.exp(curr_val[1][mask])
+        if len(numer.shape) == 2:
+            denom = denom[:, np.newaxis]
         return numer / denom
 
     def gradient(self, e, epos):
@@ -237,11 +245,14 @@ class MultiSlater:
         s = int(e >= self._nelec[0])
         if mask is None:
             mask = [True] * epos.configs.shape[0]
-        ao = np.real_if_close(
-            self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs[mask]), tol=1e4
-        )
+        eposmask = epos.configs[mask]
+        if len(eposmask) == 0:
+            return np.zeros(eposmask.shape[:2])
+        ao = self._mol.eval_gto(
+            self.pbc_str + "GTOval_sph", eposmask.reshape((-1, 3))
+        ).reshape((*eposmask.shape[:-1], -1))
         mo = ao.dot(self.parameters[self._coefflookup[s]])
-        mo_vals = mo[:, self._det_occup[s]]
+        mo_vals = mo[..., self._det_occup[s]]
         return self._testrow(e, mo_vals, mask)
 
     def pgradient(self):

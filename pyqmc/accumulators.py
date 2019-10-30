@@ -22,9 +22,9 @@ class EnergyAccumulator:
 
 class LinearTransform:
     """
-    Linearize a dictionary of wf parameters, only to_opt 
+    Linearize a dictionary of wf parameters, only to_opt
     terms optimized. A dict freeze can be used to freeze
-    certain wf parameters. 
+    certain wf parameters.
     """
 
     def __init__(self, parameters, to_opt=None, freeze=None):

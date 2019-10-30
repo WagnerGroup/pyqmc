@@ -50,7 +50,7 @@ class JastrowSpin:
         \sum_{I, \alpha, k} c^{a}_{Ik\uparrow } a_{k}(r_{I\alpha}) + 
         \sum_{I, \beta, k}  c^{a}_{Ik\downarrow } a_{k}(r_{I\beta}) +
         \sum_{\alpha_1 < \alpha_2, l} c^{b}_{l\uparrow\uparrow} b^{l}(r_{\alpha_1\alpha_2}) + 
-        \sum_{\alpha, \beta, l} c^{b}_{l\uparrow\downarrow} b^{l}(r_{\beta_1\beta_2})
+        \sum_{\alpha, \beta, l} c^{b}_{l\uparrow\downarrow} b^{l}(r_{\alpha\beta})
         \sum_{\beta_1 < \beta_2, l} c^{b}_{l\downarrow\downarrow} b^{l}(r_{\beta_1\beta_2}) + 
         $$
         the indices are $I$ for ions, $k$ for one-body (a) basis, $l$ for two-body (b) basis, $\alpha$ for up electrons, and $\beta$ for down electrons. $c^a, c^b$ are the coeffecient arrays. $r_{ij}$ denotes the distance between particles $i$ and $j$.
@@ -62,72 +62,49 @@ class JastrowSpin:
         """
         u = 0.0
         self._configscurrent = configs.copy()
-        elec = self._mol.nelec
-        nconfig, nelec = configs.configs.shape[:2]
+        nconf, nelec = configs.configs.shape[:2]
         nexpand = len(self.b_basis)
         aexpand = len(self.a_basis)
-        self._bvalues = np.zeros((nconfig, nexpand, 3))
-        self._avalues = np.zeros((nconfig, self._mol.natm, aexpand, 2))
-        self._a_partial = np.zeros((nelec, nconfig, self._mol.natm, aexpand))
-        self._b_partial = np.zeros((nelec, nconfig, nexpand, 2)) 
-        notmask = [True] * nconfig
+        self._bvalues = np.zeros((nconf, nexpand, 3))
+        self._avalues = np.zeros((nconf, self._mol.natm, aexpand, 2))
+        self._a_partial = np.zeros((nelec, nconf, self._mol.natm, aexpand))
+        self._b_partial = np.zeros((nelec, nconf, nexpand, 2))
+        notmask = [True] * nconf
         for e in range(nelec):
             epos = configs.electron(e)
             self._a_partial[e] = self._a_update(e, epos, notmask)
             self._b_partial[e] = self._b_update(e, epos, notmask)
 
-        nup = elec[0]
-        d1, ij = configs.dist.dist_matrix(configs.configs[:, :nup, :])
-        d2, ij = configs.dist.pairwise(configs.configs[:, :nup, :], configs.configs[:, nup:, :])
-        d3, ij = configs.dist.dist_matrix(configs.configs[:, nup:, :])
-
-        r1 = np.linalg.norm(d1, axis=-1)
-        r2 = np.linalg.norm(d2, axis=-1)
-        r3 = np.linalg.norm(d3, axis=-1)
-
-        # Package the electron-ion distances into a 1d array
-        di1 = np.zeros((nconfig, self._mol.natm, nup, 3))
-        di2 = np.zeros((nconfig, self._mol.natm, nelec - nup, 3))
-
-        for e in range(nup):
-            di1[:, :, e, :] = configs.dist.dist_i(
-                self._mol.atom_coords(), configs.configs[:, e, :]
-            )
-        for e in range(nup, nelec):
-            di2[:, :, e - nup, :] = configs.dist.dist_i(
-                self._mol.atom_coords(), configs.configs[:, e, :]
-            )
-
-        # print(di1.shape)
-        ri1 = np.linalg.norm(di1, axis=-1)
-        ri2 = np.linalg.norm(di2, axis=-1)
+        # electron-electron distances
+        nup = self._mol.nelec[0]
+        d_upup, ij = configs.dist.dist_matrix(configs.configs[:, :nup])
+        d_updown, ij = configs.dist.pairwise(
+            configs.configs[:, :nup], configs.configs[:, nup:]
+        )
+        d_downdown, ij = configs.dist.dist_matrix(configs.configs[:, nup:])
 
         # Update bvalues according to spin case
-        for i, b in enumerate(self.b_basis):
-            self._bvalues[:, i, 0] = np.sum(
-                b.value(d1, r1), axis=1
+        for j, d in enumerate([d_upup, d_updown, d_downdown]):
+            r = np.linalg.norm(d, axis=-1)
+            for i, b in enumerate(self.b_basis):
+                self._bvalues[:, i, j] = np.sum(b.value(d, r), axis=1)
+
+        # electron-ion distances
+        di = np.zeros((nelec, nconf, self._mol.natm, 3))
+        for e in range(nelec):
+            di[e] = configs.dist.dist_i(
+                self._mol.atom_coords(), configs.configs[:, e, :]
             )
-            self._bvalues[:, i, 1] = np.sum(
-                b.value(d2, r2), axis=1
-            )
-            self._bvalues[:, i, 2] = np.sum(
-                b.value(d3, r3), axis=1
-            )
+        ri = np.linalg.norm(di, axis=-1)
 
         # Update avalues according to spin case
         for i, a in enumerate(self.a_basis):
-            self._avalues[:, :, i, 0] = np.sum(
-                a.value(di1, ri1),
-                axis=2,
-            )
-            self._avalues[:, :, i, 1] = np.sum(
-                a.value(di2, ri2),
-                axis=2,
-            )
+            avals = a.value(di, ri)
+            self._avalues[:, :, i, 0] = np.sum(avals[:nup], axis=0)
+            self._avalues[:, :, i, 1] = np.sum(avals[nup:], axis=0)
 
         u = np.sum(self._bvalues * self.parameters["bcoeff"], axis=(2, 1))
         u += np.einsum("ijkl,jkl->i", self._avalues, self.parameters["acoeff"])
-
         return (1, u)
 
     def updateinternals(self, e, epos, wrap=None, mask=None):
@@ -143,7 +120,7 @@ class JastrowSpin:
         aupdate = self._a_update(e, epos, mask)
         bupdate = self._b_update(e, epos, mask)
         self._avalues[mask, :, :, edown] += aupdate - self._a_partial[e, mask]
-        self._bvalues[mask, :, edown:edown+2] += bupdate - self._b_partial[e, mask]
+        self._bvalues[mask, :, edown : edown + 2] += bupdate - self._b_partial[e, mask]
         self._a_partial[e, mask] = aupdate
         self._update_b_partial(e, epos, mask)
         self._configscurrent.move(e, epos, mask)
@@ -160,7 +137,7 @@ class JastrowSpin:
         """
         d = epos.dist.dist_i(self._mol.atom_coords(), epos.configs[mask])
         r = np.linalg.norm(d, axis=-1)
-        a_partial_e = np.zeros((np.sum(mask), *self._a_partial.shape[2:]))
+        a_partial_e = np.zeros((*r.shape, self._a_partial.shape[3]))
         for k, a in enumerate(self.a_basis):
             a_partial_e[..., k] = a.value(d, r)
         return a_partial_e
@@ -175,19 +152,18 @@ class JastrowSpin:
               epos: configs object for electron e
               mask: mask over configs axis, only return values for configs where mask==True. b_partial_e might have a smaller configs axis than epos, _configscurrent, and _b_partial because of the mask.
         """
-        ne = np.sum(self._mol.nelec)
         nup = self._mol.nelec[0]
         sep = nup - int(e < nup)
-        not_e = np.arange(ne) != e
+        not_e = np.arange(self._nelec) != e
         d = epos.dist.dist_i(
             self._configscurrent.configs[mask][:, not_e], epos.configs[mask]
         )
         r = np.linalg.norm(d, axis=-1)
-        b_partial_e = np.zeros((np.sum(mask), *self._b_partial.shape[2:]))
+        b_partial_e = np.zeros((*r.shape[:-1], *self._b_partial.shape[2:]))
         for l, b in enumerate(self.b_basis):
             bval = b.value(d, r)
-            b_partial_e[:, l, 0] = bval[:, :sep].sum(axis=1)
-            b_partial_e[:, l, 1] = bval[:, sep:].sum(axis=1)
+            b_partial_e[..., l, 0] = bval[..., :sep].sum(axis=-1)
+            b_partial_e[..., l, 1] = bval[..., sep:].sum(axis=-1)
         return b_partial_e
 
     def _update_b_partial(self, e, epos, mask):
@@ -201,18 +177,17 @@ class JastrowSpin:
               epos: configs object for electron e
               mask: mask over configs axis, only return values for configs where mask==True. b_partial_e might have a smaller configs axis than epos, _configscurrent, and _b_partial because of the mask.
         """
-        ne = np.sum(self._mol.nelec)
         nup = self._mol.nelec[0]
         sep = nup - int(e < nup)
-        not_e = np.arange(ne) != e
+        not_e = np.arange(self._nelec) != e
         edown = int(e >= nup)
         d = epos.dist.dist_i(
             self._configscurrent.configs[mask][:, not_e], epos.configs[mask]
         )
         r = np.linalg.norm(d, axis=-1)
         dold = epos.dist.dist_i(
-            self._configscurrent.configs[mask][:, not_e], 
-            self._configscurrent.configs[mask, e], 
+            self._configscurrent.configs[mask][:, not_e],
+            self._configscurrent.configs[mask, e],
         )
         rold = np.linalg.norm(dold, axis=-1)
         b_partial_e = np.zeros((np.sum(mask), *self._b_partial.shape[2:]))
@@ -220,7 +195,7 @@ class JastrowSpin:
         for l, b in enumerate(self.b_basis):
             bval = b.value(d, r)
             bdiff = bval - b.value(dold, rold)
-            self._b_partial[eind, mind, l, edown] += bdiff.transpose((1,0))
+            self._b_partial[eind, mind, l, edown] += bdiff.transpose((1, 0))
             self._b_partial[e, mask, l, 0] = bval[:, :sep].sum(axis=1)
             self._b_partial[e, mask, l, 1] = bval[:, sep:].sum(axis=1)
 
@@ -237,83 +212,64 @@ class JastrowSpin:
         So we need to compute the gradient of the b's for these indices.
         Note that we need to compute distances between electron position given and the current electron distances.
         We will need this for laplacian() as well"""
-        nconf = epos.configs.shape[0]
-        nconf, ne = self._configscurrent.configs.shape[:2]
+        nconf, nelec = self._configscurrent.configs.shape[:2]
         nup = self._mol.nelec[0]
-        dnew = epos.dist.dist_i(self._configscurrent.configs, epos.configs)
+
+        # Get e-e and e-ion distances
+        not_e = np.arange(nelec) != e
+        dnew = epos.dist.dist_i(self._configscurrent.configs, epos.configs)[:, not_e]
         dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
+        rnew = np.linalg.norm(dnew, axis=-1)
+        rinew = np.linalg.norm(dinew, axis=-1)
 
-        mask = [True] * ne
-        mask[e] = False
-        dnew = dnew[:, mask, :]
-
-        delta = np.zeros((3, nconf))
+        grad = np.zeros((3, nconf))
 
         # Check if selected electron is spin up or down
         eup = int(e < nup)
         edown = int(e >= nup)
 
-        dnewup = dnew[:, : nup - eup, :]  # Other electron is spin up
-        dnewdown = dnew[:, nup - eup :, :]  # Other electron is spin down
-
         for c, b in zip(self.parameters["bcoeff"], self.b_basis):
-            delta += (
-                c[edown] * np.sum(b.gradient(dnewup), axis=1).T
-            )
-            delta += (
-                c[1 + edown]
-                * np.sum(b.gradient(dnewdown), axis=1).T
-            )
-            """
-        for c,a in zip(self.parameters['acoeff'],self.a_basis):
-            delta+=np.einsum('j,ijk->ki', c[:,edown], a.gradient(dinew).reshape(nconf,-1,3))
+            bgrad = b.gradient(dnew, rnew)
+            grad += c[edown] * np.sum(bgrad[:, : nup - eup], axis=1).T
+            grad += c[1 + edown] * np.sum(bgrad[:, nup - eup :], axis=1).T
 
-            """
-        for i in range(self._mol.natm):
-            for c, a in zip(self.parameters["acoeff"][i], self.a_basis):
-                grad_all = a.gradient(dinew)
-                grad_slice = grad_all[:, i, :]
-                delta += c[edown] * grad_slice.T
+        for c, a in zip(self.parameters["acoeff"].transpose()[edown], self.a_basis):
+            grad += np.einsum("j,ijk->ki", c, a.gradient(dinew, rinew))
 
-        return delta
+        return grad
 
     def gradient_laplacian(self, e, epos):
         """ """
-        nconf = epos.configs.shape[0]
+        nconf, nelec = self._configscurrent.configs.shape[:2]
         nup = self._mol.nelec[0]
-        nconf, ne = self._configscurrent.configs.shape[:2]
 
-        # Get and break up eedist_i
-        dnew = epos.dist.dist_i(self._configscurrent.configs, epos.configs)
-        mask = [True] * ne
-        mask[e] = False
-        dnew = dnew[:, mask, :]
+        # Get e-e and e-ion distances
+        not_e = np.arange(nelec) != e
+        dnew = epos.dist.dist_i(self._configscurrent.configs, epos.configs)[:, not_e]
+        dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
+        rnew = np.linalg.norm(dnew, axis=-1)
+        rinew = np.linalg.norm(dinew, axis=-1)
 
         eup = int(e < nup)
         edown = int(e >= nup)
-        dnewup = dnew[:, : nup - eup, :]  # Other electron is spin up
-        dnewdown = dnew[:, nup - eup :, :]  # Other electron is spin down
 
-        # Electron-ion distances
-        dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
-
-        delta = np.zeros(nconf)
+        grad = np.zeros((3, nconf))
+        lap = np.zeros(nconf)
+        # a-value component
+        for c, a in zip(self.parameters["acoeff"].transpose()[edown], self.a_basis):
+            g, l = a.gradient_laplacian(dinew, rinew)
+            grad += np.einsum("j,ijk->ki", c, g)
+            lap += np.einsum("j,ijk->i", c, l)
 
         # b-value component
         for c, b in zip(self.parameters["bcoeff"], self.b_basis):
-            delta += c[edown] * np.sum(b.laplacian(dnewup).reshape(nconf, -1), axis=1)
-            delta += c[1 + edown] * np.sum(
-                b.laplacian(dnewdown).reshape(nconf, -1), axis=1
-            )
+            bgrad, blap = b.gradient_laplacian(dnew, rnew)
 
-        for i in range(self._mol.natm):
-            for c, a in zip(self.parameters["acoeff"][i], self.a_basis):
-                lap_all = a.laplacian(dinew)
-                lap_slice = lap_all[:, i, :]
-                delta += np.sum(c[edown] * lap_slice, axis=1)
-
-        g = self.gradient(e, epos)
-        return g, delta + np.sum(g ** 2, axis=0)
+            grad += c[edown] * np.sum(bgrad[:, : nup - eup], axis=1).T
+            grad += c[1 + edown] * np.sum(bgrad[:, nup - eup :], axis=1).T
+            lap += c[edown] * np.sum(blap[:, : nup - eup], axis=(1, 2))
+            lap += c[1 + edown] * np.sum(blap[:, nup - eup :], axis=(1, 2))
+        return grad, lap + np.sum(grad ** 2, axis=0)
 
     def laplacian(self, e, epos):
         return self.gradient_laplacian(e, epos)[1]
@@ -331,18 +287,42 @@ class JastrowSpin:
             mask = [True] * epos.configs.shape[0]
         edown = int(e >= self._mol.nelec[0])
         deltaa = self._a_update(e, epos, mask) - self._a_partial[e, mask]
-        a_val = np.einsum("ijk,jk->i", deltaa, self.parameters["acoeff"][..., edown])
-        deltab = self._b_update(e, epos, mask) - self._b_partial[e, mask]
-        #for i in range(len(self.b_basis)):
-            #print('b.value', self._b_partial[e, mask, i])
-        #print('deltab', deltab)
-        b_val = np.einsum("ijk,jk->i",
-            deltab, self.parameters["bcoeff"][:, edown:edown+2],
+        a_val = np.einsum(
+            "...jk,jk->...", deltaa, self.parameters["acoeff"][..., edown]
         )
-        return np.exp(b_val + a_val)
+        deltab = self._b_update(e, epos, mask) - self._b_partial[e, mask]
+        b_val = np.einsum(
+            "...jk,jk->...", deltab, self.parameters["bcoeff"][:, edown : edown + 2]
+        )
+        val = np.exp(b_val + a_val)
+        if len(val.shape) == 2:
+            val = val.T
+        return val
 
     def pgradient(self):
         """Given the b sums, this is pretty trivial for the coefficient derivatives.
         For the derivatives of basis functions, we will have to compute the derivative
         of all the b's and redo the sums, similar to recompute() """
         return {"bcoeff": self._bvalues, "acoeff": self._avalues}
+
+    def u_components(self, rvec, r):
+        """Given positions rvec and their magnitudes r, returns 
+        dictionaries of the one-body and two-body Jastrow components.
+        Dictionaries are the spin components of U summed across the basis;
+        one-body also returns U for different atoms. """
+        u_onebody = {"up": [], "dn": []}
+        a_value = list(map(lambda x: x.value(rvec, r), self.a_basis))
+        u_onebody["up"] = np.einsum(
+            "ij,jl->il", self.parameters["acoeff"][:, :, 0], a_value
+        )
+        u_onebody["dn"] = np.einsum(
+            "ij,jl->il", self.parameters["acoeff"][:, :, 1], a_value
+        )
+
+        u_twobody = {"upup": [], "updn": [], "dndn": []}
+        b_value = list(map(lambda x: x.value(rvec, r), self.b_basis[1:]))
+        u_twobody["upup"] = np.dot(self.parameters["bcoeff"][1:, 0], b_value)
+        u_twobody["updn"] = np.dot(self.parameters["bcoeff"][1:, 1], b_value)
+        u_twobody["dndn"] = np.dot(self.parameters["bcoeff"][1:, 2], b_value)
+
+        return u_onebody, u_twobody

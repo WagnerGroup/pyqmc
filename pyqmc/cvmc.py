@@ -210,7 +210,7 @@ def cvmc_optimize(
         taus = np.linspace(0, tstep, npts + 1)
         taus[0] = -tstep / (npts - 1)
         params = [
-            x0 - tau * grad["objderiv"] / np.linalg.norm(grad["objderiv"])
+            x0 - tau * grad["objderiv"] 
             for tau in taus
         ]
         stepsdata = lm(wf, configs, params, acc, **lmoptions)
@@ -274,7 +274,7 @@ def cvmc_optimize(
                 est_min = minstep
         print("estimated minimum adjusted", est_min, flush=True)
 
-        x0 = x0 - est_min * grad["objderiv"] / np.linalg.norm(grad["objderiv"])
+        x0 = x0 - est_min * grad["objderiv"] 
         if datafile is not None:
             pd.DataFrame(df).to_json(datafile)
 

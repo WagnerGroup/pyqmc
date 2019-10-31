@@ -150,6 +150,7 @@ class PySCFSlaterUHF:
             mask = [True] * epos.configs.shape[0]
         eeff = e - s * self._nelec[0]
         ao = self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs)
+        self._aovals[:, e, :] = ao 
         mo = ao.dot(self.parameters[self._coefflookup[s]])
         ratio, self._inverse[s][mask, :, :] = sherman_morrison_row(
             eeff, self._inverse[s][mask, :, :], mo[mask, :]

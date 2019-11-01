@@ -245,7 +245,6 @@ def cvmc_optimize(
 
             for k, avg in qavg.items():
                 dret["avg" + k] = avg
-            for k, avg in qdp.items():
                 dret["dp" + k] = None
 
             xfit.append(tau)

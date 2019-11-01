@@ -126,7 +126,7 @@ if __name__ == "__main__":
     obj["t"] = 0.0
     obj["trace"] = 2.0
 
-    datafile = "tmp.json"
+    datafile = "saveh2.json"
     
     wf, df = cvmc_optimize(
         sys["wf"],

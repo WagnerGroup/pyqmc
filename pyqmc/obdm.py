@@ -27,7 +27,7 @@ class OBDMAccumulator:
         self,
         mol,
         orb_coeff,
-        nstep=10,
+        nsweeps=5,
         tstep=0.50,
         warmup=100,
         naux=500,
@@ -54,12 +54,13 @@ class OBDMAccumulator:
         self._tstep = tstep
         self._mol = mol
 
-        nelec = sum(self._mol.nelec)
+        nelec = len(self._electrons)
         self._extra_config = initial_guess(mol, int(naux / nelec) + 1).configs.reshape(
             -1, 3
         )
 
-        self._nstep = nstep
+        self._nsweeps = nsweeps
+        self._nstep = nsweeps * nelec
 
         for i in range(warmup):
             accept, self._extra_config = sample_onebody(
@@ -80,7 +81,7 @@ class OBDMAccumulator:
         acceptance = 0
         naux = self._extra_config.shape[0]
         nelec = len(self._electrons)
-        e = np.random.choice(self._electrons, self._nstep)
+        e = np.repeat(self._electrons, self._nsweeps)
 
         if extra_configs is None:
             auxassignments = np.random.randint(0, naux, size=(self._nstep, nconf))
@@ -108,7 +109,7 @@ class OBDMAccumulator:
             borb_configs = borb[naux:, :]
 
             epos = configs.make_irreducible(
-                e, extra_configs[step][auxassignments[step]]
+                e[step], extra_configs[step][auxassignments[step]]
             )
             wfratio = wf.testvalue(e[step], epos)
 

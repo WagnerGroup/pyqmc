@@ -182,6 +182,8 @@ def cvmc_optimize(
             "objfunc": objfunc,
             "dist": distfromobj,
             "dEdp": dEdp,
+            "weights": None,
+            "weights_var": None,
         }
         for k, avg in qavg.items():
             dret["avg" + k] = avg
@@ -219,32 +221,26 @@ def cvmc_optimize(
             en = np.mean(data["total"] * data["weight"]) / np.mean(data["weight"])
 
             qavg = {}
-            qdp = {}
+            distfromobj = 0.0
             objfunc = en
             for k, force in forcing.items():
-                numerator = np.sum(data[k] * data["weight"])
-                denominator = np.sum(data["weight"])
-
-                objfunc += (
-                    force
-                    * (numerator ** 2 - np.sum((data[k] * data["weight"]) ** 2))
-                    / (denominator ** 2 - np.sum(data["weight"] ** 2))
-                )  # Quadratic term
-
-                qavg[k] = numerator / denominator
-                objfunc -= 2 * force * qavg[k] * objective[k]  # Linear term
-                objfunc += force * objective[k] ** 2  # Constant term
-
+                qavg[k] = np.mean(data[k] * data["weight"]) / np.mean(data["weight"])
+                distobj = qavg[k] - objective[k]
+                distfromobj += distobj
+                objfunc += force * distobj ** 2
+                
             dret = {
                 "steptype": "line",
                 "tau": tau,
                 "iteration": it,
-                "parameters": params,
+                "parameters": p.copy(),
                 "objfunc": objfunc,
                 "dist": None,
                 "objderiv": None,
                 "dEdp": None,
                 "energy": en,
+                "weights": np.mean(data["weight"]), 
+                "weights_var": np.var(data["weight"])
             }
 
             for k, avg in qavg.items():
@@ -256,24 +252,7 @@ def cvmc_optimize(
             yfit.append(dret["objfunc"])
             df.append(dret)
 
-        p = np.polyfit(xfit, yfit, 2)
-        print("fitting", xfit, yfit)
-        print("polynomial fit", p)
-        est_min = -p[1] / (2 * p[0])
-        print("estimated minimum", est_min, flush=True)
-        minstep = np.min(xfit)
-        if est_min > tstep and p[0] > 0:  # minimum past the search radius
-            est_min = tstep
-        if est_min < minstep and p[0] > 0:  # mimimum behind the search radius
-            est_min = minstep
-        if p[0] < 0:
-            plin = np.polyfit(xfit, yfit, 1)
-            if plin[0] < 0:
-                est_min = tstep
-            if plin[0] > 0:
-                est_min = minstep
-        print("estimated minimum adjusted", est_min, flush=True)
-
+        est_min = pyqmc.linemin.stable_fit(xfit, yfit)
         x0 = x0 - est_min * grad["objderiv"] 
         if datafile is not None:
             pd.DataFrame(df).to_json(datafile)

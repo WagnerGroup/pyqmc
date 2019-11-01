@@ -18,6 +18,7 @@ def sr12_update(pgrad, Sij, step, eps=0.1):
     v = np.einsum("ij,j->i", invSij, pgrad)
     return -v * step  # / np.linalg.norm(v)
 
+
 def stable_fit(xfit, yfit):
     p = np.polyfit(xfit, yfit, 2)
     steprange = np.max(xfit)
@@ -37,6 +38,7 @@ def stable_fit(xfit, yfit):
             est_min = minstep
     print("estimated minimum adjusted", est_min, flush=True)
     return est_min
+
 
 def line_minimization(
     wf,
@@ -174,10 +176,9 @@ def line_minimization(
                     "iter": it,
                 }
             )
-            print("descent step {:<15.10} {:<15.10} weight stddev {:<15.10}".format(
-                    step,
-                    dfs[-1]["en"],
-                    np.std(data["weight"])
+            print(
+                "descent step {:<15.10} {:<15.10} weight stddev {:<15.10}".format(
+                    step, dfs[-1]["en"], np.std(data["weight"])
                 ),
                 flush=True,
             )

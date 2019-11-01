@@ -211,10 +211,7 @@ def cvmc_optimize(
 
         taus = np.linspace(0, tstep, npts + 1)
         taus[0] = -tstep / (npts - 1)
-        params = [
-            x0 - tau * grad["objderiv"] 
-            for tau in taus
-        ]
+        params = [x0 - tau * grad["objderiv"] for tau in taus]
         stepsdata = lm(wf, configs, params, acc, **lmoptions)
 
         for data, p, tau in zip(stepsdata, params, taus):
@@ -228,7 +225,7 @@ def cvmc_optimize(
                 distobj = qavg[k] - objective[k]
                 distfromobj += distobj
                 objfunc += force * distobj ** 2
-                
+
             dret = {
                 "steptype": "line",
                 "tau": tau,
@@ -239,8 +236,8 @@ def cvmc_optimize(
                 "objderiv": None,
                 "dEdp": None,
                 "energy": en,
-                "weights": np.mean(data["weight"]), 
-                "weights_var": np.var(data["weight"])
+                "weights": np.mean(data["weight"]),
+                "weights_var": np.var(data["weight"]),
             }
 
             for k, avg in qavg.items():
@@ -252,7 +249,7 @@ def cvmc_optimize(
             df.append(dret)
 
         est_min = pyqmc.linemin.stable_fit(xfit, yfit)
-        x0 = x0 - est_min * grad["objderiv"] 
+        x0 = x0 - est_min * grad["objderiv"]
         if datafile is not None:
             pd.DataFrame(df).to_json(datafile)
 

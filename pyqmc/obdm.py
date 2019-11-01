@@ -87,7 +87,7 @@ class OBDMAccumulator:
             auxassignments = np.random.randint(0, naux, size=(self._nstep, nconf))
             extra_configs = []
             for step in range(self._nstep):
-                extra_configs.append(self._extra_config)
+                extra_configs.append(np.copy(self._extra_config))
                 accept, self._extra_config = sample_onebody(
                     self._mol, self._orb_coeff, self._extra_config, tstep=self._tstep
                 )

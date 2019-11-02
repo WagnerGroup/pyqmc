@@ -110,7 +110,7 @@ class PGradDescriptor:
         return d
 
 
-def optimize(
+def cvmc_optimize(
     wf,
     configs,
     acc,
@@ -122,6 +122,8 @@ def optimize(
     datafile=None,
     vmc=None,
     vmcoptions=None,
+    lm=None,
+    lmoptions=None,
 ):
     """
     Args:
@@ -140,6 +142,10 @@ def optimize(
         vmc = pyqmc.vmc
     if vmcoptions is None:
         vmcoptions = {}
+    if lm is None:
+        lm = lm_cvmc
+    if lmoptions is None:
+        lmoptions = {}
 
     import pandas as pd
 
@@ -170,7 +176,6 @@ def optimize(
             distfromobj += distobj
             objfunc += force * distobj ** 2
 
-        #print("energy", havg, "avg", qavg, "objective function", objfunc, flush=True)
         dret = {
             "objderiv": objderiv,
             "energy": havg,
@@ -185,7 +190,7 @@ def optimize(
         return dret
 
     x0 = acc.transform.serialize_parameters(wf.parameters)
-   
+
     df = []
     for it in range(iters):
         grad = get_obj_deriv(x0)
@@ -195,28 +200,61 @@ def optimize(
         grad["parameters"] = x0.copy()
         print(x0)
         for k, force in forcing.items():
-            print(k, grad['avg'+k], grad['dp'+k])
+            print(k, grad["avg" + k], grad["dp" + k])
 
         df.append(grad)
-        taus = np.linspace(0, tstep, npts)
-        taus[0] = -tstep / npts
-        xfit = [0]
-        yfit = [grad["objfunc"]]
 
-        for tau in taus:
-            #print("+++++ tau ++++++", tau)
-            x = x0 - tau * grad["objderiv"] / np.linalg.norm(grad["objderiv"])
-            print("x",x)
-            gradnew = get_obj_deriv(x)
+        xfit = []
+        yfit = []
+
+        taus = np.linspace(0, tstep, npts + 1)
+        taus[0] = -tstep / (npts - 1)
+        params = [
+            x0 - tau * grad["objderiv"] 
+            for tau in taus
+        ]
+        stepsdata = lm(wf, configs, params, acc, **lmoptions)
+
+        for data, p, tau in zip(stepsdata, params, taus):
+            en = np.mean(data["total"] * data["weight"]) / np.mean(data["weight"])
+
+            qavg = {}
+            qdp = {}
+            objfunc = en
+            for k, force in forcing.items():
+                numerator = np.sum(data[k] * data["weight"])
+                denominator = np.sum(data["weight"])
+
+                objfunc += (
+                    force
+                    * (numerator ** 2 - np.sum((data[k] * data["weight"]) ** 2))
+                    / (denominator ** 2 - np.sum(data["weight"] ** 2))
+                )  # Quadratic term
+
+                qavg[k] = numerator / denominator
+                objfunc -= 2 * force * qavg[k] * objective[k]  # Linear term
+                objfunc += force * objective[k] ** 2  # Constant term
+
+            dret = {
+                "steptype": "line",
+                "tau": tau,
+                "iteration": it,
+                "parameters": params,
+                "objfunc": objfunc,
+                "dist": None,
+                "objderiv": None,
+                "dEdp": None,
+                "energy": en,
+            }
+
+            for k, avg in qavg.items():
+                dret["avg" + k] = avg
+            for k, avg in qdp.items():
+                dret["dp" + k] = None
+
             xfit.append(tau)
-            yfit.append(gradnew["objfunc"])
-            gradnew["steptype"] = "line"
-            gradnew["tau"] = tau
-            gradnew["iteration"] = it
-            gradnew["parameters"] = x.copy()
-            df.append(gradnew)
-        for t, y in zip(xfit, yfit):
-            print(t, y)
+            yfit.append(dret["objfunc"])
+            df.append(dret)
 
         p = np.polyfit(xfit, yfit, 2)
         print("fitting", xfit, yfit)
@@ -236,7 +274,7 @@ def optimize(
                 est_min = minstep
         print("estimated minimum adjusted", est_min, flush=True)
 
-        x0 = x0 - est_min * grad["objderiv"] / np.linalg.norm(grad["objderiv"])
+        x0 = x0 - est_min * grad["objderiv"] 
         if datafile is not None:
             pd.DataFrame(df).to_json(datafile)
 
@@ -244,3 +282,55 @@ def optimize(
         wf.parameters[k] = p
 
     return wf, df
+
+
+def lm_cvmc(wf, configs, params, acc):
+    """ 
+    Evaluates accumulator on the same set of configs for correlated sampling of different wave function parameters
+
+    Args:
+        wf: wave function object
+        configs: (nconf, nelec, 3) array
+        params: (nsteps, nparams) array 
+            list of arrays of parameters (serialized) at each step
+        acc: PGradDescriptor 
+
+    Returns:
+        data: list of dicts, one dict for each sample
+            each dict contains arrays returned from PGradDescriptor, weighted by psi**2/psi0**2
+    """
+
+    import copy
+    import numpy as np
+
+    data = []
+    psi0 = wf.recompute(configs)[1]  # recompute gives logdet
+
+    # Aggregate evaluator configurations
+    extra_configs = []
+    auxassignments = []
+    for i, evaluate in enumerate(acc.dm_evaluators):
+        res = evaluate.get_extra_configs(configs)
+        extra_configs.append(res[0])
+        auxassignments.append(res[1])
+
+    # Run the correlated evaluation
+    for p in params:
+        newparms = acc.transform.deserialize(p)
+        for k in newparms:
+            wf.parameters[k] = newparms[k]
+        psi = wf.recompute(configs)[1]  # recompute gives logdet
+        rawweights = np.exp(2 * (psi - psi0))  # convert from log(|psi|) to |psi|**2
+
+        df = acc.enacc(configs, wf)
+        dms = [
+            evaluate(configs, wf, extra_configs[i], auxassignments[i])
+            for i, evaluate in enumerate(acc.dm_evaluators)
+        ]
+        descript = acc.descriptors(dms)
+        for di, desc in descript.items():
+            df[di] = desc
+        df["weight"] = rawweights
+
+        data.append(df)
+    return data

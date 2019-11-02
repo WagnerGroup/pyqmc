@@ -94,10 +94,9 @@ H ul
 if __name__ == "__main__":
     import pyqmc
     import pyqmc.dasktools
-    from pyqmc.dasktools import distvmc as vmc
-    from pyqmc.dasktools import line_minimization
-    from pyqmc.cvmc import optimize
+    from pyqmc.dasktools import line_minimization, cvmc_optimize
     from dask.distributed import Client, LocalCluster   
+    
     r = 1.1
 
     ncore = 2
@@ -108,7 +107,6 @@ if __name__ == "__main__":
     # Set up calculation
     nconf = 800
     configs = pyqmc.initial_guess(sys["mol"], nconf)
-
     wf, dfgrad, dfline = line_minimization(
         sys["wf"],
         configs,
@@ -129,8 +127,8 @@ if __name__ == "__main__":
     obj["trace"] = 2.0
 
     datafile = "saveh2.json"
-
-    wf, df = optimize(
+    
+    wf, df = cvmc_optimize(
         sys["wf"],
         configs,
         sys["acc"],
@@ -139,6 +137,5 @@ if __name__ == "__main__":
         iters=50,
         tstep=0.1,
         datafile=datafile,
-        vmc=vmc,
-        vmcoptions=dict(client=client, nsteps=100),
+        client = client,
     )

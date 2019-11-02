@@ -51,6 +51,56 @@ def test_wfs():
             for delta in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8]:
                 err.append(func(wf, epos, delta)[0])
             print(fname, min(err))
+            assert min(err) < epsilon, "epsilon {0}".format(epsilon)
+
+        for k, item in testwf.test_updateinternals(wf, epos).items():
+            print(k, item)
+            assert item < epsilon
+
+
+def test_pbc_wfs():
+    """
+    Ensure that the wave function objects are consistent in several situations.
+    """
+
+    from pyscf.pbc import lib, gto, scf
+    from pyqmc.slaterpbc import PySCFSlaterPBC
+    from pyqmc.jastrowspin import JastrowSpin
+    from pyqmc.multiplywf import MultiplyWF
+    from pyqmc.coord import OpenConfigs
+    import pyqmc
+
+    mol = gto.M(
+        atom="H 0. 0. 0.; H 1. 1. 1.", basis="cc-pvtz", unit="bohr", a=np.eye(3) * 4
+    )
+    mf = scf.KRKS(mol).run()
+    # mf_rohf = scf.KROKS(mol).run()
+    # mf_uhf = scf.KUKS(mol).run()
+    epsilon = 1e-5
+    nconf = 10
+    epos = pyqmc.initial_guess(mol, nconf)
+    supercell = np.eye(3)
+    for wf in [
+        MultiplyWF(PySCFSlaterPBC(mol, mf, supercell), JastrowSpin(mol)),
+        PySCFSlaterPBC(mol, mf, supercell),
+        # PySCFSlaterPBC(mol, mf_uhf, supercell),
+        # PySCFSlaterPBC(mol, mf_rohf, supercell),
+    ]:
+        for k in wf.parameters:
+            if k != "mo_coeff":
+                wf.parameters[k] = np.random.rand(*wf.parameters[k].shape)
+        for fname, func in zip(
+            ["gradient", "laplacian", "pgradient"],
+            [
+                testwf.test_wf_gradient,
+                testwf.test_wf_laplacian,
+                testwf.test_wf_pgradient,
+            ],
+        ):
+            err = []
+            for delta in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8]:
+                err.append(func(wf, epos, delta)[0])
+            print(fname, min(err))
             assert min(err) < epsilon
 
         for k, item in testwf.test_updateinternals(wf, epos).items():
@@ -119,4 +169,5 @@ def test_func3d():
 
 if __name__ == "__main__":
     test_wfs()
+    test_pbc_wfs()
     test_func3d()

@@ -1,5 +1,5 @@
 '''
-Implementation of various machine learning representations for molecules
+Real space quantum Monte Carlo calculations using pyscf
 '''
 import setuptools
 from distutils.core import setup
@@ -21,8 +21,7 @@ def setup_pyqmc():
         install_requires=[
             "scipy",
             "pandas",
-            "pyscf",
-            "pyblock"
+            "pyscf"
         ],
         classifiers=[
             'Development Status :: 3 - Alpha',

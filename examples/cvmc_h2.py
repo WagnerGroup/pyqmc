@@ -1,7 +1,7 @@
 import pyqmc
 import numpy as np
 
-def setuph2(r, obdm_steps=5):
+def setuph2(r):
     from pyscf import gto, scf, lo
     from pyqmc.accumulators import LinearTransform, EnergyAccumulator
     from pyqmc.obdm import OBDMAccumulator
@@ -55,8 +55,8 @@ H ul
     a = lo.iao.iao(mol, mo_occ)
     a = lo.vec_lowdin(a, mf.get_ovlp())
 
-    obdm_up = OBDMAccumulator(mol=mol, orb_coeff=a, nstep=obdm_steps, spin=0)
-    obdm_down = OBDMAccumulator(mol=mol, orb_coeff=a, nstep=obdm_steps, spin=1)
+    obdm_up = OBDMAccumulator(mol=mol, orb_coeff=a, spin=0)
+    obdm_down = OBDMAccumulator(mol=mol, orb_coeff=a, spin=1)
 
     wf = pyqmc.slater_jastrow(mol, mf)
 
@@ -135,7 +135,7 @@ if __name__ == "__main__":
         objective=obj,
         forcing=forcing,
         iters=50,
-        tstep=0.1,
+        tstep=0.5,
         datafile=datafile,
         client = client,
     )

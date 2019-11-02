@@ -19,6 +19,27 @@ def sr12_update(pgrad, Sij, step, eps=0.1):
     return -v * step  # / np.linalg.norm(v)
 
 
+def stable_fit(xfit, yfit):
+    p = np.polyfit(xfit, yfit, 2)
+    steprange = np.max(xfit)
+    minstep = np.min(xfit)
+    print("polynomial fit", p)
+    est_min = -p[1] / (2 * p[0])
+    print("estimated minimum", est_min, flush=True)
+    if est_min > steprange and p[0] > 0:  # minimum past the search radius
+        est_min = steprange
+    if est_min < minstep and p[0] > 0:  # mimimum behind the search radius
+        est_min = minstep
+    if p[0] < 0:
+        plin = np.polyfit(xfit, yfit, 1)
+        if plin[0] < 0:
+            est_min = steprange
+        if plin[0] > 0:
+            est_min = minstep
+    print("estimated minimum adjusted", est_min, flush=True)
+    return est_min
+
+
 def line_minimization(
     wf,
     coords,
@@ -155,10 +176,9 @@ def line_minimization(
                     "iter": it,
                 }
             )
-            print("descent step {:<15.10} {:<15.10} weight stddev {:<15.10}".format(
-                    step,
-                    dfs[-1]["en"],
-                    np.std(data["weight"])
+            print(
+                "descent step {:<15.10} {:<15.10} weight stddev {:<15.10}".format(
+                    step, dfs[-1]["en"], np.std(data["weight"])
                 ),
                 flush=True,
             )
@@ -167,24 +187,7 @@ def line_minimization(
         yfit.extend([df["en"] for df in dfs])
         datatest.extend(dfs)
 
-        # Fit minimum
-        p = np.polyfit(xfit, yfit, 2)
-        print("polynomial fit", p)
-        est_min = -p[1] / (2 * p[0])
-        print("estimated minimum", est_min, flush=True)
-        minstep = np.min(xfit)
-        if est_min > steprange and p[0] > 0:  # minimum past the search radius
-            est_min = steprange
-        if est_min < minstep and p[0] > 0:  # mimimum behind the search radius
-            est_min = minstep
-        if p[0] < 0:
-            plin = np.polyfit(xfit, yfit, 1)
-            if plin[0] < 0:
-                est_min = steprange
-            if plin[0] > 0:
-                est_min = minstep
-        print("estimated minimum adjusted", est_min, flush=True)
-
+        est_min = stable_fit(xfit, yfit)
         x0 += update(pgrad, Sij, est_min, **update_kws)
 
         pd.DataFrame(datagrad).to_json(dataprefix + "grad.json")

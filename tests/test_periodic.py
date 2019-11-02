@@ -104,10 +104,16 @@ def runtest(mol, mf, kind=0, do_mc=False):
         wf = pyqmc.default_msj(mol, mf, mc)[0]
         kpt = mf.kpt
         dm = mc.make_rdm1()
+        if len(dm.shape) == 4:
+            dm = np.sum(dm, axis=0)
     else:
         kpt = mf.kpts[kind]
         wf = pyqmc.PySCFSlaterUHF(mol, mf, twist=np.dot(kpt, mol.a.T / np.pi))
-        dm = mf.make_rdm1()[kind]
+        dm = mf.make_rdm1()
+        print("original dm shape", dm.shape)
+        if len(dm.shape) == 4:
+            dm = np.sum(dm, axis=0)
+        dm = dm[kind]
 
     #####################################
     ## evaluate KE in PySCF
@@ -115,8 +121,6 @@ def runtest(mol, mf, kind=0, do_mc=False):
     ke_mat = mol.pbc_intor("int1e_kin", hermi=1, kpts=np.array(kpt))
     print("ke_mat", ke_mat.shape)
     print("dm", dm.shape)
-    if len(dm.shape) == 4:
-        dm = np.sum(dm, axis=0)
     pyscfke = np.real(np.einsum("ij,ji->", ke_mat, dm))
     print("PySCF kinetic energy: {0}".format(pyscfke))
 
@@ -150,7 +154,7 @@ def runtest(mol, mf, kind=0, do_mc=False):
 if __name__ == "__main__":
     kind = 0
     nk = [2, 2, 2]
-    multislater(kind, nk)
+    # multislater(kind, nk)
     # cubic_with_ecp(kind, nk)
-    # test_RKS(kind, nk)
-    # test_noncubic(kind, nk)
+    test_RKS(kind, nk)
+    test_noncubic(kind, nk)

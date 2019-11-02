@@ -21,8 +21,7 @@ def setup_pyqmc():
         install_requires=[
             "scipy",
             "pandas",
-            "pyscf",
-            "pyblock"
+            "pyscf"
         ],
         classifiers=[
             'Development Status :: 3 - Alpha',

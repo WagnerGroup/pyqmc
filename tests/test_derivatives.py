@@ -26,7 +26,7 @@ def test_wfs():
     mf = scf.RHF(mol).run()
     mf_rohf = scf.ROHF(mol).run()
     mf_uhf = scf.UHF(mol).run()
-    epsilon = 1e-5
+    epsilon = 1e-4
     nconf = 10
     epos = pyqmc.initial_guess(mol, nconf)
     for wf in [

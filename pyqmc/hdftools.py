@@ -10,7 +10,6 @@ def setup_hdf(f, data, attr):
     It's assumed that data consists of representative sizes. 
     This function will not insert data into the HDF5 object, only set up the datasets.
     """
-    print(f.keys())
     for k, it in data.items():
         itnp = np.array(it)
         f.create_dataset(k, (0, *itnp.shape), maxshape=(None, *itnp.shape))

@@ -1,5 +1,5 @@
 '''
-Implementation of various machine learning representations for molecules
+Real space quantum Monte Carlo calculations using pyscf
 '''
 import setuptools
 from distutils.core import setup

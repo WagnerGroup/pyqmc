@@ -71,7 +71,7 @@ def test_pbc_wfs():
     import pyqmc
 
     mol = gto.M(
-        atom="H 0. 0. 0.; H 1. 1. 1.", basis="cc-pvtz", unit="bohr", a=np.eye(3) * 4
+        atom="H 0. 0. 0.; H 1. 1. 1.", basis="sto-3g", unit="bohr", a=np.eye(3) * 4
     )
     mf = scf.KRKS(mol).run()
     # mf_rohf = scf.KROKS(mol).run()

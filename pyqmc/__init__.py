@@ -17,6 +17,7 @@ from pyqmc.optsr import gradient_descent
 from pyqmc.linemin import line_minimization
 from pyqmc.dmc import rundmc
 from pyqmc.cvmc import cvmc_optimize
+from pyqmc.reblock import reblock as avg_reblock
 
 
 def slater_jastrow(mol, mf, abasis=None, bbasis=None):

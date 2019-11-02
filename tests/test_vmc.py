@@ -16,14 +16,14 @@ def test_vmc():
     """
     Test that a VMC calculation of a Slater determinant matches Hartree-Fock within error bars.
     """
-    nconf = 5000
+    nconf = 1000
     mol = gto.M(
         atom="Li 0. 0. 0.; Li 0. 0. 1.5", basis="cc-pvtz", unit="bohr", verbose=1
     )
 
     mf_rhf = scf.RHF(mol).run()
     mf_uhf = scf.UHF(mol).run()
-    nsteps = 100
+    nsteps = 300
     warmup = 30
 
     for wf, mf in [

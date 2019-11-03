@@ -149,10 +149,10 @@ def cvmc_optimize(
         lmoptions = {}
 
     attr = dict(iters=iters, npts=npts, tstep = tstep)
-    for k, it in lmoptions.items():
-        attr['linemin_'+k] = it
-    for k, it in vmcoptions:
-        attr['vmc_'+k] = it
+    #for k, it in lmoptions.items():
+    #    attr['linemin_'+k] = it
+    #for k, it in vmcoptions:
+    #    attr['vmc_'+k] = it
     for k, it in objective.items():
         attr['objective_'+k] = it
     for k, it in forcing.items():

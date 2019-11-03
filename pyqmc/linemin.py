@@ -123,12 +123,12 @@ def line_minimization(
         update_kws = {}
 
     attr = dict(maxiters=maxiters, npts=npts, steprange = steprange)
-    for k, it in lmoptions.items():
-        attr['linemin_'+k] = it
-    for k, it in vmcoptions:
-        attr['vmc_'+k] = it
-    for k, it in update_kws.items():
-        attr['update_'+k] = it
+    #for k, it in lmoptions.items():
+    #    attr['linemin_'+k] = it
+    #for k, it in vmcoptions.items():
+    #    attr['vmc_'+k] = it
+    #for k, it in update_kws.items():
+    #    attr['update_'+k] = it
 
 
     def gradient_energy_function(x, coords):
@@ -200,7 +200,7 @@ def line_minimization(
         step_data['tau'] = xfit
         step_data['yfit'] = yfit
 
-        pyqmc.linemin.opt_hdf(hdf_file, step_data, attr, coords,
+        opt_hdf(hdf_file, step_data, attr, coords,
                       pgrad_acc.transform.deserialize(x0))
         df.append(step_data)
 

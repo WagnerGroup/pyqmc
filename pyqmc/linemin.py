@@ -19,6 +19,21 @@ def sr12_update(pgrad, Sij, step, eps=0.1):
     return -v * step  # / np.linalg.norm(v)
 
 
+def opt_hdf(hdf_file, data, attr, configs, parameters):
+    import pyqmc.hdftools as hdftools
+    if hdf_file is not None:
+        if 'configs' not in hdf_file.keys():
+            hdftools.setup_hdf(hdf_file, data, attr)
+            hdf_file.create_dataset('configs', configs.configs.shape)
+            hdf_file.create_group('wf')
+            for k, it in parameters.items():
+                hdf_file.create_dataset('wf/'+k, data=it)
+        hdftools.append_hdf(hdf_file, data)
+        hdf_file['configs'][:, :, :] = configs.configs
+        for k, it in parameters.items():
+            hdf_file['wf/'+k][...] = it.copy()
+
+
 def stable_fit(xfit, yfit):
     p = np.polyfit(xfit, yfit, 2)
     steprange = np.max(xfit)
@@ -51,11 +66,11 @@ def line_minimization(
     vmcoptions=None,
     lm=None,
     lmoptions=None,
-    dataprefix="",
     update=sr_update,
     update_kws=None,
-    verbose=2,
+    verbose=False,
     npts=5,
+    hdf_file=None
 ):
     """Optimizes energy by determining gradients with stochastic reconfiguration
         and minimizing the energy along gradient directions using correlated sampling.
@@ -86,17 +101,12 @@ def line_minimization(
 
       update_kws: Any keywords 
 
-      dataprefix: A base filename in which to save datafileline.json and datafilegrad.json, which contain information about the optimization
-
       npts: number of points to fit to in each line minimization
 
     Returns:
 
       wf: optimized wave function
 
-      datagrad: dictionary with gradient descent data
-
-      dataline: dictionary with line minimization data
 
     """
     if vmc is None:
@@ -111,6 +121,15 @@ def line_minimization(
         lmoptions = {}
     if update_kws is None:
         update_kws = {}
+
+    attr = dict(maxiters=maxiters, npts=npts, steprange = steprange)
+    for k, it in lmoptions.items():
+        attr['linemin_'+k] = it
+    for k, it in vmcoptions:
+        attr['vmc_'+k] = it
+    for k, it in update_kws.items():
+        attr['update_'+k] = it
+
 
     def gradient_energy_function(x, coords):
         newparms = pgrad_acc.transform.deserialize(x)
@@ -127,32 +146,32 @@ def line_minimization(
         Sij = dpdp - np.einsum("i,j->ij", dp, dp)  # + eps*np.eye(dpdp.shape[0])
         return coords, df["pgradtotal"].values[-1], grad, Sij, en, en_err
 
+    if hdf_file is not None and 'wf' in hdf_file.keys():
+        grp = hdf_file['wf']
+        for k in grp.keys():
+            wf.parameters[k] = np.array(grp[k])
+
     x0 = pgrad_acc.transform.serialize_parameters(wf.parameters)
-    datagrad = []
-    datatest = []
 
     # VMC warm up period
-    print("starting warmup")
+    if verbose:
+        print("starting warmup")
     data, coords = vmc(wf, coords, accumulators={}, **vmcoptions)
-    print("warmup finished, nsteps", len(data))
-
+    df = []
     # Gradient descent cycles
     for it in range(maxiters):
         # Calculate gradient accurately
         coords, last_en, pgrad, Sij, en, en_err = gradient_energy_function(x0, coords)
-        datagrad.append(
-            {
-                "pgrad": pgrad,
-                "S": Sij,
-                "en": en,
-                "en_err": en_err,
-                "iter": it,
-                "params": x0.copy(),
-            }
-        )
-
-        print("descent en", en, en_err)
-        print("descent |grad|", np.linalg.norm(pgrad), flush=True)
+        step_data = {}
+        step_data['energy'] = en
+        step_data['energy_error']= en_err
+        step_data['x'] = x0
+        step_data['pgradient'] = pgrad
+        step_data['iteration'] = it
+        
+        if verbose:
+            print("descent en", en, en_err)
+            print("descent |grad|", np.linalg.norm(pgrad), flush=True)
 
         xfit = []
         yfit = []
@@ -164,40 +183,33 @@ def line_minimization(
         steps = np.linspace(-steprange / npts, steprange, npts)
         params = [x0 + update(pgrad, Sij, step, **update_kws) for step in steps]
         stepsdata = lm(wf, coords, params, pgrad_acc, **lmoptions)
-        dfs = []
         for data, p, step in zip(stepsdata, params, steps):
             en = np.mean(data["total"] * data["weight"]) / np.mean(data["weight"])
-            dfs.append(
-                {
-                    "en": en,
-                    "en_err": np.std(data["total"]) / np.sqrt(data["total"].size),
-                    "step": step,
-                    "params": p.copy(),
-                    "iter": it,
-                }
-            )
-            print(
+            yfit.append(en)
+            if verbose:
+                print(
                 "descent step {:<15.10} {:<15.10} weight stddev {:<15.10}".format(
-                    step, dfs[-1]["en"], np.std(data["weight"])
+                    step, en, np.std(data["weight"])
                 ),
                 flush=True,
-            )
+                )
 
         xfit.extend(steps)
-        yfit.extend([df["en"] for df in dfs])
-        datatest.extend(dfs)
-
         est_min = stable_fit(xfit, yfit)
         x0 += update(pgrad, Sij, est_min, **update_kws)
+        step_data['tau'] = xfit
+        step_data['yfit'] = yfit
 
-        pd.DataFrame(datagrad).to_json(dataprefix + "grad.json")
-        pd.DataFrame(datatest).to_json(dataprefix + "line.json")
+        pyqmc.linemin.opt_hdf(hdf_file, step_data, attr, coords,
+                      pgrad_acc.transform.deserialize(x0))
+        df.append(step_data)
+
 
     newparms = pgrad_acc.transform.deserialize(x0)
     for k in newparms:
         wf.parameters[k] = newparms[k]
 
-    return wf, datagrad, datatest
+    return wf, df
 
 
 def lm_sampler(wf, configs, params, pgrad_acc):

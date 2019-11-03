@@ -124,6 +124,7 @@ def cvmc_optimize(
     vmcoptions=None,
     lm=None,
     lmoptions=None,
+    hdf_file = None
 ):
     """
     Args:
@@ -146,6 +147,17 @@ def cvmc_optimize(
         lm = lm_cvmc
     if lmoptions is None:
         lmoptions = {}
+
+    attr = dict(iters=iters, npts=npts, tstep = tstep)
+    #for k, it in lmoptions.items():
+    #    attr['linemin_'+k] = it
+    #for k, it in vmcoptions:
+    #    attr['vmc_'+k] = it
+    for k, it in objective.items():
+        attr['objective_'+k] = it
+    for k, it in forcing.items():
+        attr['forcing_'+k] = it
+ 
 
     import pandas as pd
 
@@ -182,8 +194,6 @@ def cvmc_optimize(
             "objfunc": objfunc,
             "dist": distfromobj,
             "dEdp": dEdp,
-            "weights": None,
-            "weights_var": None,
         }
         for k, avg in qavg.items():
             dret["avg" + k] = avg
@@ -191,20 +201,21 @@ def cvmc_optimize(
             dret["dp" + k] = avg
         return dret
 
+    if hdf_file is not None and 'wf' in hdf_file.keys():
+        grp = hdf_file['wf']
+        for k in grp.keys():
+            wf.parameters[k] = np.array(grp[k])
+
     x0 = acc.transform.serialize_parameters(wf.parameters)
 
     df = []
     for it in range(iters):
         grad = get_obj_deriv(x0)
-        grad["steptype"] = "gradient"
-        grad["tau"] = 0.0
         grad["iteration"] = it
         grad["parameters"] = x0.copy()
-        print(x0)
         for k, force in forcing.items():
-            print(k, grad["avg" + k], grad["dp" + k])
+            print(k, grad["avg" + k], grad["dp" + k], flush=True)
 
-        df.append(grad)
 
         xfit = []
         yfit = []
@@ -226,30 +237,17 @@ def cvmc_optimize(
                 distfromobj += distobj
                 objfunc += force * distobj ** 2
 
-            dret = {
-                "steptype": "line",
-                "tau": tau,
-                "iteration": it,
-                "parameters": p.copy(),
-                "objfunc": objfunc,
-                "dist": None,
-                "objderiv": None,
-                "dEdp": None,
-                "energy": en,
-                "weights": np.mean(data["weight"]),
-                "weights_var": np.var(data["weight"]),
-            }
-
-            for k, avg in qavg.items():
-                dret["avg" + k] = avg
-                dret["dp" + k] = None
-
             xfit.append(tau)
-            yfit.append(dret["objfunc"])
-            df.append(dret)
+            yfit.append(objfunc)
 
         est_min = pyqmc.linemin.stable_fit(xfit, yfit)
         x0 = x0 - est_min * grad["objderiv"]
+        grad['yfit'] = yfit
+        grad['taus'] = xfit
+        pyqmc.linemin.opt_hdf(hdf_file, grad, attr, configs,
+                      acc.transform.deserialize(x0))
+        
+        df.append(grad)
         if datafile is not None:
             pd.DataFrame(df).to_json(datafile)
 

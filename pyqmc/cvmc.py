@@ -295,7 +295,11 @@ def lm_cvmc(wf, configs, params, acc):
         for k in newparms:
             wf.parameters[k] = newparms[k]
         psi = wf.recompute(configs)[1]  # recompute gives logdet
-        rawweights = np.exp(2 * (psi - psi0))  # convert from log(|psi|) to |psi|**2
+        #rawweights = np.exp(2 * (psi - psi0))  # convert from log(|psi|) to |psi|**2
+        
+        logweights = 2 * (psi - psi0)
+        logweights -= np.max(logweights) # rescale to avoid overflow errors, doesn't change weighting
+        rawweights = np.exp(logweights)
 
         df = acc.enacc(configs, wf)
         dms = [

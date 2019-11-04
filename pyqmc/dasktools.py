@@ -13,9 +13,12 @@ def distvmc(
     coords,
     accumulators=None,
     nsteps=100,
+    hdf_file=None,
     npartitions=None,
     nsteps_per=None,
     client=None,
+    verbose=False,
+    **kwargs
 ):
     """ 
     Args: 
@@ -29,6 +32,12 @@ def distvmc(
     """
     if nsteps_per is None:
         nsteps_per = nsteps
+
+    if hdf_file is not None and 'configs' in hdf_file.keys():
+        coords.configs = np.array(hdf_file['configs'])
+        if verbose:
+            print("Restarted calculation")
+
 
     if accumulators is None:
         accumulators = {}
@@ -49,6 +58,7 @@ def distvmc(
             wfs,
             thiscoord,
             **{"nsteps": nsteps_per, "accumulators": accumulators, "stepoffset": epoch},
+            **kwargs
         )
         iterdata = []
         for i, r in enumerate(runs):
@@ -56,15 +66,15 @@ def distvmc(
             iterdata.extend(res[0])
             coord[i] = res[1]
 
-        alldata.extend(
-            pd.DataFrame(iterdata)
-            .groupby("step", as_index=False)
-            .apply(lambda x: x.mean())
-            .to_dict("records")
-        )
-        print("epoch", epoch, "finished", flush=True)
+        collected_data=pd.DataFrame(iterdata).groupby("step",as_index=False).apply(lambda x: x.mean()).to_dict("records")
+        if verbose:
+            print("epoch", epoch, "finished", flush=True)
 
-    coords.join(coord)
+        coords.join(coord)
+        alldata.extend(collected_data)
+        for d in collected_data:
+            pyqmc.mc.vmc_file(hdf_file, d, kwargs, coords)
+
 
     return alldata, coords
 

@@ -8,6 +8,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 import pandas as pd
 from pyscf import lib, gto, scf
 from pyqmc import slater_jastrow, line_minimization, initial_guess, gradient_generator
+import h5py
 
 
 def test():
@@ -18,13 +19,16 @@ def test():
     mf = scf.RHF(mol).run()
     wf = slater_jastrow(mol, mf)
     nconf = 500
-    wf, dfgrad, dfline = line_minimization(
-        wf, initial_guess(mol, nconf), gradient_generator(mol, wf)
+    wf, dfgrad = line_minimization(
+        wf, initial_guess(mol, nconf), gradient_generator(mol, wf),
+        hdf_file = h5py.File("test_line_minimization.hdf5",'a')
     )
+    
     dfgrad = pd.DataFrame(dfgrad)
+    print(dfgrad)
     mfen = mf.energy_tot()
-    enfinal = dfgrad["en"].values[-1]
-    enfinal_err = dfgrad["en_err"].values[-1]
+    enfinal = dfgrad["energy"].values[-1]
+    enfinal_err = dfgrad["energy_error"].values[-1]
     assert mfen > enfinal
 
 

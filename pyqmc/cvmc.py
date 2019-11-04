@@ -124,6 +124,8 @@ def cvmc_optimize(
     vmcoptions=None,
     lm=None,
     lmoptions=None,
+    update=pyqmc.linemin.sr_update,
+    update_kws=None,
     hdf_file = None
 ):
     """
@@ -147,6 +149,8 @@ def cvmc_optimize(
         lm = lm_cvmc
     if lmoptions is None:
         lmoptions = {}
+    if update_kws is None:
+        update_kws = {}
 
     attr = dict(iters=iters, npts=npts, tstep = tstep)
     #for k, it in lmoptions.items():
@@ -168,10 +172,11 @@ def cvmc_optimize(
         df, configs = vmc(wf, configs, accumulators={"grad": acc}, **vmcoptions)
 
         df = pd.DataFrame(df)
-        dpavg = np.mean(df["graddppsi"])
-
-        havg = np.mean(df["gradtotal"])
-        dpH = np.mean(df["graddpH"])
+        dpavg = np.mean(df["graddppsi"], axis=0)
+        Sij = np.mean(df["graddpidpj"], axis=0) - np.einsum("i,j->ij", dpavg, dpavg)
+        
+        havg = np.mean(df["gradtotal"], axis=0)
+        dpH = np.mean(df["graddpH"], axis=0)
         dEdp = dpH - dpavg * havg
 
         qavg = {}
@@ -199,7 +204,7 @@ def cvmc_optimize(
             dret["avg" + k] = avg
         for k, avg in qdp.items():
             dret["dp" + k] = avg
-        return dret
+        return dret, Sij
 
     if hdf_file is not None and 'wf' in hdf_file.keys():
         grp = hdf_file['wf']
@@ -210,7 +215,7 @@ def cvmc_optimize(
 
     df = []
     for it in range(iters):
-        grad = get_obj_deriv(x0)
+        grad, Sij = get_obj_deriv(x0)
         grad["iteration"] = it
         grad["parameters"] = x0.copy()
         for k, force in forcing.items():
@@ -222,7 +227,8 @@ def cvmc_optimize(
 
         taus = np.linspace(0, tstep, npts + 1)
         taus[0] = -tstep / (npts - 1)
-        params = [x0 - tau * grad["objderiv"] for tau in taus]
+        #params = [x0 - tau * grad["objderiv"] for tau in taus]
+        params = [x0 + update(grad["objderiv"], Sij, tau, **update_kws) for tau in taus]
         stepsdata = lm(wf, configs, params, acc, **lmoptions)
 
         for data, p, tau in zip(stepsdata, params, taus):
@@ -241,7 +247,9 @@ def cvmc_optimize(
             yfit.append(objfunc)
 
         est_min = pyqmc.linemin.stable_fit(xfit, yfit)
-        x0 = x0 - est_min * grad["objderiv"]
+        #x0 = x0 - est_min * grad["objderiv"]
+        x0 += update(grad["objderiv"], Sij, est_min, **update_kws)
+
         grad['yfit'] = yfit
         grad['taus'] = xfit
         pyqmc.linemin.opt_hdf(hdf_file, grad, attr, configs,
@@ -294,6 +302,10 @@ def lm_cvmc(wf, configs, params, acc):
             wf.parameters[k] = newparms[k]
         psi = wf.recompute(configs)[1]  # recompute gives logdet
         rawweights = np.exp(2 * (psi - psi0))  # convert from log(|psi|) to |psi|**2
+        
+        #logweights = 2 * (psi - psi0)
+        #logweights -= np.max(logweights)
+        #rawweights = np.exp(logweights)
 
         df = acc.enacc(configs, wf)
         dms = [

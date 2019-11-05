@@ -107,7 +107,7 @@ if __name__ == "__main__":
     # Set up calculation
     nconf = 800
     configs = pyqmc.initial_guess(sys["mol"], nconf)
-    wf, dfgrad, dfline = line_minimization(
+    wf, df = line_minimization(
         sys["wf"],
         configs,
         pyqmc.gradient_generator(sys["mol"], sys["wf"]),
@@ -126,7 +126,7 @@ if __name__ == "__main__":
     obj["t"] = 0.0
     obj["trace"] = 2.0
 
-    datafile = "saveh2.json"
+    datafile = "newnew.json"
     
     wf, df = cvmc_optimize(
         sys["wf"],
@@ -135,7 +135,7 @@ if __name__ == "__main__":
         objective=obj,
         forcing=forcing,
         iters=50,
-        tstep=0.5,
+        tstep=0.2,
         datafile=datafile,
         client = client,
     )

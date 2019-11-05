@@ -227,7 +227,6 @@ def cvmc_optimize(
 
         taus = np.linspace(0, tstep, npts + 1)
         taus[0] = -tstep / (npts - 1)
-        #params = [x0 - tau * grad["objderiv"] for tau in taus]
         params = [x0 + update(grad["objderiv"], Sij, tau, **update_kws) for tau in taus]
         stepsdata = lm(wf, configs, params, acc, **lmoptions)
 
@@ -247,8 +246,7 @@ def cvmc_optimize(
             yfit.append(objfunc)
 
         est_min = pyqmc.linemin.stable_fit(xfit, yfit)
-        #x0 = x0 - est_min * grad["objderiv"]
-        x0 += update(grad["objderiv"], Sij, est_min, **update_kws)
+        x0 = x0 + update(grad["objderiv"], Sij, est_min, **update_kws)
 
         grad['yfit'] = yfit
         grad['taus'] = xfit
@@ -302,10 +300,6 @@ def lm_cvmc(wf, configs, params, acc):
             wf.parameters[k] = newparms[k]
         psi = wf.recompute(configs)[1]  # recompute gives logdet
         rawweights = np.exp(2 * (psi - psi0))  # convert from log(|psi|) to |psi|**2
-        
-        #logweights = 2 * (psi - psi0)
-        #logweights -= np.max(logweights)
-        #rawweights = np.exp(logweights)
 
         df = acc.enacc(configs, wf)
         dms = [

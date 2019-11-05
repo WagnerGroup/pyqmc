@@ -113,7 +113,7 @@ class PGradDescriptor:
         d["dpidpj"] = np.einsum("ij,ik->jk", dp, dp * f[:, np.newaxis]) / nconf
 
         for di, desc in descript.items():
-            d["dp" + di] = np.einsum("ij,i->j", dp * f[:, np.newaxis], desc]) / nconf
+            d["dp" + di] = np.einsum("ij,i->j", dp * f[:, np.newaxis], desc) / nconf
             d["avg" + di] = np.sum(desc) / nconf
         d["nodal_cutoff"] = np.sum(node_cut)
 

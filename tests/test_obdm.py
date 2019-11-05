@@ -38,9 +38,9 @@ def test():
     wf = PySCFSlaterUHF(mol, mf)
     configs = initial_guess(mol, nconf)
     energy = EnergyAccumulator(mol)
-    obdm = OBDMAccumulator(mol=mol, orb_coeff=lowdin, nstep=obdm_steps)
-    obdm_up = OBDMAccumulator(mol=mol, orb_coeff=lowdin, nstep=obdm_steps, spin=0)
-    obdm_down = OBDMAccumulator(mol=mol, orb_coeff=lowdin, nstep=obdm_steps, spin=1)
+    obdm = OBDMAccumulator(mol=mol, orb_coeff=lowdin, nsweeps=1)
+    obdm_up = OBDMAccumulator(mol=mol, orb_coeff=lowdin, nsweeps=1, spin=0)
+    obdm_down = OBDMAccumulator(mol=mol, orb_coeff=lowdin, nsweeps=1, spin=1)
 
     df, coords = vmc(
         wf,

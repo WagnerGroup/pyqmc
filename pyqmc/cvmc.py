@@ -124,6 +124,7 @@ def cvmc_optimize(
     vmcoptions=None,
     lm=None,
     lmoptions=None,
+    hdf_file = None
 ):
     """
     Args:
@@ -146,6 +147,17 @@ def cvmc_optimize(
         lm = lm_cvmc
     if lmoptions is None:
         lmoptions = {}
+
+    attr = dict(iters=iters, npts=npts, tstep = tstep)
+    #for k, it in lmoptions.items():
+    #    attr['linemin_'+k] = it
+    #for k, it in vmcoptions:
+    #    attr['vmc_'+k] = it
+    for k, it in objective.items():
+        attr['objective_'+k] = it
+    for k, it in forcing.items():
+        attr['forcing_'+k] = it
+ 
 
     import pandas as pd
 
@@ -189,92 +201,53 @@ def cvmc_optimize(
             dret["dp" + k] = avg
         return dret
 
+    if hdf_file is not None and 'wf' in hdf_file.keys():
+        grp = hdf_file['wf']
+        for k in grp.keys():
+            wf.parameters[k] = np.array(grp[k])
+
     x0 = acc.transform.serialize_parameters(wf.parameters)
 
     df = []
     for it in range(iters):
         grad = get_obj_deriv(x0)
-        grad["steptype"] = "gradient"
-        grad["tau"] = 0.0
         grad["iteration"] = it
         grad["parameters"] = x0.copy()
-        print(x0)
         for k, force in forcing.items():
-            print(k, grad["avg" + k], grad["dp" + k])
+            print(k, grad["avg" + k], grad["dp" + k], flush=True)
 
-        df.append(grad)
 
         xfit = []
         yfit = []
 
         taus = np.linspace(0, tstep, npts + 1)
         taus[0] = -tstep / (npts - 1)
-        params = [
-            x0 - tau * grad["objderiv"] / np.linalg.norm(grad["objderiv"])
-            for tau in taus
-        ]
+        params = [x0 - tau * grad["objderiv"] for tau in taus]
         stepsdata = lm(wf, configs, params, acc, **lmoptions)
 
         for data, p, tau in zip(stepsdata, params, taus):
             en = np.mean(data["total"] * data["weight"]) / np.mean(data["weight"])
 
             qavg = {}
-            qdp = {}
+            distfromobj = 0.0
             objfunc = en
             for k, force in forcing.items():
-                numerator = np.sum(data[k] * data["weight"])
-                denominator = np.sum(data["weight"])
-
-                objfunc += (
-                    force
-                    * (numerator ** 2 - np.sum((data[k] * data["weight"]) ** 2))
-                    / (denominator ** 2 - np.sum(data["weight"] ** 2))
-                )  # Quadratic term
-
-                qavg[k] = numerator / denominator
-                objfunc -= 2 * force * qavg[k] * objective[k]  # Linear term
-                objfunc += force * objective[k] ** 2  # Constant term
-
-            dret = {
-                "steptype": "line",
-                "tau": tau,
-                "iteration": it,
-                "parameters": params,
-                "objfunc": objfunc,
-                "dist": None,
-                "objderiv": None,
-                "dEdp": None,
-                "energy": en,
-            }
-
-            for k, avg in qavg.items():
-                dret["avg" + k] = avg
-            for k, avg in qdp.items():
-                dret["dp" + k] = None
+                qavg[k] = np.mean(data[k] * data["weight"]) / np.mean(data["weight"])
+                distobj = qavg[k] - objective[k]
+                distfromobj += distobj
+                objfunc += force * distobj ** 2
 
             xfit.append(tau)
-            yfit.append(dret["objfunc"])
-            df.append(dret)
+            yfit.append(objfunc)
 
-        p = np.polyfit(xfit, yfit, 2)
-        print("fitting", xfit, yfit)
-        print("polynomial fit", p)
-        est_min = -p[1] / (2 * p[0])
-        print("estimated minimum", est_min, flush=True)
-        minstep = np.min(xfit)
-        if est_min > tstep and p[0] > 0:  # minimum past the search radius
-            est_min = tstep
-        if est_min < minstep and p[0] > 0:  # mimimum behind the search radius
-            est_min = minstep
-        if p[0] < 0:
-            plin = np.polyfit(xfit, yfit, 1)
-            if plin[0] < 0:
-                est_min = tstep
-            if plin[0] > 0:
-                est_min = minstep
-        print("estimated minimum adjusted", est_min, flush=True)
-
-        x0 = x0 - est_min * grad["objderiv"] / np.linalg.norm(grad["objderiv"])
+        est_min = pyqmc.linemin.stable_fit(xfit, yfit)
+        x0 = x0 - est_min * grad["objderiv"]
+        grad['yfit'] = yfit
+        grad['taus'] = xfit
+        pyqmc.linemin.opt_hdf(hdf_file, grad, attr, configs,
+                      acc.transform.deserialize(x0))
+        
+        df.append(grad)
         if datafile is not None:
             pd.DataFrame(df).to_json(datafile)
 

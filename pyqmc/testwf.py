@@ -111,6 +111,8 @@ def test_wf_pgradient(wf, configs, delta=1e-5):
             np.amax(np.abs(gradient[k].reshape((-1, nparms)) - numgrad)),
             np.mean(np.abs(gradient[k].reshape((-1, nparms)) - numgrad)),
         )
+    if len(error) == 0:
+        return (0, 0)
     return error[max(error)]  # Return maximum coefficient error
 
 
@@ -147,7 +149,7 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
             )
             minuval = wf.testvalue(e, epos)
             minugrad = wf.gradient(e, epos)[d] * minuval
-            numeric[:, e] += (plusgrad - minugrad) / (2 * delta)
+            numeric[:, e] += np.real(plusgrad - minugrad) / (2 * delta)
 
     maxerror = np.amax(np.abs(lap - numeric))
     normerror = np.mean(np.abs((lap - numeric) / numeric))
@@ -157,6 +159,8 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
 
 
 def test_wf_gradient_laplacian(wf, configs):
+    import time
+
     nconf, nelec = configs.configs.shape[0:2]
     wf.recompute(configs)
     maxerror = 0

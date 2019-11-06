@@ -166,7 +166,7 @@ def cvmc_optimize(
       
     #Restart
     if hdf_file is not None:
-        with h5py.File(hdf_filename, 'r') as hdf:
+        with h5py.File(hdf_file, 'a') as hdf:
             if 'wf' in hdf.keys():
                 grp = hdf['wf']
                 for k in grp.keys():

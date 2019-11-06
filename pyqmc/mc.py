@@ -90,7 +90,7 @@ def limdrift(g, cutoff=1):
 def vmc_file(hdf_file, data, attr, configs):
     import pyqmc.hdftools as hdftools
     if hdf_file is not None:
-        with h5py.File(hdf_file, 'r') as hdf:
+        with h5py.File(hdf_file, 'a') as hdf:
             if 'configs' not in hdf.keys():
                 hdftools.setup_hdf(hdf, data, attr)
                 hdf.create_dataset('configs', configs.configs.shape)
@@ -132,7 +132,7 @@ def vmc(
 
     #Restart 
     if hdf_file is not None:
-        with h5py.File(hdf_file, 'r') as hdf:
+        with h5py.File(hdf_file, 'a') as hdf:
             if 'configs' in hdf.keys():
                 configs.configs = np.array(hdf['configs'])
                 if verbose:

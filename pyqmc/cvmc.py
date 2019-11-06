@@ -2,6 +2,7 @@ import pyqmc
 import numpy as np
 import h5py
 
+
 class DescriptorFromOBDM:
     """
     The reason that this has to be an object here is that parsl doesn't support 
@@ -64,18 +65,18 @@ class PGradDescriptor:
         f = a * r ** 2 + b * r ** 4 + c * r ** 3
         """
         ne = configs.configs.shape[1]
-        d2 = 0.0 
+        d2 = 0.0
         for e in range(ne):
             d2 += np.sum(wf.gradient(e, configs.electron(e)) ** 2, axis=0)
         r = 1.0 / d2
         mask = r < self.nodal_cutoff ** 2
-               
-        c = 7./(self.nodal_cutoff ** 6)
-        b = -15./(self.nodal_cutoff ** 4)
-        a = 9./(self.nodal_cutoff ** 2)
-                
+
+        c = 7.0 / (self.nodal_cutoff ** 6)
+        b = -15.0 / (self.nodal_cutoff ** 4)
+        a = 9.0 / (self.nodal_cutoff ** 2)
+
         f = a * r + b * r ** 2 + c * r ** 3
-        f[np.logical_not(mask)] = 1.
+        f[np.logical_not(mask)] = 1.0
 
         return mask, f
 
@@ -84,7 +85,7 @@ class PGradDescriptor:
         d = self.enacc(configs, wf)
         energy = d["total"]
         dp = self.transform.serialize_gradients(pgrad)
-        
+
         node_cut, f = self._node_regr(configs, wf)
 
         d["dpH"] = np.einsum("i,ij->ij", energy, dp * f[:, np.newaxis])
@@ -136,7 +137,7 @@ def cvmc_optimize(
     lmoptions=None,
     update=pyqmc.linemin.sr_update,
     update_kws=None,
-    hdf_file=None
+    hdf_file=None,
 ):
     """
     Args:
@@ -163,21 +164,21 @@ def cvmc_optimize(
         lmoptions = {}
     if update_kws is None:
         update_kws = {}
-      
-    #Restart
+
+    # Restart
     if hdf_file is not None:
-        with h5py.File(hdf_file, 'a') as hdf:
-            if 'wf' in hdf.keys():
-                grp = hdf['wf']
+        with h5py.File(hdf_file, "a") as hdf:
+            if "wf" in hdf.keys():
+                grp = hdf["wf"]
                 for k in grp.keys():
                     wf.parameters[k] = np.array(grp[k])
 
-    #Attributes for cvmc solve
+    # Attributes for cvmc solve
     attr = dict(iters=iters, npts=npts, tstep=tstep)
     for k, it in objective.items():
-        attr['objective_'+k] = it
+        attr["objective_" + k] = it
     for k, it in forcing.items():
-        attr['forcing_'+k] = it
+        attr["forcing_" + k] = it
 
     def get_obj_deriv(x):
         nonlocal configs
@@ -188,7 +189,7 @@ def cvmc_optimize(
         df = pd.DataFrame(df)
         dpavg = np.mean(df["graddppsi"], axis=0)
         Sij = np.mean(df["graddpidpj"], axis=0) - np.einsum("i,j->ij", dpavg, dpavg)
-        
+
         havg = np.mean(df["gradtotal"], axis=0)
         dpH = np.mean(df["graddpH"], axis=0)
         dEdp = dpH - dpavg * havg
@@ -230,7 +231,6 @@ def cvmc_optimize(
         for k, force in forcing.items():
             print(k, grad["avg" + k], grad["dp" + k], flush=True)
 
-
         xfit = []
         yfit = []
 
@@ -257,11 +257,12 @@ def cvmc_optimize(
         est_min = pyqmc.linemin.stable_fit(xfit, yfit)
         x0 = x0 + update(grad["objderiv"], Sij, est_min, **update_kws)
 
-        grad['yfit'] = yfit
-        grad['taus'] = xfit
-        pyqmc.linemin.opt_hdf(hdf_file, grad, attr, configs,
-                      acc.transform.deserialize(x0))
-        
+        grad["yfit"] = yfit
+        grad["taus"] = xfit
+        pyqmc.linemin.opt_hdf(
+            hdf_file, grad, attr, configs, acc.transform.deserialize(x0)
+        )
+
         df.append(grad)
         if datafile is not None:
             pd.DataFrame(df).to_json(datafile)

@@ -8,6 +8,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
 import h5py
 
+
 def initial_guess(mol, nconfig, r=1.0):
     """ Generate an initial guess by distributing electrons near atoms
     proportional to their charge.
@@ -89,17 +90,25 @@ def limdrift(g, cutoff=1):
 
 def vmc_file(hdf_file, data, attr, configs):
     import pyqmc.hdftools as hdftools
+
     if hdf_file is not None:
-        with h5py.File(hdf_file, 'a') as hdf:
-            if 'configs' not in hdf.keys():
+        with h5py.File(hdf_file, "a") as hdf:
+            if "configs" not in hdf.keys():
                 hdftools.setup_hdf(hdf, data, attr)
-                hdf.create_dataset('configs', configs.configs.shape)
+                hdf.create_dataset("configs", configs.configs.shape)
             hdftools.append_hdf(hdf, data)
-            hdf['configs'][:,:,:] = configs.configs   
+            hdf["configs"][:, :, :] = configs.configs
+
 
 def vmc(
-    wf, configs, nsteps=100, tstep=0.5, accumulators=None, verbose=False, stepoffset=0,
-    hdf_file = None
+    wf,
+    configs,
+    nsteps=100,
+    tstep=0.5,
+    accumulators=None,
+    verbose=False,
+    stepoffset=0,
+    hdf_file=None,
 ):
     """Run a Monte Carlo sample of a given wave function.
 
@@ -130,14 +139,14 @@ def vmc(
         if verbose:
             print("WARNING: running VMC with no accumulators")
 
-    #Restart 
+    # Restart
     if hdf_file is not None:
-        with h5py.File(hdf_file, 'a') as hdf:
-            if 'configs' in hdf.keys():
-                configs.configs = np.array(hdf['configs'])
+        with h5py.File(hdf_file, "a") as hdf:
+            if "configs" in hdf.keys():
+                configs.configs = np.array(hdf["configs"])
                 if verbose:
                     print("Restarted calculation")
-    
+
     nconf, nelec, ndim = configs.configs.shape
     df = []
     wf.recompute(configs)
@@ -175,10 +184,6 @@ def vmc(
         avg["acceptance"] = np.mean(acc)
         avg["step"] = stepoffset + step
         avg["nconfig"] = nconf
-        vmc_file(hdf_file, avg, dict(tstep = tstep), configs )
+        vmc_file(hdf_file, avg, dict(tstep=tstep), configs)
         df.append(avg)
     return df, configs
-
-
-
-

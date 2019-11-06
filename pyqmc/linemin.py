@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import scipy
-
+import h5py 
 
 def sr_update(pgrad, Sij, step, eps=0.1):
     invSij = np.linalg.inv(Sij + eps * np.eye(Sij.shape[0]))
@@ -19,21 +19,20 @@ def sr12_update(pgrad, Sij, step, eps=0.1):
     return -v * step  # / np.linalg.norm(v)
 
 
-def opt_hdf(hdf_filename, data, attr, configs, parameters):
+def opt_hdf(hdf_file, data, attr, configs, parameters):
     import pyqmc.hdftools as hdftools
-    import h5py 
-    if hdf_filename is not None:
-        with h5py.File(hdf_filename, 'a') as hdf_file:
-            if 'configs' not in hdf_file.keys():
-                hdftools.setup_hdf(hdf_file, data, attr)
-                hdf_file.create_dataset('configs', configs.configs.shape)
-                hdf_file.create_group('wf')
+    if hdf_file is not None:
+        with h5py.File(hdf_file, 'a') as hdf:
+            if 'configs' not in hdf.keys():
+                hdftools.setup_hdf(hdf, data, attr)
+                hdf.create_dataset('configs', configs.configs.shape)
+                hdf.create_group('wf')
                 for k, it in parameters.items():
-                    hdf_file.create_dataset('wf/'+k, data=it)
-            hdftools.append_hdf(hdf_file, data)
-            hdf_file['configs'][:, :, :] = configs.configs
+                    hdf.create_dataset('wf/'+k, data=it)
+            hdftools.append_hdf(hdf, data)
+            hdf['configs'][:, :, :] = configs.configs
             for k, it in parameters.items():
-                hdf_file['wf/'+k][...] = it.copy()
+                hdf['wf/'+k][...] = it.copy()
 
 
 def stable_fit(xfit, yfit):
@@ -72,7 +71,7 @@ def line_minimization(
     update_kws=None,
     verbose=False,
     npts=5,
-    hdf_filename=None
+    hdf_file=None
 ):
     """Optimizes energy by determining gradients with stochastic reconfiguration
         and minimizing the energy along gradient directions using correlated sampling.
@@ -111,7 +110,6 @@ def line_minimization(
 
 
     """
-    import h5py 
     if vmc is None:
         import pyqmc.mc
 
@@ -126,10 +124,10 @@ def line_minimization(
         update_kws = {}
     
     #Restart
-    if hdf_filename is not None:
-        with h5py.File(hdf_filename, 'r') as hdf_file:
-            if 'wf' in hdf_file.keys():
-                grp = hdf_file['wf']
+    if hdf_file is not None:
+        with h5py.File(hdf_file, 'r') as hdf:
+            if 'wf' in hdf.keys():
+                grp = hdf['wf']
                 for k in grp.keys():
                     wf.parameters[k] = np.array(grp[k])
 
@@ -200,7 +198,7 @@ def line_minimization(
         step_data['tau'] = xfit
         step_data['yfit'] = yfit
 
-        opt_hdf(hdf_filename, step_data, attr, coords,
+        opt_hdf(hdf_file, step_data, attr, coords,
                       pgrad_acc.transform.deserialize(x0))
         df.append(step_data)
 

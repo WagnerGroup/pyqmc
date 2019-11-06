@@ -129,8 +129,6 @@ if __name__ == "__main__":
     obj["trace"] = 2.0
 
     datafile = "saveh2.json"
-    import h5py
-    hdf_file = h5py.File('saveh2.hdf5','a')
     wf, df = cvmc_optimize(
         sys["wf"],
         configs,
@@ -140,6 +138,6 @@ if __name__ == "__main__":
         iters=50,
         tstep=0.2,
         datafile=datafile,
-        hdf_file = hdf_file,
+        hdf_filename = 'saveh2.hdf5',
         client = client,
     )

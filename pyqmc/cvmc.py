@@ -1,6 +1,6 @@
 import pyqmc
 import numpy as np
-
+import h5py
 
 class DescriptorFromOBDM:
     """
@@ -136,7 +136,7 @@ def cvmc_optimize(
     lmoptions=None,
     update=pyqmc.linemin.sr_update,
     update_kws=None,
-    hdf_filename=None
+    hdf_file=None
 ):
     """
     Args:
@@ -152,7 +152,6 @@ def cvmc_optimize(
        forcing : A dictionary which has one value for every descriptor returned by acc
     """
     import pandas as pd
-    import h5py 
 
     if vmc is None:
         vmc = pyqmc.vmc
@@ -166,10 +165,10 @@ def cvmc_optimize(
         update_kws = {}
       
     #Restart
-    if hdf_filename is not None:
-        with h5py.File(hdf_filename, 'r') as hdf_file:
-            if 'wf' in hdf_file.keys():
-                grp = hdf_file['wf']
+    if hdf_file is not None:
+        with h5py.File(hdf_filename, 'r') as hdf:
+            if 'wf' in hdf.keys():
+                grp = hdf['wf']
                 for k in grp.keys():
                     wf.parameters[k] = np.array(grp[k])
 
@@ -260,7 +259,7 @@ def cvmc_optimize(
 
         grad['yfit'] = yfit
         grad['taus'] = xfit
-        pyqmc.linemin.opt_hdf(hdf_filename, grad, attr, configs,
+        pyqmc.linemin.opt_hdf(hdf_file, grad, attr, configs,
                       acc.transform.deserialize(x0))
         
         df.append(grad)

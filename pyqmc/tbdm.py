@@ -2,6 +2,7 @@
 import numpy as np
 from copy import copy
 from pyqmc.mc import initial_guess
+from pyqmc.obdm import sample_onebody
 from sys import stdout
 
 class TBDMAccumulator:
@@ -13,24 +14,30 @@ class TBDMAccumulator:
 
       mol (Mole): PySCF Mole object.
 
-      configs (array): electron positions.
-
-      wf (pyqmc wave function object): wave function to evaluate on.
-
       orb_coeff (array): coefficients with size (nbasis,norb) relating mol basis to basis 
-                         of 2-RDM desired.
-      
+        of 2-RDM desired.
+
+      nsweeps (int):
+
       tstep (float): width of the Gaussian to update two walkers positions for the 
-                     two extra coordinates.
+        two extra coordinates.
+
+      warmup (int):
+
+      naux (int):
 
       spin: [0,0], [0,1], [1,0] or [1,1] for up-up, up-down, down-up or down-down. Defaults to all electrons.
+
+      electrons: 
+
+      ijkl:
     """
 
     def __init__(
         self,
         mol,
         orb_coeff,
-        nstep=10,
+        nsweeps=10,
         tstep=0.50,
         warmup=100,
         naux=500,
@@ -43,16 +50,16 @@ class TBDMAccumulator:
         ), "orb_coeff should be a list of orbital coefficients."
 
         if not (spin is None):
-            if spin == [0,0]:
+            if np.all(spin == [0,0]):
                 self._electrons1 = np.arange(0, mol.nelec[0])
                 self._electrons2 = np.arange(0, mol.nelec[0])
-            elif spin == [0,1]:
+            elif np.all(spin == [0,1]):
                 self._electrons1 = np.arange(0, mol.nelec[0])
                 self._electrons2 = np.arange(mol.nelec[0], np.sum(mol.nelec))
-            elif spin == [1,0]:
+            elif np.all(spin == [1,0]):
                 self._electrons1 = np.arange(mol.nelec[0], np.sum(mol.nelec))
                 self._electrons2 = np.arange(0, mol.nelec[0])
-            elif spin == [1,1]:
+            elif np.all(spin == [1,1]):
                 self._electrons1 = np.arange(mol.nelec[0], np.sum(mol.nelec))
                 self._electrons2 = np.arange(mol.nelec[0], np.sum(mol.nelec))
             else:
@@ -67,17 +74,18 @@ class TBDMAccumulator:
         self._orb_coeff = orb_coeff
         self._tstep = tstep
         self._mol = mol
-        # self._extra_config = np.random.normal(scale=tstep,size=3) # not zero to avoid sitting on top of atom.
+
         nelec = sum(self._mol.nelec)
-        self._extra_config = initial_guess(mol, 2 * (int(naux / nelec) + 1) ).reshape(-1, 3) # 2 because we have two extra positions
+        self._extra_config = initial_guess(mol, 2 * (int(naux / nelec) + 1) ).configs.reshape(-1, 3) # 2 because we have two extra positions
 
-        self._nstep = nstep
-
+        self._nsweeps = nsweeps
+        self._nstep = nsweeps * nelec
+        
         if not (ijkl is None):
             self._ijkl=ijkl
         else:
-            aux=np.arange(0,self._orb_coeff.shape[0])
-            self._ijkl=np.array(np.meshgrid(aux,aux,aux,aux)).reshape(-1,4) # All entries of the 2rdm  
+            aux=np.arange(0,self._orb_coeff.shape[1])
+            self._ijkl=np.array(np.meshgrid(aux,aux,aux,aux)).T.reshape(-1,4) # All entries of the 2rdm  
         
         for i in range(warmup):
             accept, self._extra_config = sample_onebody(
@@ -85,15 +93,16 @@ class TBDMAccumulator:
             )
 
             
-    def __call__(self, configs, wf):
+    def __call__(self, configs, wf, extra_configs=None):
         """ Quantities from equation (10) of DOI:10.1063/1.4793531"""
 
+        nconf = configs.configs.shape[0]
         results = {
             "value": np.zeros(
-                (configs.shape[0], self._orb_coeff.shape[1], self._orb_coeff.shape[1], self._orb_coeff.shape[1], self._orb_coeff.shape[1])
+                (nconf, self._orb_coeff.shape[1], self._orb_coeff.shape[1], self._orb_coeff.shape[1], self._orb_coeff.shape[1])
             ),
-            "norm": np.zeros((configs.shape[0], self._orb_coeff.shape[1])),
-            "acceptance": np.zeros(configs.shape[0]),
+            "norm": np.zeros((nconf, self._orb_coeff.shape[1])),
+            "acceptance": np.zeros(nconf),
         }
         acceptance = 0
         naux = self._extra_config.shape[0]
@@ -180,22 +189,6 @@ class TBDMAccumulator:
         return davg
 
 
-def sample_onebody(mol, orb_coeff, configs, tstep=2.0):
-    """ For a set of orbitals defined by orb_coeff, return samples from f(r) = \sum_i phi_i(r)^2. """
-    config_pack = np.concatenate(
-        [configs, configs + np.sqrt(tstep) * np.random.randn(*configs.shape)], axis=0
-    )
-
-    ao = mol.eval_gto("GTOval_sph", config_pack)
-    borb = ao.dot(orb_coeff)
-    fsum = (borb ** 2).sum(axis=1)
-
-    n = configs.shape[0]
-    accept = fsum[n:] / fsum[0:n] > np.random.rand(n) 
-    newconf = config_pack[n:, :]
-    configs[accept, :] = newconf[accept, :]
-    return accept, configs
-
 
 def normalize_tbdm(tbdm, norm):
     return tbdm / (norm[np.newaxis, np.newaxis, np.newaxis, :] * norm[np.newaxis, np.newaxis, :, np.newaxis] * norm[np.newaxis, :, np.newaxis, np.newaxis] * norm[:, np.newaxis, np.newaxis, np.newaxis]) ** 0.5 
@@ -207,4 +200,44 @@ def normalize_tbdm(tbdm, norm):
 
 
 
+if __name__ == "__main__":
 
+    import numpy as np
+    from pyscf import gto, scf, lo
+    from numpy.linalg import solve
+    from pyqmc import PySCFSlaterUHF
+    from pyqmc.mc import initial_guess, vmc
+    from pyqmc.accumulators import EnergyAccumulator
+    from pandas import DataFrame
+
+    mol = gto.M(
+        atom="Li 0. 0. 0.; H 0. 0. 2.0", basis="cc-pvdz", unit="A", verbose=4
+    )
+    mf = scf.RHF(mol).run()
+    
+    # Lowdin orthogonalized AO basis.
+    lowdin = lo.orth_ao(mol, "lowdin")
+
+    # MOs in the Lowdin basis.
+    mo = solve(lowdin, mf.mo_coeff)
+
+    # make AO to localized orbital coefficients.
+    mfobdm = mf.make_rdm1(mo, mf.mo_occ)
+    #mftbmd = ...
+    
+    ### Test TBDM calculation.
+    nconf = 25
+    nsteps = 100
+    obdm_steps = 4
+    warmup = 15
+    wf = PySCFSlaterUHF(mol, mf)
+    configs = initial_guess(mol, nconf)
+    energy = EnergyAccumulator(mol)
+    tbdm = TBDMAccumulator(mol=mol, orb_coeff=lowdin, nsweeps=obdm_steps)
+
+    print('tbdm._mol:\n',tbdm._mol)
+    print('tbdm._orb_coeff:\n',tbdm._orb_coeff)
+    print('tbdm._nstep:\n',tbdm._nstep)
+    print('tbdm._tstep:\n',tbdm._tstep)
+    print('tbdm._extra_config:\n',tbdm._extra_config.shape)
+    print('tbdm._electrons:\n',tbdm._electrons)

@@ -107,6 +107,7 @@ if __name__ == "__main__":
     # Set up calculation
     nconf = 800
     configs = pyqmc.initial_guess(sys["mol"], nconf)
+    '''
     wf, df = line_minimization(
         sys["wf"],
         configs,
@@ -114,6 +115,7 @@ if __name__ == "__main__":
         client=client,
         maxiters=5,
     )
+    '''
 
     forcing = {}
     obj = {}
@@ -127,7 +129,8 @@ if __name__ == "__main__":
     obj["trace"] = 2.0
 
     datafile = "saveh2.json"
-    
+    import h5py
+    hdf_file = h5py.File('saveh2.hdf5','a')
     wf, df = cvmc_optimize(
         sys["wf"],
         configs,
@@ -137,5 +140,6 @@ if __name__ == "__main__":
         iters=50,
         tstep=0.2,
         datafile=datafile,
+        hdf_file = hdf_file,
         client = client,
     )

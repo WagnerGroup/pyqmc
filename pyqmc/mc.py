@@ -87,19 +87,20 @@ def limdrift(g, cutoff=1):
     return g
 
 
-def vmc_file(hdf_file, data, attr, configs):
+def vmc_file(hdf_filename, data, attr, configs):
     import pyqmc.hdftools as hdftools
-    if hdf_file is not None:
-        if 'configs' not in hdf_file.keys():
-            hdftools.setup_hdf(hdf_file, data, attr)
-            hdf_file.create_dataset('configs', configs.configs.shape)
-        hdftools.append_hdf(hdf_file, data)
-        hdf_file['configs'][:,:,:] = configs.configs   
-
+    import h5py
+    if hdf_filename is not None:
+        with h5py.File(hdf_filename, 'r'): as hdf_file:
+            if 'configs' not in hdf_file.keys():
+                hdftools.setup_hdf(hdf_file, data, attr)
+                hdf_file.create_dataset('configs', configs.configs.shape)
+            hdftools.append_hdf(hdf_file, data)
+            hdf_file['configs'][:,:,:] = configs.configs   
 
 def vmc(
     wf, configs, nsteps=100, tstep=0.5, accumulators=None, verbose=False, stepoffset=0,
-    hdf_file = None
+    hdf_filename = None
 ):
     """Run a Monte Carlo sample of a given wave function.
 
@@ -130,11 +131,13 @@ def vmc(
         if verbose:
             print("WARNING: running VMC with no accumulators")
 
-    if hdf_file is not None and 'configs' in hdf_file.keys():
-        configs.configs = np.array(hdf_file['configs'])
-        if verbose:
-            print("Restarted calculation")
-
+    #Restart 
+    if hdf_filename is not None:
+        with h5py.File(hdf_filename, 'r') as hdf_file:
+            if 'configs' in hdf_file.keys():
+                configs.configs = np.array(hdf_file['configs'])
+                if verbose:
+                    print("Restarted calculation")
     
     nconf, nelec, ndim = configs.configs.shape
     df = []
@@ -173,7 +176,7 @@ def vmc(
         avg["acceptance"] = np.mean(acc)
         avg["step"] = stepoffset + step
         avg["nconfig"] = nconf
-        vmc_file(hdf_file, avg, dict(tstep = tstep), configs )
+        vmc_file(hdf_filename, avg, dict(tstep = tstep), configs )
         df.append(avg)
     return df, configs
 

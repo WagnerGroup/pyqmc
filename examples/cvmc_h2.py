@@ -126,8 +126,7 @@ if __name__ == "__main__":
     obj["t"] = 0.0
     obj["trace"] = 2.0
 
-    datafile = "saveh2.json"
-    
+    hdf_file = "saveh2.hdf5"
     wf, df = cvmc_optimize(
         sys["wf"],
         configs,
@@ -136,6 +135,6 @@ if __name__ == "__main__":
         forcing=forcing,
         iters=50,
         tstep=0.2,
-        datafile=datafile,
+        hdf_file = hdf_file,
         client = client,
     )

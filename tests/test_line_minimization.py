@@ -21,7 +21,7 @@ def test():
     nconf = 500
     wf, dfgrad = line_minimization(
         wf, initial_guess(mol, nconf), gradient_generator(mol, wf),
-        hdf_file = h5py.File("test_line_minimization.hdf5",'a')
+        hdf_file = "test_line_minimization.hdf5"
     )
     
     dfgrad = pd.DataFrame(dfgrad)

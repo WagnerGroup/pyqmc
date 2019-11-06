@@ -107,7 +107,6 @@ if __name__ == "__main__":
     # Set up calculation
     nconf = 800
     configs = pyqmc.initial_guess(sys["mol"], nconf)
-    '''
     wf, df = line_minimization(
         sys["wf"],
         configs,
@@ -115,7 +114,6 @@ if __name__ == "__main__":
         client=client,
         maxiters=5,
     )
-    '''
 
     forcing = {}
     obj = {}

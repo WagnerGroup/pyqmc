@@ -2,6 +2,7 @@ import os
 import pyqmc
 import numpy as np
 import pandas as pd
+import h5py 
 
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
@@ -33,10 +34,12 @@ def distvmc(
     if nsteps_per is None:
         nsteps_per = nsteps
 
-    if hdf_file is not None and 'configs' in hdf_file.keys():
-        coords.configs = np.array(hdf_file['configs'])
-        if verbose:
-            print("Restarted calculation")
+    if hdf_file is not None:
+        with h5py.File(hdf_file, 'a') as hdf:
+            if 'configs' in hdf.keys():
+                coords.configs = np.array(hdf['configs'])
+                if verbose:
+                    print("Restarted calculation")
 
 
     if accumulators is None:

@@ -78,7 +78,6 @@ def distvmc(
         for d in collected_data:
             pyqmc.mc.vmc_file(hdf_file, d, kwargs, coords)
 
-
     return alldata, coords
 
 

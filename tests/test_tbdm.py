@@ -84,6 +84,7 @@ if __name__ == "__main__":
     from pyqmc.mc import initial_guess, vmc
     from pyqmc.accumulators import EnergyAccumulator
     from pyqmc.tbdm import TBDMAccumulator, normalize_tbdm
+    from pyqmc.obdm import OBDMAccumulator, normalize_obdm
     from pandas import DataFrame
 
     mol = gto.M(
@@ -110,17 +111,19 @@ if __name__ == "__main__":
     
     ### Test TBDM calculation.
     # VMC params
-    nconf = 200
+    nconf = 2000
     n_vmc_steps = 100
     vmc_tstep = 0.01
     vmc_warmup = 25
     # TBDM params
-    tbdm_sweeps = 15
-    tbdm_tstep = 0.1
+    tbdm_sweeps = 1
+    tbdm_tstep = 0.05
 
     wf = PySCFSlaterUHF(mol, mf) # Single-Slater (no jastrow) wf
     configs = initial_guess(mol, nconf)
     energy = EnergyAccumulator(mol)
+    obdm_up = OBDMAccumulator(mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, spin=0)
+    obdm_dw = OBDMAccumulator(mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, spin=1)
     #tbdm = TBDMAccumulator(mol=mol, orb_coeff=lowdin, nstep=tbdm_steps)
     tbdm_upup = TBDMAccumulator(mol=mol, orb_coeff=iaos, spin=[0,0], nsweeps=tbdm_sweeps, tstep=tbdm_tstep)
     tbdm_updw = TBDMAccumulator(mol=mol, orb_coeff=iaos, spin=[0,1], nsweeps=tbdm_sweeps, tstep=tbdm_tstep)
@@ -158,6 +161,8 @@ if __name__ == "__main__":
         accumulators={
             "energy": energy,
             #"tbdm": tbdm,
+            "obdm_up": obdm_up,
+            "obdm_dw": obdm_dw,
             "tbdm_upup": tbdm_upup,
             "tbdm_updw": tbdm_updw,
             "tbdm_dwup": tbdm_dwup,
@@ -167,15 +172,32 @@ if __name__ == "__main__":
     )
     df = DataFrame(df)
     print(df)
-
     print(df.keys())
+
+    obdm_est = {}
+    for k in ["obdm_up", "obdm_dw"]:
+        avg_norm = np.array(df.loc[vmc_warmup:, k + "norm"].values.tolist()).mean(axis=0)
+        avg_obdm = np.array(df.loc[vmc_warmup:, k + "value"].values.tolist()).mean(axis=0)
+        obdm_est[k] = normalize_obdm(avg_obdm, avg_norm)
+    qmcobdm=np.array([obdm_est['obdm_up'],obdm_est['obdm_dw']])
+    
     tbdm_est = {}
     for k in ["tbdm_upup", "tbdm_updw", "tbdm_dwup", "tbdm_dwdw"]: #"tbdm",
         avg_norm = np.array(df.loc[vmc_warmup:, k + "norm"].values.tolist()).mean(axis=0)
         avg_tbdm = np.array(df.loc[vmc_warmup:, k + "value"].values.tolist()).mean(axis=0)
         tbdm_est[k] = normalize_tbdm(avg_tbdm, avg_norm)
-
     qmctbdm=np.array([[tbdm_est["tbdm_upup"],tbdm_est["tbdm_updw"]],[tbdm_est["tbdm_dwup"],tbdm_est["tbdm_dwdw"]]])
+
+
+    mfobdm = mf.make_rdm1(mo, mf.mo_occ)
+    print('\nComparing QMC and MF obdm:')
+    for s in [0,1]:
+      print('QMC obdm[%d]:\n'%s,qmcobdm[s])
+      print('MF obdm[%d]:\n'%s,mfobdm[s])
+      print('diff[%d]:\n'%s,qmcobdm[s]-mfobdm[s])
+    print(qmcobdm.shape,mfobdm.shape)
+    
+    print('\nComparing QMC and MF tbdm:')
     for sa,sb in [[0,0],[0,1],[1,0],[1,1]]:
       print('QMC tbdm[%d,%d]:\n'%(sa,sb),qmctbdm[sa,sb])
       print('MF tbdm[%d,%d]:\n'%(sa,sb),mftbdm[sa,sb])

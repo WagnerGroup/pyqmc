@@ -72,10 +72,11 @@ class TBDMAccumulator:
             exit()
             self._electrons_a = np.arange(0, np.sum(mol.nelec))
             self._electrons_b = np.arange(0, np.sum(mol.nelec))
-        if spin[0]==spin[1]:
-            self._epairs = np.stack(np.triu_indices(mol.nelec[spin[0]],1)).T + spin[0] * mol.nelec[0]
-        else:
-            self._epairs = np.array(np.meshgrid(self._electrons_a,self._electrons_b)).T.reshape(-1,2)
+        #if spin[0]==spin[1]:
+        #    self._epairs = np.stack(np.triu_indices(mol.nelec[spin[0]],1)).T + spin[0] * mol.nelec[0]
+        #else:
+        #    self._epairs = np.array(np.meshgrid(self._electrons_a,self._electrons_b)).T.reshape(-1,2)
+        self._epairs = np.array(np.meshgrid(self._electrons_a,self._electrons_b)).T.reshape(-1,2)
         self._epairs = self._epairs[self._epairs[:,0]!=self._epairs[:,1]] # Electron not repeated
         
         if len(self._epairs)==0:
@@ -154,47 +155,26 @@ class TBDMAccumulator:
             epos_b = configs.make_irreducible(
                 epairs[step,1], extra_configs[step][auxassignments_b[step]]
             )
-            #print('testvalue2:',wf.testvalue2(epairs[step,0], epairs[step,1], epos_a, epos_b))
-            #print('testvalue2:',wf.testvalue2(epairs[step,0], epairs[step,1], configs.make_irreducible(epairs[step,0], configs.configs[:, epairs[step,0], :]), epos_b))
-            #print('testvalue:',wf.testvalue(epairs[step,0], epos_a))
-            #print('testvalue2:',wf.testvalue2(epairs[step,0], epairs[step,1], epos_a, configs.make_irreducible(epairs[step,1], configs.configs[:, epairs[step,1], :])))
-            #print('testvalue:',wf.testvalue(epairs[step,1], epos_b))
-            #exit()
-            #print('Calculating wfratio_a:\n')
-            #print(epairs[step,0], epos_a.configs)
             wfratio_a = wf.testvalue(epairs[step,0], epos_a)
-            #wf_aux = copy(wf) ### This line is the issue!!!
-            #print('Warning: Shallow copy.')
-            wf.updateinternals(epairs[step,0], epos_a) # ??? CHECK HERE ???
-            #print('calculating wfratio_b:\n')
+            wf.updateinternals(epairs[step,0], epos_a)
             wfratio_b = wf.testvalue(epairs[step,1], epos_b)
-            #wfratio_b = np.ones(epos_b.configs.shape[0])
             wfratio = wfratio_a * wfratio_b
-            #print('wfratio:',wfratio)
+            wf.updateinternals(epairs[step,0], epos_a_orig)
             
-            wf.updateinternals(epairs[step,0], epos_a_orig) # ??? CHECK HERE ???
-            #print('wfratio_a.nan:',np.isnan(wfratio_a))
-            #print('wfratio_b.nan:',np.isnan(wfratio_b))
-            #if ( (np.isnan(wfratio_a).any()) | (np.isnan(wfratio_b).any()) ):
-            #    print('wfratio_a:\n',wfratio_a)
-            #    print('configs_a',configs.configs[:, epairs[step,0], :])
-            #    print('epos_a:\n',epos_a.configs)
-            #    print('wfratio_b:\n',wfratio_b)
-            #    print('epos_b:\n',epos_b.configs)
-            #    print('wfratio:\n',wfratio)
-            #    exit()
-            
-            # rho[spin][i][j][k][l] = < c^+_{spin_a,i} c^+_{spin_b,k} c_{spin_b,l} c_{spin_a,j} > .                        
+            # Index conventions. Here we will use pySCF's while Eq. (10) uses QWalk's.
+            # QWalk -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,j} c_{s1,k} c_{s2,l} > = \phi^{*}_{s1,k} \phi^{*}_{s2,l} \phi_{s1,i} \phi_{s2,j}
+            # pySCF -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,k} c_{s1,j} c_{s2,l} > = \phi^{*}_{s1,j} \phi^{*}_{s2,l} \phi_{s1,i} \phi_{s2,k}
             orbratio = np.einsum(
-                "mi,mk,ml,mj->mijkl",
+                "mj,ml,mi,mk->mijkl",
                 borb_aux[auxassignments_a[step], :] / fsum[auxassignments_a[step], np.newaxis],
                 borb_aux[auxassignments_b[step], :] / fsum[auxassignments_b[step], np.newaxis],
-                borb_configs_b, borb_configs_a
+                borb_configs_a, borb_configs_b,
             )
 
             #print('Warning: Check if should multiply nelec1 * nelec2.')
             results["value"] += np.einsum("i,ijklm->ijklm", wfratio, orbratio)
-            results["norm"] += (norm[auxassignments_a[step]] + norm[auxassignments_b[step]])/2 # ??? CHECK HERE ???
+            #results["norm"] += (norm[auxassignments_a[step]] + norm[auxassignments_b[step]])/2 # ??? CHECK HERE ???
+            results["norm"] += norm[auxassignments_a[step]]
 
         results["value"] /= self._nsweeps
         results["norm"] = results["norm"] / self._nstep
@@ -217,9 +197,9 @@ class TBDMAccumulator:
 
 def normalize_tbdm(tbdm, norm):
     #return tbdm / (norm[np.newaxis, np.newaxis, np.newaxis, :] * norm[np.newaxis, np.newaxis, :, np.newaxis] * norm[np.newaxis, :, np.newaxis, np.newaxis] * norm[:, np.newaxis, np.newaxis, np.newaxis]) ** 0.5
-    return tbdm / np.einsum('i,j,k,l->ijkl',norm,norm,norm,norm) ** 0.5 
-
-
+    #return tbdm / np.einsum('i,j,k,l->ijkl',norm,norm,norm,norm) ** 0.5
+    return tbdm / np.einsum('i,k,l,j->iklj',norm,norm,norm,norm) ** 0.5 
+    # rho[s1,s2][i][j][k][l] = < c^+_{s1,i} c^+_{s2,k} c_{s1,j} c_{s2,l} > = \phi^{*}_{s1,j} \phi^{*}_{s2,l} \phi_{s1,i} \phi_{s2,k}.
 
 
 

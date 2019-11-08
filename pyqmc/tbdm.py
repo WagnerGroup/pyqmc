@@ -1,12 +1,12 @@
 """ Evaluate the TBDM for a wave function object. """
 import numpy as np
-from copy import copy
+from copy import copy, deepcopy
 from pyqmc.mc import initial_guess
 from pyqmc.obdm import sample_onebody
 from sys import stdout
 
 class TBDMAccumulator:
-    """ Return the tbdm as an array with indices rho[spin][i][j][k][l] = < c^+_{spin,i} c^+_{spin,k} c_{spin,l} c_{spin,j} > .
+    """ Return the tbdm as an array with indices rho[spin][i][j][k][l] = < c^+_{spin_a,i} c^+_{spin_b,k} c_{spin_b,l} c_{spin_a,j} > .
     This is in pyscf's notation. ATTENTION: The OBDM is not in pyscf's notation!
         NOTE: We will assume that the localized basis in which the tbdm is written is the same for up and down electrons.
 
@@ -51,34 +51,43 @@ class TBDMAccumulator:
 
         if not (spin is None):
             if np.all(spin == [0,0]):
-                self._electrons1 = np.arange(0, mol.nelec[0])
-                self._electrons2 = np.arange(0, mol.nelec[0])
+                self._electrons_a = np.arange(0, mol.nelec[0])
+                self._electrons_b = np.arange(0, mol.nelec[0])
             elif np.all(spin == [0,1]):
-                self._electrons1 = np.arange(0, mol.nelec[0])
-                self._electrons2 = np.arange(mol.nelec[0], np.sum(mol.nelec))
+                self._electrons_a = np.arange(0, mol.nelec[0])
+                self._electrons_b = np.arange(mol.nelec[0], np.sum(mol.nelec))
             elif np.all(spin == [1,0]):
-                self._electrons1 = np.arange(mol.nelec[0], np.sum(mol.nelec))
-                self._electrons2 = np.arange(0, mol.nelec[0])
+                self._electrons_a = np.arange(mol.nelec[0], np.sum(mol.nelec))
+                self._electrons_b = np.arange(0, mol.nelec[0])
             elif np.all(spin == [1,1]):
-                self._electrons1 = np.arange(mol.nelec[0], np.sum(mol.nelec))
-                self._electrons2 = np.arange(mol.nelec[0], np.sum(mol.nelec))
+                self._electrons_a = np.arange(mol.nelec[0], np.sum(mol.nelec))
+                self._electrons_b = np.arange(mol.nelec[0], np.sum(mol.nelec))
             else:
                 raise ValueError("Spin-spin not equal to [0,0], [0,1], [1,0] or [1,1]")
         elif not (electrons is None):
-            self._electrons1 = electrons[0]
-            self._electrons2 = electrons[1]
+            self._electrons_a = electrons[0]
+            self._electrons_b = electrons[1]
         else:
-            self._electrons1 = np.arange(0, np.sum(mol.nelec))
-            self._electrons2 = np.arange(0, np.sum(mol.nelec))
-        self._epairs = np.array(np.meshgrid(self._electrons1,self._electrons2)).T.reshape(-1,2)
+            print('Not implemented.')
+            exit()
+            self._electrons_a = np.arange(0, np.sum(mol.nelec))
+            self._electrons_b = np.arange(0, np.sum(mol.nelec))
+        if spin[0]==spin[1]:
+            self._epairs = np.stack(np.triu_indices(mol.nelec[spin[0]],1)).T + spin[0] * mol.nelec[0]
+        else:
+            self._epairs = np.array(np.meshgrid(self._electrons_a,self._electrons_b)).T.reshape(-1,2)
         self._epairs = self._epairs[self._epairs[:,0]!=self._epairs[:,1]] # Electron not repeated
-            
+        
+        if len(self._epairs)==0:
+            print('Need to implement single electron sector!')
+            exit()
+        
         self._orb_coeff = orb_coeff
         self._tstep = tstep
         self._mol = mol
 
         nepairs = len(self._epairs)
-        print('nepairs',nepairs)
+        print('spin',spin,'; nepairs',nepairs,self._epairs)
         self._extra_config = initial_guess(mol, int(naux / nepairs) + 1).configs.reshape(-1, 3)
 
         self._nsweeps = nsweeps
@@ -112,8 +121,8 @@ class TBDMAccumulator:
         epairs=np.tile(self._epairs, (self._nsweeps,1))
 
         if extra_configs is None:
-            auxassignments0 = np.random.randint(0, int(naux/2), size=(self._nstep, nconf))
-            auxassignments1 = np.random.randint(int(naux/2), naux, size=(self._nstep, nconf))
+            auxassignments_a = np.random.randint(0, int(naux/2), size=(self._nstep, nconf))
+            auxassignments_b = np.random.randint(int(naux/2), naux, size=(self._nstep, nconf))
             extra_configs = []
             for step in range(self._nstep):
                 extra_configs.append(np.copy(self._extra_config))
@@ -125,6 +134,7 @@ class TBDMAccumulator:
             assert auxassignments is not None
         
         for step in range(self._nstep):
+            #print('--> epair:',epairs[step])
             points = np.concatenate([self._extra_config, configs.configs[:, epairs[step,0], :], configs.configs[:, epairs[step,1], :]])
             ao = self._mol.eval_gto("GTOval_sph", points)
             borb = ao.dot(self._orb_coeff)
@@ -133,35 +143,60 @@ class TBDMAccumulator:
             borb_aux = borb[0:naux, :]
             fsum = np.sum(borb_aux * borb_aux, axis=1)
             norm = borb_aux * borb_aux / fsum[:, np.newaxis]
-            borb_configs0 = borb[naux:(naux+configs.configs.shape[0]), :]
-            borb_configs1 = borb[(naux+configs.configs.shape[0]):, :]
+            borb_configs_a = borb[naux:(naux+configs.configs.shape[0]), :]
+            borb_configs_b = borb[(naux+configs.configs.shape[0]):, :]
            
             # It would be faster to implement a wf.testvalue_2body()
-            epos0 = configs.make_irreducible(
-                epairs[step,0], extra_configs[step][auxassignments0[step]]
+            epos_a = configs.make_irreducible(
+                epairs[step,0], extra_configs[step][auxassignments_a[step]]
             )
-            epos1 = configs.make_irreducible(
-                epairs[step,1], extra_configs[step][auxassignments1[step]]
+            epos_a_orig = configs.electron(epairs[step,0])
+            epos_b = configs.make_irreducible(
+                epairs[step,1], extra_configs[step][auxassignments_b[step]]
             )
-            wfratio1 = wf.testvalue(epairs[step,0], epos0)
-            wf_aux = copy(wf)
+            #print('testvalue2:',wf.testvalue2(epairs[step,0], epairs[step,1], epos_a, epos_b))
+            #print('testvalue2:',wf.testvalue2(epairs[step,0], epairs[step,1], configs.make_irreducible(epairs[step,0], configs.configs[:, epairs[step,0], :]), epos_b))
+            #print('testvalue:',wf.testvalue(epairs[step,0], epos_a))
+            #print('testvalue2:',wf.testvalue2(epairs[step,0], epairs[step,1], epos_a, configs.make_irreducible(epairs[step,1], configs.configs[:, epairs[step,1], :])))
+            #print('testvalue:',wf.testvalue(epairs[step,1], epos_b))
+            #exit()
+            #print('Calculating wfratio_a:\n')
+            #print(epairs[step,0], epos_a.configs)
+            wfratio_a = wf.testvalue(epairs[step,0], epos_a)
+            #wf_aux = copy(wf) ### This line is the issue!!!
             #print('Warning: Shallow copy.')
-            wf_aux.updateinternals(epairs[step,0], epos0) # ??? CHECK HERE ???
-            wfratio2 = wf_aux.testvalue(epairs[step,1], epos1)
-            wfratio = wfratio1 * wfratio2
-                        
+            wf.updateinternals(epairs[step,0], epos_a) # ??? CHECK HERE ???
+            #print('calculating wfratio_b:\n')
+            wfratio_b = wf.testvalue(epairs[step,1], epos_b)
+            #wfratio_b = np.ones(epos_b.configs.shape[0])
+            wfratio = wfratio_a * wfratio_b
+            #print('wfratio:',wfratio)
+            
+            wf.updateinternals(epairs[step,0], epos_a_orig) # ??? CHECK HERE ???
+            #print('wfratio_a.nan:',np.isnan(wfratio_a))
+            #print('wfratio_b.nan:',np.isnan(wfratio_b))
+            #if ( (np.isnan(wfratio_a).any()) | (np.isnan(wfratio_b).any()) ):
+            #    print('wfratio_a:\n',wfratio_a)
+            #    print('configs_a',configs.configs[:, epairs[step,0], :])
+            #    print('epos_a:\n',epos_a.configs)
+            #    print('wfratio_b:\n',wfratio_b)
+            #    print('epos_b:\n',epos_b.configs)
+            #    print('wfratio:\n',wfratio)
+            #    exit()
+            
+            # rho[spin][i][j][k][l] = < c^+_{spin_a,i} c^+_{spin_b,k} c_{spin_b,l} c_{spin_a,j} > .                        
             orbratio = np.einsum(
-                "ij,ik,il,im->ijklm",
-                borb_aux[auxassignments0[step], :] / fsum[auxassignments0[step], np.newaxis],
-                borb_aux[auxassignments1[step], :] / fsum[auxassignments1[step], np.newaxis],
-                borb_configs0, borb_configs1
+                "mi,mk,ml,mj->mijkl",
+                borb_aux[auxassignments_a[step], :] / fsum[auxassignments_a[step], np.newaxis],
+                borb_aux[auxassignments_b[step], :] / fsum[auxassignments_b[step], np.newaxis],
+                borb_configs_b, borb_configs_a
             )
 
             #print('Warning: Check if should multiply nelec1 * nelec2.')
-            results["value"] += len(self._electrons1) * len(self._electrons2) * np.einsum("i,ijklm->ijklm", wfratio, orbratio) # ??? CHECK THIS NORMALIZATION ???
-            results["norm"] += (norm[auxassignments0[step]] + norm[auxassignments1[step]])/2 # ??? CHECK HERE ???
+            results["value"] += np.einsum("i,ijklm->ijklm", wfratio, orbratio)
+            results["norm"] += (norm[auxassignments_a[step]] + norm[auxassignments_b[step]])/2 # ??? CHECK HERE ???
 
-        results["value"] /= self._nstep
+        results["value"] /= self._nsweeps
         results["norm"] = results["norm"] / self._nstep
         results["acceptance"] /= self._nstep
 
@@ -181,7 +216,8 @@ class TBDMAccumulator:
 
 
 def normalize_tbdm(tbdm, norm):
-    return tbdm / (norm[np.newaxis, np.newaxis, np.newaxis, :] * norm[np.newaxis, np.newaxis, :, np.newaxis] * norm[np.newaxis, :, np.newaxis, np.newaxis] * norm[:, np.newaxis, np.newaxis, np.newaxis]) ** 0.5 
+    #return tbdm / (norm[np.newaxis, np.newaxis, np.newaxis, :] * norm[np.newaxis, np.newaxis, :, np.newaxis] * norm[np.newaxis, :, np.newaxis, np.newaxis] * norm[:, np.newaxis, np.newaxis, np.newaxis]) ** 0.5
+    return tbdm / np.einsum('i,j,k,l->ijkl',norm,norm,norm,norm) ** 0.5 
 
 
 
@@ -201,9 +237,11 @@ if __name__ == "__main__":
     from pandas import DataFrame
 
     mol = gto.M(
-        atom="Li 0. 0. 0.; H 0. 0. 2.0", basis="cc-pvdz", unit="A", verbose=4
+        atom="H 0. 0. 0.; H 0. 0. 2.0", basis="minao", unit="A", verbose=4
     )
-    mf = scf.RHF(mol).run()
+    mf = scf.UHF(mol).run()
+
+    mfobdm = np.array(mf.make_rdm1(mf.mo_coeff,mf.mo_occ))
     
     # Lowdin orthogonalized AO basis.
     lowdin = lo.orth_ao(mol, "lowdin")
@@ -211,27 +249,60 @@ if __name__ == "__main__":
     # MOs in the Lowdin basis.
     mo = solve(lowdin, mf.mo_coeff)
 
-    # make AO to localized orbital coefficients.
+    # Construct 1-RMD in MO basis.
     mfobdm = mf.make_rdm1(mo, mf.mo_occ)
-    #mftbmd = ...
+    # Computes the TBDM for a single Slater determinant (in AO basis).
+    norb=mfobdm.shape[1]
+    nelec=mf.nelec
+    mftbdm=np.tile(np.nan,[2,2]+[norb,norb,norb,norb])
+    for spin in 0,1:
+        mftbdm[spin,spin]=np.einsum('ik,jl->ijkl',mfobdm[spin],mfobdm[spin]) - np.einsum('il,jk->ijkl',mfobdm[spin],mfobdm[spin])
+    mftbdm[0,1]=np.einsum('ik,jl->ijkl',mfobdm[0],mfobdm[1])
+    mftbdm[1,0]=np.einsum('ik,jl->ijkl',mfobdm[1],mfobdm[0])
+    # Rotation into pySCF's 2-RDMs notation
+    mftbdm=np.transpose(mftbdm,axes=(0,1,2,4,3,5))
+    mo_coeff_a=np.dot( (mo[0]).T, mf.get_ovlp() ).T
+    mo_coeff_b=np.dot( (mo[1]).T, mf.get_ovlp() ).T
+    mo_coeff=[mo_coeff_a,mo_coeff_b]  
+    # Transforming the 2-RDM: we change from AO (R_{ijkl}) into MOs or IAOs (R_{alpha,beta,gamma,sigma}) basis: 
+    #  R_{alpha,beta,gamma,sigma} = [C^T^*]_{alpha,i} [C^T^*]_{gamma,k} Rab_{ijkl} C_{j,beta} C_{l,sigma}
+    tbdm=np.zeros((mftbdm.shape[0],mftbdm.shape[1],mo_coeff_a.T.shape[0],mo_coeff_b.T.shape[0],mo_coeff_a.shape[1],mo_coeff_b.shape[1]))
+    for s1 in range(mftbdm.shape[0]):
+      for s2 in range(mftbdm.shape[1]):
+        rdm2_rot=np.tensordot(mo_coeff[s1].T.conj(), mftbdm[s1,s2], axes=([[1],[0]])) # \sum_i [Ca^T^*]_{alpha}^{i} Rab_{ijkl}
+        rdm2_rot=np.transpose( np.tensordot(rdm2_rot, mo_coeff[s1], axes=([[1],[0]])) , axes=(0,3,1,2)) # \sum_j Rab_{ijkl} Ca^{j}_{beta}
+        rdm2_rot=np.transpose( np.tensordot(mo_coeff[s2].T.conj(), rdm2_rot, axes=([[1],[2]])), axes=(1,2,0,3)) #\sum_k [Cb^T^*]_{gamma}^{k} Rab_{ijkl}
+        mftbdm[s1,s2]=np.tensordot(rdm2_rot, mo_coeff[s2], axes=([[3],[0]])) # \sum_l Rab_{ijkl} Cb^{l}_{sigma}
+    print(mftbdm,mftbdm.shape)
+    #exit()
     
     ### Test TBDM calculation.
-    nconf = 5
+    nconf = 500
     nsteps = 100
     tbdm_steps = 4
     warmup = 15
-    wf = PySCFSlaterUHF(mol, mf)
+    wf = PySCFSlaterUHF(mol, mf) # WF without Jastrow
     configs = initial_guess(mol, nconf)
     energy = EnergyAccumulator(mol)
-    tbdm = TBDMAccumulator(mol=mol, orb_coeff=lowdin, nsweeps=tbdm_steps)
+    #tbdm = TBDMAccumulator(mol=mol, orb_coeff=lowdin, nsweeps=tbdm_steps)
+    tbdm_upup = TBDMAccumulator(mol=mol, orb_coeff=lowdin, spin=[0,0], nsweeps=tbdm_steps)
+    tbdm_updn = TBDMAccumulator(mol=mol, orb_coeff=lowdin, spin=[0,1], nsweeps=tbdm_steps)
 
-    print('tbdm._mol:\n',tbdm._mol)
-    print('tbdm._orb_coeff:\n',tbdm._orb_coeff)
-    print('tbdm._nstep:\n',tbdm._nstep)
-    print('tbdm._tstep:\n',tbdm._tstep)
-    print('tbdm._extra_config:\n',tbdm._extra_config.shape)
-    print('tbdm._electrons1:\n',tbdm._electrons1)
-    print('tbdm._electrons2:\n',tbdm._electrons2)
+    #print('tbdm._mol:\n',tbdm._mol)
+    #print('tbdm._orb_coeff:\n',tbdm._orb_coeff)
+    #print('tbdm._nstep:\n',tbdm._nstep)
+    #print('tbdm._tstep:\n',tbdm._tstep)
+    #print('tbdm._extra_config:\n',tbdm._extra_config.shape)
+    #print('tbdm._electrons1:\n',tbdm._electrons1)
+    #print('tbdm._electrons2:\n',tbdm._electrons2)
+
+    print('tbdm_updn._mol:\n',tbdm_updn._mol)
+    print('tbdm_updn._orb_coeff:\n',tbdm_updn._orb_coeff)
+    print('tbdm_updn._nstep:\n',tbdm_updn._nstep)
+    print('tbdm_updn._tstep:\n',tbdm_updn._tstep)
+    print('tbdm_updn._extra_config:\n',tbdm_updn._extra_config.shape)
+    print('tbdm_updn._electrons1:\n',tbdm_updn._electrons1)
+    print('tbdm_updn._electrons2:\n',tbdm_updn._electrons2)
 
     print('Starting VMC...')
     df, coords = vmc(
@@ -240,9 +311,9 @@ if __name__ == "__main__":
         nsteps=nsteps,
         accumulators={
             "energy": energy,
-            "tbdm": tbdm,
-            #"tbdm_upup": tbdm_upup,
-            #"tbdm_updn": tbdm_updn,
+            #"tbdm": tbdm,
+            "tbdm_upup": tbdm_upup,
+            "tbdm_updn": tbdm_updn,
             #"tbdm_dndn": tbdm_dndn,
         },
         verbose=True,
@@ -252,14 +323,20 @@ if __name__ == "__main__":
     print(df.keys())
     
     tbdm_est = {}
-    for k in ["tbdm"]:#, "obdm_up", "obdm_down"]:
+    for k in ["tbdm_upup","tbdm_updn"]:
         avg_norm = np.array(df.loc[warmup:, k + "norm"].values.tolist()).mean(axis=0)
-        avg_obdm = np.array(df.loc[warmup:, k + "value"].values.tolist()).mean(axis=0)
+        std_norm = np.array(df.loc[warmup:, k + "norm"].values.tolist()).std(axis=0)
+        avg_tbdm = np.array(df.loc[warmup:, k + "value"].values.tolist()).mean(axis=0)
+        std_tbdm = np.array(df.loc[warmup:, k + "value"].values.tolist()).std(axis=0)
         tbdm_est[k] = normalize_tbdm(avg_tbdm, avg_norm)
 
-    print("Average TBDM(orb,orb)", tbdm_est["tbdm"].diagonal().round(3))
-    print("mf tbdm", mftbdm.diagonal().round(3))
-    assert np.max(np.abs(tbdm_est["tbdm"] - mftbdm)) < 0.05
+    #print("Av tbdm(i,i,i,i):\n", tbdm_est["tbdm_updn"].diagonal().round(3))
+    #print("Av tbdm(i,i,i,i):\n", tbdm_est["tbdm_updn"].diagonal().round(3))
+    #print("Mf tbdm(i,i,i,i):\n", mftbdm[0,1].diagonal().round(3))
+    print('mftbdm:\n',mftbdm[0,1])
+    print('tbdm_est:\n',tbdm_est["tbdm_updn"])
+    print('tbdm_est-mftbdm:\n',tbdm_est["tbdm_updn"] - mftbdm[0,1])
+    #assert np.max(np.abs(tbdm_est["tbdm"] - mftbdm[0,1])) < 0.05
     #print(obdm_est["tbdm_upup"].diagonal().round(3))
     #print(obdm_est["tbdm_updn"].diagonal().round(3))
     #print(obdm_est["tbdm_dndn"].diagonal().round(3))

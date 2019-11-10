@@ -84,8 +84,8 @@ class TBDMAccumulator:
 
 
             
-    def __call__(self, configs, wf, aux_configs=None):
-        """ Quantities from equation (10) of DOI:10.1063/1.4793531"""
+    def __call__(self, configs, wf):
+        """Gathers quantities from equation (10) of DOI:10.1063/1.4793531."""
 
         # Constructs results dictionary
         spin_dic={0:'up',1:'down'}
@@ -101,29 +101,28 @@ class TBDMAccumulator:
             results["norm_%s"%spin_dic[s]] = np.zeros((nconf, self._orb_coeff[s].shape[1]))
             results["acceptance_%s"%spin_dic[s]] = np.zeros(nconf)
 
-        if aux_configs is None:
-            # Generates aux_configs_up
-            aux_configs_up = []
-            if 0 in self._spin_sectors:
-                for step in range(self._nsweeps * len(self._pairs)):
-                    aux_configs_up.append(np.copy(self._aux_configs_up))
-                    accept, self._aux_configs_up = sample_onebody(
-                        self._mol, self._orb_coeff[0], self._aux_configs_up, tstep=self._tstep
-                    )
-                    results["acceptance_up"] += np.mean(accept)
-                results["acceptance_up"] /= ( self._nsweeps * len(self._pairs) )
-                aux_configs_up = np.concatenate(aux_configs_up,axis=0)
-            # Generates aux_configs_down
-            aux_configs_down = []
-            if 1 in self._spin_sectors:
-                for step in range(self._nsweeps * len(self._pairs)):
-                    aux_configs_down.append(np.copy(self._aux_configs_down))
-                    accept, self._aux_configs_down = sample_onebody(
-                        self._mol, self._orb_coeff[1], self._aux_configs_down, tstep=self._tstep
-                    )
-                    results["acceptance_down"] += np.mean(accept)
-                results["acceptance_down"] /= ( self._nsweeps * len(self._pairs) )
-                aux_configs_down = np.concatenate(aux_configs_down,axis=0)
+        # Generates aux_configs_up
+        aux_configs_up = []
+        if 0 in self._spin_sectors:
+            for step in range(self._nsweeps * len(self._pairs)):
+                aux_configs_up.append(np.copy(self._aux_configs_up))
+                accept, self._aux_configs_up = sample_onebody(
+                    self._mol, self._orb_coeff[0], self._aux_configs_up, tstep=self._tstep
+                )
+                results["acceptance_up"] += np.mean(accept)
+            results["acceptance_up"] /= ( self._nsweeps * len(self._pairs) )
+            aux_configs_up = np.concatenate(aux_configs_up,axis=0)
+        # Generates aux_configs_down
+        aux_configs_down = []
+        if 1 in self._spin_sectors:
+            for step in range(self._nsweeps * len(self._pairs)):
+                aux_configs_down.append(np.copy(self._aux_configs_down))
+                accept, self._aux_configs_down = sample_onebody(
+                    self._mol, self._orb_coeff[1], self._aux_configs_down, tstep=self._tstep
+                )
+                results["acceptance_down"] += np.mean(accept)
+            results["acceptance_down"] /= ( self._nsweeps * len(self._pairs) )
+            aux_configs_down = np.concatenate(aux_configs_down,axis=0)
 
         # Generates random choice of aux_config_up and aux_config_down for moving electron_a and electron_b
         naux_up = self._aux_configs_up.shape[0]
@@ -209,6 +208,7 @@ class TBDMAccumulator:
 
 
 def normalize_tbdm(tbdm, norm_a, norm_b):
+    '''Returns tbdm by taking the ratio of the averages in Eq. (10) of DOI:10.1063/1.4793531.'''
     # We are using pySCF's notation:
     #  tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,k} c_{s1,j} c_{s2,l} > = \phi*_{s1,j} \phi*_{s2,l} \phi_{s1,i} \phi_{s2,k}
     return tbdm / np.einsum('i,j,k,l->ijkl',norm_a,norm_a,norm_b,norm_b) ** 0.5 

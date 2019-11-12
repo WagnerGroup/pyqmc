@@ -60,7 +60,6 @@ class JastrowSpin:
         _a_partial is the array $A^p_{eIk} = a_k(r_{Ie}$, where $e$ is any electron
         _b_partial is the array $B^p_{els} = \sum_s b_l(r_{es}$, where $e$ is any electron, $s$ indexes over $\uparrow$ ($\alpha$) and $\downarrow$ ($\beta$) sums, not including $e$.
         """
-        u = 0.0
         self._configscurrent = configs.copy()
         nconf, nelec = configs.configs.shape[:2]
         nexpand = len(self.b_basis)

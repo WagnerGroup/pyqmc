@@ -13,47 +13,67 @@ class J3:
         self.parameters["gcoeff"] = np.zeros((dim, dim))
     
     def recompute(self, configs):
-        self._configscurrent = configs.copy()
-        self.nelec = self._configscurrent.configs.shape[1]
-
-        nconf, nelec = configs.configs.shape[:2]
-        coords = np.reshape(configs.configs, (-1, 3))
-        # No need to recompute anything...?
-        val_grad_lap = self.mol.eval_gto('GTOval_sph_deriv2', coords)
-        self.ao_value = val_grad_lap[0].reshape((nconf, nelec, -1))
-        self.ao_gradient = val_grad_lap[1:4].reshape((3, nconf, nelec, -1))
-        self.ao_hessian = val_grad_lap[4:10].reshape((6, nconf, nelec, -1))
-        return (1, self.value())
+        # self._configscurrent = configs.copy()
+        self.nelec = configs.configs.shape[1]
+        # shape of arrays:
+        # ao_val: (nconf, nelec, nbasis)
+        # ao_grad: (3, nconf, nelec, nbasis)
+        # ao_lap: (3, nconf, nelec, nbasis)
+        self.ao_val, self.ao_grad, self.ao_lap = self._get_val_grad_lap(configs)
+        return (1, self.value()) #(sign, value)
     
     def updateinternals(self, e, epos, mask=None):
-        pass
-    
+        nconfig = epos.configs.shape[0]
+        if mask is None:
+            mask = [True]*nconfig
+        e_val, e_grad, e_lap = self._get_val_grad_lap(epos)
+        self.ao_val[mask, e, :] = e_val[mask,0, :]
+        self.ao_grad[:, mask, e, :] = e_grad[:, mask, e, :]
+        self.ao_lap[:, mask, e, :] = e_lap[:, mask, e, :]
+
     def value(self):
         mask = np.tril(np.ones((self.nelec, self.nelec)), -1)
-        return np.einsum('mn,cim, cjn, ij-> c', self.parameters["gcoeff"], self.ao_value, self.ao_value, mask)
+        return np.einsum('mn,cim, cjn, ij-> c', self.parameters["gcoeff"], self.ao_val, self.ao_val, mask)
 
     def gradient(self, e, epos):
-        ao = np.real_if_close(self.mol.eval_gto("GTOcal_cart_deriv1", epos.configs), tol = 1e4)
-        ao_val = ao[0]
-        ao_grad = ao[1:]
-        mask = np.zeros(self.nelec)
-        mask[e:] = 1
-        grad1 = np.einsum('pq, dcp, jq, j -> dc', self.parameters["gcoeff"], ao_grad, ao_val, mask)
-        mask[:e-1] = 1
-        mask[e-1:] = 0
-        grad2 = np.einsum('pq, ip, dcq, i -> dc', self.parameters["gcoeff"], ao_grad, ao_val, mask)
-        return grad1+grad2
+        _, e_grad = self._get_val_grad_lap(epos, mode = 'grad')
+        grad1 = np.einsum('mn, dcm, cjn -> d', self.parameters["gcoeff"], e_grad[:,:,0,:], self.ao_val[:,e+1:,:])
+        grad2 = np.einsum('mn, cim, dcn -> d', self.parameters["gcoeff"], self.ao_val[:,:e,:], e_grad[:,:,0,:])
+        return grad1 + grad2
 
     def laplacian(self, e,epos):
-        ao = np.real_if_close(self.mol_eval_gto("GTOval_cart_deriv2", epos.configs), tol = 1e4)
-        ao_val = ao[0]
-        ao_grad = ao[1:4] # x, y, z
-        ao_hess = ao[4, 7, 9] #xx, yy, zz
-        
+        """
+        Return lap(psi)/ psi = lap(J) when psi = exp(J)
+        """
+        _, _, e_lap = self._get_val_grad_lap(epos)
+        lap1 = np.einsum('mn, dcm, cjn-> d', self.parameters["gcoeff"], e_lap[:,:,0,:], self.ao_val[:,e+1:,:])
+        lap2 = np.einsum('mn, cim, dcn -> d', self.parameters["gcoeff"], self.ao_val[:,:e,:], e_lap[:,:,0,:])
+        # lap3 = np.einsum('mn, dm, dn-> d'), self.parameters["gcoeff"], e_grad[:,0,:], e_grad[] # No cross term due to the i<j constraint on electrons
+        return lap1 + lap2
+
     def gradient_laplacian(self, e, epos):
-        pass
+        return self.gradient(e, epos), self.laplacian(e, epos)
     
     def pgradient(self):
-        pass
+        mask = np.tril(np.ones((self.nelec, self.nelec)), -1)
+        coeff_grad = np.einsum('cim, cjn, ij-> cmn', self.parameters["gcoeff"], self.ao_val, self.ao_val, mask)
+        return {"gcoeff":coeff_grad}
 
+    def _get_val_grad_lap(self, configs, mode='lap'):
+        nconf, nelec = np.shape(configs.configs)[:2]
+        coords = np.reshape(configs.configs, (-1,3))
+        if mode == "val":
+            ao = np.real_if_close(self.mol.eval_gto("GTOval_cart", coords), tol = 1e4)
+            return ao.reshape((nconf, nelec, -1))
+        elif mode == "grad":
+            ao = np.real_if_close(self.mol.eval_gto("GTOval_cart_deriv1",coords), tol = 1e4)
+            val = ao[0].reshape((nconf, nelec, -1))
+            grad = ao[1:4].reshape((3, nconf, nelec, -1))
+            return (val, grad)
+        elif mode == "lap":
+            ao = np.real_if_close(self.mol.eval_gto("GTOval_cart_deriv2", coords), tol = 1e4)
+            val = ao[0].reshape((nconf, nelec, -1))
+            grad = ao[1:4].reshape((3, nconf, nelec, -1))
+            lap = ao[4,7,9].reshape((3, nconf, nelec, -1))
+            return (val, grad, lap)
 # end J3 class

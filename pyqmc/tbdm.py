@@ -85,7 +85,10 @@ class TBDMAccumulator:
         for s in spin_dic.keys():
             results["norm_%s"%spin_dic[s]] = np.zeros((nconf, self._orb_coeff[s].shape[1]))
             results["acceptance_%s"%spin_dic[s]] = np.zeros(nconf)
-  
+        
+        naux_up = self._aux_configs_up.shape[0]
+        naux_down = self._aux_configs_down.shape[0]
+        
         if extra_configs is None:
             # Generates aux_configs_up
             aux_configs_up = []
@@ -110,8 +113,6 @@ class TBDMAccumulator:
             aux_configs_down = np.concatenate(aux_configs_down,axis=0)
 
             # Generates random choice of aux_config_up and aux_config_down for moving electron_a and electron_b
-            naux_up = self._aux_configs_up.shape[0]
-            naux_down = self._aux_configs_down.shape[0]
             auxassignments_a = np.array([ np.random.randint(0, int(naux_up/2), size=(self._nsweeps*len(self._pairs), nconf)),
                                  np.random.randint(0, int(naux_down/2), size=(self._nsweeps*len(self._pairs), nconf)) ])
             auxassignments_b = np.array([ np.random.randint(int(naux_up/2), naux_up, size=(self._nsweeps*len(self._pairs), nconf)),
@@ -119,10 +120,10 @@ class TBDMAccumulator:
         else:   
             assert auxassignments is not None
             aux_configs_up = extra_configs[0]
-            aux_configs_dn = extra_configs[1]
+            aux_configs_down = extra_configs[1]
             auxassignments_a = auxassignments[0]
             auxassignments_b = auxassignments[1]
-            
+
         # Sweeps over electron pairs        
         for sweep in range(self._nsweeps):
             for i,pair in enumerate(self._pairs):
@@ -197,6 +198,8 @@ class TBDMAccumulator:
     def get_extra_configs(self, configs):
         """ Returns an nstep length array of configurations
         starting from self._extra_config """
+        nconf = configs.configs.shape[0]
+
         # Generates aux_configs_up
         aux_configs_up = []
         for step in range(self._nsweeps * len(self._pairs)):
@@ -204,8 +207,6 @@ class TBDMAccumulator:
             accept, self._aux_configs_up = sample_onebody(
                 self._mol, self._orb_coeff[0], self._aux_configs_up, tstep=self._tstep
             )
-            results["acceptance_up"] += np.mean(accept)
-        results["acceptance_up"] /= ( self._nsweeps * len(self._pairs) )
         aux_configs_up = np.concatenate(aux_configs_up,axis=0)
         
         # Generates aux_configs_down
@@ -215,8 +216,6 @@ class TBDMAccumulator:
             accept, self._aux_configs_down = sample_onebody(
                 self._mol, self._orb_coeff[1], self._aux_configs_down, tstep=self._tstep
             )
-            results["acceptance_down"] += np.mean(accept)
-        results["acceptance_down"] /= ( self._nsweeps * len(self._pairs) )
         aux_configs_down = np.concatenate(aux_configs_down,axis=0)
 
         # Generates random choice of aux_config_up and aux_config_down for moving electron_a and electron_b

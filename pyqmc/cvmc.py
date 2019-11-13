@@ -68,10 +68,12 @@ class DescriptorFromTBDM:
         avgvals = {}
         for k, mapping in self.mapping.items():
             n = rets[0]["value"].shape[0]
-            totsum = np.zeros(n)
+            totsum = None
             for ret, ellist in zip(rets, mapping):
                 for w, ind in ellist:
-                    totsum += self.norm * w * ret["value"][:, ind[0], ind[1], ind[2], ind[3]]
+                    for k in ret.keys():
+                        if "value" in k:
+                            totsum += self.norm * w * ret[k][:, ind[0], ind[1], ind[2], ind[3]]
             avgvals[k] = totsum
 
         return avgvals

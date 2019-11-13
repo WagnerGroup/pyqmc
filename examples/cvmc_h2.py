@@ -5,7 +5,8 @@ def setuph2(r):
     from pyscf import gto, scf, lo
     from pyqmc.accumulators import LinearTransform, EnergyAccumulator
     from pyqmc.obdm import OBDMAccumulator
-    from pyqmc.cvmc import DescriptorFromOBDM, PGradDescriptor
+    from pyqmc.tbdm import TBDMAccumulator
+    from pyqmc.cvmc import DescriptorFromOBDM, DescriptorFromTBDM, PGradDescriptor
 
     import itertools
 
@@ -58,9 +59,10 @@ H ul
     obdm_up = OBDMAccumulator(mol=mol, orb_coeff=a, spin=0)
     obdm_down = OBDMAccumulator(mol=mol, orb_coeff=a, spin=1)
 
+    tbdm_updn = TBDMAccumulator(mol=mol, orb_coeff=np.array([a,a]), spin_sectors=[[0,1]])
+    tbdm_dnup = TBDMAccumulator(mol=mol, orb_coeff=np.array([a,a]), spin_sectors=[[1,0]])
+    
     wf = pyqmc.slater_jastrow(mol, mf)
-
-
     freeze = {}
     for k in wf.parameters:
         freeze[k] = np.zeros(wf.parameters[k].shape,dtype='bool')
@@ -71,7 +73,6 @@ H ul
     freeze['wf1mo_coeff_alpha'][0,0]=True
     freeze['wf1mo_coeff_beta'][1,0]=True
 
-
     descriptors = {
         "t": [[(1.0, (0, 1)), (1.0, (1, 0))], [(1.0, (0, 1)), (1.0, (1, 0))]],
         "trace": [[(1.0, (0, 0)), (1.0, (1, 1))], [(1.0, (0, 0)), (1.0, (1, 1))]],
@@ -80,16 +81,24 @@ H ul
         descriptors[f"nup{i}"] = [[(1.0, (i, i))], []]
         descriptors[f"ndown{i}"] = [[], [(1.0, (i, i))]]
 
+    descriptors_tbdm = {
+        "U": [
+                [(1.0, (0,0,0,0))], #up-dn
+                [(1.0, (0,0,0,0))], #dn-up
+        ]
+    }
+
     acc = PGradDescriptor(
         EnergyAccumulator(mol),
         LinearTransform(wf.parameters, freeze=freeze),
-        [obdm_up, obdm_down],
-        DescriptorFromOBDM(descriptors, norm=2.0),
+        {'obdm': [obdm_up, obdm_down], 'tbdm': [tbdm_updn, tbdm_dnup]},
+        {
+          'obdm': DescriptorFromOBDM(descriptors, norm=2.0),
+          'tbdm': DescriptorFromTBDM(descriptors_tbdm, norm=2.0*(2.0 - 1.0)),
+        },
     )
 
     return {"wf": wf, "acc": acc, "mol": mol, "mf": mf, "descriptors": descriptors}
-
-
 
 if __name__ == "__main__":
     import pyqmc
@@ -107,6 +116,7 @@ if __name__ == "__main__":
     # Set up calculation
     nconf = 800
     configs = pyqmc.initial_guess(sys["mol"], nconf)
+    '''
     wf, df = line_minimization(
         sys["wf"],
         configs,
@@ -114,6 +124,7 @@ if __name__ == "__main__":
         client=client,
         maxiters=5,
     )
+    '''
 
     forcing = {}
     obj = {}
@@ -121,12 +132,14 @@ if __name__ == "__main__":
         forcing[k] = 0.0
         obj[k] = 0.0
 
-    forcing["t"] = 0.5
-    forcing["trace"] = 1.0
-    obj["t"] = 0.0
-    obj["trace"] = 2.0
+    #forcing["t"] = 0.5
+    #forcing["trace"] = 1.0
+    #obj["t"] = 0.0
+    #obj["trace"] = 2.0
+    forcing["U"] = 2.0
+    obj["U"] = 1.0
 
-    hdf_file = "saveh2.hdf5"
+    hdf_file = "saveh2_2rdm.hdf5"
     wf, df = cvmc_optimize(
         sys["wf"],
         configs,

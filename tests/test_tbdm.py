@@ -139,10 +139,10 @@ def test(atom='He', total_spin=0, scf_basis='sto-3g'):
     energy = EnergyAccumulator(mol)
     obdm_up = OBDMAccumulator(mol=mol, orb_coeff=iaos[0], nsweeps=tbdm_sweeps, spin=0)
     obdm_down = OBDMAccumulator(mol=mol, orb_coeff=iaos[1], nsweeps=tbdm_sweeps, spin=1)
-    tbdm_up_up = TBDMAccumulator(mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin_sectors = [[0,0]])
-    tbdm_up_down = TBDMAccumulator(mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin_sectors = [[0,1]])
-    tbdm_down_up = TBDMAccumulator(mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin_sectors = [[1,0]])
-    tbdm_down_down = TBDMAccumulator(mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin_sectors = [[1,1]])
+    tbdm_up_up = TBDMAccumulator(mol=mol, orb_coeff=iaos, spin = (0,0), nsweeps=tbdm_sweeps, tstep=tbdm_tstep)
+    tbdm_up_down = TBDMAccumulator(mol=mol, orb_coeff=iaos, spin = (0,1), nsweeps=tbdm_sweeps, tstep=tbdm_tstep)
+    tbdm_down_up = TBDMAccumulator(mol=mol, orb_coeff=iaos, spin = (1,0), nsweeps=tbdm_sweeps, tstep=tbdm_tstep)
+    tbdm_down_down = TBDMAccumulator(mol=mol, orb_coeff=iaos, spin = (1,1), nsweeps=tbdm_sweeps, tstep=tbdm_tstep)
 
     print('VMC...')
     if(total_spin == 2):
@@ -198,7 +198,7 @@ def test(atom='He', total_spin=0, scf_basis='sto-3g'):
     print(df.keys())
     for t in ['tbdm_up_up','tbdm_up_down','tbdm_down_up','tbdm_down_down']:
         splitt = t.split("_")
-        value = np.array(df.loc[vmc_warmup:, t+"value_"+splitt[-2]+splitt[-1]].values.tolist()).mean(axis=0)
+        value = np.array(df.loc[vmc_warmup:, t+"value"].values.tolist()).mean(axis=0)
         norm = {
                 "up": np.array(df.loc[vmc_warmup:, t+"norm_up"].values.tolist()).mean(axis=0),
                 "down":np.array(df.loc[vmc_warmup:, t+"norm_down"].values.tolist()).mean(axis=0),

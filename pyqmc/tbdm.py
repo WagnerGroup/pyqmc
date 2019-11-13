@@ -25,9 +25,7 @@ class TBDMAccumulator:
       naux (int): number of auxiliary configurations for extra moves sampling the local
          orbitals.  
 
-      spin (array): with size (num_spin_sectors,2) contains spin sectors to be computed;
-         can include [0,0], [0,1], [1,0] and [1,1] for up-up, up-down, down-up or down-down. 
-         Defaults to all four sectors.
+      spin (tuple): with size (2) contains spin sectors to be computed;
 
       ijkl (array): contains M tbdm matrix elements to calculate with dim (M,4). 
     """
@@ -36,11 +34,11 @@ class TBDMAccumulator:
         self,
         mol,
         orb_coeff,
+        spin,
         nsweeps=1,
         tstep=0.50,
         warmup=200,
         naux=500,
-        spin_sectors=None,
         ijkl=None,
     ):
         assert (
@@ -51,21 +49,12 @@ class TBDMAccumulator:
         self._orb_coeff = orb_coeff
         self._tstep = tstep
         self._nsweeps = nsweeps
+        self._spin = spin
 
-        if not (spin_sectors is None):
-            self._spin_sectors = np.array(spin_sectors)
-            for i,sector in enumerate(spin_sectors):
-                electrons_a = np.arange(sector[0]*mol.nelec[0], mol.nelec[0]+sector[0]*mol.nelec[1])
-                electrons_b = np.arange(sector[1]*mol.nelec[0], mol.nelec[0]+sector[1]*mol.nelec[1])
-                if i==0:
-                    self._pairs = np.array(np.meshgrid( electrons_a, electrons_b)).T.reshape(-1,2)
-                else:
-                    self._pairs = np.concatenate([ self._pairs, np.array(np.meshgrid( electrons_a, electrons_b)).T.reshape(-1,2) ])                
-            self._pairs = self._pairs[self._pairs[:,0]!=self._pairs[:,1]] # Removes repeated electron pairs
-        else:
-            self._spin_sectors = np.stack(np.indices((2,2)).reshape(2,-1).T)
-            self._pairs = np.array(np.meshgrid( np.arange(0, np.sum(mol.nelec)), np.arange(0, np.sum(mol.nelec)) )).T.reshape(-1,2)
-            self._pairs = self._pairs[self._pairs[:,0]!=self._pairs[:,1]] # Removes repeated electron pairs
+        electrons_a = np.arange(self._spin[0]*mol.nelec[0], mol.nelec[0]+self._spin[0]*mol.nelec[1])
+        electrons_b = np.arange(self._spin[1]*mol.nelec[0], mol.nelec[0]+self._spin[1]*mol.nelec[1])
+        self._pairs = np.array(np.meshgrid( electrons_a, electrons_b)).T.reshape(-1,2)
+        self._pairs = self._pairs[self._pairs[:,0]!=self._pairs[:,1]] # Removes repeated electron pairs
 
         # Initialization and warmup of aux_configs_up
         self._aux_configs_up = initial_guess(mol, int(naux/sum(self._mol.nelec))).configs.reshape(-1, 3)
@@ -79,8 +68,6 @@ class TBDMAccumulator:
             accept_down, self._aux_configs_down = sample_onebody(
                 mol, orb_coeff[1], self._aux_configs_down, tstep
             )
-
-
             
     def __call__(self, configs, wf):
         """Gathers quantities from equation (10) of DOI:10.1063/1.4793531."""
@@ -89,12 +76,12 @@ class TBDMAccumulator:
         spin_dic={0:'up',1:'down'}
         nconf = configs.configs.shape[0]
         results={}
-        for sector in self._spin_sectors:
-            orb_a_size = self._orb_coeff[sector[0]].shape[1]
-            orb_b_size = self._orb_coeff[sector[1]].shape[1]
-            results["value_%s%s"%(spin_dic[sector[0]],spin_dic[sector[1]])] = np.zeros(
-                (nconf, orb_a_size, orb_a_size, orb_b_size, orb_b_size)
-            )
+
+        orb_a_size = self._orb_coeff[self._spin[0]].shape[1]
+        orb_b_size = self._orb_coeff[self._spin[1]].shape[1]
+        results["value"] = np.zeros(
+            (nconf, orb_a_size, orb_a_size, orb_b_size, orb_b_size)
+        )
         for s in spin_dic.keys():
             results["norm_%s"%spin_dic[s]] = np.zeros((nconf, self._orb_coeff[s].shape[1]))
             results["acceptance_%s"%spin_dic[s]] = np.zeros(nconf)
@@ -109,6 +96,7 @@ class TBDMAccumulator:
             results["acceptance_up"] += np.mean(accept)
         results["acceptance_up"] /= ( self._nsweeps * len(self._pairs) )
         aux_configs_up = np.concatenate(aux_configs_up,axis=0)
+        
         # Generates aux_configs_down
         aux_configs_down = []
         for step in range(self._nsweeps * len(self._pairs)):
@@ -179,14 +167,13 @@ class TBDMAccumulator:
                 )
 
                 # Adding to results
-                results["value_%s%s"%(spin_dic[spin_a],spin_dic[spin_b])] += np.einsum("i,ijklm->ijklm", wfratio, orbratio)
+                results["value"] += np.einsum("i,ijklm->ijklm", wfratio, orbratio)
                 results["norm_%s"%spin_dic[spin_a]] += norm_a[auxassignments_a[spin_a,i+sweep*len(self._pairs)]]
                 results["norm_%s"%spin_dic[spin_b]] += norm_b[auxassignments_b[spin_b,i+sweep*len(self._pairs)]]
 
         # Average over sweeps and pairs
-        for sector in self._spin_sectors:
-            results["value_%s%s"%(spin_dic[sector[0]],spin_dic[sector[1]])] /= self._nsweeps 
-        for s in np.unique(self._spin_sectors):
+        results["value"] /= self._nsweeps 
+        for s in np.unique(self._spin):
             # Correct number of spin_up and spin_down moves (necessary when totalspin!=0)
             results["norm_%s"%spin_dic[s]] /= ( self._nsweeps * np.sum( np.abs(-s + (self._pairs<self._mol.nelec[0]) ) ) )
             
@@ -200,7 +187,6 @@ class TBDMAccumulator:
             # print(k, v.shape)
             davg[k] = np.mean(v, axis=0)
         return davg
-
 
 
 def normalize_tbdm(tbdm, norm_a, norm_b):

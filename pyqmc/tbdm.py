@@ -68,19 +68,17 @@ class TBDMAccumulator:
             self._pairs = self._pairs[self._pairs[:,0]!=self._pairs[:,1]] # Removes repeated electron pairs
 
         # Initialization and warmup of aux_configs_up
-        if 0 in self._spin_sectors:
-            self._aux_configs_up = initial_guess(mol, int(naux/sum(self._mol.nelec))).configs.reshape(-1, 3)
-            for i in range(warmup):
-                accept_up, self._aux_configs_up = sample_onebody(
-                    mol, orb_coeff[0], self._aux_configs_up, tstep
-                )
+        self._aux_configs_up = initial_guess(mol, int(naux/sum(self._mol.nelec))).configs.reshape(-1, 3)
+        for i in range(warmup):
+            accept_up, self._aux_configs_up = sample_onebody(
+                mol, orb_coeff[0], self._aux_configs_up, tstep
+            )
         # Initialization and warmup of aux_configs_down
-        if 1 in self._spin_sectors:
-            self._aux_configs_down = initial_guess(mol, int(naux/sum(self._mol.nelec))).configs.reshape(-1, 3)
-            for i in range(warmup):
-                accept_down, self._aux_configs_down = sample_onebody(
-                    mol, orb_coeff[1], self._aux_configs_down, tstep
-                )
+        self._aux_configs_down = initial_guess(mol, int(naux/sum(self._mol.nelec))).configs.reshape(-1, 3)
+        for i in range(warmup):
+            accept_down, self._aux_configs_down = sample_onebody(
+                mol, orb_coeff[1], self._aux_configs_down, tstep
+            )
 
 
             
@@ -97,32 +95,30 @@ class TBDMAccumulator:
             results["value_%s%s"%(spin_dic[sector[0]],spin_dic[sector[1]])] = np.zeros(
                 (nconf, orb_a_size, orb_a_size, orb_b_size, orb_b_size)
             )
-        for s in np.unique(self._spin_sectors):
+        for s in spin_dic.keys():
             results["norm_%s"%spin_dic[s]] = np.zeros((nconf, self._orb_coeff[s].shape[1]))
             results["acceptance_%s"%spin_dic[s]] = np.zeros(nconf)
 
         # Generates aux_configs_up
         aux_configs_up = []
-        if 0 in self._spin_sectors:
-            for step in range(self._nsweeps * len(self._pairs)):
-                aux_configs_up.append(np.copy(self._aux_configs_up))
-                accept, self._aux_configs_up = sample_onebody(
-                    self._mol, self._orb_coeff[0], self._aux_configs_up, tstep=self._tstep
-                )
-                results["acceptance_up"] += np.mean(accept)
-            results["acceptance_up"] /= ( self._nsweeps * len(self._pairs) )
-            aux_configs_up = np.concatenate(aux_configs_up,axis=0)
+        for step in range(self._nsweeps * len(self._pairs)):
+            aux_configs_up.append(np.copy(self._aux_configs_up))
+            accept, self._aux_configs_up = sample_onebody(
+                self._mol, self._orb_coeff[0], self._aux_configs_up, tstep=self._tstep
+            )
+            results["acceptance_up"] += np.mean(accept)
+        results["acceptance_up"] /= ( self._nsweeps * len(self._pairs) )
+        aux_configs_up = np.concatenate(aux_configs_up,axis=0)
         # Generates aux_configs_down
         aux_configs_down = []
-        if 1 in self._spin_sectors:
-            for step in range(self._nsweeps * len(self._pairs)):
-                aux_configs_down.append(np.copy(self._aux_configs_down))
-                accept, self._aux_configs_down = sample_onebody(
-                    self._mol, self._orb_coeff[1], self._aux_configs_down, tstep=self._tstep
-                )
-                results["acceptance_down"] += np.mean(accept)
-            results["acceptance_down"] /= ( self._nsweeps * len(self._pairs) )
-            aux_configs_down = np.concatenate(aux_configs_down,axis=0)
+        for step in range(self._nsweeps * len(self._pairs)):
+            aux_configs_down.append(np.copy(self._aux_configs_down))
+            accept, self._aux_configs_down = sample_onebody(
+                self._mol, self._orb_coeff[1], self._aux_configs_down, tstep=self._tstep
+            )
+            results["acceptance_down"] += np.mean(accept)
+        results["acceptance_down"] /= ( self._nsweeps * len(self._pairs) )
+        aux_configs_down = np.concatenate(aux_configs_down,axis=0)
 
         # Generates random choice of aux_config_up and aux_config_down for moving electron_a and electron_b
         naux_up = self._aux_configs_up.shape[0]

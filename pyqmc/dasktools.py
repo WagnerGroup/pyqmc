@@ -2,6 +2,7 @@ import os
 import pyqmc
 import numpy as np
 import pandas as pd
+import h5py
 
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
@@ -33,11 +34,12 @@ def distvmc(
     if nsteps_per is None:
         nsteps_per = nsteps
 
-    if hdf_file is not None and 'configs' in hdf_file.keys():
-        coords.configs = np.array(hdf_file['configs'])
-        if verbose:
-            print("Restarted calculation")
-
+    if hdf_file is not None:
+        with h5py.File(hdf_file, "a") as hdf:
+            if "configs" in hdf.keys():
+                coords.configs = np.array(hdf["configs"])
+                if verbose:
+                    print("Restarted calculation")
 
     if accumulators is None:
         accumulators = {}
@@ -57,7 +59,7 @@ def distvmc(
             pyqmc.vmc,
             wfs,
             thiscoord,
-            **{"nsteps": nsteps_per, "accumulators": accumulators, "stepoffset": epoch},
+            **{"nsteps": nsteps_per, "accumulators": accumulators, "stepoffset": epoch*nsteps_per},
             **kwargs
         )
         iterdata = []
@@ -66,7 +68,12 @@ def distvmc(
             iterdata.extend(res[0])
             coord[i] = res[1]
 
-        collected_data=pd.DataFrame(iterdata).groupby("step",as_index=False).apply(lambda x: x.mean()).to_dict("records")
+        collected_data = (
+            pd.DataFrame(iterdata)
+            .groupby("step", as_index=False)
+            .apply(lambda x: x.mean())
+            .to_dict("records")
+        )
         if verbose:
             print("epoch", epoch, "finished", flush=True)
 
@@ -74,7 +81,6 @@ def distvmc(
         alldata.extend(collected_data)
         for d in collected_data:
             pyqmc.mc.vmc_file(hdf_file, d, kwargs, coords)
-
 
     return alldata, coords
 

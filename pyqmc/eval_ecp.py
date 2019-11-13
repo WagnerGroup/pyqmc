@@ -141,11 +141,7 @@ def get_P_l(mol, configs, weights, epos_rot, l_list, e, at):
 
     # already included the factor (2l+1), and the integration weights here
     for l in l_list:
-        P_l_val[:, :, l] = (
-            (2 * l + 1)
-            * P_l(rdotR, l)
-            * weights[np.newaxis]
-        )
+        P_l_val[:, :, l] = (2 * l + 1) * P_l(rdotR, l) * weights[np.newaxis]
     return P_l_val
 
 

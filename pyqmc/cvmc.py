@@ -2,11 +2,10 @@ import pyqmc
 import numpy as np
 import h5py
 
-
 class DescriptorFromOBDM:
     """
     The reason that this has to be an object here is that parsl doesn't support 
-    functions and objects that are defined in __main__. 
+    functions and objects that are defined in __main__.
     """
 
     def __init__(self, mapping, norm=1.0):
@@ -23,7 +22,6 @@ class DescriptorFromOBDM:
         }
         """
         self.norm = norm
-
         self.mapping = mapping
         pass
 
@@ -38,6 +36,42 @@ class DescriptorFromOBDM:
             for ret, ellist in zip(rets, mapping):
                 for w, ind in ellist:
                     totsum += self.norm * w * ret["value"][:, ind[0], ind[1]]
+            avgvals[k] = totsum
+
+        return avgvals
+
+class DescriptorFromTBDM:
+    """
+    The reason that this has to be an object here is that parsl doesn't support 
+    functions and objects that are defined in __main__. 
+    """
+
+    def __init__(self, mapping, norm=1.0):
+        """mapping should be a dictionary such that each descriptor has 
+        nret lists of weights and indices to add together
+        For example, 
+        {'U': [
+                [], #up - up
+                [(0.5, (0,0,0,0))], #up - dn
+                [(0.5, (0,0,0,0))], #dn - up
+                [], #up - up
+        ]
+        """
+        self.norm = norm
+        self.mapping = mapping
+        pass
+
+    def __call__(self, rets):
+        """
+        Return a dictionary of descriptors
+        """
+        avgvals = {}
+        for k, mapping in self.mapping.items():
+            n = rets[0]["value"].shape[0]
+            totsum = np.zeros(n)
+            for ret, ellist in zip(rets, mapping):
+                for w, ind in ellist:
+                    totsum += self.norm * w * ret["value"][:, ind[0], ind[1], ind[2], ind[3]]
             avgvals[k] = totsum
 
         return avgvals
@@ -101,8 +135,10 @@ class PGradDescriptor:
         energy = den["total"]
         dp = self.transform.serialize_gradients(pgrad)
 
-        dms = [evaluate(configs, wf) for evaluate in self.dm_evaluators]
-        descript = self.descriptors(dms)
+        descript = {}
+        for dm_type, evaluators in self.dm_evaluators.items():
+            dms = [evaluate(configs, wf) for evaluate in evaluators]
+            descript.update(self.descriptors[dm_type](dms))
 
         node_cut, f = self._node_regr(configs, wf)
 
@@ -298,10 +334,11 @@ def lm_cvmc(wf, configs, params, acc):
     # Aggregate evaluator configurations
     extra_configs = []
     auxassignments = []
-    for i, evaluate in enumerate(acc.dm_evaluators):
-        res = evaluate.get_extra_configs(configs)
-        extra_configs.append(res[0])
-        auxassignments.append(res[1])
+    for i, evaluators in acc.dm_evaluators.items():
+        for evaluate in evaluators:
+            res = evaluate.get_extra_configs(configs)
+            extra_configs.append(res[0])
+            auxassignments.append(res[1])
 
     # Run the correlated evaluation
     for p in params:
@@ -312,11 +349,15 @@ def lm_cvmc(wf, configs, params, acc):
         rawweights = np.exp(2 * (psi - psi0))  # convert from log(|psi|) to |psi|**2
 
         df = acc.enacc(configs, wf)
-        dms = [
-            evaluate(configs, wf, extra_configs[i], auxassignments[i])
-            for i, evaluate in enumerate(acc.dm_evaluators)
-        ]
-        descript = acc.descriptors(dms)
+        
+        descript = {}
+        for dm_type, evaluators in acc.dm_evaluators.items():
+            dms = [
+                evaluate(configs, wf, extra_configs[i], auxassignments[i])
+                for i, evaluate in enumerate(evaluators)
+            ]
+            descript.update(acc.descriptors[dm_type](dms))
+        
         for di, desc in descript.items():
             df[di] = desc
         df["weight"] = rawweights

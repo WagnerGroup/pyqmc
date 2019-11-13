@@ -139,23 +139,45 @@ def test(atom='He', total_spin=0, scf_basis='sto-3g'):
     energy = EnergyAccumulator(mol)
     obdm_up = OBDMAccumulator(mol=mol, orb_coeff=iaos[0], nsweeps=tbdm_sweeps, spin=0)
     obdm_down = OBDMAccumulator(mol=mol, orb_coeff=iaos[1], nsweeps=tbdm_sweeps, spin=1)
-    tbdm = TBDMAccumulator(mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep)
-    #tbdm = TBDMAccumulator(mol=mol, orb_coeff=np.array([iaos,iaos]), spin_sectors=[[0,0],[0,1],[1,0],[1,1]], nsweeps=tbdm_sweeps, tstep=tbdm_tstep)
-    
+    tbdm_up_up = TBDMAccumulator(mol=mol, orb_coeff=iaos, spin = (0,0), nsweeps=tbdm_sweeps, tstep=tbdm_tstep)
+    tbdm_up_down = TBDMAccumulator(mol=mol, orb_coeff=iaos, spin = (0,1), nsweeps=tbdm_sweeps, tstep=tbdm_tstep)
+    tbdm_down_up = TBDMAccumulator(mol=mol, orb_coeff=iaos, spin = (1,0), nsweeps=tbdm_sweeps, tstep=tbdm_tstep)
+    tbdm_down_down = TBDMAccumulator(mol=mol, orb_coeff=iaos, spin = (1,1), nsweeps=tbdm_sweeps, tstep=tbdm_tstep)
+
     print('VMC...')
-    df, coords = vmc(
-        wf,
-        configs,
-        nsteps=n_vmc_steps,
-        tstep=vmc_tstep,
-        accumulators={
-            "energy": energy,
-            "obdm_up": obdm_up,
-            "obdm_down": obdm_down,
-            "tbdm": tbdm,
-        },
-        verbose=True,
-    )    
+    if(total_spin == 2):
+      df, coords = vmc(
+          wf,
+          configs,
+          nsteps=n_vmc_steps,
+          tstep=vmc_tstep,
+          accumulators={
+              "energy": energy,
+              "obdm_up": obdm_up,
+              "obdm_down": obdm_down,
+              "tbdm_up_up": tbdm_up_up,
+              "tbdm_up_down": tbdm_up_down,
+              "tbdm_down_up": tbdm_down_up,
+          },
+          verbose=True,
+      )    
+    else:
+      df, coords = vmc(
+          wf,
+          configs,
+          nsteps=n_vmc_steps,
+          tstep=vmc_tstep,
+          accumulators={
+              "energy": energy,
+              "obdm_up": obdm_up,
+              "obdm_down": obdm_down,
+              "tbdm_up_up": tbdm_up_up,
+              "tbdm_up_down": tbdm_up_down,
+              "tbdm_down_up": tbdm_down_up,
+              "tbdm_down_down": tbdm_down_down,
+          },
+          verbose=True,
+      )    
     df = DataFrame(df)
 
     # Compares obdm from QMC and MF
@@ -172,35 +194,29 @@ def test(atom='He', total_spin=0, scf_basis='sto-3g'):
         print('diff[%d]:\n'%s,qmcobdm[s]-mfobdm[s])
         
     # Compares tbdm from QMC and MF
-    avg_norm = {}
-    avg_tbdm = {}
     tbdm_est = {}
     print(df.keys())
-    for t in ['tbdm']:
-        for k in df.keys():
-            if k.startswith(t+'norm_'):
-                avg_norm[k.split('_')[-1]] = np.array(df.loc[vmc_warmup:, k].values.tolist()).mean(axis=0)
-            if k.startswith(t+'value_'):
-                avg_tbdm[k.split('_')[-1]] = np.array(df.loc[vmc_warmup:, k].values.tolist()).mean(axis=0)
-        for k in avg_tbdm.keys():
-            dic_spin_sector = {'upup':['up','up'],'updown':['up','down'],'downup':['down','up'],'downdown':['down','down']}
-            spin_sector = dic_spin_sector[k]
-            tbdm_est[k] = normalize_tbdm(avg_tbdm[k], avg_norm[spin_sector[0]], avg_norm[spin_sector[1]])
-    qmctbdm=np.array([ [tbdm_est["upup"],tbdm_est["updown"]],[tbdm_est["downup"],tbdm_est["downdown"]]])
+    for t in ['tbdm_up_up','tbdm_up_down','tbdm_down_up','tbdm_down_down']:
+        splitt = t.split("_")
+        value = np.array(df.loc[vmc_warmup:, t+"value"].values.tolist()).mean(axis=0)
+        norm = {
+                "up": np.array(df.loc[vmc_warmup:, t+"norm_up"].values.tolist()).mean(axis=0),
+                "down":np.array(df.loc[vmc_warmup:, t+"norm_down"].values.tolist()).mean(axis=0),
+        }
+        tbdm_est[t] = normalize_tbdm(value, norm[splitt[-2]], norm[splitt[-1]])
+    qmctbdm=np.array([ [tbdm_est["tbdm_up_up"],tbdm_est["tbdm_up_down"]],[tbdm_est["tbdm_down_up"],tbdm_est["tbdm_down_down"]]])
     print('\nComparing QMC and MF tbdm:')
-    for sa,sb in [[0,0],[0,1],[1,0],[1,1]]:
+    check = [[0,0],[0,1],[1,0],[1,1]]
+    if total_spin == 2: check = [[0,0],[0,1],[1,0]]
+    for sa,sb in check:
         #print('QMC tbdm[%d,%d]:\n'%(sa,sb),qmctbdm[sa,sb])
         #print('MF tbdm[%d,%d]:\n'%(sa,sb),mftbdm[sa,sb])
         diff=qmctbdm[sa,sb]-mftbdm[sa,sb]
         print('diff[%d,%d]:\n'%(sa,sb),diff)
         assert np.max(np.abs(diff)) < 0.05
-    
-
 
 if __name__ == "__main__":
     # Tests He2 molecule (Sz=0)
     test(atom='He',total_spin=0,scf_basis='cc-pvdz')
     # Tests He2 molecule (Sz=2)
     test(atom='He',total_spin=2,scf_basis='cc-pvdz')
-    
-    

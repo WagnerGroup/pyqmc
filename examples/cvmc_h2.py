@@ -59,8 +59,8 @@ H ul
     obdm_up = OBDMAccumulator(mol=mol, orb_coeff=a, spin=0)
     obdm_down = OBDMAccumulator(mol=mol, orb_coeff=a, spin=1)
 
-    tbdm_updn = TBDMAccumulator(mol=mol, orb_coeff=np.array([a,a]), spin_sectors=[[0,1]])
-    tbdm_dnup = TBDMAccumulator(mol=mol, orb_coeff=np.array([a,a]), spin_sectors=[[1,0]])
+    tbdm_updn = TBDMAccumulator(mol=mol, orb_coeff=np.array([a,a]), spin=(0,1))
+    tbdm_dnup = TBDMAccumulator(mol=mol, orb_coeff=np.array([a,a]), spin=(1,0))
     
     wf = pyqmc.slater_jastrow(mol, mf)
     freeze = {}
@@ -91,9 +91,9 @@ H ul
     acc = PGradDescriptor(
         EnergyAccumulator(mol),
         LinearTransform(wf.parameters, freeze=freeze),
-        {'obdm': [obdm_up, obdm_down], 'tbdm': [tbdm_updn, tbdm_dnup]},
+        {'tbdm': [tbdm_updn,tbdm_dnup]}, #'obdm': [obdm_up, obdm_down], 'tbdm': [tbdm_updn, tbdm_dnup]},
         {
-          'obdm': DescriptorFromOBDM(descriptors, norm=2.0),
+          #'obdm': DescriptorFromOBDM(descriptors, norm=2.0),
           'tbdm': DescriptorFromTBDM(descriptors_tbdm, norm=2.0*(2.0 - 1.0)),
         },
     )
@@ -116,7 +116,6 @@ if __name__ == "__main__":
     # Set up calculation
     nconf = 800
     configs = pyqmc.initial_guess(sys["mol"], nconf)
-    '''
     wf, df = line_minimization(
         sys["wf"],
         configs,
@@ -124,19 +123,18 @@ if __name__ == "__main__":
         client=client,
         maxiters=5,
     )
-    '''
 
     forcing = {}
     obj = {}
-    for k in sys["descriptors"]:
-        forcing[k] = 0.0
-        obj[k] = 0.0
+    #for k in sys["descriptors"]:
+    #    forcing[k] = 0.0
+    #    obj[k] = 0.0
 
     #forcing["t"] = 0.5
     #forcing["trace"] = 1.0
     #obj["t"] = 0.0
     #obj["trace"] = 2.0
-    forcing["U"] = 2.0
+    forcing["U"] = 5.0
     obj["U"] = 1.0
 
     hdf_file = "saveh2_2rdm.hdf5"
@@ -147,7 +145,7 @@ if __name__ == "__main__":
         objective=obj,
         forcing=forcing,
         iters=50,
-        tstep=0.2,
+        tstep=0.1,
         hdf_file = hdf_file,
         client = client,
     )

@@ -145,22 +145,39 @@ def test(atom='He', total_spin=0, scf_basis='sto-3g'):
     tbdm_down_down = TBDMAccumulator(mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin_sectors = [[1,1]])
 
     print('VMC...')
-    df, coords = vmc(
-        wf,
-        configs,
-        nsteps=n_vmc_steps,
-        tstep=vmc_tstep,
-        accumulators={
-            "energy": energy,
-            "obdm_up": obdm_up,
-            "obdm_down": obdm_down,
-            "tbdm_up_up": tbdm_up_up,
-            "tbdm_up_down": tbdm_up_down,
-            "tbdm_down_up": tbdm_down_up,
-            "tbdm_down_down": tbdm_down_down,
-        },
-        verbose=True,
-    )    
+    if(total_spin == 2):
+      df, coords = vmc(
+          wf,
+          configs,
+          nsteps=n_vmc_steps,
+          tstep=vmc_tstep,
+          accumulators={
+              "energy": energy,
+              "obdm_up": obdm_up,
+              "obdm_down": obdm_down,
+              "tbdm_up_up": tbdm_up_up,
+              "tbdm_up_down": tbdm_up_down,
+              "tbdm_down_up": tbdm_down_up,
+          },
+          verbose=True,
+      )    
+    else:
+      df, coords = vmc(
+          wf,
+          configs,
+          nsteps=n_vmc_steps,
+          tstep=vmc_tstep,
+          accumulators={
+              "energy": energy,
+              "obdm_up": obdm_up,
+              "obdm_down": obdm_down,
+              "tbdm_up_up": tbdm_up_up,
+              "tbdm_up_down": tbdm_up_down,
+              "tbdm_down_up": tbdm_down_up,
+              "tbdm_down_down": tbdm_down_down,
+          },
+          verbose=True,
+      )    
     df = DataFrame(df)
 
     # Compares obdm from QMC and MF

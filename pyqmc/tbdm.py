@@ -40,7 +40,6 @@ class TBDMAccumulator:
         tstep=0.50,
         warmup=200,
         naux=500,
-        spin=None,
         ijkl=None,
     ):
         assert (
@@ -52,10 +51,6 @@ class TBDMAccumulator:
         self._tstep = tstep
         self._nsweeps = nsweeps
         self._spin = spin
-
-        assert (
-            spin != None
-        ), "spin sector needs to be specified: (0,0), (0,1), (1,0) or (1,1)."
         
         self._spin_sector = spin
         electrons_a = np.arange(spin[0]*mol.nelec[0], mol.nelec[0]+spin[0]*mol.nelec[1])
@@ -113,7 +108,6 @@ class TBDMAccumulator:
             results["acceptance_b"] /= ( self._nsweeps * len(self._pairs) )
             aux_configs_a = np.concatenate(aux_configs_a,axis=0)
             aux_configs_b = np.concatenate(aux_configs_b,axis=0)
-
             # Generates random choice of aux_config_a and aux_config_b for moving electron_a and electron_b
             naux_a = self._aux_configs_a.shape[0]
             naux_b = self._aux_configs_b.shape[0]
@@ -209,10 +203,6 @@ class TBDMAccumulator:
             accept_b, self._aux_configs_b = sample_onebody(
                 self._mol, self._orb_coeff[self._spin_sector[1]], self._aux_configs_b, tstep=self._tstep
             )
-            results["acceptance_a"] += np.mean(accept_a)
-            results["acceptance_b"] += np.mean(accept_b)
-        results["acceptance_a"] /= ( self._nsweeps * len(self._pairs) )
-        results["acceptance_b"] /= ( self._nsweeps * len(self._pairs) )
         aux_configs_a = np.concatenate(aux_configs_a,axis=0)
         aux_configs_b = np.concatenate(aux_configs_b,axis=0)
 
@@ -221,7 +211,7 @@ class TBDMAccumulator:
         naux_b = self._aux_configs_b.shape[0]
         auxassignments_a = np.random.randint(0, naux_a, size=(self._nsweeps*len(self._pairs), nconf))
         auxassignments_b = np.random.randint(0, naux_b, size=(self._nsweeps*len(self._pairs), nconf))
-
+        
         return [aux_configs_a, aux_configs_b], [auxassignments_a, auxassignments_b]
 
 def normalize_tbdm(tbdm, norm_a, norm_b):

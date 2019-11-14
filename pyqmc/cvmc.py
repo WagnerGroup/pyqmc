@@ -266,7 +266,6 @@ def cvmc_optimize(
         grad["parameters"] = x0.copy()
         for k, force in forcing.items():
             print(k, grad["avg" + k], grad["dp" + k], flush=True)
-
         xfit = []
         yfit = []
 
@@ -327,19 +326,18 @@ def lm_cvmc(wf, configs, params, acc):
 
     import copy
     import numpy as np
-
     data = []
     psi0 = wf.recompute(configs)[1]  # recompute gives logdet
 
     # Aggregate evaluator configurations
     extra_configs = []
     auxassignments = []
-    for i, evaluators in acc.dm_evaluators.items():
+    for dm_type, evaluators in acc.dm_evaluators.items():
         for evaluate in evaluators:
             res = evaluate.get_extra_configs(configs)
             extra_configs.append(res[0])
             auxassignments.append(res[1])
-
+    
     # Run the correlated evaluation
     for p in params:
         newparms = acc.transform.deserialize(p)
@@ -351,11 +349,14 @@ def lm_cvmc(wf, configs, params, acc):
         df = acc.enacc(configs, wf)
         
         descript = {}
+        i=0
         for dm_type, evaluators in acc.dm_evaluators.items():
-            dms = [
-                evaluate(configs, wf, extra_configs[i], auxassignments[i])
-                for i, evaluate in enumerate(evaluators)
-            ]
+            dms = []
+            for evaluate in evaluators:
+                dms += [
+                    evaluate(configs, wf, extra_configs[i], auxassignments[i])
+                ]
+                i+=1
             descript.update(acc.descriptors[dm_type](dms))
         
         for di, desc in descript.items():
@@ -363,4 +364,5 @@ def lm_cvmc(wf, configs, params, acc):
         df["weight"] = rawweights
 
         data.append(df)
+    
     return data

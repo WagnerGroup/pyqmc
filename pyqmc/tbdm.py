@@ -220,9 +220,7 @@ class TBDMAccumulator:
                 # We use pySCF's index convention (while Eq. 10 in DOI:10.1063/1.4793531 uses QWalk's)
                 # QWalk -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,j} c_{s1,k} c_{s2,l} > = \phi*_{s1,k} \phi*_{s2,l} \phi_{s1,i} \phi_{s2,j}
                 # pySCF -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,k} c_{s1,j} c_{s2,l} > = \phi*_{s1,j} \phi*_{s2,l} \phi_{s1,i} \phi_{s2,k}
-                orbratio = np.zeros(results["value"].shape)
-                orbratio.fill(np.nan) 
-                orbratio[:,self._ijkl[0], self._ijkl[1], self._ijkl[2], self._ijkl[3]] =\
+                orbratio =\
                     (
                         orb_a_aux[auxassignments_a[i + sweep * len(self._pairs)]][:, self._ijkl[1]]
                         / fsum_a[

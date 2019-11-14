@@ -91,10 +91,11 @@ H ul
     acc = PGradDescriptor(
         EnergyAccumulator(mol),
         LinearTransform(wf.parameters, freeze=freeze),
-        {'tbdm': [tbdm_updn,tbdm_dnup]}, #'obdm': [obdm_up, obdm_down], 'tbdm': [tbdm_updn, tbdm_dnup]},
         {
-          #'obdm': DescriptorFromOBDM(descriptors, norm=2.0),
-          'tbdm': DescriptorFromTBDM(descriptors_tbdm, norm=2.0*(2.0 - 1.0)),
+          'obdm': [obdm_up, obdm_down], 
+        },
+        {
+          'obdm': DescriptorFromOBDM(descriptors, norm=2.0),
         },
     )
 
@@ -105,7 +106,7 @@ if __name__ == "__main__":
     import pyqmc.dasktools
     from pyqmc.dasktools import line_minimization, cvmc_optimize
     from dask.distributed import Client, LocalCluster   
-    
+
     r = 1.1
 
     ncore = 2
@@ -126,18 +127,12 @@ if __name__ == "__main__":
 
     forcing = {}
     obj = {}
-    #for k in sys["descriptors"]:
-    #    forcing[k] = 0.0
-    #    obj[k] = 0.0
+    forcing["t"] = 0.0
+    forcing["trace"] = 0.0
+    obj["t"] = 0.0
+    obj["trace"] = 2.0
 
-    #forcing["t"] = 0.5
-    #forcing["trace"] = 1.0
-    #obj["t"] = 0.0
-    #obj["trace"] = 2.0
-    forcing["U"] = 5.0
-    obj["U"] = 1.0
-
-    hdf_file = "saveh2_2rdm.hdf5"
+    hdf_file = "saveh2.hdf5"
     wf, df = cvmc_optimize(
         sys["wf"],
         configs,

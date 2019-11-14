@@ -116,6 +116,10 @@ if __name__ == "__main__":
 
     forcing = {}
     obj = {}
+    for k in sys["descriptors"]:
+        forcing[k] = 0.0
+        obj[k] = 0.0
+
     forcing["t"] = 0.5
     forcing["trace"] = 1.0
     obj["t"] = 0.0

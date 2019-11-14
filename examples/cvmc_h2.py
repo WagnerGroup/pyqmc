@@ -59,9 +59,6 @@ H ul
     obdm_up = OBDMAccumulator(mol=mol, orb_coeff=a, spin=0)
     obdm_down = OBDMAccumulator(mol=mol, orb_coeff=a, spin=1)
 
-    tbdm_updn = TBDMAccumulator(mol=mol, orb_coeff=np.array([a,a]), spin=(0,1))
-    tbdm_dnup = TBDMAccumulator(mol=mol, orb_coeff=np.array([a,a]), spin=(1,0))
-    
     wf = pyqmc.slater_jastrow(mol, mf)
     freeze = {}
     for k in wf.parameters:

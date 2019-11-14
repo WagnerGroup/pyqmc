@@ -5,8 +5,7 @@ def setuph2(r):
     from pyscf import gto, scf, lo
     from pyqmc.accumulators import LinearTransform, EnergyAccumulator
     from pyqmc.obdm import OBDMAccumulator
-    from pyqmc.tbdm import TBDMAccumulator
-    from pyqmc.cvmc import DescriptorFromOBDM, DescriptorFromTBDM, PGradDescriptor
+    from pyqmc.cvmc import DescriptorFromOBDM, PGradDescriptor
 
     import itertools
 
@@ -78,13 +77,6 @@ H ul
         descriptors[f"nup{i}"] = [[(1.0, (i, i))], []]
         descriptors[f"ndown{i}"] = [[], [(1.0, (i, i))]]
 
-    descriptors_tbdm = {
-        "U": [
-                [(1.0, (0,0,0,0))], #up-dn
-                [(1.0, (0,0,0,0))], #dn-up
-        ]
-    }
-
     acc = PGradDescriptor(
         EnergyAccumulator(mol),
         LinearTransform(wf.parameters, freeze=freeze),
@@ -125,7 +117,7 @@ if __name__ == "__main__":
     forcing = {}
     obj = {}
     forcing["t"] = 0.0
-    forcing["trace"] = 0.0
+    forcing["trace"] = 1.0
     obj["t"] = 0.0
     obj["trace"] = 2.0
 
@@ -137,7 +129,7 @@ if __name__ == "__main__":
         objective=obj,
         forcing=forcing,
         iters=50,
-        tstep=0.1,
+        tstep=0.2,
         hdf_file = hdf_file,
         client = client,
     )

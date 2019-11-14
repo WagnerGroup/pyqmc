@@ -188,9 +188,7 @@ def test(atom='He', total_spin=0, total_charge=0, scf_basis='sto-3g'):
         tbdm_est[k] = normalize_tbdm(avg_tbdm[k], avg_norm['a'], avg_norm['b'])
     qmctbdm=np.array([ [tbdm_est["upupvalue"],tbdm_est["updownvalue"]],[tbdm_est["downupvalue"],tbdm_est["downdownvalue"]]])
     print('\nComparing QMC and MF tbdm:')
-    check = [[0,0],[0,1],[1,0],[1,1]]
-    if total_spin == 2: check = [[0,0],[0,1],[1,0]]
-    for sa,sb in check:
+    for sa,sb in [[0,0],[0,1],[1,0],[1,1]]:
         #print('QMC tbdm[%d,%d]:\n'%(sa,sb),qmctbdm[sa,sb])
         #print('MF tbdm[%d,%d]:\n'%(sa,sb),mftbdm[sa,sb])
         diff=qmctbdm[sa,sb]-mftbdm[sa,sb]

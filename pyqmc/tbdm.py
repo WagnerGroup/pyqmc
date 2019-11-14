@@ -93,31 +93,40 @@ class TBDMAccumulator:
         # Returns empty arrays if no electron pairs
         if len(self._pairs)==0:
             return results
-        
-        # Generates aux_configs_a and aux_configs_b
-        aux_configs_a = []
-        aux_configs_b = []
-        for step in range(self._nsweeps * len(self._pairs)):
-            aux_configs_a.append(np.copy(self._aux_configs_a))
-            accept_a, self._aux_configs_a = sample_onebody(
-                self._mol, self._orb_coeff[self._spin_sector[0]], self._aux_configs_a, tstep=self._tstep
-            )
-            aux_configs_b.append(np.copy(self._aux_configs_b))
-            accept_b, self._aux_configs_b = sample_onebody(
-                self._mol, self._orb_coeff[self._spin_sector[1]], self._aux_configs_b, tstep=self._tstep
-            )
-            results["acceptance_a"] += np.mean(accept_a)
-            results["acceptance_b"] += np.mean(accept_b)
-        results["acceptance_a"] /= ( self._nsweeps * len(self._pairs) )
-        results["acceptance_b"] /= ( self._nsweeps * len(self._pairs) )
-        aux_configs_a = np.concatenate(aux_configs_a,axis=0)
-        aux_configs_b = np.concatenate(aux_configs_b,axis=0)
+       
+        if extra_configs is None:
+            # Generates aux_configs_a and aux_configs_b
+            aux_configs_a = []
+            aux_configs_b = []
+            for step in range(self._nsweeps * len(self._pairs)):
+                aux_configs_a.append(np.copy(self._aux_configs_a))
+                accept_a, self._aux_configs_a = sample_onebody(
+                    self._mol, self._orb_coeff[self._spin_sector[0]], self._aux_configs_a, tstep=self._tstep
+                )
+                aux_configs_b.append(np.copy(self._aux_configs_b))
+                accept_b, self._aux_configs_b = sample_onebody(
+                    self._mol, self._orb_coeff[self._spin_sector[1]], self._aux_configs_b, tstep=self._tstep
+                )
+                results["acceptance_a"] += np.mean(accept_a)
+                results["acceptance_b"] += np.mean(accept_b)
+            results["acceptance_a"] /= ( self._nsweeps * len(self._pairs) )
+            results["acceptance_b"] /= ( self._nsweeps * len(self._pairs) )
+            aux_configs_a = np.concatenate(aux_configs_a,axis=0)
+            aux_configs_b = np.concatenate(aux_configs_b,axis=0)
 
-        # Generates random choice of aux_config_a and aux_config_b for moving electron_a and electron_b
-        naux_a = self._aux_configs_a.shape[0]
-        naux_b = self._aux_configs_b.shape[0]
-        auxassignments_a = np.random.randint(0, naux_a, size=(self._nsweeps*len(self._pairs), nconf))
-        auxassignments_b = np.random.randint(0, naux_b, size=(self._nsweeps*len(self._pairs), nconf))
+            # Generates random choice of aux_config_a and aux_config_b for moving electron_a and electron_b
+            naux_a = self._aux_configs_a.shape[0]
+            naux_b = self._aux_configs_b.shape[0]
+            auxassignments_a = np.random.randint(0, naux_a, size=(self._nsweeps*len(self._pairs), nconf))
+            auxassignments_b = np.random.randint(0, naux_b, size=(self._nsweeps*len(self._pairs), nconf))
+        else: 
+            assert auxassignments is not None
+            aux_configs_a = extra_configs[0]
+            aux_configs_b = extra_configs[1]
+            naux_a = self._aux_configs_a.shape[0]
+            naux_b = self._aux_configs_b.shape[0]
+            auxassignments_a = auxassignments[0]
+            auxassignments_b = auxassignments[1]
 
         # Sweeps over electron pairs
         for sweep in range(self._nsweeps):

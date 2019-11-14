@@ -87,13 +87,13 @@ def default_jastrow(mol,ion_cusp=False):
 
     jastrow = JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
     if ion_cusp:
-        jastrow.parameters["acoeff"][:,0, [0, 1]] = mol.atom_charges()[None]
+        jastrow.parameters["acoeff"][:,0, :] = mol.atom_charges()[:,None]
     jastrow.parameters["bcoeff"][0, [0, 1, 2]] = np.array([-0.25, -0.50, -0.25])
 
     freeze = {}
     freeze["acoeff"] = np.zeros(jastrow.parameters["acoeff"].shape).astype(bool)
     if ion_cusp:
-        freeze["acoeff"][0, [0, 1]] = True  # Cusp conditions
+        freeze["acoeff"][:,0,:] = True  # Cusp conditions
     freeze["bcoeff"] = np.zeros(jastrow.parameters["bcoeff"].shape).astype(bool)
     freeze["bcoeff"][0, [0, 1, 2]] = True  # Cusp conditions
     to_opt = ["acoeff", "bcoeff"]

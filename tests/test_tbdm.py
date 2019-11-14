@@ -177,6 +177,8 @@ def test(atom='He', total_spin=0, total_charge=0, scf_basis='sto-3g'):
         print('diff[%d]:\n'%s,qmcobdm[s]-mfobdm[s])
         
     # Compares tbdm from QMC and MF
+    avg_norm = {}
+    avg_tbdm = {}
     tbdm_est = {}
     for t in ['tbdm_upup','tbdm_updown','tbdm_downup','tbdm_downdown']:
         for k in df.keys():

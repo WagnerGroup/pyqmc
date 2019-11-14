@@ -82,8 +82,9 @@ class PGradDescriptor:
 
     def __init__(self, enacc, transform, dm_evaluators, descriptors, nodal_cutoff=1e-3):
         """ 
-        
-        descriptors : function-like object that translates an obdm_up and obdm_down return to a dictionary of descriptors
+        dm_evaluators: dictionary of density matrix accumulator objects   
+        descriptors : dictionary of function-like objects that translate dm_evaluators[key] to 
+                      a dictionary of descriptors
         """
         self.enacc = enacc
         self.transform = transform

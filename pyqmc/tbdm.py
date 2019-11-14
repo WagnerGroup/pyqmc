@@ -81,7 +81,17 @@ class TBDMAccumulator:
             accept_b, self._aux_configs_b = sample_onebody(
                 mol, orb_coeff[self._spin_sector[1]], self._aux_configs_b, tstep
             )
-
+        # Default to full 2rdm if ijkl not specified 
+        if ijkl is None: 
+            norb_up = orb_coeff[0].shape[1]
+            norb_down = orb_coeff[1].shape[1]
+            ijkl = [
+              [i, j, k, l] for i in range(norb_up) \
+                           for j in range(norb_up) \
+                           for k in range(norb_down) \
+                           for l in range(norb_down) \
+            ]
+        self._ijkl = np.array(ijkl).T
     def __call__(self, configs, wf, extra_configs=None, auxassignments=None):
         """Gathers quantities from equation (10) of DOI:10.1063/1.4793531."""
 
@@ -150,6 +160,9 @@ class TBDMAccumulator:
         for sweep in range(self._nsweeps):
             for i, pair in enumerate(self._pairs):
                 # Orbital evaluations at all coordinates
+                import time 
+                start0 = time.time()
+                start = time.time()
                 points_a = np.concatenate(
                     [
                         aux_configs_a[i * naux_a : (i + 1) * naux_a],
@@ -162,11 +175,14 @@ class TBDMAccumulator:
                         configs.configs[:, pair[1], :],
                     ]
                 )
+                print(time.time() - start)
+                start = time.time()
                 ao_a = self._mol.eval_gto("GTOval_sph", points_a)
                 ao_b = self._mol.eval_gto("GTOval_sph", points_b)
                 orb_a = ao_a.dot(self._orb_coeff[self._spin_sector[0]])
                 orb_b = ao_b.dot(self._orb_coeff[self._spin_sector[1]])
-
+                print(time.time() - start)
+                start = time.time()
                 # Constructs aux_orbitals, fsum and norm for electron_a and electron_b
                 orb_a_aux = orb_a[0:naux_a, :]
                 orb_b_aux = orb_b[0:naux_b, :]
@@ -176,7 +192,8 @@ class TBDMAccumulator:
                 norm_b = orb_b_aux * orb_b_aux / fsum_b[:, np.newaxis]
                 orb_a_configs = orb_a[naux_a:, :]
                 orb_b_configs = orb_b[naux_b:, :]
-
+                print(time.time() - start)
+                start = time.time()
                 # Calculation of wf ratio (no McMillan trick yet)
                 epos_a = configs.make_irreducible(
                     pair[0],
@@ -191,38 +208,53 @@ class TBDMAccumulator:
                         auxassignments_b[i + sweep * len(self._pairs)]
                     ],
                 )
+                print(time.time() - start)
+                start = time.time()
                 wfratio_a = wf.testvalue(pair[0], epos_a)
                 wf.updateinternals(pair[0], epos_a)
                 wfratio_b = wf.testvalue(pair[1], epos_b)
                 wfratio = wfratio_a * wfratio_b
                 wf.updateinternals(pair[0], epos_a_orig)
-
+                print("WFRATIO:", time.time() - start)
+                start = time.time()
                 # We use pySCF's index convention (while Eq. 10 in DOI:10.1063/1.4793531 uses QWalk's)
                 # QWalk -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,j} c_{s1,k} c_{s2,l} > = \phi*_{s1,k} \phi*_{s2,l} \phi_{s1,i} \phi_{s2,j}
                 # pySCF -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,k} c_{s1,j} c_{s2,l} > = \phi*_{s1,j} \phi*_{s2,l} \phi_{s1,i} \phi_{s2,k}
-                orbratio = np.einsum(
-                    "mj,ml,mi,mk->mijkl",
-                    orb_a_aux[auxassignments_a[i + sweep * len(self._pairs)], :]
-                    / fsum_a[
-                        auxassignments_a[i + sweep * len(self._pairs)], np.newaxis
-                    ],
-                    orb_b_aux[auxassignments_b[i + sweep * len(self._pairs)], :]
-                    / fsum_b[
+                orbratio = np.zeros(results["value"].shape)
+                orbratio.fill(np.nan) 
+                orbratio[:,self._ijkl[0], self._ijkl[1], self._ijkl[2], self._ijkl[3]] =\
+                    (
+                        orb_a_aux[auxassignments_a[i + sweep * len(self._pairs)]][:, self._ijkl[1]]
+                        / fsum_a[
+                            auxassignments_a[i + sweep * len(self._pairs)], np.newaxis
+                        ]
+                    ) *\
+                    (
+                        orb_b_aux[auxassignments_b[i + sweep * len(self._pairs)]][:, self._ijkl[3]]
+                        / fsum_b[
                         auxassignments_b[i + sweep * len(self._pairs)], np.newaxis
-                    ],
-                    orb_a_configs,
-                    orb_b_configs,
-                )
+                        ]
+                    ) *\
+                    orb_a_configs[:, self._ijkl[0]] *\
+                    orb_b_configs[:, self._ijkl[2]]
+                print("ORBRATIO:", time.time() - start)
+                start = time.time()
 
                 # Adding to results
                 results["value"] += np.einsum("i,ijklm->ijklm", wfratio, orbratio)
+                print("VALUE:", time.time() - start)
+                start = time.time()
                 results["norm_a"] += norm_a[
                     auxassignments_a[i + sweep * len(self._pairs)]
                 ]
                 results["norm_b"] += norm_b[
                     auxassignments_b[i + sweep * len(self._pairs)]
                 ]
-
+                print(time.time() - start)
+                start = time.time()
+                print('---------------------------')
+                print(time.time() - start0)
+                exit(0)
         # Average over sweeps and pairs
         results["value"] /= self._nsweeps
         for e in ["a", "b"]:

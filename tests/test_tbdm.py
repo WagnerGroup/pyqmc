@@ -109,9 +109,9 @@ def reps_combined_spin_iaos(iaos,mf,mos):
 
 
 
-def test(atom='He', total_spin=0, scf_basis='sto-3g'):
+def test(atom='He', total_spin=0, total_charge=0, scf_basis='sto-3g'):
     mol = gto.M(
-        atom="%s 0. 0. 0.; %s 0. 0. 1.5"%(atom,atom), basis=scf_basis, unit="bohr", verbose=4, spin=total_spin,
+        atom="%s 0. 0. 0.; %s 0. 0. 1.5"%(atom,atom), basis=scf_basis, unit="bohr", verbose=4, spin=total_spin, charge=total_charge,
     )
     mf = scf.UHF(mol).run()
     # Intrinsic Atomic Orbitals
@@ -128,7 +128,7 @@ def test(atom='He', total_spin=0, scf_basis='sto-3g'):
     # VMC params
     nconf = 500
     n_vmc_steps = 400
-    vmc_tstep = 0.2
+    vmc_tstep = 0.3
     vmc_warmup = 30
     # TBDM params
     tbdm_sweeps = 1
@@ -139,45 +139,28 @@ def test(atom='He', total_spin=0, scf_basis='sto-3g'):
     energy = EnergyAccumulator(mol)
     obdm_up = OBDMAccumulator(mol=mol, orb_coeff=iaos[0], nsweeps=tbdm_sweeps, spin=0)
     obdm_down = OBDMAccumulator(mol=mol, orb_coeff=iaos[1], nsweeps=tbdm_sweeps, spin=1)
-    tbdm_up_up = TBDMAccumulator(mol=mol, orb_coeff=iaos, spin = (0,0), nsweeps=tbdm_sweeps, tstep=tbdm_tstep)
-    tbdm_up_down = TBDMAccumulator(mol=mol, orb_coeff=iaos, spin = (0,1), nsweeps=tbdm_sweeps, tstep=tbdm_tstep)
-    tbdm_down_up = TBDMAccumulator(mol=mol, orb_coeff=iaos, spin = (1,0), nsweeps=tbdm_sweeps, tstep=tbdm_tstep)
-    tbdm_down_down = TBDMAccumulator(mol=mol, orb_coeff=iaos, spin = (1,1), nsweeps=tbdm_sweeps, tstep=tbdm_tstep)
-
+    tbdm_upup = TBDMAccumulator(mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin=(0,0))
+    tbdm_updown = TBDMAccumulator(mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin=(0,1))
+    tbdm_downup = TBDMAccumulator(mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin=(1,0))
+    tbdm_downdown = TBDMAccumulator(mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin=(1,1))
+    
     print('VMC...')
-    if(total_spin == 2):
-      df, coords = vmc(
-          wf,
-          configs,
-          nsteps=n_vmc_steps,
-          tstep=vmc_tstep,
-          accumulators={
-              "energy": energy,
-              "obdm_up": obdm_up,
-              "obdm_down": obdm_down,
-              "tbdm_up_up": tbdm_up_up,
-              "tbdm_up_down": tbdm_up_down,
-              "tbdm_down_up": tbdm_down_up,
-          },
-          verbose=True,
-      )    
-    else:
-      df, coords = vmc(
-          wf,
-          configs,
-          nsteps=n_vmc_steps,
-          tstep=vmc_tstep,
-          accumulators={
-              "energy": energy,
-              "obdm_up": obdm_up,
-              "obdm_down": obdm_down,
-              "tbdm_up_up": tbdm_up_up,
-              "tbdm_up_down": tbdm_up_down,
-              "tbdm_down_up": tbdm_down_up,
-              "tbdm_down_down": tbdm_down_down,
-          },
-          verbose=True,
-      )    
+    df, coords = vmc(
+        wf,
+        configs,
+        nsteps=n_vmc_steps,
+        tstep=vmc_tstep,
+        accumulators={
+            "energy": energy,
+            "obdm_up": obdm_up,
+            "obdm_down": obdm_down,
+            "tbdm_upup": tbdm_upup,
+            "tbdm_updown": tbdm_updown,
+            "tbdm_downup": tbdm_downup,
+            "tbdm_downdown": tbdm_downdown,
+        },
+        verbose=True,
+    )    
     df = DataFrame(df)
 
     # Compares obdm from QMC and MF
@@ -195,16 +178,15 @@ def test(atom='He', total_spin=0, scf_basis='sto-3g'):
         
     # Compares tbdm from QMC and MF
     tbdm_est = {}
-    print(df.keys())
-    for t in ['tbdm_up_up','tbdm_up_down','tbdm_down_up','tbdm_down_down']:
-        splitt = t.split("_")
-        value = np.array(df.loc[vmc_warmup:, t+"value"].values.tolist()).mean(axis=0)
-        norm = {
-                "up": np.array(df.loc[vmc_warmup:, t+"norm_up"].values.tolist()).mean(axis=0),
-                "down":np.array(df.loc[vmc_warmup:, t+"norm_down"].values.tolist()).mean(axis=0),
-        }
-        tbdm_est[t] = normalize_tbdm(value, norm[splitt[-2]], norm[splitt[-1]])
-    qmctbdm=np.array([ [tbdm_est["tbdm_up_up"],tbdm_est["tbdm_up_down"]],[tbdm_est["tbdm_down_up"],tbdm_est["tbdm_down_down"]]])
+    for t in ['tbdm_upup','tbdm_updown','tbdm_downup','tbdm_downdown']:
+        for k in df.keys():
+            if k.startswith(t+'norm_'):
+                avg_norm[k.split('_')[-1]] = np.array(df.loc[vmc_warmup:, k].values.tolist()).mean(axis=0)
+            if k.startswith(t+'value'):
+                avg_tbdm[k.split('_')[-1]] = np.array(df.loc[vmc_warmup:, k].values.tolist()).mean(axis=0)
+    for k in avg_tbdm.keys():
+        tbdm_est[k] = normalize_tbdm(avg_tbdm[k], avg_norm['a'], avg_norm['b'])
+    qmctbdm=np.array([ [tbdm_est["upupvalue"],tbdm_est["updownvalue"]],[tbdm_est["downupvalue"],tbdm_est["downdownvalue"]]])
     print('\nComparing QMC and MF tbdm:')
     check = [[0,0],[0,1],[1,0],[1,1]]
     if total_spin == 2: check = [[0,0],[0,1],[1,0]]
@@ -218,5 +200,5 @@ def test(atom='He', total_spin=0, scf_basis='sto-3g'):
 if __name__ == "__main__":
     # Tests He2 molecule (Sz=0)
     test(atom='He',total_spin=0,scf_basis='cc-pvdz')
-    # Tests He2 molecule (Sz=2)
-    test(atom='He',total_spin=2,scf_basis='cc-pvdz')
+    # Tests He2- molecule (Sz=1)
+    test(atom='He',total_spin=1,total_charge=-1,scf_basis='cc-pvdz')

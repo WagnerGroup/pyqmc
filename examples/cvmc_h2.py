@@ -59,8 +59,6 @@ H ul
     obdm_down = OBDMAccumulator(mol=mol, orb_coeff=a, spin=1)
 
     wf = pyqmc.slater_jastrow(mol, mf)
-
-
     freeze = {}
     for k in wf.parameters:
         freeze[k] = np.zeros(wf.parameters[k].shape,dtype='bool')
@@ -70,7 +68,6 @@ H ul
     # AFM configurations.
     freeze['wf1mo_coeff_alpha'][0,0]=True
     freeze['wf1mo_coeff_beta'][1,0]=True
-
 
     descriptors = {
         "t": [[(1.0, (0, 1)), (1.0, (1, 0))], [(1.0, (0, 1)), (1.0, (1, 0))]],
@@ -83,20 +80,22 @@ H ul
     acc = PGradDescriptor(
         EnergyAccumulator(mol),
         LinearTransform(wf.parameters, freeze=freeze),
-        [obdm_up, obdm_down],
-        DescriptorFromOBDM(descriptors, norm=2.0),
+        {
+          'obdm': [obdm_up, obdm_down], 
+        },
+        {
+          'obdm': DescriptorFromOBDM(descriptors, norm=2.0),
+        },
     )
 
     return {"wf": wf, "acc": acc, "mol": mol, "mf": mf, "descriptors": descriptors}
-
-
 
 if __name__ == "__main__":
     import pyqmc
     import pyqmc.dasktools
     from pyqmc.dasktools import line_minimization, cvmc_optimize
     from dask.distributed import Client, LocalCluster   
-    
+
     r = 1.1
 
     ncore = 2

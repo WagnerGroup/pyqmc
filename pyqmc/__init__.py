@@ -54,10 +54,13 @@ def default_multislater(mol, mf, mc):
     return wf, to_opt, freeze
 
 
-def default_jastrow(mol):
+def default_jastrow(mol,ion_cusp=False):
     """         
     Default 2-body jastrow from qwalk,
-    returns jastrow, to_opt and freeze
+    Args:
+      ion_cusp (bool): add an extra term to satisfy electron-ion cusp.
+    Returns:
+      jastrow, to_opt and freeze
     """
     import numpy as np
 
@@ -74,15 +77,26 @@ def default_jastrow(mol):
 
     beta_abasis = expand_beta_qwalk(0.2, 4)
     beta_bbasis = expand_beta_qwalk(0.5, 3)
-    abasis = [PolyPadeFunction(beta=beta_abasis[i], rcut=7.5) for i in range(4)]
+    if ion_cusp:
+        abasis = [CutoffCuspFunction(gamma=24, rcut=7.5)]
+    else:
+        abasis = []
+    abasis += [PolyPadeFunction(beta=beta_abasis[i], rcut=7.5) for i in range(4)]
     bbasis = [CutoffCuspFunction(gamma=24, rcut=7.5)]
     bbasis += [PolyPadeFunction(beta=beta_bbasis[i], rcut=7.5) for i in range(3)]
 
     jastrow = JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
+    if ion_cusp:
+        # I don't think the current format allows for cusps on each atom to be different. 
+        # Would need to adjust the constructor for Jastrow to allow difference coefficients for each atom probably.
+        assert len(set([mol.atom_symbol(i) for i in range(mol.natm)]))==1, "ion_cusp only implemented for one atom type."
+        jastrow.parameters["acoeff"][0, [0, 1]] = mol.atom_charge(0)
     jastrow.parameters["bcoeff"][0, [0, 1, 2]] = np.array([-0.25, -0.50, -0.25])
 
     freeze = {}
     freeze["acoeff"] = np.zeros(jastrow.parameters["acoeff"].shape).astype(bool)
+    if ion_cusp:
+        freeze["acoeff"][0, [0, 1]] = True  # Cusp conditions
     freeze["bcoeff"] = np.zeros(jastrow.parameters["bcoeff"].shape).astype(bool)
     freeze["bcoeff"][0, [0, 1, 2]] = True  # Cusp conditions
     to_opt = ["acoeff", "bcoeff"]

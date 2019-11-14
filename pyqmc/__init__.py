@@ -87,10 +87,7 @@ def default_jastrow(mol,ion_cusp=False):
 
     jastrow = JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
     if ion_cusp:
-        # I don't think the current format allows for cusps on each atom to be different. 
-        # Would need to adjust the constructor for Jastrow to allow difference coefficients for each atom probably.
-        assert len(set([mol.atom_symbol(i) for i in range(mol.natm)]))==1, "ion_cusp only implemented for one atom type."
-        jastrow.parameters["acoeff"][0, [0, 1]] = mol.atom_charge(0)
+        jastrow.parameters["acoeff"][:,0, [0, 1]] = mol.atom_charges()[None]
     jastrow.parameters["bcoeff"][0, [0, 1, 2]] = np.array([-0.25, -0.50, -0.25])
 
     freeze = {}

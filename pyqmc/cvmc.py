@@ -2,6 +2,7 @@ import pyqmc
 import numpy as np
 import h5py
 
+
 class DescriptorFromOBDM:
     """
     The reason that this has to be an object here is that parsl doesn't support 
@@ -40,6 +41,7 @@ class DescriptorFromOBDM:
 
         return avgvals
 
+
 class DescriptorFromTBDM:
     """
     The reason that this has to be an object here is that parsl doesn't support 
@@ -71,7 +73,9 @@ class DescriptorFromTBDM:
             totsum = np.zeros(n)
             for ret, ellist in zip(rets, mapping):
                 for w, ind in ellist:
-                    totsum += self.norm * w * ret["value"][:, ind[0], ind[1], ind[2], ind[3]]
+                    totsum += (
+                        self.norm * w * ret["value"][:, ind[0], ind[1], ind[2], ind[3]]
+                    )
             avgvals[k] = totsum
 
         return avgvals
@@ -327,6 +331,7 @@ def lm_cvmc(wf, configs, params, acc):
 
     import copy
     import numpy as np
+
     data = []
     psi0 = wf.recompute(configs)[1]  # recompute gives logdet
 
@@ -338,7 +343,7 @@ def lm_cvmc(wf, configs, params, acc):
             res = evaluate.get_extra_configs(configs)
             extra_configs.append(res[0])
             auxassignments.append(res[1])
-    
+
     # Run the correlated evaluation
     for p in params:
         newparms = acc.transform.deserialize(p)
@@ -348,22 +353,20 @@ def lm_cvmc(wf, configs, params, acc):
         rawweights = np.exp(2 * (psi - psi0))  # convert from log(|psi|) to |psi|**2
 
         df = acc.enacc(configs, wf)
-        
+
         descript = {}
-        i=0
+        i = 0
         for dm_type, evaluators in acc.dm_evaluators.items():
             dms = []
             for evaluate in evaluators:
-                dms += [
-                    evaluate(configs, wf, extra_configs[i], auxassignments[i])
-                ]
-                i+=1
+                dms += [evaluate(configs, wf, extra_configs[i], auxassignments[i])]
+                i += 1
             descript.update(acc.descriptors[dm_type](dms))
-        
+
         for di, desc in descript.items():
             df[di] = desc
         df["weight"] = rawweights
 
         data.append(df)
-    
+
     return data

@@ -189,33 +189,31 @@ class TBDMAccumulator:
         starting from self._extra_config """
         nconf = configs.configs.shape[0]
 
-        # Generates aux_configs_up
-        aux_configs_up = []
+        aux_configs_a = []
+        aux_configs_b = []
         for step in range(self._nsweeps * len(self._pairs)):
-            aux_configs_up.append(np.copy(self._aux_configs_up))
-            accept, self._aux_configs_up = sample_onebody(
-                self._mol, self._orb_coeff[0], self._aux_configs_up, tstep=self._tstep
+            aux_configs_a.append(np.copy(self._aux_configs_a))
+            accept_a, self._aux_configs_a = sample_onebody(
+                self._mol, self._orb_coeff[self._spin_sector[0]], self._aux_configs_a, tstep=self._tstep
             )
-        aux_configs_up = np.concatenate(aux_configs_up,axis=0)
-        
-        # Generates aux_configs_down
-        aux_configs_down = []
-        for step in range(self._nsweeps * len(self._pairs)):
-            aux_configs_down.append(np.copy(self._aux_configs_down))
-            accept, self._aux_configs_down = sample_onebody(
-                self._mol, self._orb_coeff[1], self._aux_configs_down, tstep=self._tstep
+            aux_configs_b.append(np.copy(self._aux_configs_b))
+            accept_b, self._aux_configs_b = sample_onebody(
+                self._mol, self._orb_coeff[self._spin_sector[1]], self._aux_configs_b, tstep=self._tstep
             )
-        aux_configs_down = np.concatenate(aux_configs_down,axis=0)
+            results["acceptance_a"] += np.mean(accept_a)
+            results["acceptance_b"] += np.mean(accept_b)
+        results["acceptance_a"] /= ( self._nsweeps * len(self._pairs) )
+        results["acceptance_b"] /= ( self._nsweeps * len(self._pairs) )
+        aux_configs_a = np.concatenate(aux_configs_a,axis=0)
+        aux_configs_b = np.concatenate(aux_configs_b,axis=0)
 
-        # Generates random choice of aux_config_up and aux_config_down for moving electron_a and electron_b
-        naux_up = self._aux_configs_up.shape[0]
-        naux_down = self._aux_configs_down.shape[0]
-        auxassignments_a = np.array([ np.random.randint(0, int(naux_up/2), size=(self._nsweeps*len(self._pairs), nconf)),
-                             np.random.randint(0, int(naux_down/2), size=(self._nsweeps*len(self._pairs), nconf)) ])
-        auxassignments_b = np.array([ np.random.randint(int(naux_up/2), naux_up, size=(self._nsweeps*len(self._pairs), nconf)),
-                             np.random.randint(int(naux_down/2), naux_down, size=(self._nsweeps*len(self._pairs), nconf)) ])
-        
-        return [aux_configs_up, aux_configs_down], [auxassignments_a, auxassignments_b]
+        # Generates random choice of aux_config_a and aux_config_b for moving electron_a and electron_b
+        naux_a = self._aux_configs_a.shape[0]
+        naux_b = self._aux_configs_b.shape[0]
+        auxassignments_a = np.random.randint(0, naux_a, size=(self._nsweeps*len(self._pairs), nconf))
+        auxassignments_b = np.random.randint(0, naux_b, size=(self._nsweeps*len(self._pairs), nconf))
+
+        return [aux_configs_a, aux_configs_b], [auxassignments_a, auxassignments_b]
 
 def normalize_tbdm(tbdm, norm_a, norm_b):
     '''Returns tbdm by taking the ratio of the averages in Eq. (10) of DOI:10.1063/1.4793531.'''

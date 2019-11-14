@@ -101,8 +101,9 @@ class TBDMAccumulator:
         orb_a_size = self._orb_coeff[self._spin_sector[0]].shape[1]
         orb_b_size = self._orb_coeff[self._spin_sector[1]].shape[1]
         results["value"] = np.zeros(
-            (nconf, orb_a_size, orb_a_size, orb_b_size, orb_b_size)
+            (nconf, self._ijkl.shape[1])
         )
+        results["ijkl"] = self._ijkl
         for i, e in enumerate(["a", "b"]):
             results["norm_%s" % e] = np.zeros(
                 (nconf, self._orb_coeff[self._spin_sector[i]].shape[1])
@@ -239,7 +240,7 @@ class TBDMAccumulator:
                 start = time.time()
 
                 # Adding to results
-                results["value"] += np.einsum("i,ijklm->ijklm", wfratio, orbratio)
+                results["value"] += np.einsum("i,ij->ij", wfratio, orbratio)
                 print("VALUE:", time.time() - start)
                 start = time.time()
                 results["norm_a"] += norm_a[

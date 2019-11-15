@@ -64,7 +64,7 @@ def initial_guess(mol, nconfig, r=1.0):
 
     epos += r * np.random.randn(*epos.shape)  # random shifts from atom positions
     if hasattr(mol, "a"):
-        epos = PeriodicConfigs(epos, mol.a)
+        epos = PeriodicConfigs(epos, mol.lattice_vectors())
     else:
         epos = OpenConfigs(epos)
     return epos

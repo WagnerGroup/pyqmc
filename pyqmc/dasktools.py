@@ -59,7 +59,7 @@ def distvmc(
             pyqmc.vmc,
             wfs,
             thiscoord,
-            **{"nsteps": nsteps_per, "accumulators": accumulators, "stepoffset": epoch},
+            **{"nsteps": nsteps_per, "accumulators": accumulators, "stepoffset": epoch*nsteps_per},
             **kwargs
         )
         iterdata = []

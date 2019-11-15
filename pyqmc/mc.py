@@ -9,7 +9,7 @@ import numpy as np
 import h5py
 
 
-def initial_guess(mol, nconfig, r=1.0):
+def initial_guess(mol, nconfig, r=1.0, supercell=None):
     """ Generate an initial guess by distributing electrons near atoms
     proportional to their charge.
 
@@ -28,10 +28,15 @@ def initial_guess(mol, nconfig, r=1.0):
     
     """
     from pyqmc.coord import OpenConfigs, PeriodicConfigs
+    from pyqmc.ewald import get_supercell_atoms
 
-    nelec = np.sum(mol.nelec)
-    epos = np.zeros((nconfig, nelec, 3))
-    wts = mol.atom_charges()
+    if supercell is None:
+        supercell = np.eye(3)
+
+    atom_coords, atom_charges = get_supercell_atoms(mol, supercell)
+    nelec = np.array(mol.nelec, dtype=int) * int(np.round(np.linalg.det(supercell)))
+    epos = np.zeros((nconfig, nelec.sum(), 3))
+    wts = atom_charges
     wts = wts / np.sum(wts)
 
     # assign electrons to atoms based on atom charges
@@ -40,31 +45,27 @@ def initial_guess(mol, nconfig, r=1.0):
 
     for s in [0, 1]:
         neach = np.array(
-            np.floor(mol.nelec[s] * wts), dtype=int
+            np.floor(nelec[s] * wts), dtype=int
         )  # integer number of elec on each atom
-        nleft = (
-            mol.nelec[s] * wts - neach
-        )  # fraction of electron unassigned on each atom
+        nleft = nelec[s] * wts - neach  # fraction of electron unassigned on each atom
         nassigned = np.sum(neach)  # number of electrons assigned
-        totleft = int(mol.nelec[s] - nassigned)  # number of electrons not yet assigned
+        totleft = int(nelec[s] - nassigned)  # number of electrons not yet assigned
         if totleft > 0:
             bins = np.cumsum(nleft) / totleft
             inds = np.argpartition(
                 np.random.random((nconfig, len(wts))), totleft, axis=1
             )[:, :totleft]
-            ind0 = s * mol.nelec[0]
-            epos[:, ind0 : ind0 + nassigned, :] = np.repeat(
-                mol.atom_coords(), neach, axis=0
-            )[
+            ind0 = s * nelec[0]
+            epos[:, ind0 : ind0 + nassigned, :] = np.repeat(atom_coords, neach, axis=0)[
                 np.newaxis
             ]  # assign core electrons
-            epos[:, ind0 + nassigned : ind0 + mol.nelec[s], :] = mol.atom_coords()[
+            epos[:, ind0 + nassigned : ind0 + nelec[s], :] = atom_coords[
                 inds
             ]  # assign remaining electrons
 
     epos += r * np.random.randn(*epos.shape)  # random shifts from atom positions
     if hasattr(mol, "a"):
-        epos = PeriodicConfigs(epos, mol.lattice_vectors())
+        epos = PeriodicConfigs(epos, np.dot(supercell, mol.lattice_vectors()))
     else:
         epos = OpenConfigs(epos)
     return epos

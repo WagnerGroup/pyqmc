@@ -54,8 +54,8 @@ class DescriptorFromTBDM:
         For example, 
         {'U': [
                 [], #up - up
-                [(0.5, (0,0,0,0))], #up - dn
-                [(0.5, (0,0,0,0))], #dn - up
+                [(0.5, (0))], #up - dn
+                [(0.5, (0))], #dn - up
                 [], #up - up
         ]
         """
@@ -73,9 +73,7 @@ class DescriptorFromTBDM:
             totsum = np.zeros(n)
             for ret, ellist in zip(rets, mapping):
                 for w, ind in ellist:
-                    totsum += (
-                        self.norm * w * ret["value"][:, ind[0], ind[1], ind[2], ind[3]]
-                    )
+                    totsum += self.norm * w * ret["value"][:, ind]
             avgvals[k] = totsum
 
         return avgvals

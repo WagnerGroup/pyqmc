@@ -81,6 +81,18 @@ class TBDMAccumulator:
             accept_b, self._aux_configs_b = sample_onebody(
                 mol, orb_coeff[self._spin_sector[1]], self._aux_configs_b, tstep
             )
+        # Default to full 2rdm if ijkl not specified
+        if ijkl is None:
+            norb_up = orb_coeff[0].shape[1]
+            norb_down = orb_coeff[1].shape[1]
+            ijkl = [
+                [i, j, k, l]
+                for i in range(norb_up)
+                for j in range(norb_up)
+                for k in range(norb_down)
+                for l in range(norb_down)
+            ]
+        self._ijkl = np.array(ijkl).T
 
     def __call__(self, configs, wf, extra_configs=None, auxassignments=None):
         """Gathers quantities from equation (10) of DOI:10.1063/1.4793531."""
@@ -90,9 +102,8 @@ class TBDMAccumulator:
         results = {}
         orb_a_size = self._orb_coeff[self._spin_sector[0]].shape[1]
         orb_b_size = self._orb_coeff[self._spin_sector[1]].shape[1]
-        results["value"] = np.zeros(
-            (nconf, orb_a_size, orb_a_size, orb_b_size, orb_b_size)
-        )
+        results["value"] = np.zeros((nconf, self._ijkl.shape[1]))
+        results["ijkl"] = self._ijkl
         for i, e in enumerate(["a", "b"]):
             results["norm_%s" % e] = np.zeros(
                 (nconf, self._orb_coeff[self._spin_sector[i]].shape[1])
@@ -191,6 +202,7 @@ class TBDMAccumulator:
                         auxassignments_b[i + sweep * len(self._pairs)]
                     ],
                 )
+
                 wfratio_a = wf.testvalue(pair[0], epos_a)
                 wf.updateinternals(pair[0], epos_a)
                 wfratio_b = wf.testvalue(pair[1], epos_b)
@@ -200,29 +212,35 @@ class TBDMAccumulator:
                 # We use pySCF's index convention (while Eq. 10 in DOI:10.1063/1.4793531 uses QWalk's)
                 # QWalk -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,j} c_{s1,k} c_{s2,l} > = \phi*_{s1,k} \phi*_{s2,l} \phi_{s1,i} \phi_{s2,j}
                 # pySCF -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,k} c_{s1,j} c_{s2,l} > = \phi*_{s1,j} \phi*_{s2,l} \phi_{s1,i} \phi_{s2,k}
-                orbratio = np.einsum(
-                    "mj,ml,mi,mk->mijkl",
-                    orb_a_aux[auxassignments_a[i + sweep * len(self._pairs)], :]
-                    / fsum_a[
-                        auxassignments_a[i + sweep * len(self._pairs)], np.newaxis
-                    ],
-                    orb_b_aux[auxassignments_b[i + sweep * len(self._pairs)], :]
-                    / fsum_b[
-                        auxassignments_b[i + sweep * len(self._pairs)], np.newaxis
-                    ],
-                    orb_a_configs,
-                    orb_b_configs,
+                orbratio = (
+                    (
+                        orb_a_aux[auxassignments_a[i + sweep * len(self._pairs)]][
+                            :, self._ijkl[1]
+                        ]
+                        / fsum_a[
+                            auxassignments_a[i + sweep * len(self._pairs)], np.newaxis
+                        ]
+                    )
+                    * (
+                        orb_b_aux[auxassignments_b[i + sweep * len(self._pairs)]][
+                            :, self._ijkl[3]
+                        ]
+                        / fsum_b[
+                            auxassignments_b[i + sweep * len(self._pairs)], np.newaxis
+                        ]
+                    )
+                    * orb_a_configs[:, self._ijkl[0]]
+                    * orb_b_configs[:, self._ijkl[2]]
                 )
 
                 # Adding to results
-                results["value"] += np.einsum("i,ijklm->ijklm", wfratio, orbratio)
+                results["value"] += np.einsum("i,ij->ij", wfratio, orbratio)
                 results["norm_a"] += norm_a[
                     auxassignments_a[i + sweep * len(self._pairs)]
                 ]
                 results["norm_b"] += norm_b[
                     auxassignments_b[i + sweep * len(self._pairs)]
                 ]
-
         # Average over sweeps and pairs
         results["value"] /= self._nsweeps
         for e in ["a", "b"]:

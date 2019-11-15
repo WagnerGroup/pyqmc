@@ -1,7 +1,20 @@
 import numpy as np
 import pyqmc
-from scipy.special import erf, erfc
+from scipy.special import erfc
 from pyqmc.slaterpbc import get_supercell_copies
+
+
+def get_supercell_atoms(mol, supercell):
+    """
+    Calculate atom coordinates and charges for a supercell of the mol object
+    """
+    atom_coords = []
+    atom_charges = []
+    Rpts = get_supercell_copies(mol.lattice_vectors(), supercell)
+    for (xyz, charge) in zip(mol.atom_coords(), mol.atom_charges()):
+        atom_coords.extend([xyz + R for R in Rpts])
+        atom_charges.extend([charge for R in Rpts])
+    return np.asarray(atom_coords), np.asarray(atom_charges)
 
 
 class Ewald:
@@ -17,14 +30,7 @@ class Ewald:
         if supercell is None:
             supercell = np.eye(3)
         self.nelec = np.array(mol.nelec) * np.linalg.det(supercell)
-        atom_coords = []
-        atom_charges = []
-        Rpts = get_supercell_copies(mol.lattice_vectors(), supercell)
-        for (xyz, charge) in zip(mol.atom_coords(), mol.atom_charges()):
-            atom_coords.extend([xyz + R for R in Rpts])
-            atom_charges.extend([charge for R in Rpts])
-        self.atom_coords = np.asarray(atom_coords)
-        self.atom_charges = np.asarray(atom_charges)
+        self.atom_coords, self.atom_charges = get_supercell_atoms(mol, supercell)
         self.latvec = np.dot(supercell, mol.lattice_vectors())
         self.set_lattice_displacements(nlatvec)
         self.set_up_reciprocal_ewald_sum(ewald_gmax)

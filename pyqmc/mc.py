@@ -33,8 +33,13 @@ def initial_guess(mol, nconfig, r=1.0, supercell=None):
     if supercell is None:
         supercell = np.eye(3)
 
-    atom_coords, atom_charges = get_supercell_atoms(mol, supercell)
-    nelec = np.array(mol.nelec, dtype=int) * int(np.round(np.linalg.det(supercell)))
+    if hasattr(mol, "a"):
+        atom_coords, atom_charges = get_supercell_atoms(mol, supercell)
+        nelec = np.array(mol.nelec, dtype=int) * int(np.round(np.linalg.det(supercell)))
+    else:
+        atom_coords = mol.atom_coords()
+        atom_charges = mol.atom_charges()
+        nelec = np.array(mol.nelec)
     epos = np.zeros((nconfig, nelec.sum(), 3))
     wts = atom_charges
     wts = wts / np.sum(wts)

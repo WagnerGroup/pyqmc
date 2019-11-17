@@ -41,7 +41,7 @@ class PySCFSlaterPBC:
         Inputs:
           mol:
           mf:
-          supercell: supercell matrix for QMC from cell defined by mol.a
+          supercell: (3, 3) supercell matrix for QMC from cell defined by mol.a. In other words, the QMC calculation cell is qmc_cell = np.dot(supercell, mol.lattice_vectors()). For a 2x2x2 supercell, supercell is [[2, 0, 0], [0, 2, 0], [0, 0, 2]].
         """
         self.occ = np.asarray(mf.mo_occ) > 0.9
         self.parameters = {}

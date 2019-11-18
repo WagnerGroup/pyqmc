@@ -37,9 +37,10 @@ def slater_jastrow(mol, mf, abasis=None, bbasis=None):
     return wf
 
 
-def gradient_generator(mol, wf, to_opt=None, freeze=None):
+def gradient_generator(mol, wf, to_opt=None, freeze=None, supercell=None):
     return PGradTransform(
-        EnergyAccumulator(mol), LinearTransform(wf.parameters, to_opt, freeze)
+        EnergyAccumulator(mol, supercell=supercell),
+        LinearTransform(wf.parameters, to_opt, freeze),
     )
 
 
@@ -54,7 +55,7 @@ def default_multislater(mol, mf, mc):
     return wf, to_opt, freeze
 
 
-def default_jastrow(mol,ion_cusp=False):
+def default_jastrow(mol, ion_cusp=False):
     """         
     Default 2-body jastrow from qwalk,
     Args:
@@ -87,13 +88,13 @@ def default_jastrow(mol,ion_cusp=False):
 
     jastrow = JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
     if ion_cusp:
-        jastrow.parameters["acoeff"][:,0, :] = mol.atom_charges()[:,None]
+        jastrow.parameters["acoeff"][:, 0, :] = mol.atom_charges()[:, None]
     jastrow.parameters["bcoeff"][0, [0, 1, 2]] = np.array([-0.25, -0.50, -0.25])
 
     freeze = {}
     freeze["acoeff"] = np.zeros(jastrow.parameters["acoeff"].shape).astype(bool)
     if ion_cusp:
-        freeze["acoeff"][:,0,:] = True  # Cusp conditions
+        freeze["acoeff"][:, 0, :] = True  # Cusp conditions
     freeze["bcoeff"] = np.zeros(jastrow.parameters["bcoeff"].shape).astype(bool)
     freeze["bcoeff"][0, [0, 1, 2]] = True  # Cusp conditions
     to_opt = ["acoeff", "bcoeff"]

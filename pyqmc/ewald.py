@@ -4,34 +4,31 @@ from scipy.special import erfc
 from pyqmc.slaterpbc import get_supercell_copies
 
 
-def get_supercell_atoms(mol, supercell):
+def get_supercell_atoms(cell, supercell):
     """
-    Calculate atom coordinates and charges for a supercell of the mol object
+    Calculate atom coordinates and charges for a supercell of the cell object
     """
     atom_coords = []
     atom_charges = []
-    Rpts = get_supercell_copies(mol.lattice_vectors(), supercell)
-    for (xyz, charge) in zip(mol.atom_coords(), mol.atom_charges()):
+    Rpts = get_supercell_copies(cell.lattice_vectors(), supercell)
+    for (xyz, charge) in zip(cell.atom_coords(), cell.atom_charges()):
         atom_coords.extend([xyz + R for R in Rpts])
         atom_charges.extend([charge for R in Rpts])
     return np.asarray(atom_coords), np.asarray(atom_charges)
 
 
 class Ewald:
-    def __init__(self, mol, supercell, ewald_gmax=200, nlatvec=2):
+    def __init__(self, cell, ewald_gmax=200, nlatvec=2):
         """
         Class for computing Ewald sums
         Inputs:
-            mol: pyscf Cell object
-            supercell: (3, 3) array to scale mol.lattice_vectors() up to the QMC calculation cell (i.e. qmc_cell = np.dot(supercell, mol.lattice_vectors()))
+            cell: pyscf Cell object (simulation cell)
             ewald_gmax: int, how far to take reciprocal sum; probably never needs to be changed.
             nlatvec: int, how far to take real space sum; probably never needs to be changed.
         """
-        if supercell is None:
-            supercell = np.eye(3)
-        self.nelec = np.array(mol.nelec) * np.linalg.det(supercell)
-        self.atom_coords, self.atom_charges = get_supercell_atoms(mol, supercell)
-        self.latvec = np.dot(supercell, mol.lattice_vectors())
+        self.nelec = np.array(cell.nelec)
+        self.atom_coords, self.atom_charges = cell.atom_coords(), cell.atom_charges()
+        self.latvec = cell.lattice_vectors()
         self.set_lattice_displacements(nlatvec)
         self.set_up_reciprocal_ewald_sum(ewald_gmax)
 

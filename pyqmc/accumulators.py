@@ -7,12 +7,12 @@ class EnergyAccumulator:
     """returns energy of each configuration in a dictionary. 
   Keys and their meanings can be found in energy.energy """
 
-    def __init__(self, mol, threshold=10, supercell=None, **kwargs):
+    def __init__(self, mol, threshold=10, **kwargs):
         self.mol = mol
         self.threshold = threshold
         if hasattr(mol, "a"):
             print("Using Ewald")
-            self.ewald = Ewald(mol, supercell, **kwargs)
+            self.ewald = Ewald(mol, **kwargs)
 
             def compute_energy(mol, configs, wf, threshold):
                 ee, ei, ii = self.ewald.energy(configs)

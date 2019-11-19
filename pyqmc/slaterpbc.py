@@ -2,7 +2,7 @@ import numpy as np
 from pyqmc import pbc, slateruhf
 
 
-def get_supercell_kpts(mol, S):
+def get_supercell_kpts(cell, S):
     Sinv = np.linalg.inv(S).T
     u = [0, 1]
     unit_box = np.stack([x.ravel() for x in np.meshgrid(*[u] * 3, indexing="ij")]).T
@@ -12,7 +12,7 @@ def get_supercell_kpts(mol, S):
     possible_kpts = np.dot(np.stack([x.ravel() for x in kptmesh]).T, Sinv)
     in_unit_box = (possible_kpts >= 0) * (possible_kpts < 1 - 1e-12)
     select = np.where(np.all(in_unit_box, axis=1))[0]
-    reclatvec = np.linalg.inv(mol.lattice_vectors()).T * 2 * np.pi
+    reclatvec = np.linalg.inv(cell.lattice_vectors()).T * 2 * np.pi
     kpts = np.dot(possible_kpts[select], reclatvec)
     return kpts
 
@@ -31,23 +31,42 @@ def get_supercell_copies(latvec, S):
     return pts
 
 
+def get_pyscf_supercell(cell, S):
+    from pyscf.pbc import gto
+
+    superlattice = np.dot(S, cell.lattice_vectors())
+    Rpts = get_supercell_copies(cell.lattice_vectors(), S)
+    atom = []
+    for (name, xyz) in cell._atom:
+        atom.extend([(name, xyz + R) for R in Rpts])
+    supercell = gto.Cell()
+    supercell.a = superlattice
+    supercell.atom = atom
+    supercell.pseudo = cell.pseudo
+    supercell.basis = cell.basis
+    supercell.unit = cell.unit
+    supercell.build()
+    return supercell
+
+
 class PySCFSlaterPBC:
     """A wave function object has a state defined by a reference configuration of electrons.
     The functions recompute() and updateinternals() change the state of the object, and 
     the rest compute and return values from that state. """
 
-    def __init__(self, mol, mf, supercell=None):
+    def __init__(self, cell, mf, S=None):
         """
         Inputs:
-          mol:
+          cell:
           mf:
-          supercell: (3, 3) supercell matrix for QMC from cell defined by mol.a. In other words, the QMC calculation cell is qmc_cell = np.dot(supercell, mol.lattice_vectors()). For a 2x2x2 supercell, supercell is [[2, 0, 0], [0, 2, 0], [0, 0, 2]].
+          S: (3, 3) supercell matrix for QMC from cell defined by cell.a. In other words, the QMC calculation cell is qmc_cell = np.dot(S, cell.lattice_vectors()). For a 2x2x2 supercell, S is [[2, 0, 0], [0, 2, 0], [0, 0, 2]].
         """
         self.occ = np.asarray(mf.mo_occ) > 0.9
         self.parameters = {}
         self.real_tol = 1e4
-        self.supercell = np.eye(3) if supercell is None else supercell
-        self._kpts = get_supercell_kpts(mol, self.supercell)
+        self.S = np.eye(3) if S is None else S
+        self.supercell = get_pyscf_supercell(cell, S)
+        self._kpts = get_supercell_kpts(cell, self.S)
         kdiffs = mf.kpts[np.newaxis] - self._kpts[:, np.newaxis]
         self.kinds = np.nonzero(np.linalg.norm(kdiffs, axis=-1) < 1e-12)[1]
         self.nk = len(self._kpts)
@@ -55,11 +74,7 @@ class PySCFSlaterPBC:
         print(self.kinds)
 
         mo_coeff = np.asarray(mf.mo_coeff)
-        self._mol = mol
-        self.atom = []
-        Rpts = get_supercell_copies(mol.lattice_vectors(), supercell)
-        for (name, xyz) in mol._atom:
-            self.atom.extend([(name, xyz + R) for R in Rpts])
+        self._cell = cell
 
         mcalist = []
         mcblist = []
@@ -81,8 +96,8 @@ class PySCFSlaterPBC:
         if len(mf.mo_coeff[0][0].shape) == 2:
             self._nelec = [int(np.sum(np.concatenate(o))) for o in mf.mo_occ]
         else:
-            scale = np.linalg.det(self.supercell)
-            self._nelec = [int(np.round(n * scale)) for n in self._mol.nelec]
+            scale = np.linalg.det(self.S)
+            self._nelec = [int(np.round(n * scale)) for n in self._cell.nelec]
         self._nelec = tuple(self._nelec)
         self.get_phase = lambda x: np.exp(2j * np.pi * np.angle(x))
 
@@ -92,12 +107,14 @@ class PySCFSlaterPBC:
             mycoords = mycoords[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
         # wrap supercell positions into primitive cell
-        prim_coords, prim_wrap = pbc.enforce_pbc(self._mol.lattice_vectors(), mycoords)
-        wrap = prim_wrap + np.dot(configs.wrap.reshape(prim_wrap.shape), self.supercell)
-        kdotR = np.linalg.multi_dot((self._kpts, self._mol.lattice_vectors().T, wrap.T))
+        prim_coords, prim_wrap = pbc.enforce_pbc(self._cell.lattice_vectors(), mycoords)
+        wrap = prim_wrap + np.dot(configs.wrap.reshape(prim_wrap.shape), self.S)
+        kdotR = np.linalg.multi_dot(
+            (self._kpts, self._cell.lattice_vectors().T, wrap.T)
+        )
         wrap_phase = np.exp(1j * kdotR)
         # evaluate AOs for all electron positions
-        ao = self._mol.eval_gto(eval_str, prim_coords, kpts=self._kpts)
+        ao = self._cell.eval_gto(eval_str, prim_coords, kpts=self._kpts)
         ao = [ao[k] * wrap_phase[k][:, np.newaxis] for k in range(self.nk)]
         return ao
 
@@ -249,9 +266,9 @@ class PySCFSlaterPBC:
 
         grid = np.meshgrid(*[np.arange(n) / n for n in [nx, ny, nz]], indexing="ij")
         grid = np.stack([g.ravel() for g in grid]).T
-        grid = np.linalg.multi_dot((grid, self.supercell, self._mol.lattice_vectors()))
+        grid = np.linalg.dot(grid, self.supercell.lattice_vectors())
         configs = PeriodicConfigs(
-            grid.reshape((-1, 16, 3)), self._mol.lattice_vectors()
+            grid.reshape((-1, 16, 3)), self._cell.lattice_vectors()
         )
         nconf, nelec, ndim = configs.configs.shape
         ao = self.evaluate_orbitals(configs)
@@ -267,7 +284,7 @@ class PySCFSlaterPBC:
             coeff.append(mca)
 
         mo = []
-        nsorb = int(np.round(np.linalg.det(self.supercell) * norb))
+        nsorb = int(np.round(np.linalg.det(self.S) * norb))
         for k in range(self.nk):
             mo.append(np.dot(ao[k], coeff[k]))
         mo = np.concatenate(mo, axis=-1).reshape(-1, nsorb)
@@ -283,15 +300,13 @@ class PySCFSlaterPBC:
         cube = {}
         cube["comment"] = comment
         cube["type"] = "\n"
-        cube["natoms"] = int(np.round(self._mol.natm * np.linalg.det(self.supercell)))
+        cube["natoms"] = self.supercell.natm
         cube["origin"] = np.zeros(3)
         cube["ints"] = np.array([nx, ny, nz])
-        cube["latvec"] = np.dot(self.supercell, self._mol.lattice_vectors())
+        cube["latvec"] = self.supercell.lattice_vectors()
         cube["latvec"] = cube["latvec"] / cube["ints"][:, np.newaxis]
-        atomname, atomxyz = list(zip(*self.atom))
-        atomdict = {"H": 1}
-        cube["atomname"] = [atomdict[a] for a in atomname]
-        cube["atomxyz"] = np.array(atomxyz)
+        cube["atomname"] = self.supercell.atom_charges()
+        cube["atomxyz"] = self.supercell.atom_coords()
         cube["data"] = np.reshape(vals, (nx, ny, nz))
         with open(fname, "w") as f:
             cubetools.write_cube(cube, f)
@@ -310,17 +325,17 @@ def generate_test_inputs():
     if from_chkfile:
 
         def loadchkfile(chkfile):
-            mol = gto.cell.loads(lib.chkfile.load(chkfile, "mol"))
-            kpts = mol.make_kpts([1, 1, 1])
-            mf = scf.KRKS(mol, kpts)
+            cell = gto.cell.loads(lib.chkfile.load(chkfile, "mol"))
+            kpts = cell.make_kpts([1, 1, 1])
+            mf = scf.KRKS(cell, kpts)
             mf.__dict__.update(lib.chkfile.load(chkfile, "scf"))
-            return mol, mf
+            return cell, mf
 
-        mol1, mf1 = loadchkfile("mf1.chkfile")
-        mol2, mf2 = loadchkfile("mf2.chkfile")
+        cell1, mf1 = loadchkfile("mf1.chkfile")
+        cell2, mf2 = loadchkfile("mf2.chkfile")
     else:
         L = 4
-        mol2 = gto.M(
+        cell2 = gto.M(
             atom="""H     {0}      {0}      {0}                
                       H     {1}      {1}      {1}""".format(
                 0.0, L * 0.25
@@ -332,25 +347,25 @@ def generate_test_inputs():
         )
 
         print("Primitive cell")
-        kpts = mol2.make_kpts((2, 2, 2))
-        mf2 = scf.KRKS(mol2, kpts)
+        kpts = cell2.make_kpts((2, 2, 2))
+        mf2 = scf.KRKS(cell2, kpts)
         mf2.xc = "pbe"
         mf2.chkfile = "mf2.chkfile"
         mf2 = mf2.run()
 
         print("Supercell")
-        mol1 = tools.super_cell(mol2, [2, 2, 2])
+        cell1 = tools.super_cell(cell2, [2, 2, 2])
         kpts = [[0, 0, 0]]
-        mf1 = scf.KRKS(mol1, kpts)
+        mf1 = scf.KRKS(cell1, kpts)
         mf1.xc = "pbe"
         mf1.chkfile = "mf1.chkfile"
         mf1 = mf1.run()
 
-    # wf1 = pyqmc.PySCFSlaterUHF(mol1, mf1)
-    wf1 = PySCFSlaterPBC(mol1, mf1, supercell=1 * np.eye(3))
-    wf2 = PySCFSlaterPBC(mol2, mf2, supercell=2 * np.eye(3))
+    # wf1 = pyqmc.PySCFSlaterUHF(cell1, mf1)
+    wf1 = PySCFSlaterPBC(cell1, mf1, supercell=1 * np.eye(3))
+    wf2 = PySCFSlaterPBC(cell2, mf2, supercell=2 * np.eye(3))
 
-    configs = pyqmc.initial_guess(mol1, 10, 0.1)
+    configs = pyqmc.initial_guess(cell1, 10, 0.1)
 
     return wf1, wf2, configs
 

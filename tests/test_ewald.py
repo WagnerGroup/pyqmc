@@ -1,6 +1,7 @@
 import numpy as np
 import pyqmc
 from pyqmc.coord import PeriodicConfigs
+from pyqmc.slaterpbc import get_pyscf_supercell
 from pyscf.pbc import gto, scf
 
 
@@ -16,14 +17,14 @@ def test_ewald_NaCl():
     mol.build(a=(np.ones((3, 3)) - np.eye(3)) * L / 2)
 
     # supercell = np.ones((3,3)) - 2 * np.eye(3)
-    supercell = np.eye(3)
-    newvecs = np.dot(supercell, mol.lattice_vectors())
-    ewald = pyqmc.ewald.Ewald(mol, supercell)
+    S = np.eye(3)
+    supercell = get_pyscf_supercell(mol, S)
+    ewald = pyqmc.ewald.Ewald(supercell)
 
     # configs = np.ones((1, 4, 3))
     # configs[:, 1:, :] = np.eye(3)
     configs = np.ones((1, 1, 3)) * L / 2
-    configs = PeriodicConfigs(configs, newvecs)
+    configs = PeriodicConfigs(configs, supercell.lattice_vectors())
 
     print("NaCl ewald energy")
     ee, ei, ii = ewald.energy(configs)
@@ -43,15 +44,15 @@ def test_ewald_CaF2():
     mol.build(a=(np.ones((3, 3)) - np.eye(3)) * L / 2)
 
     # supercell = np.ones((3,3)) - 2 * np.eye(3)
-    supercell = np.eye(3)
-    newvecs = np.dot(supercell, mol.lattice_vectors())
-    ewald = pyqmc.ewald.Ewald(mol, supercell)
+    S = np.eye(3)
+    supercell = get_pyscf_supercell(mol, S)
+    ewald = pyqmc.ewald.Ewald(supercell)
 
     # cube = np.stack(np.meshgrid(*[[0, 1]]*3, indexing="ij"), axis=-1).reshape((-1, 3))
     # configs = np.reshape((cube + 0.5) * L / 2, (1, 8, 3))
     configs = np.ones((1, 2, 3)) * L / 4
     configs[0, 1, 1] *= -1
-    configs = PeriodicConfigs(configs, newvecs)
+    configs = PeriodicConfigs(configs, supercell.lattice_vectors())
 
     print("CaF2 ewald energy")
     ee, ei, ii = ewald.energy(configs)

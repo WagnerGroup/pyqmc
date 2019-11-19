@@ -3,7 +3,7 @@
 import numpy as np
 from pyscf.pbc import gto, scf
 import pyqmc
-from pyqmc.slaterpbc import PySCFSlaterPBC
+from pyqmc.slaterpbc import PySCFSlaterPBC, get_pyscf_supercell
 
 
 def read_nk():
@@ -52,15 +52,16 @@ if __name__ == "__main__":
         cell, kmf = run_scf(nk)
 
         # Set up wf and configs
-        supercell = np.eye(3) * nk
-        wf = PySCFSlaterPBC(cell, kmf, supercell=supercell)
-        configs = pyqmc.initial_guess(cell, nconfigs, supercell=supercell)
+        S = np.eye(3) * nk
+        supercell = get_pyscf_supercell(cell, S)
+        wf = PySCFSlaterPBC(cell, kmf, S=S)
+        configs = pyqmc.initial_guess(supercell, nconfigs)
 
         # Warm up VMC
         df, configs = pyqmc.vmc(wf, configs, nsteps=40, verbose=True)
 
         # Initialize energy accumulator (and Ewald)
-        enacc = pyqmc.EnergyAccumulator(cell, supercell=supercell)
+        enacc = pyqmc.EnergyAccumulator(supercell)
 
         # Run VMC
         df, configs = pyqmc.vmc(

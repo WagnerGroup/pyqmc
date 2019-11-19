@@ -48,14 +48,13 @@ class J3:
         _, _, e_lap = self._get_val_grad_lap(epos)
         lap1 = np.einsum('mn, dcm, cjn-> d', self.parameters["gcoeff"], e_lap[:,:,0,:], self.ao_val[:,e+1:,:])
         lap2 = np.einsum('mn, cim, dcn -> d', self.parameters["gcoeff"], self.ao_val[:,:e,:], e_lap[:,:,0,:])
-        # lap3 = np.einsum('mn, dm, dn-> d'), self.parameters["gcoeff"], e_grad[:,0,:], e_grad[] # No cross term due to the i<j constraint on electrons
         return lap1 + lap2
 
     def gradient_laplacian(self, e, epos):
         return self.gradient(e, epos), self.laplacian(e, epos)
     
     def pgradient(self):
-        mask = np.tril(np.ones((self.nelec, self.nelec)), -1)
+        mask = np.tril(np.ones((self.nelec, self.nelec)), -1) # to prevent double counting of electron pairs
         coeff_grad = np.einsum('cim, cjn, ij-> cmn', self.parameters["gcoeff"], self.ao_val, self.ao_val, mask)
         return {"gcoeff":coeff_grad}
 
@@ -76,4 +75,6 @@ class J3:
             grad = ao[1:4].reshape((3, nconf, nelec, -1))
             lap = ao[4,7,9].reshape((3, nconf, nelec, -1))
             return (val, grad, lap)
+    def testvalue(self, e, epos, mask=None):
+        pass
 # end J3 class

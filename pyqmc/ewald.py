@@ -1,20 +1,6 @@
 import numpy as np
 import pyqmc
 from scipy.special import erfc
-from pyqmc.slaterpbc import get_supercell_copies
-
-
-def get_supercell_atoms(cell, supercell):
-    """
-    Calculate atom coordinates and charges for a supercell of the cell object
-    """
-    atom_coords = []
-    atom_charges = []
-    Rpts = get_supercell_copies(cell.lattice_vectors(), supercell)
-    for (xyz, charge) in zip(cell.atom_coords(), cell.atom_charges()):
-        atom_coords.extend([xyz + R for R in Rpts])
-        atom_charges.extend([charge for R in Rpts])
-    return np.asarray(atom_coords), np.asarray(atom_charges)
 
 
 class Ewald:

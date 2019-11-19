@@ -2,37 +2,41 @@ import numpy as np
 from pyqmc import pbc, slateruhf
 
 
-def get_supercell_kpts(cell, S):
-    Sinv = np.linalg.inv(S).T
+def get_supercell_kpts(supercell):
+    Sinv = np.linalg.inv(supercell.S).T
     u = [0, 1]
     unit_box = np.stack([x.ravel() for x in np.meshgrid(*[u] * 3, indexing="ij")]).T
-    unit_box_ = np.dot(unit_box, S.T)
+    unit_box_ = np.dot(unit_box, supercell.S.T)
     xyz_range = np.stack([f(unit_box_, axis=0) for f in (np.amin, np.amax)]).T
     kptmesh = np.meshgrid(*[np.arange(*r) for r in xyz_range], indexing="ij")
     possible_kpts = np.dot(np.stack([x.ravel() for x in kptmesh]).T, Sinv)
     in_unit_box = (possible_kpts >= 0) * (possible_kpts < 1 - 1e-12)
     select = np.where(np.all(in_unit_box, axis=1))[0]
-    reclatvec = np.linalg.inv(cell.lattice_vectors()).T * 2 * np.pi
+    reclatvec = np.linalg.inv(supercell.original_cell.lattice_vectors()).T * 2 * np.pi
     kpts = np.dot(possible_kpts[select], reclatvec)
     return kpts
 
 
-def get_supercell_copies(latvec, S):
-    Sinv = np.linalg.inv(S).T
-    u = [0, 1]
-    unit_box = np.stack([x.ravel() for x in np.meshgrid(*[u] * 3, indexing="ij")]).T
-    unit_box_ = np.dot(unit_box, S)
-    xyz_range = np.stack([f(unit_box_, axis=0) for f in (np.amin, np.amax)]).T
-    mesh = np.meshgrid(*[np.arange(*r) for r in xyz_range], indexing="ij")
-    possible_pts = np.dot(np.stack([x.ravel() for x in mesh]).T, Sinv.T)
-    in_unit_box = (possible_pts >= 0) * (possible_pts < 1 - 1e-12)
-    select = np.where(np.all(in_unit_box, axis=1))[0]
-    pts = np.linalg.multi_dot((possible_pts[select], S, latvec))
-    return pts
-
-
-def get_pyscf_supercell(cell, S):
+def get_supercell(cell, S):
+    """
+    Inputs:
+        cell: pyscf Cell object
+        S: (3, 3) supercell matrix for QMC from cell defined by cell.a. In other words, the QMC calculation cell is qmc_cell = np.dot(S, cell.lattice_vectors()). For a 2x2x2 supercell, S is [[2, 0, 0], [0, 2, 0], [0, 0, 2]].
+    """
     from pyscf.pbc import gto
+
+    def get_supercell_copies(latvec, S):
+        Sinv = np.linalg.inv(S).T
+        u = [0, 1]
+        unit_box = np.stack([x.ravel() for x in np.meshgrid(*[u] * 3, indexing="ij")]).T
+        unit_box_ = np.dot(unit_box, S)
+        xyz_range = np.stack([f(unit_box_, axis=0) for f in (np.amin, np.amax)]).T
+        mesh = np.meshgrid(*[np.arange(*r) for r in xyz_range], indexing="ij")
+        possible_pts = np.dot(np.stack([x.ravel() for x in mesh]).T, Sinv.T)
+        in_unit_box = (possible_pts >= 0) * (possible_pts < 1 - 1e-12)
+        select = np.where(np.all(in_unit_box, axis=1))[0]
+        pts = np.linalg.multi_dot((possible_pts[select], S, latvec))
+        return pts
 
     superlattice = np.dot(S, cell.lattice_vectors())
     Rpts = get_supercell_copies(cell.lattice_vectors(), S)
@@ -46,6 +50,8 @@ def get_pyscf_supercell(cell, S):
     supercell.basis = cell.basis
     supercell.unit = cell.unit
     supercell.build()
+    supercell.original_cell = cell
+    supercell.S = S
     return supercell
 
 
@@ -54,19 +60,25 @@ class PySCFSlaterPBC:
     The functions recompute() and updateinternals() change the state of the object, and 
     the rest compute and return values from that state. """
 
-    def __init__(self, cell, mf, S=None):
+    def __init__(self, supercell, mf):
         """
         Inputs:
-          cell:
+          supercell:
           mf:
-          S: (3, 3) supercell matrix for QMC from cell defined by cell.a. In other words, the QMC calculation cell is qmc_cell = np.dot(S, cell.lattice_vectors()). For a 2x2x2 supercell, S is [[2, 0, 0], [0, 2, 0], [0, 0, 2]].
         """
+        for attribute in ["original_cell", "S"]:
+            if not hasattr(supercell, attribute):
+                print('Warning: supercell is missing attribute "%s"' % attribute)
+                print("setting original_cell=supercell and S=np.eye(3)")
+                supercell.original_cell = supercell
+                supercell.S = np.eye(3)
+
         self.occ = np.asarray(mf.mo_occ) > 0.9
         self.parameters = {}
         self.real_tol = 1e4
-        self.S = np.eye(3) if S is None else S
-        self.supercell = get_pyscf_supercell(cell, S)
-        self._kpts = get_supercell_kpts(cell, self.S)
+
+        self.supercell = supercell
+        self._kpts = get_supercell_kpts(supercell)
         kdiffs = mf.kpts[np.newaxis] - self._kpts[:, np.newaxis]
         self.kinds = np.nonzero(np.linalg.norm(kdiffs, axis=-1) < 1e-12)[1]
         self.nk = len(self._kpts)
@@ -74,7 +86,7 @@ class PySCFSlaterPBC:
         print(self.kinds)
 
         mo_coeff = np.asarray(mf.mo_coeff)
-        self._cell = cell
+        self._cell = supercell.original_cell
 
         mcalist = []
         mcblist = []
@@ -96,7 +108,7 @@ class PySCFSlaterPBC:
         if len(mf.mo_coeff[0][0].shape) == 2:
             self._nelec = [int(np.sum(np.concatenate(o))) for o in mf.mo_occ]
         else:
-            scale = np.linalg.det(self.S)
+            scale = np.linalg.det(self.supercell.S)
             self._nelec = [int(np.round(n * scale)) for n in self._cell.nelec]
         self._nelec = tuple(self._nelec)
         self.get_phase = lambda x: np.exp(2j * np.pi * np.angle(x))
@@ -108,7 +120,8 @@ class PySCFSlaterPBC:
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
         # wrap supercell positions into primitive cell
         prim_coords, prim_wrap = pbc.enforce_pbc(self._cell.lattice_vectors(), mycoords)
-        wrap = prim_wrap + np.dot(configs.wrap.reshape(prim_wrap.shape), self.S)
+        configswrap = configs.wrap.reshape(prim_wrap.shape)
+        wrap = prim_wrap + np.dot(configswrap, self.supercell.S)
         kdotR = np.linalg.multi_dot(
             (self._kpts, self._cell.lattice_vectors().T, wrap.T)
         )
@@ -246,20 +259,20 @@ class PySCFSlaterPBC:
 
     def pgradient(self):
         d = {}
-        for parm in self.parameters:
-            s = int("beta" in parm)
-            # Get AOs for our spin channel only
-            i0, i1 = s * self._nelec[0], self._nelec[0] + s * self._nelec[1]
-            ao = self._aovals[:, :, i0:i1]  # (kpt, config, electron, ao)
-            pgrad_shape = (ao.shape[1],) + self.parameters[parm].shape
-            pgrad = np.zeros(pgrad_shape)
-            # Compute derivatives w.r.t. MO coefficients
-            for k in range(self.nk):
-                for i in range(self._nelec[s]):
-                    for j in range(ao.shape[2]):
-                        pgrad[:, k, j, i] = self._testcol(i, s, ao[k, :, :, j])
-            d[parm] = np.array(pgrad)
-        return {}
+        # for parm in self.parameters:
+        #    s = int("beta" in parm)
+        #    # Get AOs for our spin channel only
+        #    i0, i1 = s * self._nelec[0], self._nelec[0] + s * self._nelec[1]
+        #    ao = self._aovals[:, :, i0:i1]  # (kpt, config, electron, ao)
+        #    pgrad_shape = (ao.shape[1],) + self.parameters[parm].shape
+        #    pgrad = np.zeros(pgrad_shape)
+        #    # Compute derivatives w.r.t. MO coefficients
+        #    for k in range(self.nk):
+        #        for i in range(self._nelec[s]):
+        #            for j in range(ao.shape[2]):
+        #                pgrad[:, k, j, i] = self._testcol(i, s, ao[k, :, :, j])
+        #    d[parm] = np.array(pgrad)
+        return d
 
     def plot_orbitals(self, mf, norb, spin_channel=0, basename="", nx=80, ny=80, nz=80):
         from pyqmc.coord import PeriodicConfigs

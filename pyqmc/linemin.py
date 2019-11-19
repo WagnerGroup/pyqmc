@@ -147,8 +147,8 @@ def line_minimization(
         dpH = np.mean(df["pgraddpH"], axis=0)
         dp = np.mean(df["pgraddppsi"], axis=0)
         dpdp = np.mean(df["pgraddpidpj"], axis=0)
-        grad = 2 * (dpH - en * dp)
-        Sij = dpdp - np.einsum("i,j->ij", dp, dp)  # + eps*np.eye(dpdp.shape[0])
+        grad = 2 * np.real(dpH - en * dp)
+        Sij = np.real(dpdp - np.einsum("i,j->ij", dp, dp))
         return coords, df["pgradtotal"].values[-1], grad, Sij, en, en_err
 
     x0 = pgrad_acc.transform.serialize_parameters(wf.parameters)

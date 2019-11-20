@@ -1,17 +1,36 @@
 import numpy as np
-from pyqmc.energy import energy
+import pyqmc.energy as energy
+from pyqmc.ewald import Ewald
 
 
 class EnergyAccumulator:
     """returns energy of each configuration in a dictionary. 
   Keys and their meanings can be found in energy.energy """
 
-    def __init__(self, mol, threshold=10):
+    def __init__(self, mol, threshold=10, **kwargs):
         self.mol = mol
         self.threshold = threshold
+        if hasattr(mol, "a"):
+            print("Using Ewald")
+            self.ewald = Ewald(mol, **kwargs)
+
+            def compute_energy(mol, configs, wf, threshold):
+                ee, ei, ii = self.ewald.energy(configs)
+                ecp_val = energy.get_ecp(mol, configs, wf, threshold)
+                ke = energy.kinetic(configs, wf)
+                return {
+                    "ke": ke,
+                    "ee": ee,
+                    "ei": ei + ecp_val,
+                    "total": ke + ee + ei + ecp_val + ii,
+                }
+
+            self.compute_energy = compute_energy
+        else:
+            self.compute_energy = energy.energy
 
     def __call__(self, configs, wf):
-        return energy(self.mol, configs, wf, self.threshold)
+        return self.compute_energy(self.mol, configs, wf, self.threshold)
 
     def avg(self, configs, wf):
         d = {}
@@ -103,18 +122,18 @@ class PGradTransform:
         f = a * r ** 2 + b * r ** 4 + c * r ** 3
         """
         ne = configs.configs.shape[1]
-        d2 = 0.0 
+        d2 = 0.0
         for e in range(ne):
             d2 += np.sum(wf.gradient(e, configs.electron(e)) ** 2, axis=0)
         r = 1.0 / d2
         mask = r < self.nodal_cutoff ** 2
-           
-        c = 7./(self.nodal_cutoff ** 6)
-        b = -15./(self.nodal_cutoff ** 4)
-        a = 9./(self.nodal_cutoff ** 2)
-            
+
+        c = 7.0 / (self.nodal_cutoff ** 6)
+        b = -15.0 / (self.nodal_cutoff ** 4)
+        a = 9.0 / (self.nodal_cutoff ** 2)
+
         f = a * r + b * r ** 2 + c * r ** 3
-        f[np.logical_not(mask)] = 1.
+        f[np.logical_not(mask)] = 1.0
 
         return mask, f
 
@@ -123,13 +142,13 @@ class PGradTransform:
         d = self.enacc(configs, wf)
         energy = d["total"]
         dp = self.transform.serialize_gradients(pgrad)
-        
-        node_cut, f = self._node_regr(configs, wf) 
+
+        node_cut, f = self._node_regr(configs, wf)
 
         d["dpH"] = np.einsum("i,ij->ij", energy, dp * f[:, np.newaxis])
-        d["dppsi"] = dp  
+        d["dppsi"] = dp
         d["dpidpj"] = np.einsum("ij,ik->ijk", dp, dp * f[:, np.newaxis])
-        
+
         return d
 
     def avg(self, configs, wf):
@@ -138,8 +157,8 @@ class PGradTransform:
         den = self.enacc(configs, wf)
         energy = den["total"]
         dp = self.transform.serialize_gradients(pgrad)
- 
-        node_cut, f = self._node_regr(configs, wf) 
+
+        node_cut, f = self._node_regr(configs, wf)
 
         d = {}
         for k, it in den.items():

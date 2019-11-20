@@ -2,6 +2,13 @@ import numpy as np
 import copy
 
 
+def is_complex(wf):
+    cond1 = hasattr(wf, "nk")
+    cond2 = hasattr(wf, "wf1") and is_complex(wf.wf1)
+    cond3 = hasattr(wf, "wf2") and is_complex(wf.wf2)
+    return cond1 or cond2 or cond3
+
+
 def test_updateinternals(wf, configs):
     """
     Parameters:
@@ -15,9 +22,11 @@ def test_updateinternals(wf, configs):
 
     nconf, ne, ndim = configs.configs.shape
     delta = 1e-2
-    updatevstest = np.zeros((ne, nconf))
-    recomputevstest = np.zeros((ne, nconf))
-    recomputevsupdate = np.zeros((ne, nconf))
+
+    iscomplex = 1j if is_complex(wf) else 1
+    updatevstest = np.zeros((ne, nconf)) * iscomplex
+    recomputevstest = np.zeros((ne, nconf)) * iscomplex
+    recomputevsupdate = np.zeros((ne, nconf)) * iscomplex
     wfcopy = copy.copy(wf)
     val1 = wf.recompute(configs)
     for e in range(ne):
@@ -59,10 +68,11 @@ def test_wf_gradient(wf, configs, delta=1e-5):
     
     """
     nconf, nelec = configs.configs.shape[0:2]
+    iscomplex = 1j if is_complex(wf) else 1
     wf.recompute(configs)
     maxerror = 0
-    grad = np.zeros(configs.configs.shape)
-    numeric = np.zeros(configs.configs.shape)
+    grad = np.zeros(configs.configs.shape) * iscomplex
+    numeric = np.zeros(configs.configs.shape) * iscomplex
     for e in range(nelec):
         grad[:, e, :] = wf.gradient(e, configs.electron(e)).T
         for d in range(0, 3):
@@ -84,6 +94,7 @@ def test_wf_gradient(wf, configs, delta=1e-5):
 
 
 def test_wf_pgradient(wf, configs, delta=1e-5):
+    iscomplex = 1j if is_complex(wf) else 1
     pkeys = wf.parameters.keys()
     baseval = wf.recompute(configs)
     gradient = wf.pgradient()
@@ -92,7 +103,7 @@ def test_wf_pgradient(wf, configs, delta=1e-5):
         flt = wf.parameters[k].reshape(-1)
         # print(flt.shape,wf.parameters[k].shape,gradient[k].shape)
         nparms = len(flt)
-        numgrad = np.zeros((configs.configs.shape[0], nparms))
+        numgrad = np.zeros((configs.configs.shape[0], nparms)) * iscomplex
         for i, c in enumerate(flt):
             flt[i] += delta
             wf.parameters[k] = flt.reshape(wf.parameters[k].shape)
@@ -130,10 +141,11 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
     wf.laplacian(e,epos) should behave the same as gradient, except lap(\Psi(epos))/Psi(epos)
     """
     nconf, nelec = configs.configs.shape[0:2]
+    iscomplex = 1j if is_complex(wf) else 1
     wf.recompute(configs)
     maxerror = 0
-    lap = np.zeros(configs.configs.shape[:2])
-    numeric = np.zeros(configs.configs.shape[:2])
+    lap = np.zeros(configs.configs.shape[:2]) * iscomplex
+    numeric = np.zeros(configs.configs.shape[:2]) * iscomplex
 
     for e in range(nelec):
         lap[:, e] = wf.laplacian(e, configs.electron(e))
@@ -162,12 +174,13 @@ def test_wf_gradient_laplacian(wf, configs):
     import time
 
     nconf, nelec = configs.configs.shape[0:2]
+    iscomplex = 1j if is_complex(wf) else 1
     wf.recompute(configs)
     maxerror = 0
-    lap = np.zeros(configs.configs.shape[:2])
-    grad = np.zeros(configs.configs.shape).transpose((1, 2, 0))
-    andlap = np.zeros(configs.configs.shape[:2])
-    andgrad = np.zeros(configs.configs.shape).transpose((1, 2, 0))
+    lap = np.zeros(configs.configs.shape[:2]) * iscomplex
+    grad = np.zeros(configs.configs.shape).transpose((1, 2, 0)) * iscomplex
+    andlap = np.zeros(configs.configs.shape[:2]) * iscomplex
+    andgrad = np.zeros(configs.configs.shape).transpose((1, 2, 0)) * iscomplex
 
     tsep = 0
     ttog = 0

@@ -29,8 +29,7 @@ def initial_guess(mol, nconfig, r=1.0):
     """
     from pyqmc.coord import OpenConfigs, PeriodicConfigs
 
-    nelec = np.sum(mol.nelec)
-    epos = np.zeros((nconfig, nelec, 3))
+    epos = np.zeros((nconfig, np.sum(mol.nelec), 3))
     wts = mol.atom_charges()
     wts = wts / np.sum(wts)
 
@@ -64,7 +63,7 @@ def initial_guess(mol, nconfig, r=1.0):
 
     epos += r * np.random.randn(*epos.shape)  # random shifts from atom positions
     if hasattr(mol, "a"):
-        epos = PeriodicConfigs(epos, mol.a)
+        epos = PeriodicConfigs(epos, mol.lattice_vectors())
     else:
         epos = OpenConfigs(epos)
     return epos

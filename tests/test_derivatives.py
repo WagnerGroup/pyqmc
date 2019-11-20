@@ -64,7 +64,7 @@ def test_pbc_wfs():
     """
 
     from pyscf.pbc import lib, gto, scf
-    from pyqmc.slaterpbc import PySCFSlaterPBC
+    from pyqmc.slaterpbc import PySCFSlaterPBC, get_supercell
     from pyqmc.jastrowspin import JastrowSpin
     from pyqmc.multiplywf import MultiplyWF
     from pyqmc.coord import OpenConfigs
@@ -78,13 +78,13 @@ def test_pbc_wfs():
     # mf_uhf = scf.KUKS(mol).run()
     epsilon = 1e-5
     nconf = 10
-    epos = pyqmc.initial_guess(mol, nconf)
-    supercell = np.eye(3)
+    supercell = get_supercell(mol, S=np.eye(3))
+    epos = pyqmc.initial_guess(supercell, nconf)
     for wf in [
-        MultiplyWF(PySCFSlaterPBC(mol, mf, supercell), JastrowSpin(mol)),
-        PySCFSlaterPBC(mol, mf, supercell),
-        # PySCFSlaterPBC(mol, mf_uhf, supercell),
-        # PySCFSlaterPBC(mol, mf_rohf, supercell),
+        MultiplyWF(PySCFSlaterPBC(supercell, mf), JastrowSpin(mol)),
+        PySCFSlaterPBC(supercell, mf),
+        # PySCFSlaterPBC(supercell, mf_uhf),
+        # PySCFSlaterPBC(supercell, mf_rohf),
     ]:
         for k in wf.parameters:
             if k != "mo_coeff":

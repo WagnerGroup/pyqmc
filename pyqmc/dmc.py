@@ -104,13 +104,13 @@ def dmc_propagate(
         acc = np.zeros(nelec)
         for e in range(nelec):
             # Propose move
-            grad = drift_limiter(wf.gradient(e, configs.electron(e)).T, tstep)
+            grad = drift_limiter(np.real(wf.gradient(e, configs.electron(e)).T), tstep)
             gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconfig, 3))
             eposnew = configs.configs[:, e, :] + gauss + grad
             newepos = configs.make_irreducible(e, eposnew)
 
             # Compute reverse move
-            new_grad = drift_limiter(wf.gradient(e, newepos).T, tstep)
+            new_grad = drift_limiter(np.real(wf.gradient(e, newepos).T), tstep)
             forward = np.sum(gauss ** 2, axis=1)
             backward = np.sum((gauss + grad + new_grad) ** 2, axis=1)
             # forward = np.sum((configs[:, e, :] + grad - eposnew) ** 2, axis=1)

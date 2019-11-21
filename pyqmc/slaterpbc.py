@@ -38,7 +38,7 @@ def get_supercell(cell, S):
         pts = np.linalg.multi_dot((possible_pts[select], S, latvec))
         return pts
 
-    scale = int(np.round(np.linalg.det(S)))
+    scale = np.abs(int(np.round(np.linalg.det(S))))
     superlattice = np.dot(S, cell.lattice_vectors())
     Rpts = get_supercell_copies(cell.lattice_vectors(), S)
     atom = []

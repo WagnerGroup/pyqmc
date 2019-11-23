@@ -10,6 +10,7 @@ import numpy as np
 import pyqmc.mc as mc
 import sys
 import pandas as pd
+import h5py
 
 
 def limdrift(g, tau, acyrus=0.25):
@@ -222,6 +223,22 @@ def branch(configs, weights):
     return configs, weights
 
 
+def dmc_file(hdf_file, data, attr, configs, weights):
+    import pyqmc.hdftools as hdftools
+
+    if hdf_file is not None:
+        with h5py.File(hdf_file, "a") as hdf:
+            if "configs" not in hdf.keys():
+                hdftools.setup_hdf(hdf, data[0], attr)
+                hdf.create_dataset("configs", configs.configs.shape)
+            if "weights" not in hdf.keys():
+                hdf.create_dataset("weights", weights.shape)
+            for d in data:
+                hdftools.append_hdf(hdf, d)
+            hdf["configs"][:, :, :] = configs.configs
+            hdf["weights"][:] = weights
+
+
 def rundmc(
     wf,
     configs,
@@ -238,6 +255,7 @@ def rundmc(
     ekey=("energy", "total"),
     propagate=dmc_propagate,
     feedback=1.0,
+    hdf_file=None,
     **kwargs,
 ):
     """
@@ -274,6 +292,15 @@ def rundmc(
       weights: The final weights from this calculation
       
     """
+    # Restart
+    if hdf_file is not None:
+        with h5py.File(hdf_file, "a") as hdf:
+            if "configs" in hdf.keys():
+                configs.configs = np.array(hdf["configs"])
+                weights = np.array(hdf["weights"])
+                if verbose:
+                    print("Restarted calculation")
+
     nconfig, nelec = configs.configs.shape[0:2]
     if weights is None:
         weights = np.ones(nconfig)
@@ -317,6 +344,7 @@ def rundmc(
             drift_limiter=drift_limiter,
             **kwargs,
         )
+        dmc_file(hdf_file, df_, dict(tstep=tstep), configs, weights)
         df_ = pd.DataFrame(df_)
         df_["eref"] = eref
         # print(df_)

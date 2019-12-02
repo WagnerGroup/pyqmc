@@ -234,7 +234,7 @@ def dmc_file(hdf_file, data, attr, configs, weights):
             if "weights" not in hdf.keys():
                 hdf.create_dataset("weights", weights.shape)
             for i in range(len(data)):
-                hdftools.append_hdf(hdf, df.loc[i])
+                hdftools.append_hdf(hdf, data.loc[i])
             hdf["configs"][:, :, :] = configs.configs
             hdf["weights"][:] = weights
 

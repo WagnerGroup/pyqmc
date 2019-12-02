@@ -156,7 +156,7 @@ def dmc_propagate(
         avg["step"] = stepoffset + step
 
         df.append(avg)
-    return df, configs, weights
+    return pd.DataFrame(df), configs, weights
 
 
 def limit_timestep(weights, elocnew, elocold, eref, start, stop):
@@ -229,12 +229,12 @@ def dmc_file(hdf_file, data, attr, configs, weights):
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
             if "configs" not in hdf.keys():
-                hdftools.setup_hdf(hdf, data[0], attr)
+                hdftools.setup_hdf(hdf, data.loc[0], attr)
                 hdf.create_dataset("configs", configs.configs.shape)
             if "weights" not in hdf.keys():
                 hdf.create_dataset("weights", weights.shape)
-            for d in data:
-                hdftools.append_hdf(hdf, d)
+            for i in range(len(data)):
+                hdftools.append_hdf(hdf, df.loc[i])
             hdf["configs"][:, :, :] = configs.configs
             hdf["weights"][:] = weights
 
@@ -345,7 +345,6 @@ def rundmc(
             **kwargs,
         )
         dmc_file(hdf_file, df_, dict(tstep=tstep), configs, weights)
-        df_ = pd.DataFrame(df_)
         df_["eref"] = eref
         # print(df_)
         df.append(df_)

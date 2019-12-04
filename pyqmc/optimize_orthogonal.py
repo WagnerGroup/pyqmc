@@ -6,22 +6,15 @@ import pyqmc
 import pyqmc.hdftools as hdftools
 
 
-def ortho_hdf(hdf_file, data, attr, configs, wfs):
+def ortho_hdf(hdf_file, data, attr, configs):
 
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
             if "configs" not in hdf.keys():
                 hdftools.setup_hdf(hdf, data, attr)
                 hdf.create_dataset("configs", configs.configs.shape)
-                for i,parameters in enumerate(wfs):
-                    hdf.create_group(f"wf{i}")
-                    for k, it in parameters.items():
-                        hdf.create_dataset(f"wf{i}/" + k, data=it)
             hdftools.append_hdf(hdf, data)
             hdf["configs"][:, :, :] = configs.configs
-            for i,parameters in enumerate(wfs):
-                for k, it in parameters.items():
-                    hdf[f"wf{i}/" + k][...] = it.copy()
 
 
 from pyqmc.mc import limdrift
@@ -120,6 +113,7 @@ def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.
     forcing_N = None,
     max_step = 10.0,
     alpha_mix = .5,
+    hdf_file =None
 ):
     r"""
     Minimize 
@@ -153,8 +147,10 @@ def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.
         forcing_N = 10*forcing
     parameters = pgrad.transform.serialize_parameters(wfs[1].parameters)
     last_change = np.zeros(parameters.shape)
+    attr = dict(tstep=tstep, nsteps=nsteps, forcing=forcing, warmup=warmup,
+    Starget=Starget, Ntarget=Ntarget, forcing_N=forcing_N, max_step=max_step, alpha_mix=alpha_mix)
     for step in range(nsteps): 
-        return_data = sample_overlap(wfs,configs, pgrad)
+        return_data = sample_overlap(wfs,coords, pgrad)
         avg_data = {}
         for k, it in return_data.items():
             avg_data[k] = np.average(it[warmup:,...], axis=0)
@@ -181,10 +177,18 @@ def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.
         parameters += this_change
         for k, it in pgrad.transform.deserialize(parameters).items():
             wfs[1].parameters[k] = it
-        print("energies", avg_data['total'], avg_data['weight'])
-        print("Normalization", N)
-        print("overlap", avg_data['overlap'][0,1])
         last_change = this_change
+
+        print("energies", avg_data['total'])
+        print("Normalization", N, 'target', Ntarget)
+        print("overlap", S[1,0], 'target', Starget )
+        save_data = {'energies': avg_data['total'],
+                    'overlap': S,
+                    'gradient': total_derivative,
+                    'N' : N,
+                    'parameters': parameters}
+        
+        ortho_hdf(hdf_file, save_data, attr, coords)
 
             
 
@@ -206,7 +210,7 @@ if __name__ =="__main__":
 
     wf = pyqmc.slater_jastrow(mol, mf)
 
-    nconfig = 500
+    nconfig = 4000
     acc = pyqmc.gradient_generator(mol, wf)
     configs = pyqmc.initial_guess(mol, nconfig)
     wf, linedata = pyqmc.line_minimization(wf, configs, acc)
@@ -214,7 +218,8 @@ if __name__ =="__main__":
     wf2.parameters['wf1mo_coeff_alpha'] += .01*np.random.randn(*wf2.parameters['wf1mo_coeff_alpha'].shape)
     wf2.parameters['wf1mo_coeff_beta'] += .01*np.random.randn(*wf2.parameters['wf1mo_coeff_beta'].shape)
 
-    optimize_orthogonal([wf,wf2], configs, acc, nsteps = 200)
+    for starget in [1.0, 0.8, 0.6, 0.4, 0.2, 0.0, -0.2, -0.4, -0.6, -0.8]:
+        optimize_orthogonal([wf,wf2], configs, acc, nsteps = 50, hdf_file = f'nconfig4000ortho{starget}.hdf5', Starget = starget)
     #avg_data = {}
     #for k, it in return_data.items():
     #    avg_data[k] = np.mean(it, axis=0)

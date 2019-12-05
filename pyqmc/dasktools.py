@@ -71,7 +71,7 @@ def distvmc(
         collected_data = (
             pd.DataFrame(iterdata)
             .groupby("step", as_index=False)
-            .apply(lambda x: x.mean())
+            .apply(lambda x: x.stack().groupby(level=1).apply(np.mean, axis=0)) #Added for array returns, e.g. obdm, tbdm
             .to_dict("records")
         )
         if verbose:

@@ -233,11 +233,10 @@ class PolyPadeFunction:
         dzdx = rvec / (r * self.parameters["rcut"])
         d2pdz2_over_dpdz = (3 * z - 1) / (z * (z - 1))
         d2bdp2_over_dbdp = -2 * beta / (1 + beta * p)
-        d2zdx2_over_dzdx = (1 - (rvec / r) ** 2) / rvec
+        d2zdx2 = (1 - (rvec / r) ** 2) / (r * self.parameters["rcut"])
         grad = dbdp * dpdz * dzdx
-        lapl = grad * (
-            d2bdp2_over_dbdp * dpdz * dzdx + d2pdz2_over_dpdz * dzdx + d2zdx2_over_dzdx
-        )
+        lapl = grad * (d2bdp2_over_dbdp * dpdz * dzdx + d2pdz2_over_dpdz * dzdx)
+        lapl += dbdp * dpdz * d2zdx2
         lapl[mask] = 0
         return lapl
 
@@ -262,11 +261,9 @@ class PolyPadeFunction:
         grad = dbdp * dpdz * dzdx
         d2pdz2_over_dpdz = (3 * z - 1) / (z * (z - 1))
         d2bdp2_over_dbdp = -2 * beta / (1 + beta * p)
-        d2zdx2_over_dzdx = (1 - (rvec / r) ** 2) / rvec
-        lap = grad.copy()
-        lap *= (
-            d2bdp2_over_dbdp * dpdz * dzdx + d2pdz2_over_dpdz * dzdx + d2zdx2_over_dzdx
-        )
+        d2zdx2 = (1 - (rvec / r) ** 2) / (r * self.parameters["rcut"])
+        lap = grad * (d2bdp2_over_dbdp * dpdz * dzdx + d2pdz2_over_dpdz * dzdx)
+        lap += dbdp * dpdz * d2zdx2
         grad[mask] = 0
         lap[mask] = 0
         return grad, lap

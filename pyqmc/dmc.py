@@ -10,6 +10,7 @@ import numpy as np
 import pyqmc.mc as mc
 import sys
 import pandas as pd
+import h5py
 
 
 def limdrift(g, tau, acyrus=0.25):
@@ -104,13 +105,13 @@ def dmc_propagate(
         acc = np.zeros(nelec)
         for e in range(nelec):
             # Propose move
-            grad = drift_limiter(wf.gradient(e, configs.electron(e)).T, tstep)
+            grad = drift_limiter(np.real(wf.gradient(e, configs.electron(e)).T), tstep)
             gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconfig, 3))
             eposnew = configs.configs[:, e, :] + gauss + grad
             newepos = configs.make_irreducible(e, eposnew)
 
             # Compute reverse move
-            new_grad = drift_limiter(wf.gradient(e, newepos).T, tstep)
+            new_grad = drift_limiter(np.real(wf.gradient(e, newepos).T), tstep)
             forward = np.sum(gauss ** 2, axis=1)
             backward = np.sum((gauss + grad + new_grad) ** 2, axis=1)
             # forward = np.sum((configs[:, e, :] + grad - eposnew) ** 2, axis=1)
@@ -155,7 +156,7 @@ def dmc_propagate(
         avg["step"] = stepoffset + step
 
         df.append(avg)
-    return df, configs, weights
+    return pd.DataFrame(df), configs, weights
 
 
 def limit_timestep(weights, elocnew, elocold, eref, start, stop):
@@ -222,6 +223,22 @@ def branch(configs, weights):
     return configs, weights
 
 
+def dmc_file(hdf_file, data, attr, configs, weights):
+    import pyqmc.hdftools as hdftools
+
+    if hdf_file is not None:
+        with h5py.File(hdf_file, "a") as hdf:
+            if "configs" not in hdf.keys():
+                hdftools.setup_hdf(hdf, data.loc[0], attr)
+                hdf.create_dataset("configs", configs.configs.shape)
+            if "weights" not in hdf.keys():
+                hdf.create_dataset("weights", weights.shape)
+            for i in range(len(data)):
+                hdftools.append_hdf(hdf, data.loc[i])
+            hdf["configs"][:, :, :] = configs.configs
+            hdf["weights"][:] = weights
+
+
 def rundmc(
     wf,
     configs,
@@ -238,6 +255,7 @@ def rundmc(
     ekey=("energy", "total"),
     propagate=dmc_propagate,
     feedback=1.0,
+    hdf_file=None,
     **kwargs,
 ):
     """
@@ -274,6 +292,15 @@ def rundmc(
       weights: The final weights from this calculation
       
     """
+    # Restart
+    if hdf_file is not None:
+        with h5py.File(hdf_file, "a") as hdf:
+            if "configs" in hdf.keys():
+                configs.configs = np.array(hdf["configs"])
+                weights = np.array(hdf["weights"])
+                if verbose:
+                    print("Restarted calculation")
+
     nconfig, nelec = configs.configs.shape[0:2]
     if weights is None:
         weights = np.ones(nconfig)
@@ -317,7 +344,7 @@ def rundmc(
             drift_limiter=drift_limiter,
             **kwargs,
         )
-        df_ = pd.DataFrame(df_)
+        dmc_file(hdf_file, df_, dict(tstep=tstep), configs, weights)
         df_["eref"] = eref
         # print(df_)
         df.append(df_)

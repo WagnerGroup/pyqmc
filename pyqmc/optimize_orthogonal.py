@@ -166,14 +166,18 @@ def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.
 
         energy_derivative = 2.0*(avg_data['dpH']-avg_data['total'][:,np.newaxis]*avg_data['dppsi'])
         print(energy_derivative.shape)
+        dp = avg_data['dppsi'][-1,...]
+        condition = np.real(avg_data['dpidpj'][-1,...]- np.einsum('i,j->ij',dp,dp))
 
         #assume for the moment we just have two wave functions and the base is 0
         total_derivative = energy_derivative[1,:] + 2.0*forcing * (S[1,0] -Starget)*S_derivative[1,0,:] + 2.0*forcing_N*(N[1]-Ntarget)*N_derivative[1,:]
         print("derivative", total_derivative)
+
         deriv_norm = np.linalg.norm(total_derivative)
         if deriv_norm > max_step:
             total_derivative = total_derivative*max_step/deriv_norm
-        this_change = alpha_mix*last_change - tstep*total_derivative
+        #this_change = alpha_mix*last_change - tstep*total_derivative
+        this_change = alpha_mix*last_change + pyqmc.linemin.sr_update(total_derivative, condition, tstep)
         parameters += this_change
         for k, it in pgrad.transform.deserialize(parameters).items():
             wfs[1].parameters[k] = it

@@ -106,6 +106,81 @@ def sample_overlap(wfs,
             
 
 
+def correlated_sample(wfs, configs, parameters, pgrad):
+    r"""
+    Given a configs sampled from the distribution
+    
+    .. math:: \rho = \sum_i \Psi_i^2
+
+    Compute properties for replacing the last wave function with each of parameters
+
+    For energy
+
+    .. math:: \langle E \rangle = \left\langle \frac{H\Psi}{\Psi} \frac{|\Psi|^2}{\rho}  \right\rangle
+
+    The ratio can be computed as 
+
+    .. math:: \frac{|\Psi|^2}{\rho} = \frac{1}{\sum_i e^{\alpha_i - \alpha} 
+
+    Where we write 
+
+    .. math:: \Psi = e^{i\theta}{e^\alpha} 
+
+    We also compute 
+
+    .. math:: \langle S_i \rangle = \left\langle \frac{\Psi_i^* \Psi}{\rho} \right\rangle
+
+    And 
+
+    .. math:: \langle N_i \rangle = \left\langle \frac{|\Psi_i|^2}{\rho} \right\rangle
+
+    """
+    p0 = pgrad.transform.serialize_parameters(wfs[-1].parameters)
+    log_values0 = np.array([wf.value() for wf in wfs])
+    nparms = len(parameters)
+    nconfig = configs.configs.shape[0]
+    ref = np.max(log_values0[:,1,:])
+    normalized_values = log_values0[:,0,:]*np.exp(log_values0[:,1,:] - ref)
+    denominator = np.sum(np.exp(2*(log_values0[:,1,:]-ref)),axis=0)
+
+    weight = np.array([np.exp(-2*(log_values0[i,1,:]-log_values0[:,1,:])) for i in range(len(wfs))])
+    weight = np.mean(1.0/np.sum(weight,axis=1), axis=1)
+    print('weight', weight.shape)
+
+    data = {'total':np.zeros(nparms),
+            'weight':np.zeros(nparms),
+            'overlap':np.zeros((nparms,len(wfs))) } 
+    data['base_weight'] = weight
+    for p,parameter in enumerate(parameters): 
+        #print(parameter)
+        wf = wfs[-1]
+        for k, it in pgrad.transform.deserialize(parameter).items():
+            wf.parameters[k] = it
+        wf.recompute(configs)
+        val = wf.value()
+        dat = pgrad(configs,wf)
+        #print(log_values0.shape, val[1].shape)
+    
+        wt = 1./np.sum(np.exp(2*log_values0[:,1,:]-2*val[1][np.newaxis,:]),axis=0)
+        normalized_val = val[0]*np.exp(val[1]-ref)
+        # This is the new rho with the test wave function 
+        rhoprime = (np.sum(np.exp(2*log_values0[0:-1,1,:] -2*ref),axis=0)+np.exp(2*val[1]-2*ref))/denominator
+
+        overlap = np.einsum("k,jk->jk",normalized_val,normalized_values)/denominator
+
+        data['total'][p] = np.average(dat['total'],weights= wt)
+        data['weight'][p] = np.mean(wt)/np.mean(rhoprime)
+        print(np.mean(wt), weight, np.mean(rhoprime))
+        data['overlap'][p] = np.mean(overlap,axis=1)/np.sqrt(np.mean(wt)*weight)
+        
+        #print('wt', wt)
+    #print('average energy',data['total'])
+    for k, it in pgrad.transform.deserialize(p0).items():
+        wfs[-1].parameters[k] = it
+    return data
+
+
+
 def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.0,
     warmup = 5,
     Starget = 0.0,
@@ -113,7 +188,8 @@ def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.
     forcing_N = None,
     max_step = 10.0,
     alpha_mix = .5,
-    hdf_file =None
+    hdf_file =None,
+    update_method = 'linemin'
 ):
     r"""
     Minimize 
@@ -144,9 +220,14 @@ def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.
     Note that in the definition of N there is an arbitrary normalization of rho. The targets are set relative to the normalization of the reference wave functions. 
     """
     if forcing_N is None:
-        forcing_N = 10*forcing
+        forcing_N = 1*forcing
     parameters = pgrad.transform.serialize_parameters(wfs[1].parameters)
     last_change = np.zeros(parameters.shape)
+    beta1 = 0.9
+    beta2=0.999
+    adam_m = np.zeros(parameters.shape)
+    adam_v = np.zeros(parameters.shape)
+    adam_epsilon = 1e-8
     attr = dict(tstep=tstep, nsteps=nsteps, forcing=forcing, warmup=warmup,
     Starget=Starget, Ntarget=Ntarget, forcing_N=forcing_N, max_step=max_step, alpha_mix=alpha_mix)
     for step in range(nsteps): 
@@ -172,13 +253,43 @@ def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.
         #assume for the moment we just have two wave functions and the base is 0
         total_derivative = energy_derivative[1,:] + 2.0*forcing * (S[1,0] -Starget)*S_derivative[1,0,:] + 2.0*forcing_N*(N[1]-Ntarget)*N_derivative[1,:]
         print("derivative", total_derivative)
+        print("N derivative", 2.0*forcing_N*(N[1]-Ntarget)*N_derivative[1,:])
 
         deriv_norm = np.linalg.norm(total_derivative)
         if deriv_norm > max_step:
             total_derivative = total_derivative*max_step/deriv_norm
-        #this_change = alpha_mix*last_change - tstep*total_derivative
         this_change = alpha_mix*last_change + pyqmc.linemin.sr_update(total_derivative, condition, tstep)
-        parameters += this_change
+
+        test_parameters=[]
+        test_tsteps = np.linspace(-tstep,tstep, 10)
+        for tmp_tstep in test_tsteps:
+            test_parameters.append(parameters + pyqmc.linemin.sr_update(total_derivative, condition, tmp_tstep))
+            #test_parameters.append(parameters - tmp_tstep * total_derivative)
+
+        data = correlated_sample(wfs, coords, test_parameters, pgrad)
+        yfit = []
+        print('test_tsteps', test_tsteps)
+        print('energy', 'S', 'weight', 'cost function')
+        for enp, Sp, Np in zip(data['total'],data['overlap'],data['weight']):
+            cost = enp + forcing*(Sp[0]-Starget)**2 + forcing_N*(Np-Ntarget)**2
+            print(enp, Sp[0], Np, cost)
+            yfit.append(cost)
+
+        min_tstep = pyqmc.linemin.stable_fit(test_tsteps, yfit)
+
+        if update_method == 'linemin':
+            parameters +=  pyqmc.linemin.sr_update(total_derivative, condition, min_tstep)
+        elif update_method == 'momentum':
+            parameters += this_change
+        elif update_method =='adam':
+            adam_m = beta1*adam_m + (1-beta1)*total_derivative
+            adam_v = beta2*adam_v + (1-beta2)*total_derivative**2
+            adam_mhat = adam_m/(1-beta1**(step+1))
+            adam_vhat = adam_v/(1-beta2**(step+1))
+            parameters -= tstep*adam_mhat/(np.sqrt(adam_vhat)+adam_epsilon)
+        else:
+            raise ValueError("update_method not implemented:" + update_method)
+
         for k, it in pgrad.transform.deserialize(parameters).items():
             wfs[1].parameters[k] = it
         last_change = this_change
@@ -191,8 +302,10 @@ def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.
                     'gradient': total_derivative,
                     'N' : N,
                     'parameters': parameters}
-        
+        print('Determinant coefficients', wfs[-1].parameters['wf1det_coeff'])
+
         ortho_hdf(hdf_file, save_data, attr, coords)
+
 
             
 

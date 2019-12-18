@@ -101,9 +101,10 @@ class OBDMAccumulator:
             fsum = np.sum(borb_aux * borb_aux, axis=1)
             norm = borb_aux * borb_aux / fsum[:, np.newaxis]
 
-            coords = configs.configs.reshape((nconf * nelec, -1))
+            coords = configs.configs.reshape((configs.configs.shape[0] * configs.configs.shape[1], -1))
             ao_configs = self._mol.eval_gto("GTOval_sph", coords)
-            borb_configs = ao_configs.dot(self._orb_coeff).reshape((nconf, nelec, -1))
+            borb_configs = ao_configs.dot(self._orb_coeff).reshape((configs.configs.shape[0], configs.configs.shape[1], -1))
+            borb_configs = borb_configs[:, self._electrons, :]
 
             orbratio = np.einsum(
                 "ij,ink->injk",
@@ -111,14 +112,13 @@ class OBDMAccumulator:
                 / fsum[auxassignments[sweep], np.newaxis],
                 borb_configs,
             )
-
             epos = configs.make_irreducible(
                 e[sweep], extra_configs[sweep][auxassignments[sweep]]
             )
-            wfratio = wf.testvalue(e[sweep], epos)
-
+            wfratio = wf.testvalue_many(e[sweep], epos)
+           
             results["value"] += np.einsum("in,injk->ijk", wfratio, orbratio)
-            results["norm"] += norm[auxassignments[sweep]].sum(axis=0)
+            results["norm"] += norm[auxassignments[sweep]]
 
         results["value"] /= self._nstep
         results["norm"] = results["norm"] / self._nstep

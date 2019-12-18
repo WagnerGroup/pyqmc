@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import scipy
+import h5py
 
 
 def sr_update(pgrad, Sij, step, eps=0.1):
@@ -21,17 +22,19 @@ def sr12_update(pgrad, Sij, step, eps=0.1):
 
 def opt_hdf(hdf_file, data, attr, configs, parameters):
     import pyqmc.hdftools as hdftools
+
     if hdf_file is not None:
-        if 'configs' not in hdf_file.keys():
-            hdftools.setup_hdf(hdf_file, data, attr)
-            hdf_file.create_dataset('configs', configs.configs.shape)
-            hdf_file.create_group('wf')
+        with h5py.File(hdf_file, "a") as hdf:
+            if "configs" not in hdf.keys():
+                hdftools.setup_hdf(hdf, data, attr)
+                hdf.create_dataset("configs", configs.configs.shape)
+                hdf.create_group("wf")
+                for k, it in parameters.items():
+                    hdf.create_dataset("wf/" + k, data=it)
+            hdftools.append_hdf(hdf, data)
+            hdf["configs"][:, :, :] = configs.configs
             for k, it in parameters.items():
-                hdf_file.create_dataset('wf/'+k, data=it)
-        hdftools.append_hdf(hdf_file, data)
-        hdf_file['configs'][:, :, :] = configs.configs
-        for k, it in parameters.items():
-            hdf_file['wf/'+k][...] = it.copy()
+                hdf["wf/" + k][...] = it.copy()
 
 
 def stable_fit(xfit, yfit):
@@ -70,7 +73,7 @@ def line_minimization(
     update_kws=None,
     verbose=False,
     npts=5,
-    hdf_file=None
+    hdf_file=None,
 ):
     """Optimizes energy by determining gradients with stochastic reconfiguration
         and minimizing the energy along gradient directions using correlated sampling.
@@ -122,14 +125,16 @@ def line_minimization(
     if update_kws is None:
         update_kws = {}
 
-    attr = dict(maxiters=maxiters, npts=npts, steprange = steprange)
-    #for k, it in lmoptions.items():
-    #    attr['linemin_'+k] = it
-    #for k, it in vmcoptions.items():
-    #    attr['vmc_'+k] = it
-    #for k, it in update_kws.items():
-    #    attr['update_'+k] = it
+    # Restart
+    if hdf_file is not None:
+        with h5py.File(hdf_file, "a") as hdf:
+            if "wf" in hdf.keys():
+                grp = hdf["wf"]
+                for k in grp.keys():
+                    wf.parameters[k] = np.array(grp[k])
 
+    # Attributes for linemin
+    attr = dict(maxiters=maxiters, npts=npts, steprange=steprange)
 
     def gradient_energy_function(x, coords):
         newparms = pgrad_acc.transform.deserialize(x)
@@ -142,14 +147,9 @@ def line_minimization(
         dpH = np.mean(df["pgraddpH"], axis=0)
         dp = np.mean(df["pgraddppsi"], axis=0)
         dpdp = np.mean(df["pgraddpidpj"], axis=0)
-        grad = 2 * (dpH - en * dp)
-        Sij = dpdp - np.einsum("i,j->ij", dp, dp)  # + eps*np.eye(dpdp.shape[0])
+        grad = 2 * np.real(dpH - en * dp)
+        Sij = np.real(dpdp - np.einsum("i,j->ij", dp, dp))
         return coords, df["pgradtotal"].values[-1], grad, Sij, en, en_err
-
-    if hdf_file is not None and 'wf' in hdf_file.keys():
-        grp = hdf_file['wf']
-        for k in grp.keys():
-            wf.parameters[k] = np.array(grp[k])
 
     x0 = pgrad_acc.transform.serialize_parameters(wf.parameters)
 
@@ -163,12 +163,12 @@ def line_minimization(
         # Calculate gradient accurately
         coords, last_en, pgrad, Sij, en, en_err = gradient_energy_function(x0, coords)
         step_data = {}
-        step_data['energy'] = en
-        step_data['energy_error']= en_err
-        step_data['x'] = x0
-        step_data['pgradient'] = pgrad
-        step_data['iteration'] = it
-        
+        step_data["energy"] = en
+        step_data["energy_error"] = en_err
+        step_data["x"] = x0
+        step_data["pgradient"] = pgrad
+        step_data["iteration"] = it
+
         if verbose:
             print("descent en", en, en_err)
             print("descent |grad|", np.linalg.norm(pgrad), flush=True)
@@ -188,22 +188,20 @@ def line_minimization(
             yfit.append(en)
             if verbose:
                 print(
-                "descent step {:<15.10} {:<15.10} weight stddev {:<15.10}".format(
-                    step, en, np.std(data["weight"])
-                ),
-                flush=True,
+                    "descent step {:<15.10} {:<15.10} weight stddev {:<15.10}".format(
+                        step, en, np.std(data["weight"])
+                    ),
+                    flush=True,
                 )
 
         xfit.extend(steps)
         est_min = stable_fit(xfit, yfit)
         x0 += update(pgrad, Sij, est_min, **update_kws)
-        step_data['tau'] = xfit
-        step_data['yfit'] = yfit
+        step_data["tau"] = xfit
+        step_data["yfit"] = yfit
 
-        opt_hdf(hdf_file, step_data, attr, coords,
-                      pgrad_acc.transform.deserialize(x0))
+        opt_hdf(hdf_file, step_data, attr, coords, pgrad_acc.transform.deserialize(x0))
         df.append(step_data)
-
 
     newparms = pgrad_acc.transform.deserialize(x0)
     for k in newparms:

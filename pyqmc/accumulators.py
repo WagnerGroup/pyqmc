@@ -1,17 +1,36 @@
 import numpy as np
-from pyqmc.energy import energy
+import pyqmc.energy as energy
+from pyqmc.ewald import Ewald
 
 
 class EnergyAccumulator:
     """returns energy of each configuration in a dictionary. 
   Keys and their meanings can be found in energy.energy """
 
-    def __init__(self, mol, threshold=10):
+    def __init__(self, mol, threshold=10, **kwargs):
         self.mol = mol
         self.threshold = threshold
+        if hasattr(mol, "a"):
+            print("Using Ewald")
+            self.ewald = Ewald(mol, **kwargs)
+
+            def compute_energy(mol, configs, wf, threshold):
+                ee, ei, ii = self.ewald.energy(configs)
+                ecp_val = energy.get_ecp(mol, configs, wf, threshold)
+                ke = energy.kinetic(configs, wf)
+                return {
+                    "ke": ke,
+                    "ee": ee,
+                    "ei": ei + ecp_val,
+                    "total": ke + ee + ei + ecp_val + ii,
+                }
+
+            self.compute_energy = compute_energy
+        else:
+            self.compute_energy = energy.energy
 
     def __call__(self, configs, wf):
-        return energy(self.mol, configs, wf, self.threshold)
+        return self.compute_energy(self.mol, configs, wf, self.threshold)
 
     def avg(self, configs, wf):
         d = {}
@@ -90,33 +109,46 @@ class LinearTransform:
 class PGradTransform:
     """   """
 
-    def __init__(self, enacc, transform, nodal_cutoff=1e-5):
+    def __init__(self, enacc, transform, nodal_cutoff=1e-3):
         self.enacc = enacc
         self.transform = transform
         self.nodal_cutoff = nodal_cutoff
 
-    def _node_cut(self, configs, wf):
-        """ Return true if a given configuration is within nodal_cutoff 
-        of the node """
+    def _node_regr(self, configs, wf):
+        """ 
+        Return true if a given configuration is within nodal_cutoff 
+        of the node 
+        Also return the regularization polynomial if true, 
+        f = a * r ** 2 + b * r ** 4 + c * r ** 3
+        """
         ne = configs.configs.shape[1]
         d2 = 0.0
         for e in range(ne):
             d2 += np.sum(wf.gradient(e, configs.electron(e)) ** 2, axis=0)
-        r = 1.0 / (d2 * ne * ne)
-        return r < self.nodal_cutoff ** 2
+        r = 1.0 / d2
+        mask = r < self.nodal_cutoff ** 2
+
+        c = 7.0 / (self.nodal_cutoff ** 6)
+        b = -15.0 / (self.nodal_cutoff ** 4)
+        a = 9.0 / (self.nodal_cutoff ** 2)
+
+        f = a * r + b * r ** 2 + c * r ** 3
+        f[np.logical_not(mask)] = 1.0
+
+        return mask, f
 
     def __call__(self, configs, wf):
         pgrad = wf.pgradient()
         d = self.enacc(configs, wf)
         energy = d["total"]
         dp = self.transform.serialize_gradients(pgrad)
-        node_cut = self._node_cut(configs, wf)
-        dp[node_cut, :] = 0.0
-        # print('number cut off',np.sum(node_cut))
 
-        d["dpH"] = np.einsum("i,ij->ij", energy, dp)
+        node_cut, f = self._node_regr(configs, wf)
+
+        d["dpH"] = np.einsum("i,ij->ij", energy, dp * f[:, np.newaxis])
         d["dppsi"] = dp
-        d["dpidpj"] = np.einsum("ij,ik->ijk", dp, dp)
+        d["dpidpj"] = np.einsum("ij,ik->ijk", dp, dp * f[:, np.newaxis])
+
         return d
 
     def avg(self, configs, wf):
@@ -126,15 +158,13 @@ class PGradTransform:
         energy = den["total"]
         dp = self.transform.serialize_gradients(pgrad)
 
-        node_cut = self._node_cut(configs, wf)
-        dp[node_cut, :] = 0.0
-        # print('number cut off',np.sum(node_cut))
+        node_cut, f = self._node_regr(configs, wf)
 
         d = {}
         for k, it in den.items():
             d[k] = np.mean(it, axis=0)
-        d["dpH"] = np.einsum("i,ij->j", energy, dp) / nconf
+        d["dpH"] = np.einsum("i,ij->j", energy, dp * f[:, np.newaxis]) / nconf
         d["dppsi"] = np.mean(dp, axis=0)
-        d["dpidpj"] = np.einsum("ij,ik->jk", dp, dp) / nconf
+        d["dpidpj"] = np.einsum("ij,ik->jk", dp, dp * f[:, np.newaxis]) / nconf
 
         return d

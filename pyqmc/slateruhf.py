@@ -168,16 +168,20 @@ class PySCFSlaterUHF:
         self._dets[s][0][mask] *= self.get_phase(ratio)  # will not work for complex!
         self._dets[s][1][mask] += np.log(np.abs(ratio))
 
-    def _testrow(self, e, vec, mask=None):
+    def _testrow(self, e, vec, mask=None, spin=None):
         """vec is a nconfig,nmo vector which replaces row e"""
-        s = int(e >= self._nelec[0])
+        if spin is None: 
+            s = int(e >= self._nelec[0])
+        else: 
+            s = spin
+        
         if mask is None:
             return np.einsum(
-                "i...j,ij->i...", vec, self._inverse[s][:, :, e - s * self._nelec[0]]
+                "i...j,ij...->i...", vec, self._inverse[s][:, :, e - s * self._nelec[0]]
             )
 
         return np.einsum(
-            "i...j,ij->i...", vec, self._inverse[s][mask][:, :, e - s * self._nelec[0]]
+            "i...j,ij...->i...", vec, self._inverse[s][mask][:, :, e - s * self._nelec[0]]
         )
 
     def _testcol(self, i, s, vec):
@@ -249,9 +253,7 @@ class PySCFSlaterUHF:
         for spin in [0, 1]:
             ind = (s == spin)
             mo = ao.dot(self.parameters[self._coefflookup[spin]])
-            ratios[:, ind] = np.einsum(
-              "i...j,ij...->i...", mo, self._inverse[spin][mask][:, :, e[ind] - spin * self._nelec[0]]
-            )
+            ratios[:, ind] = self._testrow(e[ind], mo, spin = spin)
         return ratios
 
     def pgradient(self):

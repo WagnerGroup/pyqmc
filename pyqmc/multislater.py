@@ -162,16 +162,20 @@ class MultiSlater:
         self._dets[s][0, mask, :] *= np.sign(ratio)
         self._dets[s][1, mask, :] += np.log(np.abs(ratio))
 
-    def _testrow(self, e, vec, mask=None):
+    def _testrow(self, e, vec, mask=None, spin=None):
         """vec is a nconfig,nmo vector which replaces row e"""
-        s = int(e >= self._nelec[0])
+        if spin is None:
+            s = int(e >= self._nelec[0])
+        else:
+            s = spin
+
         if mask is None:
             mask = [True] * vec.shape[0]
 
         ratios = np.einsum(
             "i...dj,idj...->i...d",
             vec,
-            self._inverse[s][mask, :, :, e - s * self._nelec[0]],
+            self._inverse[s][mask][..., e - s * self._nelec[0]],
         )
         det_array = (
             self._dets[0][0, :, self._det_map[0]][:, mask]

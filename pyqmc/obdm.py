@@ -81,12 +81,12 @@ class OBDMAccumulator:
         acceptance = 0
         naux = self._extra_config.shape[0]
         nelec = len(self._electrons)
-        e = np.repeat(self._electrons, self._nsweeps)
+        e = np.repeat(self._electrons, self._nsweeps).reshape(self._nsweeps, -1)
 
         if extra_configs is None:
-            auxassignments = np.random.randint(0, naux, size=(self._nstep, nconf))
+            auxassignments = np.random.randint(0, naux, size=(self._nsweeps, nconf))
             extra_configs = []
-            for step in range(self._nstep):
+            for sweep in range(self._nsweeps):
                 extra_configs.append(np.copy(self._extra_config))
                 accept, self._extra_config = sample_onebody(
                     self._mol, self._orb_coeff, self._extra_config, tstep=self._tstep
@@ -95,33 +95,30 @@ class OBDMAccumulator:
         else:
             assert auxassignments is not None
 
-        for step in range(self._nstep):
-            points = np.concatenate(
-                [extra_configs[step], configs.configs[:, e[step], :]]
-            )
-            ao = self._mol.eval_gto("GTOval_sph", points)
-            borb = ao.dot(self._orb_coeff)
-
-            # Orbital evaluations at extra coordinate.
-            borb_aux = borb[0:naux, :]
+        for sweep in range(self._nsweeps):
+            ao_aux = self._mol.eval_gto("GTOval_sph", extra_configs[sweep])
+            borb_aux = ao_aux.dot(self._orb_coeff)
             fsum = np.sum(borb_aux * borb_aux, axis=1)
             norm = borb_aux * borb_aux / fsum[:, np.newaxis]
-            borb_configs = borb[naux:, :]
 
-            epos = configs.make_irreducible(
-                e[step], extra_configs[step][auxassignments[step]]
-            )
-            wfratio = wf.testvalue(e[step], epos)
+            coords = configs.configs.reshape((nconf * nelec, -1))
+            ao_configs = self._mol.eval_gto("GTOval_sph", coords)
+            borb_configs = ao_configs.dot(self._orb_coeff).reshape((nconf, nelec, -1))
 
             orbratio = np.einsum(
-                "ij,ik->ijk",
-                borb_aux[auxassignments[step], :]
-                / fsum[auxassignments[step], np.newaxis],
+                "ij,ink->injk",
+                borb_aux[auxassignments[sweep], :]
+                / fsum[auxassignments[sweep], np.newaxis],
                 borb_configs,
             )
 
-            results["value"] += nelec * np.einsum("i,ijk->ijk", wfratio, orbratio)
-            results["norm"] += norm[auxassignments[step]]
+            epos = configs.make_irreducible(
+                e[sweep], extra_configs[sweep][auxassignments[sweep]]
+            )
+            wfratio = wf.testvalue(e[sweep], epos)
+
+            results["value"] += np.einsum("in,injk->ijk", wfratio, orbratio)
+            results["norm"] += norm[auxassignments[sweep]].sum(axis=0)
 
         results["value"] /= self._nstep
         results["norm"] = results["norm"] / self._nstep
@@ -138,13 +135,14 @@ class OBDMAccumulator:
         return davg
 
     def get_extra_configs(self, configs):
-        """ Returns an nstep length array of configurations
+        """ Returns an nsweep length array of configurations
             starting from self._extra_config """
+        
         nconf = configs.configs.shape[0]
         naux = self._extra_config.shape[0]
         extra_configs = []
-        auxassignments = np.random.randint(0, naux, size=(self._nstep, nconf))
-        for step in range(self._nstep):
+        auxassignments = np.random.randint(0, naux, size=(self._nsweep, nconf))
+        for sweep in range(self._nsweep):
             extra_configs.append(np.copy(self._extra_config))
             accept, self._extra_config = sample_onebody(
                 self._mol, self._orb_coeff, self._extra_config, tstep=self._tstep

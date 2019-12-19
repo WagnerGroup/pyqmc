@@ -199,7 +199,7 @@ class TBDMAccumulator:
                 * orb_a_configs[..., self._ijkl[0]]
                 * orb_b_configs[..., self._ijkl[2]]
             )
-            
+
             # Calculation of wf ratio (no McMillan trick yet)
             epos_a = configs.make_irreducible(
                 -1,
@@ -219,16 +219,16 @@ class TBDMAccumulator:
                 wf.updateinternals(ea, configs.electron(ea))
                 wfratio.append(wfratio_a[:, np.newaxis] * wfratio_b)
             wfratio = np.concatenate(wfratio, axis=1)
-            
+           
             # Adding to results
             results["value"] += np.einsum("in,inj->ij", wfratio, orbratio)
             results["norm_a"] += norm_a[auxassignments_a[sweep]]
             results["norm_b"] += norm_b[auxassignments_b[sweep]]
-        
+       
         # Average over sweeps and pairs
-        results["value"] /= self._nsweeps * len(self._pairs)
+        results["value"] /= self._nsweeps
         for e in ["a", "b"]:
-            results["norm_%s" % e] /= self._nsweeps * len(self._pairs)
+            results["norm_%s" % e] /= self._nsweeps
 
         return results
 

@@ -187,7 +187,7 @@ class TBDMAccumulator:
                     / fsum_a[
                         auxassignments_a[sweep], np.newaxis
                     ]
-                ) [..., np.newaxis]
+                ) [:, np.newaxis, :]
                 * (
                     orb_b_aux[auxassignments_b[sweep]][
                         :, self._ijkl[3]
@@ -195,11 +195,11 @@ class TBDMAccumulator:
                     / fsum_b[
                         auxassignments_b[sweep], np.newaxis
                     ]
-                ) [..., np.newaxis]
-                * orb_a_configs[:, self._ijkl[0]]
-                * orb_b_configs[:, self._ijkl[2]]
+                ) [:, np.newaxis, :]
+                * orb_a_configs[..., self._ijkl[0]]
+                * orb_b_configs[..., self._ijkl[2]]
             )
-
+            
             # Calculation of wf ratio (no McMillan trick yet)
             epos_a = configs.make_irreducible(
                 -1,
@@ -219,9 +219,9 @@ class TBDMAccumulator:
                 wf.updateinternals(ea, configs.electron(ea))
                 wfratio.append(wfratio_a[:, np.newaxis] * wfratio_b)
             wfratio = np.concatenate(wfratio, axis=1)
-
+            
             # Adding to results
-            results["value"] += np.einsum("in,ijn->ij", wfratio, orbratio)
+            results["value"] += np.einsum("in,inj->ij", wfratio, orbratio)
             results["norm_a"] += norm_a[auxassignments_a[sweep]]
             results["norm_b"] += norm_b[auxassignments_b[sweep]]
         

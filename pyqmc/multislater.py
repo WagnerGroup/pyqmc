@@ -162,16 +162,20 @@ class MultiSlater:
         self._dets[s][0, mask, :] *= np.sign(ratio)
         self._dets[s][1, mask, :] += np.log(np.abs(ratio))
 
-    def _testrow(self, e, vec, mask=None):
+    def _testrow(self, e, vec, mask=None, spin=None):
         """vec is a nconfig,nmo vector which replaces row e"""
-        s = int(e >= self._nelec[0])
+        if spin is None:
+            s = int(e >= self._nelec[0])
+        else:
+            s = spin
+
         if mask is None:
             mask = [True] * vec.shape[0]
 
         ratios = np.einsum(
-            "i...dj,idj->i...d",
+            "i...dj,idj...->i...d",
             vec,
-            self._inverse[s][mask, :, :, e - s * self._nelec[0]],
+            self._inverse[s][mask][..., e - s * self._nelec[0]],
         )
         det_array = (
             self._dets[0][0, :, self._det_map[0]][:, mask]
@@ -254,6 +258,28 @@ class MultiSlater:
         mo = ao.dot(self.parameters[self._coefflookup[s]])
         mo_vals = mo[..., self._det_occup[s]]
         return self._testrow(e, mo_vals, mask)
+
+    def testvalue_many(self, e, epos, mask=None):
+        """ return the ratio between the current wave function and the wave function if 
+        electron e's position is replaced by epos for each electron"""
+        s = (e >= self._nelec[0]).astype(int)
+        if mask is None:
+            mask = [True] * epos.configs.shape[0]
+        eposmask = epos.configs[mask]
+        if len(eposmask) == 0:
+            return np.zeros(eposmask.shape[:2])
+        ao = self._mol.eval_gto(
+            self.pbc_str + "GTOval_sph", eposmask.reshape((-1, 3))
+        ).reshape((*eposmask.shape[:-1], -1))
+        
+        ratios = np.zeros((epos.configs.shape[0], e.shape[0]))
+        for spin in [0,1]:
+            ind = (s == spin)
+            mo = ao.dot(self.parameters[self._coefflookup[spin]])
+            mo_vals = mo[..., self._det_occup[spin]]
+            ratios[:, ind] = self._testrow(e[ind], mo_vals, mask, spin = spin)
+       
+        return ratios
 
     def pgradient(self):
         """Compute the parameter gradient of Psi. 

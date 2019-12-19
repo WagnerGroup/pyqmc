@@ -75,6 +75,10 @@ class MultiplyWF:
         return self.wf1.testvalue(e, epos, mask=mask) * self.wf2.testvalue(
             e, epos, mask=mask
         )
+    
+    def testvalue_many(self, e, epos, mask=None):
+        return self.wf1.testvalue_many(e, epos, mask=mask) *\
+               self.wf2.testvalue_many(e, epos, mask=mask)
 
     def laplacian(self, e, epos):
         # This is a place where we might want to specialize a vgl function

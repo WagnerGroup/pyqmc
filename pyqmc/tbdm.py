@@ -167,62 +167,62 @@ class TBDMAccumulator:
 
         # Sweeps over electron pairs
         for sweep in range(self._nsweeps):
-                ao_a_aux = self._mol.eval_gto("GTOval_sph", aux_configs_a[sweep])
-                ao_b_aux = self._mol.eval_gto("GTOval_sph", aux_configs_b[sweep])
-                orb_a_aux = ao_a_aux.dot(self._orb_coeff[self._spin_sector[0]])
-                orb_b_aux = ao_b_aux.dot(self._orb_coeff[self._spin_sector[1]])
-                fsum_a = np.sum(orb_a_aux * orb_a_aux, axis=1)
-                fsum_b = np.sum(orb_b_aux * orb_b_aux, axis=1)
-                norm_a = orb_a_aux * orb_a_aux / fsum_a[:, np.newaxis]
-                norm_b = orb_b_aux * orb_b_aux / fsum_b[:, np.newaxis]
+            ao_a_aux = self._mol.eval_gto("GTOval_sph", aux_configs_a[sweep])
+            ao_b_aux = self._mol.eval_gto("GTOval_sph", aux_configs_b[sweep])
+            orb_a_aux = ao_a_aux.dot(self._orb_coeff[self._spin_sector[0]])
+            orb_b_aux = ao_b_aux.dot(self._orb_coeff[self._spin_sector[1]])
+            fsum_a = np.sum(orb_a_aux * orb_a_aux, axis=1)
+            fsum_b = np.sum(orb_b_aux * orb_b_aux, axis=1)
+            norm_a = orb_a_aux * orb_a_aux / fsum_a[:, np.newaxis]
+            norm_b = orb_b_aux * orb_b_aux / fsum_b[:, np.newaxis]
 
-                # We use pySCF's index convention (while Eq. 10 in DOI:10.1063/1.4793531 uses QWalk's)
-                # QWalk -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,j} c_{s2,l} c_{s1,k} > = \phi*_{s1,k} \phi*_{s2,l} \phi_{s2,j} \phi_{s1,i}
-                # pySCF -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,k} c_{s2,l} c_{s1,j} > = \phi*_{s1,j} \phi*_{s2,l} \phi_{s2,k} \phi_{s1,i}
-                orbratio = (
-                    (
-                        orb_a_aux[auxassignments_a[sweep]][
-                            :, self._ijkl[1]
-                        ]
-                        / fsum_a[
-                            auxassignments_a[sweep], np.newaxis
-                        ]
-                    ) [..., np.newaxis]
-                    * (
-                        orb_b_aux[auxassignments_b[sweep]][
-                            :, self._ijkl[3]
-                        ]
-                        / fsum_b[
-                            auxassignments_b[sweep], np.newaxis
-                        ]
-                    ) [..., np.newaxis]
-                    * orb_a_configs[:, self._ijkl[0]]
-                    * orb_b_configs[:, self._ijkl[2]]
-                )
+            # We use pySCF's index convention (while Eq. 10 in DOI:10.1063/1.4793531 uses QWalk's)
+            # QWalk -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,j} c_{s2,l} c_{s1,k} > = \phi*_{s1,k} \phi*_{s2,l} \phi_{s2,j} \phi_{s1,i}
+            # pySCF -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,k} c_{s2,l} c_{s1,j} > = \phi*_{s1,j} \phi*_{s2,l} \phi_{s2,k} \phi_{s1,i}
+            orbratio = (
+                (
+                    orb_a_aux[auxassignments_a[sweep]][
+                        :, self._ijkl[1]
+                    ]
+                    / fsum_a[
+                        auxassignments_a[sweep], np.newaxis
+                    ]
+                ) [..., np.newaxis]
+                * (
+                    orb_b_aux[auxassignments_b[sweep]][
+                        :, self._ijkl[3]
+                    ]
+                    / fsum_b[
+                        auxassignments_b[sweep], np.newaxis
+                    ]
+                ) [..., np.newaxis]
+                * orb_a_configs[:, self._ijkl[0]]
+                * orb_b_configs[:, self._ijkl[2]]
+            )
 
-                # Calculation of wf ratio (no McMillan trick yet)
-                epos_a = configs.make_irreducible(
-                    -1,
-                    aux_configs_a[sweep][auxassignments_a[sweep]],
-                )
-                #epos_a_orig = configs.electron(pair[0])
-                epos_b = configs.make_irreducible(
-                    -1,
-                    aux_configs_b[sweep][auxassignments_b[sweep]],
-                )
+            # Calculation of wf ratio (no McMillan trick yet)
+            epos_a = configs.make_irreducible(
+                -1,
+                aux_configs_a[sweep][auxassignments_a[sweep]],
+            )
+            #epos_a_orig = configs.electron(pair[0])
+            epos_b = configs.make_irreducible(
+                -1,
+                aux_configs_b[sweep][auxassignments_b[sweep]],
+            )
 
-                wfratio_a = wf.testvalue_many(self._pairs[:, 0], epos_a)
-                #wf.updateinternals(pair[0], epos_a)
-                wfratio_b = wf.testvalue_many(self._pairs[:, 1], epos_b)
-                wfratio = wfratio_a * wfratio_b
-                print(orbratio.shape, wfratio.shape)
-                exit(0)
-                #wf.updateinternals(pair[0], epos_a_orig)
+            wfratio_a = wf.testvalue_many(self._pairs[:, 0], epos_a)
+            #wf.updateinternals(pair[0], epos_a)
+            wfratio_b = wf.testvalue_many(self._pairs[:, 1], epos_b)
+            wfratio = wfratio_a * wfratio_b
+            print(orbratio.shape, wfratio.shape)
+            exit(0)
+            #wf.updateinternals(pair[0], epos_a_orig)
 
-                # Adding to results
-                results["value"] += np.einsum("in,ijn->ij", wfratio, orbratio)
-                results["norm_a"] += norm_a[auxassignments_a[sweep]]
-                results["norm_b"] += norm_b[auxassignments_b[sweep]]
+            # Adding to results
+            results["value"] += np.einsum("in,ijn->ij", wfratio, orbratio)
+            results["norm_a"] += norm_a[auxassignments_a[sweep]]
+            results["norm_b"] += norm_b[auxassignments_b[sweep]]
         
         # Average over sweeps and pairs
         results["value"] /= self._nsweeps * len(self._pairs)

@@ -95,16 +95,18 @@ class OBDMAccumulator:
         else:
             assert auxassignments is not None
 
+        #Evaluate VMC configurations
+        coords = configs.configs.reshape((configs.configs.shape[0] * configs.configs.shape[1], -1))
+        ao_configs = self._mol.eval_gto("GTOval_sph", coords)
+        borb_configs = ao_configs.dot(self._orb_coeff).reshape((configs.configs.shape[0], configs.configs.shape[1], -1))
+        borb_configs = borb_configs[:, self._electrons, :]
+        
         for sweep in range(self._nsweeps):
+            #Evaluate 1 electron configurations
             ao_aux = self._mol.eval_gto("GTOval_sph", extra_configs[sweep])
             borb_aux = ao_aux.dot(self._orb_coeff)
             fsum = np.sum(borb_aux * borb_aux, axis=1)
             norm = borb_aux * borb_aux / fsum[:, np.newaxis]
-
-            coords = configs.configs.reshape((configs.configs.shape[0] * configs.configs.shape[1], -1))
-            ao_configs = self._mol.eval_gto("GTOval_sph", coords)
-            borb_configs = ao_configs.dot(self._orb_coeff).reshape((configs.configs.shape[0], configs.configs.shape[1], -1))
-            borb_configs = borb_configs[:, self._electrons, :]
 
             orbratio = np.einsum(
                 "ij,ink->injk",
@@ -141,8 +143,8 @@ class OBDMAccumulator:
         nconf = configs.configs.shape[0]
         naux = self._extra_config.shape[0]
         extra_configs = []
-        auxassignments = np.random.randint(0, naux, size=(self._nsweep, nconf))
-        for sweep in range(self._nsweep):
+        auxassignments = np.random.randint(0, naux, size=(self._nsweeps, nconf))
+        for sweep in range(self._nsweeps):
             extra_configs.append(np.copy(self._extra_config))
             accept, self._extra_config = sample_onebody(
                 self._mol, self._orb_coeff, self._extra_config, tstep=self._tstep

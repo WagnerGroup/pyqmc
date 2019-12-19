@@ -54,13 +54,13 @@ class TBDMAccumulator:
         self._spin = spin
 
         self._spin_sector = spin
-        electrons_a = np.arange(
+        self._electrons_a = np.arange(
             spin[0] * mol.nelec[0], mol.nelec[0] + spin[0] * mol.nelec[1]
         )
-        electrons_b = np.arange(
+        self._electrons_b = np.arange(
             spin[1] * mol.nelec[0], mol.nelec[0] + spin[1] * mol.nelec[1]
         )
-        self._pairs = np.array(np.meshgrid(electrons_a, electrons_b)).T.reshape(-1, 2)
+        self._pairs = np.array(np.meshgrid(self._electrons_a, self._electrons_b)).T.reshape(-1, 2)
         self._pairs = self._pairs[
             self._pairs[:, 0] != self._pairs[:, 1]
         ]  # Removes repeated electron pairs
@@ -205,19 +205,20 @@ class TBDMAccumulator:
                 -1,
                 aux_configs_a[sweep][auxassignments_a[sweep]],
             )
-            #epos_a_orig = configs.electron(pair[0])
             epos_b = configs.make_irreducible(
                 -1,
                 aux_configs_b[sweep][auxassignments_b[sweep]],
             )
 
-            wfratio_a = wf.testvalue_many(self._pairs[:, 0], epos_a)
-            #wf.updateinternals(pair[0], epos_a)
-            wfratio_b = wf.testvalue_many(self._pairs[:, 1], epos_b)
-            wfratio = wfratio_a * wfratio_b
-            print(orbratio.shape, wfratio.shape)
-            exit(0)
-            #wf.updateinternals(pair[0], epos_a_orig)
+            wfratio = []
+            for ea in self._electrons_a: 
+                electrons_b = self._electrons_b[self._electrons_b != ea]
+                wfratio_a = wf.testvalue(ea, epos_a)
+                wf.updateinternals(ea, epos_a)
+                wfratio_b = wf.testvalue_many(electrons_b, epos_b)
+                wf.updateinternals(ea, configs.electron(ea))
+                wfratio.append(wfratio_a[:, np.newaxis] * wfratio_b)
+            wfratio = np.concatenate(wfratio, axis=1)
 
             # Adding to results
             results["value"] += np.einsum("in,ijn->ij", wfratio, orbratio)

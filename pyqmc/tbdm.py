@@ -103,7 +103,6 @@ class TBDMAccumulator:
         orb_a_size = self._orb_coeff[self._spin_sector[0]].shape[1]
         orb_b_size = self._orb_coeff[self._spin_sector[1]].shape[1]
         results["value"] = np.zeros((nconf, self._ijkl.shape[1]))
-        results["ijkl"] = self._ijkl
         for i, e in enumerate(["a", "b"]):
             results["norm_%s" % e] = np.zeros(
                 (nconf, self._orb_coeff[self._spin_sector[i]].shape[1])
@@ -238,6 +237,7 @@ class TBDMAccumulator:
         for k, v in d.items():
             # print(k, v.shape)
             davg[k] = np.mean(v, axis=0)
+        davg['ijkl'] = self._ijkl.T
         return davg
 
     def get_extra_configs(self, configs):

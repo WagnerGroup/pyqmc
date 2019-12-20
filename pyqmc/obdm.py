@@ -69,6 +69,7 @@ class OBDMAccumulator:
 
     def __call__(self, configs, wf, extra_configs=None, auxassignments=None):
         """ Quantities from equation (9) of DOI:10.1063/1.4793531"""
+        
         nconf = configs.configs.shape[0]
         results = {
             "value": np.zeros(
@@ -127,6 +128,7 @@ class OBDMAccumulator:
         results["acceptance"] /= self._nstep
 
         return results
+    
     def avg(self, configs, wf):
         d = self(configs, wf)
         davg = {}
@@ -138,7 +140,6 @@ class OBDMAccumulator:
     def get_extra_configs(self, configs):
         """ Returns an nstep length array of configurations
             starting from self._extra_config """
-        
         nconf = configs.configs.shape[0]
         naux = self._extra_config.shape[0]
         extra_configs = []
@@ -149,6 +150,7 @@ class OBDMAccumulator:
                 self._mol, self._orb_coeff, self._extra_config, tstep=self._tstep
             )
         return extra_configs, auxassignments
+
 
 def sample_onebody(mol, orb_coeff, configs, tstep=2.0):
     """ For a set of orbitals defined by orb_coeff, return samples from f(r) = \sum_i phi_i(r)^2. """

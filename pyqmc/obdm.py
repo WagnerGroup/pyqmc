@@ -69,7 +69,7 @@ class OBDMAccumulator:
 
     def __call__(self, configs, wf, extra_configs=None, auxassignments=None):
         """ Quantities from equation (9) of DOI:10.1063/1.4793531"""
-
+       
         nconf = configs.configs.shape[0]
         results = {
             "value": np.zeros(
@@ -81,12 +81,12 @@ class OBDMAccumulator:
         acceptance = 0
         naux = self._extra_config.shape[0]
         nelec = len(self._electrons)
-        e = np.repeat(self._electrons, self._nsweeps).reshape(self._nsweeps, -1)
+        e = np.repeat(self._electrons, self._nsweeps)
 
         if extra_configs is None:
-            auxassignments = np.random.randint(0, naux, size=(self._nsweeps, nconf))
+            auxassignments = np.random.randint(0, naux, size=(self._nstep, nconf))
             extra_configs = []
-            for sweep in range(self._nsweeps):
+            for step in range(self._nstep):
                 extra_configs.append(np.copy(self._extra_config))
                 accept, self._extra_config = sample_onebody(
                     self._mol, self._orb_coeff, self._extra_config, tstep=self._tstep
@@ -95,39 +95,40 @@ class OBDMAccumulator:
         else:
             assert auxassignments is not None
 
-        #Evaluate VMC configurations
-        coords = configs.configs.reshape((configs.configs.shape[0] * configs.configs.shape[1], -1))
-        ao_configs = self._mol.eval_gto("GTOval_sph", coords)
-        borb_configs = ao_configs.dot(self._orb_coeff).reshape((configs.configs.shape[0], configs.configs.shape[1], -1))
-        borb_configs = borb_configs[:, self._electrons, :]
-        
-        for sweep in range(self._nsweeps):
-            #Evaluate 1 electron configurations
-            ao_aux = self._mol.eval_gto("GTOval_sph", extra_configs[sweep])
-            borb_aux = ao_aux.dot(self._orb_coeff)
+        for step in range(self._nstep):
+            points = np.concatenate(
+                [extra_configs[step], configs.configs[:, e[step], :]]
+            )
+            ao = self._mol.eval_gto("GTOval_sph", points)
+            borb = ao.dot(self._orb_coeff)
+
+            # Orbital evaluations at extra coordinate.
+            borb_aux = borb[0:naux, :]
             fsum = np.sum(borb_aux * borb_aux, axis=1)
             norm = borb_aux * borb_aux / fsum[:, np.newaxis]
+            borb_configs = borb[naux:, :]
+
+            epos = configs.make_irreducible(
+                e[step], extra_configs[step][auxassignments[step]]
+            )
+            wfratio = wf.testvalue(e[step], epos)
 
             orbratio = np.einsum(
-                "ij,ink->injk",
-                borb_aux[auxassignments[sweep], :]
-                / fsum[auxassignments[sweep], np.newaxis],
+                "ij,ik->ijk",
+                borb_aux[auxassignments[step], :]
+                / fsum[auxassignments[step], np.newaxis],
                 borb_configs,
             )
-            epos = configs.make_irreducible(
-                e[sweep], extra_configs[sweep][auxassignments[sweep]]
-            )
-            wfratio = wf.testvalue_many(e[sweep], epos)
-           
-            results["value"] += np.einsum("in,injk->ijk", wfratio, orbratio)
-            results["norm"] += norm[auxassignments[sweep]]
+
+            results["value"] += nelec * np.einsum("i,ijk->ijk", wfratio, orbratio)
+            results["norm"] += norm[auxassignments[step]]
 
         results["value"] /= self._nstep
         results["norm"] = results["norm"] / self._nstep
         results["acceptance"] /= self._nstep
 
         return results
-
+    
     def avg(self, configs, wf):
         d = self(configs, wf)
         davg = {}
@@ -143,14 +144,16 @@ class OBDMAccumulator:
         nconf = configs.configs.shape[0]
         naux = self._extra_config.shape[0]
         extra_configs = []
-        auxassignments = np.random.randint(0, naux, size=(self._nsweeps, nconf))
-        for sweep in range(self._nsweeps):
+        
+        auxassignments = np.random.randint(0, naux, size=(self._nstep, nconf))
+        extra_configs = []
+        for step in range(self._nstep):
             extra_configs.append(np.copy(self._extra_config))
             accept, self._extra_config = sample_onebody(
                 self._mol, self._orb_coeff, self._extra_config, tstep=self._tstep
             )
+        
         return extra_configs, auxassignments
-
 
 def sample_onebody(mol, orb_coeff, configs, tstep=2.0):
     """ For a set of orbitals defined by orb_coeff, return samples from f(r) = \sum_i phi_i(r)^2. """

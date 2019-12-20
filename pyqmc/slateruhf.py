@@ -170,18 +170,20 @@ class PySCFSlaterUHF:
 
     def _testrow(self, e, vec, mask=None, spin=None):
         """vec is a nconfig,nmo vector which replaces row e"""
-        if spin is None: 
+        if spin is None:
             s = int(e >= self._nelec[0])
-        else: 
+        else:
             s = spin
-        
+
         if mask is None:
             return np.einsum(
                 "i...j,ij...->i...", vec, self._inverse[s][:, :, e - s * self._nelec[0]]
             )
 
         return np.einsum(
-            "i...j,ij...->i...", vec, self._inverse[s][mask][:, :, e - s * self._nelec[0]]
+            "i...j,ij...->i...",
+            vec,
+            self._inverse[s][mask][:, :, e - s * self._nelec[0]],
         )
 
     def _testcol(self, i, s, vec):
@@ -248,12 +250,12 @@ class PySCFSlaterUHF:
         ao = self._mol.eval_gto(
             self.pbc_str + "GTOval_sph", eposmask.reshape((-1, 3))
         ).reshape((*eposmask.shape[:-1], -1))
-       
+
         ratios = np.zeros((epos.configs.shape[0], e.shape[0]))
         for spin in [0, 1]:
-            ind = (s == spin)
+            ind = s == spin
             mo = ao.dot(self.parameters[self._coefflookup[spin]])
-            ratios[:, ind] = self._testrow(e[ind], mo, spin = spin)
+            ratios[:, ind] = self._testrow(e[ind], mo, spin=spin)
         return ratios
 
     def pgradient(self):

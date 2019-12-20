@@ -69,7 +69,7 @@ class OBDMAccumulator:
 
     def __call__(self, configs, wf, extra_configs=None, auxassignments=None):
         """ Quantities from equation (9) of DOI:10.1063/1.4793531"""
-        
+
         nconf = configs.configs.shape[0]
         results = {
             "value": np.zeros(
@@ -128,7 +128,7 @@ class OBDMAccumulator:
         results["acceptance"] /= self._nstep
 
         return results
-    
+
     def avg(self, configs, wf):
         d = self(configs, wf)
         davg = {}

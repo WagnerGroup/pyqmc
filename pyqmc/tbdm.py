@@ -60,7 +60,9 @@ class TBDMAccumulator:
         self._electrons_b = np.arange(
             spin[1] * mol.nelec[0], mol.nelec[0] + spin[1] * mol.nelec[1]
         )
-        self._pairs = np.array(np.meshgrid(self._electrons_a, self._electrons_b)).T.reshape(-1, 2)
+        self._pairs = np.array(
+            np.meshgrid(self._electrons_a, self._electrons_b)
+        ).T.reshape(-1, 2)
         self._pairs = self._pairs[
             self._pairs[:, 0] != self._pairs[:, 1]
         ]  # Removes repeated electron pairs
@@ -141,12 +143,8 @@ class TBDMAccumulator:
             # Generates random choice of aux_config_a and aux_config_b for moving electron_a and electron_b
             naux_a = self._aux_configs_a.shape[0]
             naux_b = self._aux_configs_b.shape[0]
-            auxassignments_a = np.random.randint(
-                0, naux_a, size=(self._nsweeps, nconf)
-            )
-            auxassignments_b = np.random.randint(
-                0, naux_b, size=(self._nsweeps, nconf)
-            )
+            auxassignments_a = np.random.randint(0, naux_a, size=(self._nsweeps, nconf))
+            auxassignments_b = np.random.randint(0, naux_b, size=(self._nsweeps, nconf))
         else:
             assert auxassignments is not None
             aux_configs_a = extra_configs[0]
@@ -156,11 +154,17 @@ class TBDMAccumulator:
             auxassignments_a = auxassignments[0]
             auxassignments_b = auxassignments[1]
 
-        #Evaluate VMC configurations
-        coords = configs.configs.reshape((configs.configs.shape[0] * configs.configs.shape[1], -1))
+        # Evaluate VMC configurations
+        coords = configs.configs.reshape(
+            (configs.configs.shape[0] * configs.configs.shape[1], -1)
+        )
         ao_configs = self._mol.eval_gto("GTOval_sph", coords)
-        orb_a_configs = ao_configs.dot(self._orb_coeff[self._spin_sector[0]]).reshape((configs.configs.shape[0], configs.configs.shape[1], -1))
-        orb_b_configs = ao_configs.dot(self._orb_coeff[self._spin_sector[1]]).reshape((configs.configs.shape[0], configs.configs.shape[1], -1))
+        orb_a_configs = ao_configs.dot(self._orb_coeff[self._spin_sector[0]]).reshape(
+            (configs.configs.shape[0], configs.configs.shape[1], -1)
+        )
+        orb_b_configs = ao_configs.dot(self._orb_coeff[self._spin_sector[1]]).reshape(
+            (configs.configs.shape[0], configs.configs.shape[1], -1)
+        )
         orb_a_configs = orb_a_configs[:, self._pairs[:, 0], :]
         orb_b_configs = orb_b_configs[:, self._pairs[:, 1], :]
 
@@ -180,37 +184,27 @@ class TBDMAccumulator:
             # pySCF -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,k} c_{s2,l} c_{s1,j} > = \phi*_{s1,j} \phi*_{s2,l} \phi_{s2,k} \phi_{s1,i}
             orbratio = (
                 (
-                    orb_a_aux[auxassignments_a[sweep]][
-                        :, self._ijkl[1]
-                    ]
-                    / fsum_a[
-                        auxassignments_a[sweep], np.newaxis
-                    ]
-                ) [:, np.newaxis, :]
+                    orb_a_aux[auxassignments_a[sweep]][:, self._ijkl[1]]
+                    / fsum_a[auxassignments_a[sweep], np.newaxis]
+                )[:, np.newaxis, :]
                 * (
-                    orb_b_aux[auxassignments_b[sweep]][
-                        :, self._ijkl[3]
-                    ]
-                    / fsum_b[
-                        auxassignments_b[sweep], np.newaxis
-                    ]
-                ) [:, np.newaxis, :]
+                    orb_b_aux[auxassignments_b[sweep]][:, self._ijkl[3]]
+                    / fsum_b[auxassignments_b[sweep], np.newaxis]
+                )[:, np.newaxis, :]
                 * orb_a_configs[..., self._ijkl[0]]
                 * orb_b_configs[..., self._ijkl[2]]
             )
 
             # Calculation of wf ratio (no McMillan trick yet)
             epos_a = configs.make_irreducible(
-                -1,
-                aux_configs_a[sweep][auxassignments_a[sweep]],
+                -1, aux_configs_a[sweep][auxassignments_a[sweep]]
             )
             epos_b = configs.make_irreducible(
-                -1,
-                aux_configs_b[sweep][auxassignments_b[sweep]],
+                -1, aux_configs_b[sweep][auxassignments_b[sweep]]
             )
 
             wfratio = []
-            for ea in self._electrons_a: 
+            for ea in self._electrons_a:
                 electrons_b = self._electrons_b[self._electrons_b != ea]
                 wfratio_a = wf.testvalue(ea, epos_a)
                 wf.updateinternals(ea, epos_a)
@@ -218,12 +212,12 @@ class TBDMAccumulator:
                 wf.updateinternals(ea, configs.electron(ea))
                 wfratio.append(wfratio_a[:, np.newaxis] * wfratio_b)
             wfratio = np.concatenate(wfratio, axis=1)
-           
+
             # Adding to results
             results["value"] += np.einsum("in,inj->ij", wfratio, orbratio)
             results["norm_a"] += norm_a[auxassignments_a[sweep]]
             results["norm_b"] += norm_b[auxassignments_b[sweep]]
-       
+
         # Average over sweeps and pairs
         results["value"] /= self._nsweeps
         for e in ["a", "b"]:
@@ -237,7 +231,7 @@ class TBDMAccumulator:
         for k, v in d.items():
             # print(k, v.shape)
             davg[k] = np.mean(v, axis=0)
-        davg['ijkl'] = self._ijkl.T
+        davg["ijkl"] = self._ijkl.T
         return davg
 
     def get_extra_configs(self, configs):
@@ -264,17 +258,14 @@ class TBDMAccumulator:
             )
         aux_configs_a = np.array(aux_configs_a)
         aux_configs_b = np.array(aux_configs_b)
-        
+
         # Generates random choice of aux_config_a and aux_config_b for moving electron_a and electron_b
         naux_a = self._aux_configs_a.shape[0]
         naux_b = self._aux_configs_b.shape[0]
-        auxassignments_a = np.random.randint(
-            0, naux_a, size=(self._nsweeps, nconf)
-        )
-        auxassignments_b = np.random.randint(
-            0, naux_b, size=(self._nsweeps, nconf)
-        )
+        auxassignments_a = np.random.randint(0, naux_a, size=(self._nsweeps, nconf))
+        auxassignments_b = np.random.randint(0, naux_b, size=(self._nsweeps, nconf))
         return [aux_configs_a, aux_configs_b], [auxassignments_a, auxassignments_b]
+
 
 def normalize_tbdm(tbdm, norm_a, norm_b):
     """Returns tbdm by taking the ratio of the averages in Eq. (10) of DOI:10.1063/1.4793531."""

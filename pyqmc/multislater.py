@@ -271,14 +271,14 @@ class MultiSlater:
         ao = self._mol.eval_gto(
             self.pbc_str + "GTOval_sph", eposmask.reshape((-1, 3))
         ).reshape((*eposmask.shape[:-1], -1))
-        
+
         ratios = np.zeros((epos.configs.shape[0], e.shape[0]))
-        for spin in [0,1]:
-            ind = (s == spin)
+        for spin in [0, 1]:
+            ind = s == spin
             mo = ao.dot(self.parameters[self._coefflookup[spin]])
             mo_vals = mo[..., self._det_occup[spin]]
-            ratios[:, ind] = self._testrow(e[ind], mo_vals, mask, spin = spin)
-       
+            ratios[:, ind] = self._testrow(e[ind], mo_vals, mask, spin=spin)
+
         return ratios
 
     def pgradient(self):

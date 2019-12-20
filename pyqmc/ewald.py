@@ -4,9 +4,61 @@ from scipy.special import erfc
 
 
 class Ewald:
+    r"""
+    The Ewald summation is a scheme for computing the Coulomb energy of a periodic arrangement of charges.
+    The Couomb energy is the sum of two divergent quantities: sum of interactions between same-charge pairs, and opposite-charge pairs.
+    Separated differently, the divergence can be avoided: the sum is divided into real space (short range) and reciprocal space (long range) parts, each of which converges quickly.
+    The separation is determined by the parameter $\alpha$
+
+    The Ewald separation is:
+
+    .. math:: E_{Coulomb} = E_{\rm real space} + E_{\rm reciprocal space} - E_{\rm intra-cell} - E_{\rm self} - E_{\rm charged system}
+
+    .. math:: E_{\rm real space} = \frac{1}{2} {\sum_{\vec{n}}}^\dagger \sum_{i=1}^N \sum_{j=1}^N q_i q_j \frac{\erfc(\alpha |\vec{x}_ij+\vec{n}|)}{|\vec{x}_ij+\vec{n}|}
+
+    .. math:: E_{\rm reciprocal space} = \frac{4\pi}{V} \frac{1}{2} \sum_{k \ne 0} \frac{1}{k^2} e^{-\frac{k^2}{4\alpha^2}} \left| \sum_{i=1}^N q_i e^{-i\vec{k}\cdot\vec{x}_i} \right|^2
+
+    .. math:: E_{\rm self}  = \frac{\alpha}{\sqrt{\pi}} \sum_{i=1}^N q_i^2
+
+    .. math:: E_{\rm charged}  = \frac{\pi}{2V\alpha^2} \left| \sum_{i=1}^N q_i \right|^2
+
+    In our implementation, the parts are further split into electron-electron, electron-ion, and ion-ion contributions. Since the ions don't move in our calculations, the ion-ion term only needs to be computed once.
+
+    Real space terms:
+
+    .. math:: E_{\rm real space}^{ii} = \frac{1}{2} {\sum_{\vec{n}}}^\dagger \sum_{I=1}^{N_i} \sum_{J=1}^{N_i} Z_I Z_J \frac{\erfc(\alpha |\vec{x}_{IJ}+\vec{n}|)}{|\vec{x}_{IJ}+\vec{n}|}
+
+    .. math:: E_{\rm real space}^{ee} = \frac{1}{2} {\sum_{\vec{n}}}^\dagger \sum_{i=1}^{N_e} \sum_{j=1}^{N_e} \frac{\erfc(\alpha |\vec{x}_ij+\vec{n}|)}{|\vec{x}_ij+\vec{n}|}
+
+    .. math:: E_{\rm real space}^{ei} = {\sum_{\vec{n}}} \sum_{i=1}^{N_e} \sum_{I=1}^{N_i} Z_I \frac{\erfc(\alpha |\vec{x}_iI+\vec{n}|)}{|\vec{x}_iI+\vec{n}|}
+
+    Reciprocal space terms:
+
+    .. math:: E_{\rm reciprocal space}^{ii} = \frac{4\pi}{V} \frac{1}{2} \sum_{k \ne 0} \frac{1}{k^2} e^{-\frac{k^2}{4\alpha^2}} \left| \sum_{I=1}^{N_i} Z_I e^{-i\vec{k}\cdot\vec{x}_I} \right|^2
+
+    .. math:: E_{\rm reciprocal space}^{ee} = - \frac{4\pi}{V} \frac{1}{2} \sum_{k \ne 0} \frac{1}{k^2} e^{-\frac{k^2}{4\alpha^2}} \left| \sum_{i=1}^{N_e} e^{-i\vec{k}\cdot\vec{x}_i} \right|^2
+
+    .. math:: E_{\rm reciprocal space}^{ei} = \frac{4\pi}{V} \frac{1}{2} \sum_{k \ne 0} \frac{1}{k^2} e^{-\frac{k^2}{4\alpha^2}} {\rm Re} \left[ 2 \sum_{i=1}^{N_e} \sum_{I=1}^{N_i} -Z_I e^{-i\vec{k}\cdot\vec{x}_i} e^{i\vec{k}\cdot\vec{x}_I} \right]
+
+    Self energy:
+
+    .. math:: E_{\rm self}^{e} = - \frac{\alpha N_e}{\sqrt{\pi}}
+
+    .. math:: E_{\rm self}^{i} = - \frac{\alpha}{\sqrt{\pi}} \sum_{I=1}^{N_i} Z_I^2
+
+    Charged system energy:
+    
+    .. math:: E_{\rm charged}^{ee} = - \frac{\pi}{2V\alpha^2} N_e^2
+
+    .. math:: E_{\rm charged}^{ei} =   \frac{\pi}{2V\alpha^2} 2 N_e \sum_{I=1}^{N_i} Z_I
+
+    .. math:: E_{\rm charged}^{ii} = - \frac{\pi}{2V\alpha^2} \left[ \sum_{I=1}^{N_i} Z_I^2 + 2 \sum_{I<J}^{N_i} Z_I Z_J \right]
+
+    """
+
     def __init__(self, cell, ewald_gmax=200, nlatvec=2):
         """
-        Class for computing Ewald sums
+        Class for computing Ewald sums. The sum is split into real space (short range) and reciprocal space (long range) terms; the electron-electron, electron-ion, and ion-ion contributions are computed separately.
         Inputs:
             cell: pyscf Cell object (simulation cell)
             ewald_gmax: int, how far to take reciprocal sum; probably never needs to be changed.
@@ -27,21 +79,29 @@ class Ewald:
         self.lattice_displacements = np.dot(xyz, self.latvec)
 
     def set_up_reciprocal_ewald_sum(self, ewald_gmax):
-        """
-        Determine parameters for Ewald sums
+        r"""
+        Determine parameters for Ewald sums. 
+
+        $\alpha$ determines the partitioning of the real and reciprocal space parts.
+
+        We define a weight `gweight` for the part of the reciprocal space sums that doesn't depend on the coordinates:
+        
+        .. math:: W_G = \frac{4\pi}{V |\vec{G}|^2} e^{- \frac{|\vec{G}|^2}{ 4\alpha^2}}
+
         Inputs:
             latvec: (3, 3) array of lattice vectors; latvec[0] is the first
             ewald_gmax: int, max number of reciprocal lattice vectors to check away from 0
         """
         cellvolume = np.linalg.det(self.latvec)
         recvec = np.linalg.inv(self.latvec)
-        crossproduct = recvec * cellvolume
+        crossproduct = recvec.T * cellvolume
 
         # Determine alpha
         tmpheight_i = np.einsum("ij,ij->i", crossproduct, self.latvec)
         length_i = np.linalg.norm(crossproduct, axis=1)
         smallestheight = np.amin(np.abs(tmpheight_i) / length_i)
         self.alpha = 5.0 / smallestheight
+        print("Setting Ewald alpha to ", self.alpha)
 
         # Determine G points to include in reciprocal Ewald sum
         XYZ = np.meshgrid(*[np.arange(-ewald_gmax, ewald_gmax + 1)] * 3, indexing="ij")
@@ -56,15 +116,41 @@ class Ewald:
         self.gpoints = gpoints[bigweight]
         self.gweight = gweight[bigweight]
 
-        # def const_ewald():
-        # Compute Ewald constants (sums)
-        # ntot = np.sum(self.nelec)
-        # ee_sum2 = ntot
-        ii_sum2 = np.sum(self.atom_charges ** 2)
+        self.set_ewald_constants(cellvolume)
 
-        # ee_sum = ntot * (ntot - 1) / 2
+    def set_ewald_constants(self, cellvolume):
+        r"""
+        Compute Ewald constants (independent of particle positions): self energy and charged system energy. Here we compute the combined terms. These terms are independent of the convergence parameters `gmax` and `nlatvec`, but do depend on the partitioning parameter $\alpha$.
+        
+        We define two constants, `squareconst`, the coefficient of the squared charges, 
+        and `ijconst`, the coefficient of the pairs:
+
+        .. math:: C_{ij} = - \frac{\pi}{V\alpha^2}
+
+        .. math:: C_{\rm square} = - \frac{\alpha}{\sqrt{\pi}}  - \frac{\pi}{2V\alpha^2} 
+                  = - \frac{\alpha}{\sqrt{\pi}}  - \frac{C_{ij}}{2}
+
+        The Ewald object doesn't retain information about the configurations, including number of electrons, so the electron constants are defined as functions of $N_e$.
+
+
+        Self plus charged-system energy:
+        
+        .. math:: E_{\rm self+charged}^{ee} = N_e C_{\rm square} + \frac{N_e(N_e-1)}{2} C_{ij}
+
+        .. math:: E_{\rm self+charged}^{ei} = N_e \sum_{I=1}^{N_i} Z_I C_{ij}
+
+        .. math:: E_{\rm self+charged}^{ii} = \sum_{I=1}^{N_i} Z_I^2 C_{\rm square} + \sum_{I<J}^{N_i} Z_I Z_J C_{ij}
+
+        We also compute contributions from a single electron, to separate the Ewald sum by electron.
+        
+        .. math:: E_{\rm self+charged}^{\rm single} = C_{\rm square} + \frac{N_e-1}{2} C_{ij} - \sum_{I=1}^{N_i} Z_I C_{ij}
+
+        .. math:: E_{\rm self+charged}^{\rm single-test} = C_{\rm square} - \sum_{I=1}^{N_i} Z_I C_{ij}
+
+        """
         i_sum = np.sum(self.atom_charges)
-        ii_sum = (np.sum(self.atom_charges) ** 2 - ii_sum2) / 2
+        ii_sum2 = np.sum(self.atom_charges ** 2)
+        ii_sum = (i_sum ** 2 - ii_sum2) / 2
 
         ijconst = -np.pi / (cellvolume * self.alpha ** 2)
         self.ijconst = ijconst
@@ -84,8 +170,25 @@ class Ewald:
         xc_correction = lambda ne: cexc / rs(ne)
 
     def ewald_ion(self):
-        """
-        Compute ion contribution to Ewald sums
+        r"""
+        Compute ion contribution to Ewald sums. 
+        There is a constant term we ignore, corresponding to the interaction of a particle with its own image in other cells:
+
+        .. math:: C_{\rm ignore}^{\rm ii} = \sum_{\vec{n} \ne 0} \sum_{I=1}^{N_i} Z_I^2  \frac{\erfc(\alpha |\vec{n}|)}{|\vec{n}|} 
+
+        The real space part:
+
+        .. math:: E_{\rm real space}^{ii} = \sum_{\vec{n}} \sum_{I<J}^{N_i} Z_I Z_J \frac{\erfc(\alpha |\vec{x}_{IJ}+\vec{n}|)}{|\vec{x}_{IJ}+\vec{n}|} 
+        + C_{\rm ignore}^{\rm ii}
+
+        The reciprocal space part:
+
+        .. math:: E_{\rm reciprocal space}^{i} = \sum_{\vec{G} \in {\rm octant}} W_G \left| \sum_{I=1}^{N_i} e^{-i\vec{G}\cdot\vec{x}_I} \right|^2
+
+        where `gweight` is a factor that doesn't depend on the coordinates:
+        
+        .. math:: W_G = \frac{4\pi}{V |\vec{G}|^2} e^{- \frac{|\vec{G}|^2}{ 4\alpha^2}}
+
         Returns:
             ion_ion: float, ion-ion component of Ewald sum
         """
@@ -109,8 +212,41 @@ class Ewald:
         return ion_ion
 
     def ewald_electron(self, configs):
-        """
+        r"""
         Compute the Ewald sum for e-e and e-ion
+
+        For ease of notation (and reading the code), define
+
+        ..math:: r_{iIn} = |\vec{x}_iI+\vec{n}|
+
+        ..math:: r_{ijn} = |\vec{x}_ij+\vec{n}|
+
+        As with the ions, we ignore a constant term in the real-space e-e sum corresponding to the interaction of a particle with its own image in other cells:
+
+        .. math:: C_{\rm ignore}^{\rm ee} = \sum_{\vec{n} \ne 0} \sum_{i=1}^{N_e} \frac{\erfc(\alpha |\vec{n}|)}{|\vec{n}|} 
+
+
+        Real space e-e:
+        .. math:: E_{\rm real space}^{ee} = \sum_{\vec{n}} \sum_{i<j}^{N_e} \frac{\erfc(\alpha r_{ijn})}{r_{ijn}}
+        + C_{\rm ignore}^{\rm ee}
+
+        Real space e-i:
+
+        .. math:: E_{\rm real space}^{ei} = {\sum_{\vec{n}}} \sum_{i=1}^{N_e} \sum_{I=1}^{N_i} Z_I \frac{\erfc(\alpha r_{iIn})}{r_{iIn}}
+
+        Reciprocal space e-e:
+
+        .. math:: E_{\rm reciprocal space}^{ee} = \sum_{\vec{G} \in {\rm octant}} W_G \left| \sum_{i=1}^{N_e} e^{-i\vec{k}\cdot\vec{x}_i} \right|^2
+
+        Reciprocal space e-i:
+
+        .. math:: E_{\rm reciprocal space}^{ei} = \sum_{\vec{G} \in {\rm octant}} W_G {\rm Re} \left[ 2 \sum_{i=1}^{N_e} \sum_{I=1}^{N_i} -Z_I e^{-i\vec{k}\cdot\vec{x}_i} e^{i\vec{k}\cdot\vec{x}_I} \right]
+
+        where `gweight` is a factor that doesn't depend on the coordinates:
+        
+        .. math:: W_G = \frac{4\pi}{V |\vec{G}|^2} e^{- \frac{|\vec{G}|^2}{ 4\alpha^2}}
+
+
         Inputs:
             configs: pyqmc PeriodicConfigs object of shape (nconf, nelec, ndim)
         Returns:
@@ -149,6 +285,7 @@ class Ewald:
         e_expGdotR = np.exp(1j * e_GdotR)
         sum_e_exp = np.sum(e_expGdotR, axis=1, keepdims=True)
         coscos_sinsin = np.real(sum_e_exp.conj() * e_expGdotR)
+        ### Don't know why we subtract 0.5 for "separated"
         ee_recip_separated = np.dot(coscos_sinsin - 0.5, self.gweight)
 
         # Reciprocal space electron-ion part
@@ -160,13 +297,15 @@ class Ewald:
         self.ee_separated = ee_real_separated + 1 * ee_recip_separated
         self.ewalde_separated = self.ei_separated + self.ee_separated
         nelec = ee_recip_separated.shape[1]
+        ### Add back the 0.5 that was subtracted earlier
         ee = self.ee_separated.sum(axis=1) + nelec / 2 * self.gweight.sum()
         ei = self.ei_separated.sum(axis=1)
         return ee, ei
 
     def energy(self, configs):
         """
-        Compute Coulomb energy for a set of configs
+        Compute Coulomb energy for a set of configs.  
+        
         Inputs:
             configs: pyqmc PeriodicConfigs object of shape (nconf, nelec, ndim)
         Returns: 

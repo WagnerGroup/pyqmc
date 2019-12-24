@@ -18,6 +18,7 @@ def get_ewald_energy(cell, S, configs):
 
 def test_ewald_NaCl():
     print("NaCl ewald energy")
+    nacl_answer = 1.74756
     L = 2.0  # this normalizes n.n. separation to 1 for rock salt structure
     cell = gto.Cell(
         atom="""H     {0}      {0}      {0}""".format(0.0),
@@ -34,7 +35,8 @@ def test_ewald_NaCl():
     S = np.eye(3)
     configs = np.ones((1, 1, 3)) * L / 2
     etot = get_ewald_energy(cell, S, configs)
-    assert np.abs(etot + 1.74756) < 1e-3
+    print("correct answer: ", nacl_answer)
+    assert np.abs(etot + nacl_answer) < 1e-4
 
     # Conventional cell
     print("conventional cell")
@@ -42,11 +44,13 @@ def test_ewald_NaCl():
     configs = np.ones((1, 4, 3)) * L / 2
     configs[:, 1:, :] = np.eye(3) * L / 2
     etot = get_ewald_energy(cell, S, configs)
-    assert np.abs(etot / 4 + 1.74756) < 1e-3
+    print("correct answer: ", 4 * nacl_answer)
+    assert np.abs(etot / 4 + nacl_answer) < 1e-4
 
 
 def test_ewald_CaF2():
     print("CaF2 ewald energy")
+    caf2_answer = 5.03879
     L = 4 / np.sqrt(3)  # this normalizes n.n. separation to 1 for fluorite structure
     cell = gto.Cell(
         atom="""He     {0}      {0}      {0}""".format(0.0),
@@ -62,7 +66,8 @@ def test_ewald_CaF2():
     configs = np.ones((1, 2, 3)) * L / 4
     configs[0, 1, 1] *= -1
     etot = get_ewald_energy(cell, S, configs)
-    assert np.abs(etot + 5.03879) < 1e-3
+    print("correct answer: ", caf2_answer)
+    assert np.abs(etot + caf2_answer) < 1e-4
 
     # Conventional cell
     print("conventional cell")
@@ -70,7 +75,8 @@ def test_ewald_CaF2():
     cube = np.stack(np.meshgrid(*[[0, 1]] * 3, indexing="ij"), axis=-1).reshape((-1, 3))
     configs = np.reshape((cube + 0.5) * L / 2, (1, 8, 3))
     etot = get_ewald_energy(cell, S, configs)
-    assert np.abs(etot / 4 + 5.03879) < 1e-3
+    print("correct answer: ", 4 * caf2_answer)
+    assert np.abs(etot / 4 + caf2_answer) < 1e-4
 
 
 r"""

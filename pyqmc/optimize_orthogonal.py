@@ -145,7 +145,6 @@ def correlated_sample(wfs, configs, parameters, pgrad):
 
     weight = np.array([np.exp(-2*(log_values0[i,1,:]-log_values0[:,1,:])) for i in range(len(wfs))])
     weight = np.mean(1.0/np.sum(weight,axis=1), axis=1)
-    print('weight', weight.shape)
 
     data = {'total':np.zeros(nparms),
             'weight':np.zeros(nparms),
@@ -170,7 +169,7 @@ def correlated_sample(wfs, configs, parameters, pgrad):
 
         data['total'][p] = np.average(dat['total'],weights= wt)
         data['weight'][p] = np.mean(wt)/np.mean(rhoprime)
-        print(np.mean(wt), weight, np.mean(rhoprime))
+        #print(np.mean(wt), weight, np.mean(rhoprime))
         data['overlap'][p] = np.mean(overlap,axis=1)/np.sqrt(np.mean(wt)*weight)
         
         #print('wt', wt)
@@ -187,9 +186,15 @@ def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.
     Ntarget = 0.5,
     forcing_N = None,
     max_step = 10.0,
-    alpha_mix = .5,
     hdf_file =None,
-    update_method = 'linemin'
+    update_method = 'linemin',
+    linemin = True,
+    beta1=0.9,
+    beta2=0.999,
+    adam_epsilon = 1e-8, 
+    step_offset = 0,
+    ramp_forcing = False,
+    forcing_offset = 0.0
 ):
     r"""
     Minimize 
@@ -220,17 +225,21 @@ def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.
     Note that in the definition of N there is an arbitrary normalization of rho. The targets are set relative to the normalization of the reference wave functions. 
     """
     if forcing_N is None:
-        forcing_N = 1*forcing
+        forcing_N = 10*forcing
     parameters = pgrad.transform.serialize_parameters(wfs[1].parameters)
     last_change = np.zeros(parameters.shape)
-    beta1 = 0.9
-    beta2=0.999
     adam_m = np.zeros(parameters.shape)
     adam_v = np.zeros(parameters.shape)
-    adam_epsilon = 1e-8
     attr = dict(tstep=tstep, nsteps=nsteps, forcing=forcing, warmup=warmup,
-    Starget=Starget, Ntarget=Ntarget, forcing_N=forcing_N, max_step=max_step, alpha_mix=alpha_mix)
+    Starget=Starget, Ntarget=Ntarget, forcing_N=forcing_N, max_step=max_step, 
+    update_method = update_method, beta1 = beta1, beta2=beta2,
+    adam_epsilon = adam_epsilon, forcing_offset = forcing_offset)
+    conditioner = pyqmc.linemin.sd_update
     for step in range(nsteps): 
+        if ramp_forcing: 
+            forcing_step = (forcing-forcing_offset)*step/nsteps + forcing_offset
+        else:
+            forcing_step = forcing
         return_data = sample_overlap(wfs,coords, pgrad)
         avg_data = {}
         for k, it in return_data.items():
@@ -238,61 +247,57 @@ def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.
         
         N = avg_data['overlap'].diagonal()
         N_derivative = 2*np.real(avg_data['overlap_gradient'].diagonal()).T
-        print(N_derivative.shape)
 
         Nij = np.outer(N,N)
         S = avg_data['overlap']/np.sqrt(Nij)
         S_derivative = avg_data['overlap_gradient']/Nij[:,:,np.newaxis] - np.einsum('ij,im->ijm', avg_data['overlap']/Nij, N_derivative/N[:,np.newaxis])
 
-
         energy_derivative = 2.0*(avg_data['dpH']-avg_data['total'][:,np.newaxis]*avg_data['dppsi'])
-        print(energy_derivative.shape)
         dp = avg_data['dppsi'][-1,...]
         condition = np.real(avg_data['dpidpj'][-1,...]- np.einsum('i,j->ij',dp,dp))
 
-        #assume for the moment we just have two wave functions and the base is 0
-        total_derivative = energy_derivative[1,:] + 2.0*forcing * (S[1,0] -Starget)*S_derivative[1,0,:] + 2.0*forcing_N*(N[1]-Ntarget)*N_derivative[1,:]
+        total_derivative = energy_derivative[-1,:] + 2.0*forcing_step * np.sum((S[-1,0:-1] -Starget)*S_derivative[-1,0:-1,:]) + 2.0*forcing_N*(N[-1]-Ntarget)*N_derivative[-1,:]
         print("derivative", total_derivative)
-        print("N derivative", 2.0*forcing_N*(N[1]-Ntarget)*N_derivative[1,:])
 
         deriv_norm = np.linalg.norm(total_derivative)
         if deriv_norm > max_step:
             total_derivative = total_derivative*max_step/deriv_norm
-        this_change = alpha_mix*last_change + pyqmc.linemin.sr_update(total_derivative, condition, tstep)
 
-        test_parameters=[]
-        test_tsteps = np.linspace(-tstep,tstep, 10)
-        for tmp_tstep in test_tsteps:
-            test_parameters.append(parameters + pyqmc.linemin.sr_update(total_derivative, condition, tmp_tstep))
-            #test_parameters.append(parameters - tmp_tstep * total_derivative)
-
-        data = correlated_sample(wfs, coords, test_parameters, pgrad)
-        yfit = []
-        print('test_tsteps', test_tsteps)
-        print('energy', 'S', 'weight', 'cost function')
-        for enp, Sp, Np in zip(data['total'],data['overlap'],data['weight']):
-            cost = enp + forcing*(Sp[0]-Starget)**2 + forcing_N*(Np-Ntarget)**2
-            print(enp, Sp[0], Np, cost)
-            yfit.append(cost)
-
-        min_tstep = pyqmc.linemin.stable_fit(test_tsteps, yfit)
-
-        if update_method == 'linemin':
-            parameters +=  pyqmc.linemin.sr_update(total_derivative, condition, min_tstep)
-        elif update_method == 'momentum':
-            parameters += this_change
-        elif update_method =='adam':
+        if update_method =='adam':
+            invSij = np.linalg.inv(condition + .1 * np.eye(condition.shape[0]))
+            total_derivative = np.einsum("ij,j->i", invSij, total_derivative)
             adam_m = beta1*adam_m + (1-beta1)*total_derivative
             adam_v = beta2*adam_v + (1-beta2)*total_derivative**2
             adam_mhat = adam_m/(1-beta1**(step+1))
             adam_vhat = adam_v/(1-beta2**(step+1))
-            parameters -= tstep*adam_mhat/(np.sqrt(adam_vhat)+adam_epsilon)
-        else:
-            raise ValueError("update_method not implemented:" + update_method)
+            print("adam_vhat", adam_vhat)
+            print("adam_mhat", adam_mhat)
+            total_derivative = adam_mhat/(np.sqrt(adam_vhat)+adam_epsilon)
+
+        print("derivative after modifications", total_derivative)
+        if linemin:
+            test_parameters=[]
+            test_tsteps = np.linspace(-tstep,tstep, 10)
+            for tmp_tstep in test_tsteps:
+                test_parameters.append(parameters + conditioner(total_derivative, condition, tmp_tstep))
+                #test_parameters.append(parameters - tmp_tstep * total_derivative)
+
+            data = correlated_sample(wfs, coords, test_parameters, pgrad)
+            yfit = []
+            print('test_tsteps', test_tsteps)
+            print('tstep', 'energy', 'S', 'weight', 'cost function')
+            for t, enp, Sp, Np in zip(test_tsteps, data['total'],data['overlap'],data['weight']):
+                cost = enp + forcing_step*(Sp[0]-Starget)**2 + forcing_N*(Np-Ntarget)**2
+                print(t, enp, Sp[0], Np, cost)
+                yfit.append(cost)
+
+            min_tstep = pyqmc.linemin.stable_fit(test_tsteps, yfit)
+            parameters +=  conditioner(total_derivative, condition, min_tstep)
+        else: 
+            parameters +=  conditioner(total_derivative, condition, tstep)
 
         for k, it in pgrad.transform.deserialize(parameters).items():
             wfs[1].parameters[k] = it
-        last_change = this_change
 
         print("energies", avg_data['total'])
         print("Normalization", N, 'target', Ntarget)
@@ -301,51 +306,12 @@ def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.
                     'overlap': S,
                     'gradient': total_derivative,
                     'N' : N,
-                    'parameters': parameters}
+                    'parameters': parameters,
+                    'step':step + step_offset}
         print('Determinant coefficients', wfs[-1].parameters['wf1det_coeff'])
 
         ortho_hdf(hdf_file, save_data, attr, coords)
 
 
             
-
-
-if __name__ =="__main__":
-    import pyscf
-    import pyqmc
-    import pandas as pd
-    import copy
-    mol = pyscf.gto.M(atom = "He 0. 0. 0.", basis='bfd_vdz', ecp='bfd', unit='bohr')
-
-    mf = pyscf.scf.RHF(mol).run()
-    mol.output = None
-    mol.stdout = None
-    mf.output = None
-    mf.stdout = None
-    mf.chkfle = None
-
-
-    wf = pyqmc.slater_jastrow(mol, mf)
-
-    nconfig = 4000
-    acc = pyqmc.gradient_generator(mol, wf)
-    configs = pyqmc.initial_guess(mol, nconfig)
-    wf, linedata = pyqmc.line_minimization(wf, configs, acc)
-    wf2 = copy.deepcopy(wf)
-    wf2.parameters['wf1mo_coeff_alpha'] += .01*np.random.randn(*wf2.parameters['wf1mo_coeff_alpha'].shape)
-    wf2.parameters['wf1mo_coeff_beta'] += .01*np.random.randn(*wf2.parameters['wf1mo_coeff_beta'].shape)
-
-    for starget in [1.0, 0.8, 0.6, 0.4, 0.2, 0.0, -0.2, -0.4, -0.6, -0.8]:
-        optimize_orthogonal([wf,wf2], configs, acc, nsteps = 50, hdf_file = f'nconfig4000ortho{starget}.hdf5', Starget = starget)
-    #avg_data = {}
-    #for k, it in return_data.items():
-    #    avg_data[k] = np.mean(it, axis=0)
-    #for k, it in avg_data.items():
-    #    print(k,it.shape)
-    #Nij = np.outer(avg_data['overlap'].diagonal(), avg_data['overlap'].diagonal())
-    #avg_data['overlap'] /= np.sqrt(Nij)
-    #avg_data['overlap_gradient'] /= np.sqrt(Nij[..., np.newaxis])
-    #actual_derivative = avg_data['overlap_gradient'] - np.einsum('ij,iim->ijm', avg_data['overlap'], 2*avg_data['overlap_gradient'])
-    #print("actual derivative", actual_derivative)
-
 

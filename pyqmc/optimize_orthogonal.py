@@ -256,7 +256,7 @@ def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.
         dp = avg_data['dppsi'][-1,...]
         condition = np.real(avg_data['dpidpj'][-1,...]- np.einsum('i,j->ij',dp,dp))
 
-        total_derivative = energy_derivative[-1,:] + 2.0*forcing_step * np.sum((S[-1,0:-1] -Starget)*S_derivative[-1,0:-1,:]) + 2.0*forcing_N*(N[-1]-Ntarget)*N_derivative[-1,:]
+        total_derivative = energy_derivative[-1,:] + 2.0*forcing_step * np.sum((S[-1,0:-1] -Starget)*S_derivative[-1,0:-1,:], axis=0) + 2.0*forcing_N*(N[-1]-Ntarget)*N_derivative[-1,:]
         print("derivative", total_derivative)
 
         deriv_norm = np.linalg.norm(total_derivative)

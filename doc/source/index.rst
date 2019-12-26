@@ -20,6 +20,7 @@ Welcome to pyQMC's documentation!
    jastrow
    ecp
    energy
+   ewald
    accumulators
    func3d
    optvariance

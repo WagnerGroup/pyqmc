@@ -37,9 +37,10 @@ def slater_jastrow(mol, mf, abasis=None, bbasis=None):
     return wf
 
 
-def gradient_generator(mol, wf, to_opt=None, freeze=None):
+def gradient_generator(mol, wf, to_opt=None, freeze=None, **ewald_kwargs):
     return PGradTransform(
-        EnergyAccumulator(mol), LinearTransform(wf.parameters, to_opt, freeze)
+        EnergyAccumulator(mol, **ewald_kwargs),
+        LinearTransform(wf.parameters, to_opt, freeze),
     )
 
 

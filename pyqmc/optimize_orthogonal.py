@@ -336,6 +336,7 @@ def optimize_orthogonal(
         print(format_str.format("norm",N[-1], np.linalg.norm(N_derivative),""))
         print(format_str.format("overlap",S[-1,0], np.linalg.norm(S_derivative[-1,0,:]),np.linalg.norm(overlap_derivative)))
 
+        #Modifications to the derivative
         if np.linalg.norm(N_derivative) > 1e-8:
             total_derivative -= (
                 np.dot(total_derivative, N_derivative)
@@ -354,11 +355,9 @@ def optimize_orthogonal(
             adam_v = beta2 * adam_v + (1 - beta2) * total_derivative ** 2
             adam_mhat = adam_m / (1 - beta1 ** (step + 1))
             adam_vhat = adam_v / (1 - beta2 ** (step + 1))
-            print("adam_vhat", adam_vhat)
-            print("adam_mhat", adam_mhat)
             total_derivative = adam_mhat / (np.sqrt(adam_vhat) + adam_epsilon)
 
-        print("derivative after modifications", total_derivative.round(2))
+        #print("derivative after modifications", total_derivative.round(2))
         if linemin:
             test_parameters = []
             test_tsteps = np.linspace(-tstep, tstep, 10)
@@ -366,7 +365,6 @@ def optimize_orthogonal(
                 test_parameters.append(
                     parameters + conditioner(total_derivative, condition, tmp_tstep)
                 )
-                # test_parameters.append(parameters - tmp_tstep * total_derivative)
 
             data = correlated_sample(wfs, coords, test_parameters, pgrad)
             yfit = []
@@ -406,6 +404,6 @@ def optimize_orthogonal(
             "energy_derivative_magnitude": np.linalg.norm(energy_derivative),
             "norm_derivative_magnitude": np.linalg.norm(N_derivative),
         }
-        print("Determinant coefficients", wfs[-1].parameters["wf1det_coeff"])
+        #print("Determinant coefficients", wfs[-1].parameters["wf1det_coeff"])
 
         ortho_hdf(hdf_file, save_data, attr, coords)

@@ -178,7 +178,18 @@ def correlated_sample(wfs, configs, parameters, pgrad):
         wfs[-1].parameters[k] = it
     return data
 
+def renormalize(wfs, N):
+    """
+    b^2/(a^2 + b^2) = N
 
+    b^2 = N a^2 /(1-N)
+
+    f^2 b^2 = 0.5 a^2/0.5 = a^2 
+    f^2 = a^2/b^2 = (1-N)/N
+    """ 
+    desired_n = 1.0/len(wfs)
+    current_n = N
+    wfs[-1].parameters['wf1det_coeff']*=np.sqrt((1-N)/N)
 
 def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.0,
     warmup = 5,
@@ -194,7 +205,10 @@ def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.
     adam_epsilon = 1e-8, 
     step_offset = 0,
     ramp_forcing = False,
-    forcing_offset = 0.0
+    forcing_offset = 0.0,
+    ramp_target = False,
+    Starget_start = 1.0,
+    norm_exponent = 4
 ):
     r"""
     Minimize 
@@ -225,8 +239,8 @@ def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.
     Note that in the definition of N there is an arbitrary normalization of rho. The targets are set relative to the normalization of the reference wave functions. 
     """
     if forcing_N is None:
-        forcing_N = 10*forcing
-    parameters = pgrad.transform.serialize_parameters(wfs[1].parameters)
+        forcing_N = 0.0
+    parameters = pgrad.transform.serialize_parameters(wfs[-1].parameters)
     last_change = np.zeros(parameters.shape)
     adam_m = np.zeros(parameters.shape)
     adam_v = np.zeros(parameters.shape)
@@ -235,11 +249,21 @@ def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.
     update_method = update_method, beta1 = beta1, beta2=beta2,
     adam_epsilon = adam_epsilon, forcing_offset = forcing_offset)
     conditioner = pyqmc.linemin.sd_update
+    Starget_final = Starget
     for step in range(nsteps): 
         if ramp_forcing: 
             forcing_step = (forcing-forcing_offset)*step/nsteps + forcing_offset
         else:
             forcing_step = forcing
+        if ramp_target:
+            Starget = (Starget_final - Starget_start)*step/nsteps + Starget_start
+        return_data = sample_overlap(wfs, coords, pgrad)
+        N = np.average(return_data['overlap'][warmup:,...],axis=0).diagonal()[-1]
+        print("Normalization", N)
+        renormalize(wfs, N)
+        parameters = pgrad.transform.serialize_parameters(wfs[-1].parameters)
+
+        
         return_data = sample_overlap(wfs,coords, pgrad)
         avg_data = {}
         for k, it in return_data.items():
@@ -255,17 +279,32 @@ def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.
         energy_derivative = 2.0*(avg_data['dpH']-avg_data['total'][:,np.newaxis]*avg_data['dppsi'])
         dp = avg_data['dppsi'][-1,...]
         condition = np.real(avg_data['dpidpj'][-1,...]- np.einsum('i,j->ij',dp,dp))
+        overlap_derivative = 2.0*forcing_step * np.sum((S[-1,0:-1] -Starget)*S_derivative[-1,0:-1,:], axis=0)
+        norm_derivative = norm_exponent*forcing_N*(N[-1]-Ntarget)**(norm_exponent-1)*N_derivative[-1,:]
 
-        total_derivative = energy_derivative[-1,:] + 2.0*forcing_step * np.sum((S[-1,0:-1] -Starget)*S_derivative[-1,0:-1,:], axis=0) + 2.0*forcing_N*(N[-1]-Ntarget)*N_derivative[-1,:]
-        print("derivative", total_derivative)
+        total_derivative = energy_derivative[-1,:] + overlap_derivative + norm_derivative
+
+        print("energies", avg_data['total'])
+        print("Normalization", N, 'target', Ntarget)
+        print("overlap", S[1,0], 'target', Starget )
+
+        print("total", np.linalg.norm(total_derivative))
+        print("overlap", np.linalg.norm(overlap_derivative))
+        print("energy", np.linalg.norm(energy_derivative))
+        print("norm", np.linalg.norm(norm_derivative))
+        N_derivative = N_derivative[-1,:]
+        print("N_derivative", np.linalg.norm(N_derivative))
+
+        if np.linalg.norm(N_derivative) > 1e-8:
+            total_derivative -= np.dot(total_derivative, N_derivative)*N_derivative/(np.linalg.norm(N_derivative))**2
 
         deriv_norm = np.linalg.norm(total_derivative)
         if deriv_norm > max_step:
             total_derivative = total_derivative*max_step/deriv_norm
+        invSij = np.linalg.inv(condition + .1 * np.eye(condition.shape[0]))
+        total_derivative = np.einsum("ij,j->i", invSij, total_derivative)
 
         if update_method =='adam':
-            invSij = np.linalg.inv(condition + .1 * np.eye(condition.shape[0]))
-            total_derivative = np.einsum("ij,j->i", invSij, total_derivative)
             adam_m = beta1*adam_m + (1-beta1)*total_derivative
             adam_v = beta2*adam_v + (1-beta2)*total_derivative**2
             adam_mhat = adam_m/(1-beta1**(step+1))
@@ -287,7 +326,7 @@ def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.
             print('test_tsteps', test_tsteps)
             print('tstep', 'energy', 'S', 'weight', 'cost function')
             for t, enp, Sp, Np in zip(test_tsteps, data['total'],data['overlap'],data['weight']):
-                cost = enp + forcing_step*(Sp[0]-Starget)**2 + forcing_N*(Np-Ntarget)**2
+                cost = enp + forcing_step*(Sp[0]-Starget)**2 + forcing_N*(Np-Ntarget)**norm_exponent
                 print(t, enp, Sp[0], Np, cost)
                 yfit.append(cost)
 
@@ -299,9 +338,6 @@ def optimize_orthogonal(wfs, coords, pgrad, tstep=0.01, nsteps=30, forcing = 10.
         for k, it in pgrad.transform.deserialize(parameters).items():
             wfs[1].parameters[k] = it
 
-        print("energies", avg_data['total'])
-        print("Normalization", N, 'target', Ntarget)
-        print("overlap", S[1,0], 'target', Starget )
         save_data = {'energies': avg_data['total'],
                     'overlap': S,
                     'gradient': total_derivative,

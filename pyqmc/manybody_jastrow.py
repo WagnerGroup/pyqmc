@@ -103,5 +103,5 @@ class J3:
         after_val = self.value()
         self._configscurrent.configs[:, e, :] = curr_epos
         self.recompute(self._configscurrent)
-        return np.exp(after_val[0]*after_val[1]-curr_val[0]*after_val[1])
+        return np.exp(after_val[0]*after_val[1]-curr_val[0]*curr_val[1])
 # end J3 class

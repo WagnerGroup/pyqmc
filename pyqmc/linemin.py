@@ -38,11 +38,12 @@ def opt_hdf(hdf_file, data, attr, configs, parameters):
 
 
 def polyfit_relative(xfit, yfit, degree):
-    p = np.polyfit(xfit, yfit,2)
+    p = np.polyfit(xfit, yfit,degree)
     ypred = np.polyval(p, xfit)
     resid = (ypred-yfit)**2
     relative_error = np.var(resid)/np.var(yfit)
     return p, relative_error
+    
 def stable_fit2(xfit, yfit, tolerance = 1e-2):
     """ Try to fit to a quadratic. If the fit is not good, 
     then just take the lowest value of yfit

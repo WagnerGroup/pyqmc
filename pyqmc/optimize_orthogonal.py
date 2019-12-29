@@ -336,7 +336,12 @@ def optimize_orthogonal(
         print(format_str.format("norm",N[-1], np.linalg.norm(N_derivative),""))
         print(format_str.format("overlap",S[-1,0], np.linalg.norm(S_derivative[-1,0,:]),np.linalg.norm(overlap_derivative)))
 
-        #Modifications to the derivative
+        #Use SR to condition the derivatives
+        invSij = np.linalg.inv(condition + 0.1 * np.eye(condition.shape[0]))
+        total_derivative = np.einsum("ij,j->i", invSij, total_derivative)
+        N_derivative = np.einsum("ij,j->i", invSij, N_derivative)
+
+        #Try to move in the projection that doesn't change the norm
         if np.linalg.norm(N_derivative) > 1e-8:
             total_derivative -= (
                 np.dot(total_derivative, N_derivative)
@@ -347,8 +352,6 @@ def optimize_orthogonal(
         deriv_norm = np.linalg.norm(total_derivative)
         if deriv_norm > max_step:
             total_derivative = total_derivative * max_step / deriv_norm
-        invSij = np.linalg.inv(condition + 0.1 * np.eye(condition.shape[0]))
-        total_derivative = np.einsum("ij,j->i", invSij, total_derivative)
 
         if update_method == "adam":
             adam_m = beta1 * adam_m + (1 - beta1) * total_derivative

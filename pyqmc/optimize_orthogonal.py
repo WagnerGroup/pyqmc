@@ -237,7 +237,7 @@ def optimize_orthogonal(
     ramp_target=False,
     Starget_start=1.0,
     Ntol=0.05,
-    weight_boundaries = 0.2
+    weight_boundaries = 0.3
 ):
     r"""
     Minimize 
@@ -360,7 +360,7 @@ def optimize_orthogonal(
         #print("derivative after modifications", total_derivative.round(2))
         if linemin:
             test_parameters = []
-            test_tsteps = np.linspace(-tstep, tstep, 10)
+            test_tsteps = np.linspace(-tstep, tstep, 21)
             for tmp_tstep in test_tsteps:
                 test_parameters.append(
                     parameters + conditioner(total_derivative, condition, tmp_tstep)
@@ -384,7 +384,8 @@ def optimize_orthogonal(
                     yfit.append(cost)
 
             if len(xfit) > 0:
-                min_tstep = pyqmc.linemin.stable_fit(xfit, yfit)
+                min_tstep = pyqmc.linemin.stable_fit2(xfit, yfit)
+                print("chose to move", min_tstep)
                 parameters += conditioner(total_derivative, condition, min_tstep)
         else:
             parameters += conditioner(total_derivative, condition, tstep)

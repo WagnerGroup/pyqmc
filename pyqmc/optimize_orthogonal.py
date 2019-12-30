@@ -234,8 +234,6 @@ def optimize_orthogonal(
     beta2=0.999,
     adam_epsilon=1e-8,
     step_offset=0,
-    ramp_target=False,
-    Starget_start=1.0,
     Ntol=0.05,
     weight_boundaries = 0.3
 ):
@@ -269,7 +267,6 @@ def optimize_orthogonal(
     """
 
     parameters = pgrad.transform.serialize_parameters(wfs[-1].parameters)
-    last_change = np.zeros(parameters.shape)
     adam_m = np.zeros(parameters.shape)
     adam_v = np.zeros(parameters.shape)
     attr = dict(
@@ -286,11 +283,10 @@ def optimize_orthogonal(
         adam_epsilon=adam_epsilon,
     )
     conditioner = pyqmc.linemin.sd_update
-    Starget_final = Starget
     for step in range(nsteps):
-        if ramp_target:
-            Starget = (Starget_final - Starget_start) * step / nsteps + Starget_start
-
+        # we iterate until the normalization is reasonable
+        # One could potentially save a little time here by not computing the gradients 
+        # every time, but typically we don't have to renormalize if the moves are good
         while True:
             return_data = sample_overlap(wfs, coords, pgrad)
             N = np.average(return_data["overlap"][warmup:, ...], axis=0).diagonal()[-1]
@@ -342,6 +338,7 @@ def optimize_orthogonal(
         N_derivative = np.einsum("ij,j->i", invSij, N_derivative)
 
         #Try to move in the projection that doesn't change the norm
+        #Here we project out the 
         if np.linalg.norm(N_derivative) > 1e-8:
             total_derivative -= (
                 np.dot(total_derivative, N_derivative)
@@ -353,6 +350,8 @@ def optimize_orthogonal(
         if deriv_norm > max_step:
             total_derivative = total_derivative * max_step / deriv_norm
 
+        #ADAM uses a momentum term, which can sometimes accelerate the 
+        #optimization and allow for a much smaller sample size
         if update_method == "adam":
             adam_m = beta1 * adam_m + (1 - beta1) * total_derivative
             adam_v = beta2 * adam_v + (1 - beta2) * total_derivative ** 2
@@ -408,6 +407,5 @@ def optimize_orthogonal(
             "energy_derivative_magnitude": np.linalg.norm(energy_derivative),
             "norm_derivative_magnitude": np.linalg.norm(N_derivative),
         }
-        #print("Determinant coefficients", wfs[-1].parameters["wf1det_coeff"])
 
         ortho_hdf(hdf_file, save_data, attr, coords)

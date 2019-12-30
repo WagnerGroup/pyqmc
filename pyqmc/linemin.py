@@ -43,7 +43,7 @@ def polyfit_relative(xfit, yfit, degree):
     resid = (ypred-yfit)**2
     relative_error = np.var(resid)/np.var(yfit)
     return p, relative_error
-    
+
 def stable_fit2(xfit, yfit, tolerance = 1e-2):
     """ Try to fit to a quadratic. If the fit is not good, 
     then just take the lowest value of yfit
@@ -53,18 +53,17 @@ def stable_fit2(xfit, yfit, tolerance = 1e-2):
     pq, relative_errq = polyfit_relative(xfit, yfit, 2)
     pl, relative_errl = polyfit_relative(xfit, yfit, 1)
 
-
     print("relative errors in fit", relative_errq, relative_errl)
-    if relative_errl < tolerance: 
+    if relative_errl/relative_errq < 1: 
         if pl[0] < 0:
             return steprange
         else: 
             return minstep
-    elif relative_errq < tolerance:
-        est_min = -p[1] / (2 * p[0])
-        if est_min > steprange and p[0] > 0:  # minimum past the search radius
+    elif relative_errq < tolerance and pq[0] > 0:
+        est_min = -pq[1] / (2 * pq[0])
+        if est_min > steprange:
             est_min = steprange
-        if est_min < minstep and p[0] > 0:  # mimimum behind the search radius
+        if est_min < minstep:
             est_min = minstep
         return est_min
     else: 

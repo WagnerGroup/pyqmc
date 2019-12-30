@@ -36,7 +36,9 @@ def sample_overlap(wfs, configs, pgrad, nsteps=100, tstep=0.1, hdf_file=None):
 
     .. math:: \left\langle \frac{\partial_{im} \Psi_i^* \Psi_j}{\rho} \right\rangle
 
-    In addition, any key returned by `pgrad` will be saved with an additional index at the beginning that indicates the wave function.
+    Note that overlap_gradient is only saved for i = f, where f is the final wave function.
+
+    In addition, any key returned by `pgrad` will be saved for the final wave function.
     """
     nconf, nelec, ndim = configs.configs.shape
 

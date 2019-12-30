@@ -54,7 +54,7 @@ def stable_fit2(xfit, yfit, tolerance = 1e-2):
     pl, relative_errl = polyfit_relative(xfit, yfit, 1)
 
     print("relative errors in fit", relative_errq, relative_errl)
-    if relative_errl/relative_errq < 1: 
+    if relative_errl/relative_errq < 2:  #If a linear fit is about as good..
         if pl[0] < 0:
             return steprange
         else: 

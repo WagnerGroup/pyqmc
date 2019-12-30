@@ -97,17 +97,15 @@ def sample_overlap(wfs, configs, pgrad, nsteps=100, tstep=0.1, hdf_file=None):
         )
         weight = 1.0 / np.sum(weight, axis=1)
         # print(weight)
-        dats = [pgrad(configs, wf) for wf in wfs]
-        dppsi = np.array([dat["dppsi"] for dat in dats])
+        dat = pgrad(configs, wfs[-1])
+        #dppsi = np.array([dat["dppsi"] for dat in dats])
         save_dat["overlap_gradient"] = np.mean(
-            np.einsum("ikm,ik,jk->ijmk", dppsi, normalized_values, normalized_values)
+            np.einsum("km,k,jk->jmk", dat['dppsi'], normalized_values[-1], normalized_values)
             / denominator,
             axis=-1,
         )
-        for k in dats[0].keys():
-            save_dat[k] = np.array(
-                [np.average(dat[k], axis=0, weights=w) for dat, w in zip(dats, weight)]
-            )
+        for k in dat.keys():
+            save_dat[k] = np.average(dat[k], axis=0, weights=weight[-1]) 
         save_dat["weight"] = np.mean(weight, axis=1)
         # print(save_dat['total'], save_dat['weight'])
         for k, it in save_dat.items():
@@ -240,7 +238,7 @@ def optimize_orthogonal(
     r"""
     Minimize 
 
-    .. math:: f(p_f) = E_f + \sum_i \lambda_{i=0}^{f-1} (S_{fi} - S_{fi}^*)^2 + \lambda_{norm} (N_f - N_f^*)^2
+    .. math:: f(p_f) = E_f + \sum_i \lambda_{i=0}^{f-1} (S_{fi} - S_{fi}^*)^2 
 
     Where 
 
@@ -300,37 +298,41 @@ def optimize_orthogonal(
         avg_data = {}
         for k, it in return_data.items():
             avg_data[k] = np.average(it[warmup:, ...], axis=0)
-
+        print("shape", avg_data['overlap_gradient'].shape)
         N = avg_data["overlap"].diagonal()
-        N_derivative = 2 * np.real(avg_data["overlap_gradient"].diagonal()).T
+        #Derivatives are only for the optimized wave function, so they miss
+        # an index
+        N_derivative = 2 * np.real(avg_data["overlap_gradient"][-1])
+        print(N_derivative.shape)
 
         Nij = np.outer(N, N)
         S = avg_data["overlap"] / np.sqrt(Nij)
-        S_derivative = avg_data["overlap_gradient"] / Nij[:, :, np.newaxis] - np.einsum(
-            "ij,im->ijm", avg_data["overlap"] / Nij, N_derivative / N[:, np.newaxis]
+        print(avg_data['overlap'].shape)
+        S_derivative = avg_data["overlap_gradient"] / Nij[-1, :, np.newaxis] - np.einsum(
+            "j,m->jm", avg_data["overlap"][-1,:] / Nij[-1,:], N_derivative / N[-1]
         )
 
         energy_derivative = 2.0 * (
-            avg_data["dpH"] - avg_data["total"][:, np.newaxis] * avg_data["dppsi"]
+            avg_data["dpH"] - avg_data["total"] * avg_data["dppsi"]
         )
-        dp = avg_data["dppsi"][-1, ...]
-        condition = np.real(avg_data["dpidpj"][-1, ...] - np.einsum("i,j->ij", dp, dp))
+        dp = avg_data["dppsi"]
+        condition = np.real(avg_data["dpidpj"] - np.einsum("i,j->ij", dp, dp))
         overlap_derivative = (
             2.0
             * forcing
-            * np.sum((S[-1, 0:-1] - Starget) * S_derivative[-1, 0:-1, :], axis=0)
+            * np.sum((S[-1, 0:-1] - Starget) * S_derivative[0:-1, :], axis=0)
         )
 
         total_derivative = (
-            energy_derivative[-1, :] + overlap_derivative 
+            energy_derivative + overlap_derivative 
         )
-        N_derivative = N_derivative[-1, :]
+        #N_derivative = N_derivative[-1, :]
         print("############################# step ", step)
         format_str = "{:<15.10} " * 4
         print(format_str.format("Quantity", "value", "derivative norm", "cost derivative norm"))
-        print(format_str.format("energy",avg_data['total'][-1], np.linalg.norm(energy_derivative),""))
+        print(format_str.format("energy",avg_data['total'], np.linalg.norm(energy_derivative),""))
         print(format_str.format("norm",N[-1], np.linalg.norm(N_derivative),""))
-        print(format_str.format("overlap",S[-1,0], np.linalg.norm(S_derivative[-1,0,:]),np.linalg.norm(overlap_derivative)))
+        print(format_str.format("overlap",S[-1,0], np.linalg.norm(S_derivative[0,:]),np.linalg.norm(overlap_derivative)))
 
         #Use SR to condition the derivatives
         invSij = np.linalg.inv(condition + 0.1 * np.eye(condition.shape[0]))

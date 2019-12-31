@@ -146,7 +146,7 @@ class PGradDescriptor:
 
         node_cut, f = self._node_regr(configs, wf)
         dp_regularized = dp * f[:, np.newaxis]
-        
+
         d = {}
         for k, it in den.items():
             d[k] = np.mean(it, axis=0)

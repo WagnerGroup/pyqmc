@@ -161,7 +161,7 @@ def test(atom="He", total_spin=0, total_charge=0, scf_basis="sto-3g"):
     vmc_tstep = 0.3
     vmc_warmup = 30
     # TBDM params
-    tbdm_sweeps = 1
+    tbdm_sweeps = 4
     tbdm_tstep = 0.5
 
     wf = PySCFSlaterUHF(mol, mf)  # Single-Slater (no jastrow) wf

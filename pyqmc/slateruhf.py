@@ -168,16 +168,22 @@ class PySCFSlaterUHF:
         self._dets[s][0][mask] *= self.get_phase(ratio)  # will not work for complex!
         self._dets[s][1][mask] += np.log(np.abs(ratio))
 
-    def _testrow(self, e, vec, mask=None):
+    def _testrow(self, e, vec, mask=None, spin=None):
         """vec is a nconfig,nmo vector which replaces row e"""
-        s = int(e >= self._nelec[0])
+        if spin is None:
+            s = int(e >= self._nelec[0])
+        else:
+            s = spin
+
         if mask is None:
             return np.einsum(
-                "i...j,ij->i...", vec, self._inverse[s][:, :, e - s * self._nelec[0]]
+                "i...j,ij...->i...", vec, self._inverse[s][:, :, e - s * self._nelec[0]]
             )
 
         return np.einsum(
-            "i...j,ij->i...", vec, self._inverse[s][mask, :, e - s * self._nelec[0]]
+            "i...j,ij...->i...",
+            vec,
+            self._inverse[s][mask][:, :, e - s * self._nelec[0]],
         )
 
     def _testcol(self, i, s, vec):
@@ -231,6 +237,26 @@ class PySCFSlaterUHF:
         a = self._testrow(e, mo, mask)
         b = self.single_twist_mask(e, epos, mask)
         return a * b
+
+    def testvalue_many(self, e, epos, mask=None):
+        """ return the ratio between the current wave function and the wave function if 
+        an electron's position is replaced by epos for each electron"""
+        s = (e >= self._nelec[0]).astype(int)
+        if mask is None:
+            mask = [True] * epos.configs.shape[0]
+        eposmask = epos.configs[mask]
+        if len(eposmask) == 0:
+            return np.zeros(eposmask.shape[:2])
+        ao = self._mol.eval_gto(
+            self.pbc_str + "GTOval_sph", eposmask.reshape((-1, 3))
+        ).reshape((*eposmask.shape[:-1], -1))
+
+        ratios = np.zeros((epos.configs.shape[0], e.shape[0]))
+        for spin in [0, 1]:
+            ind = s == spin
+            mo = ao.dot(self.parameters[self._coefflookup[spin]])
+            ratios[:, ind] = self._testrow(e[ind], mo, spin=spin)
+        return ratios
 
     def pgradient(self):
         """Compute the parameter gradient of Psi. 

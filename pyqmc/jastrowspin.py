@@ -159,10 +159,35 @@ class JastrowSpin:
         )
         r = np.linalg.norm(d, axis=-1)
         b_partial_e = np.zeros((*r.shape[:-1], *self._b_partial.shape[2:]))
+
         for l, b in enumerate(self.b_basis):
             bval = b.value(d, r)
             b_partial_e[..., l, 0] = bval[..., :sep].sum(axis=-1)
             b_partial_e[..., l, 1] = bval[..., sep:].sum(axis=-1)
+
+        return b_partial_e
+
+    def _b_update_many(self, e, epos, mask, spin):
+        r"""
+          Calculate b (e-e) partial sums for electron e
+        _b_partial_e is the array $B^p_{ils} = \sum_s b_l(r^i_{es}$, with e fixed; $s$ indexes over $\uparrow$ ($\alpha$) and $\downarrow$ ($\beta$) sums, not including electron e. 
+          $i$ is the configuration index.
+          Args:
+              e: fixed electron index
+              epos: configs object for electron e
+              mask: mask over configs axis, only return values for configs where mask==True. b_partial_e might have a smaller configs axis than epos, _configscurrent, and _b_partial because of the mask.
+        """
+        nup = self._mol.nelec[0]
+        d = epos.dist.dist_i(self._configscurrent.configs[mask], epos.configs[mask])
+        r = np.linalg.norm(d, axis=-1)
+        b_partial_e = np.zeros((e.shape[0], *r.shape[:-1], *self._b_partial.shape[2:]))
+
+        for l, b in enumerate(self.b_basis):
+            bval = b.value(d, r)
+            b_partial_e[..., l, 0] = bval[..., :nup].sum(axis=-1)
+            b_partial_e[..., l, 1] = bval[..., nup:].sum(axis=-1)
+            b_partial_e[..., l, spin] -= bval[..., e].T
+
         return b_partial_e
 
     def _update_b_partial(self, e, epos, mask):
@@ -297,6 +322,41 @@ class JastrowSpin:
         if len(val.shape) == 2:
             val = val.T
         return val
+
+    def testvalue_many(self, e, epos, mask=None):
+        r"""
+        Compute the ratio $\Psi_{\rm new}/\Psi_{\rm old}$ for moving electron e to epos.
+        _avalues is the array for current configurations $A_{Iks} = \sum_s a_{k}(r_{Is})$ where $s$ indexes over $\uparrow$ ($\alpha$) and $\downarrow$ ($\beta$) sums.
+        _bvalues is the array for current configurations $B_{ls} = \sum_s b_{l}(r_{s})$ where $s$ indexes over $\uparrow\uparrow$ ($\alpha_1 < \alpha_2$), $\uparrow\downarrow$ ($\alpha, \beta$), and $\downarrow\downarrow$ ($\beta_1 < \beta_2$)  sums.
+        The update for _avalues and _b_values from moving one electron only requires computing the new sum for that electron. The sums for the electron in the current configuration are stored in _a_partial and _b_partial.
+        deltaa = $a_{k}(r_{Ie})$, indexing (atom, a_basis)
+        deltab = $\sum_s b_{l}(r_{se})$, indexing (b_basis, spin s)
+        """
+        s = (e >= self._mol.nelec[0]).astype(int)
+        if mask is None:
+            mask = [True] * epos.configs.shape[0]
+
+        ratios = np.zeros((epos.configs.shape[0], e.shape[0]))
+        for spin in [0, 1]:
+            ind = s == spin
+            deltaa = (
+                self._a_update(e[ind], epos, mask) - self._a_partial[e[ind]][:, mask]
+            )
+            deltab = (
+                self._b_update_many(e[ind], epos, mask, spin)
+                - self._b_partial[e[ind]][:, mask]
+            )
+            a_val = np.einsum(
+                "...jk,jk->...", deltaa, self.parameters["acoeff"][..., spin]
+            )
+            b_val = np.einsum(
+                "...jk,jk->...", deltab, self.parameters["bcoeff"][:, spin : spin + 2]
+            )
+            val = np.exp(b_val + a_val)
+            if len(val.shape) == 2:
+                val = val.T
+            ratios[:, ind] = val
+        return ratios
 
     def pgradient(self):
         """Given the b sums, this is pretty trivial for the coefficient derivatives.

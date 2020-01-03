@@ -5,7 +5,8 @@ def setuph2(r):
     from pyscf import gto, scf, lo
     from pyqmc.accumulators import LinearTransform, EnergyAccumulator
     from pyqmc.obdm import OBDMAccumulator
-    from pyqmc.cvmc import DescriptorFromOBDM, PGradDescriptor
+    from pyqmc.tbdm import TBDMAccumulator
+    from pyqmc.cvmc import DescriptorFromOBDM, DescriptorFromTBDM, PGradDescriptor
 
     import itertools
 
@@ -51,16 +52,8 @@ H ul
         atom=f"H 0. 0. 0.; H 0. 0. {r}", unit="bohr", basis=basis, ecp=ecp, verbose=5
     )
     mf = scf.RHF(mol).run()
-    mo_occ = mf.mo_coeff[:, mf.mo_occ > 0]
-    a = lo.iao.iao(mol, mo_occ)
-    a = lo.vec_lowdin(a, mf.get_ovlp())
-
-    obdm_up = OBDMAccumulator(mol=mol, orb_coeff=a, spin=0)
-    obdm_down = OBDMAccumulator(mol=mol, orb_coeff=a, spin=1)
-
+    
     wf = pyqmc.slater_jastrow(mol, mf)
-
-
     freeze = {}
     for k in wf.parameters:
         freeze[k] = np.zeros(wf.parameters[k].shape,dtype='bool')
@@ -70,8 +63,13 @@ H ul
     # AFM configurations.
     freeze['wf1mo_coeff_alpha'][0,0]=True
     freeze['wf1mo_coeff_beta'][1,0]=True
+    
+    mo_occ = mf.mo_coeff[:, mf.mo_occ > 0]
+    a = lo.iao.iao(mol, mo_occ)
+    a = lo.vec_lowdin(a, mf.get_ovlp())
 
-
+    obdm_up = OBDMAccumulator(mol=mol, orb_coeff=a, spin=0)
+    obdm_down = OBDMAccumulator(mol=mol, orb_coeff=a, spin=1)
     descriptors = {
         "t": [[(1.0, (0, 1)), (1.0, (1, 0))], [(1.0, (0, 1)), (1.0, (1, 0))]],
         "trace": [[(1.0, (0, 0)), (1.0, (1, 1))], [(1.0, (0, 0)), (1.0, (1, 1))]],
@@ -79,24 +77,34 @@ H ul
     for i in [0, 1]:
         descriptors[f"nup{i}"] = [[(1.0, (i, i))], []]
         descriptors[f"ndown{i}"] = [[], [(1.0, (i, i))]]
+    
+    tbdm_up_down = TBDMAccumulator(mol=mol, orb_coeff=np.array([a,a]), spin=(0,1), ijkl=[[0,0,0,0]])
+    tbdm_down_up = TBDMAccumulator(mol=mol, orb_coeff=np.array([a,a]), spin=(1,0), ijkl=[[0,0,0,0]])
+    descriptors_tbdm = {
+        "U": [[(1.0,(0))],[(1.0,(0))]]
+    }
 
     acc = PGradDescriptor(
         EnergyAccumulator(mol),
         LinearTransform(wf.parameters, freeze=freeze),
-        [obdm_up, obdm_down],
-        DescriptorFromOBDM(descriptors, norm=2.0),
+        {
+          'obdm': [obdm_up, obdm_down], 
+          'tbdm': [tbdm_up_down, tbdm_down_up],
+        },
+        {
+          'obdm': DescriptorFromOBDM(descriptors, norm=2.0),
+          'tbdm': DescriptorFromTBDM(descriptors_tbdm, norm=2.0*(2.0-1.0)),
+        },
     )
 
-    return {"wf": wf, "acc": acc, "mol": mol, "mf": mf, "descriptors": descriptors}
-
-
+    return {"wf": wf, "acc": acc, "mol": mol, "mf": mf, "descriptors": descriptors, "descriptors_tbdm": descriptors_tbdm}
 
 if __name__ == "__main__":
     import pyqmc
     import pyqmc.dasktools
     from pyqmc.dasktools import line_minimization, cvmc_optimize
     from dask.distributed import Client, LocalCluster   
-    
+
     r = 1.1
 
     ncore = 2
@@ -121,10 +129,16 @@ if __name__ == "__main__":
         forcing[k] = 0.0
         obj[k] = 0.0
 
+    for k in sys["descriptors_tbdm"]:
+        forcing[k] = 0.0
+        obj[k] = 0.0
+
     forcing["t"] = 0.5
     forcing["trace"] = 1.0
+    forcing["U"] = 5.0
     obj["t"] = 0.0
     obj["trace"] = 2.0
+    obj["U"] = 1.0
 
     hdf_file = "saveh2.hdf5"
     wf, df = cvmc_optimize(

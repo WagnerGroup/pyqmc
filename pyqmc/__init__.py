@@ -39,9 +39,10 @@ def slater_jastrow(mol, mf, abasis=None, bbasis=None):
     return wf
 
 
-def gradient_generator(mol, wf, to_opt=None, freeze=None):
+def gradient_generator(mol, wf, to_opt=None, freeze=None, **ewald_kwargs):
     return PGradTransform(
-        EnergyAccumulator(mol), LinearTransform(wf.parameters, to_opt, freeze)
+        EnergyAccumulator(mol, **ewald_kwargs),
+        LinearTransform(wf.parameters, to_opt, freeze),
     )
 
 
@@ -56,10 +57,13 @@ def default_multislater(mol, mf, mc):
     return wf, to_opt, freeze
 
 
-def default_jastrow(mol):
+def default_jastrow(mol, ion_cusp=False):
     """         
     Default 2-body jastrow from qwalk,
-    returns jastrow, to_opt and freeze
+    Args:
+      ion_cusp (bool): add an extra term to satisfy electron-ion cusp.
+    Returns:
+      jastrow, to_opt and freeze
     """
     import numpy as np
 
@@ -76,15 +80,23 @@ def default_jastrow(mol):
 
     beta_abasis = expand_beta_qwalk(0.2, 4)
     beta_bbasis = expand_beta_qwalk(0.5, 3)
-    abasis = [PolyPadeFunction(beta=beta_abasis[i], rcut=7.5) for i in range(4)]
+    if ion_cusp:
+        abasis = [CutoffCuspFunction(gamma=24, rcut=7.5)]
+    else:
+        abasis = []
+    abasis += [PolyPadeFunction(beta=beta_abasis[i], rcut=7.5) for i in range(4)]
     bbasis = [CutoffCuspFunction(gamma=24, rcut=7.5)]
     bbasis += [PolyPadeFunction(beta=beta_bbasis[i], rcut=7.5) for i in range(3)]
 
     jastrow = JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
+    if ion_cusp:
+        jastrow.parameters["acoeff"][:, 0, :] = mol.atom_charges()[:, None]
     jastrow.parameters["bcoeff"][0, [0, 1, 2]] = np.array([-0.25, -0.50, -0.25])
 
     freeze = {}
     freeze["acoeff"] = np.zeros(jastrow.parameters["acoeff"].shape).astype(bool)
+    if ion_cusp:
+        freeze["acoeff"][:, 0, :] = True  # Cusp conditions
     freeze["bcoeff"] = np.zeros(jastrow.parameters["bcoeff"].shape).astype(bool)
     freeze["bcoeff"][0, [0, 1, 2]] = True  # Cusp conditions
     to_opt = ["acoeff", "bcoeff"]

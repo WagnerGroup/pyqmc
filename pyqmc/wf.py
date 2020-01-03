@@ -1,6 +1,4 @@
-import numpy as np
-
-class Parameters():
+class Parameters:
     def __init__(self, dicts):
         self.data = {}
         self.wf_count = len(dicts)
@@ -107,7 +105,6 @@ def test_parameters():
     for i in range(10):
         dicts.append({"coeff"+str(i): np.random.rand(3)})
     p = Parameters(dicts)
-    # print("length of p =", len(p))
     # test len
     assert(len(p) == 30)
     print("len test passed")
@@ -119,4 +116,3 @@ def test_parameters():
     p["wf2coeff2"] = new_coeff
     assert(p["wf2coeff2"].all() == new_coeff.all())
     print("setitem test passed")
-    

@@ -14,35 +14,34 @@ class J3:
         self.parameters["gcoeff"] = np.ones((dim, dim)) #debug
     
     def recompute(self, configs):
-        # print("calling recompute")
         self._configscurrent = configs.copy()
         self.nelec = configs.configs.shape[1]
-        # print("configs.shape:",configs.configs.shape)
         # shape of arrays:
         # ao_val: (nconf, nelec, nbasis)
         # ao_grad: (3, nconf, nelec, nbasis)
         # ao_lap: (3, nconf, nelec, nbasis)
         self.ao_val, self.ao_grad, self.ao_lap = self._get_val_grad_lap(configs)
-        # print("after recompute self.ao_val.shape",self.ao_val.shape)
         return self.value() #(sign, value)
     
     def updateinternals(self, e, epos, mask=None):
         # # print("calling recompute")
-        # nconfig = epos.configs.shape[0]
-        # if mask is None:
-        #     mask = [True]*nconfig
-        # e_val, e_grad, e_lap = self._get_val_grad_lap(epos)
-        # # print("self.ao_val.shape",self.ao_val.shape)
-        # self.ao_val[mask, e, :] = e_val[mask,0, :]
-        # self.ao_grad[:, mask, e, :] = e_grad[:, mask, 0, :]
-        # self.ao_lap[:, mask, e, :] = e_lap[:, mask, 0, :]
-        self._configscurrent.configs[:, e, :] = epos.configs#.copy()
-        self.recompute(self._configscurrent)
+        nconfig = epos.configs.shape[0]
+        if mask is None:
+            mask = [True]*nconfig
+        e_val, e_grad, e_lap = self._get_val_grad_lap(epos)
+        # print("self.ao_val.shape",self.ao_val.shape)
+        self.ao_val[mask, e, :] = e_val[mask,0, :]
+        self.ao_grad[:, mask, e, :] = e_grad[:, mask, 0, :]
+        self.ao_lap[:, mask, e, :] = e_lap[:, mask, 0, :]
+        self._configscurrent.configs[:, e, :] = epos.configs
+        
 
     def value(self):
         # print("calling value")
         mask = np.tril(np.ones((self.nelec, self.nelec)), -1)
-        return (1, np.einsum('mn,cim, cjn, ij-> c', self.parameters["gcoeff"], self.ao_val, self.ao_val, mask))
+        vals = np.einsum('mn,cim, cjn, ij-> c', self.parameters["gcoeff"], self.ao_val, self.ao_val, mask)
+        signs = np.ones(len(vals))
+        return (signs, vals)
 
     def gradient(self, e, epos):
         # print("calling gradient")
@@ -55,15 +54,21 @@ class J3:
         """
         Return lap(psi)/ psi = lap(J) when psi = exp(J)
         """
-        # print("calling gradient")
+        # print("calling laplacian")
         _, _, e_lap = self._get_val_grad_lap(epos)
         lap1 = np.einsum('mn, dcm, cjn-> c', self.parameters["gcoeff"], e_lap[:,:,0,:], self.ao_val[:,e+1:,:])
         lap2 = np.einsum('mn, cim, dcn -> c', self.parameters["gcoeff"], self.ao_val[:,:e,:], e_lap[:,:,0,:])
-        return lap1 + lap2
+        grad = self.gradient(e, epos)
+        lap3 = np.einsum('dc,dc->c', grad, grad)
+        return (lap1 +lap2+lap3)
 
     def gradient_laplacian(self, e, epos):
-        # print("calling gradient_laplacian")
-        return self.gradient(e, epos), self.laplacian(e, epos)
+        _, _, e_lap = self._get_val_grad_lap(epos)
+        lap1 = np.einsum('mn, dcm, cjn-> c', self.parameters["gcoeff"], e_lap[:,:,0,:], self.ao_val[:,e+1:,:])
+        lap2 = np.einsum('mn, cim, dcn -> c', self.parameters["gcoeff"], self.ao_val[:,:e,:], e_lap[:,:,0,:])
+        grad = self.gradient(e, epos)
+        lap3 = np.einsum('dc,dc->c', grad, grad)
+        return grad, (lap1 +lap2+lap3)
     
     def pgradient(self):
         mask = np.tril(np.ones((self.nelec, self.nelec)), -1) # to prevent double counting of electron pairs
@@ -88,12 +93,10 @@ class J3:
             grad = ao[1:4].reshape((3, nconf, nelec, -1))
             return (val, grad)
         elif mode == "lap":
-            # print("shape of coords", coords.shape)
             ao = np.real_if_close(self.mol.eval_gto("GTOval_cart_deriv2", coords), tol = 1e4)
-            # print("ao.shape=", ao.shape)
             val = ao[0].reshape((nconf, nelec, -1))
             grad = ao[1:4].reshape((3, nconf, nelec, -1))
-            lap = ao[[4,7,9],:,:].reshape((3, nconf, nelec, -1))
+            lap = ao[[4,7,9]].reshape((3, nconf, nelec, -1))
             return (val, grad, lap)
     def testvalue(self, e, epos, mask=None):
         curr_epos = self._configscurrent.configs[:, e, :].copy()

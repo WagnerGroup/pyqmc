@@ -208,6 +208,7 @@ def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs)
 
     coord = configs.split(npartitions)
     allruns = []
+        
     for nodeconfigs in coord:
         allruns.append(
             client.submit(
@@ -227,7 +228,6 @@ def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs)
 
     for k in df.keys():
         if k != 'weight' and k!= 'overlap' and k!= 'overlap_gradient':
-            print(k)
             if len(df[k].shape) == 2:
                 df[k] = np.sum(df[k] * df["weight"][:,:,-1],axis=0)/np.sum(df['weight'][:,:,-1],axis=0)
             elif len(df[k].shape) == 3:
@@ -245,7 +245,7 @@ def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs)
     return df, coordret
 
 
-def dist_correlated_sample(wfs, configs, *args, client, **kwargs):
+def dist_correlated_sample(wfs, configs, *args, client, npartitions = None, **kwargs):
     
     if npartitions is None:
         npartitions = sum([x for x in client.nthreads().values()])
@@ -262,11 +262,12 @@ def dist_correlated_sample(wfs, configs, *args, client, **kwargs):
 
     allresults = [r.result() for r in allruns]
     df = {}
-    for k in keys:
+    for k in allresults[0].keys():
         df[k] = np.array([x[k] for x in allresults])
-    df['total'] = np.sum(df['total'] * df["weight"][:,:,-1],axis=0)/np.sum(df['weight'][:,:,-1],axis=0)
+    df['total'] = np.sum(df['total'] * df["weight"],axis=0)/np.sum(df['weight'],axis=0)
     df['overlap'] = np.mean(df['overlap'], axis=0)
-    df['weight'] = np.mean(df['weight'], axis=0)
+    df['weight'] = np.mean(df['weight']*df["rhoprime"], axis=0)/np.mean(df["rhoprime"], axis=0)
+    df['rhoprime'] = np.mean(df['rhoprime'], axis=0)
     return df
 
 

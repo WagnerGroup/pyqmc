@@ -170,6 +170,7 @@ def correlated_sample(wfs, configs, parameters, pgrad):
         "total": np.zeros(nparms),
         "weight": np.zeros(nparms),
         "overlap": np.zeros((nparms, len(wfs))),
+        "rhoprime": np.zeros(nparms)
     }
     data["base_weight"] = weight
     for p, parameter in enumerate(parameters):
@@ -195,6 +196,7 @@ def correlated_sample(wfs, configs, parameters, pgrad):
         overlap = np.einsum("k,jk->jk", normalized_val, normalized_values) / denominator
 
         data["total"][p] = np.average(dat["total"], weights=wt)
+        data["rhoprime"][p] = np.mean(rhoprime)
         data["weight"][p] = np.mean(wt) / np.mean(rhoprime)
         # print(np.mean(wt), weight, np.mean(rhoprime))
         data["overlap"][p] = np.mean(overlap, axis=1) / np.sqrt(np.mean(wt) * weight)
@@ -314,16 +316,13 @@ def optimize_orthogonal(
         avg_data = {}
         for k, it in return_data.items():
             avg_data[k] = np.average(it[warmup:, ...], axis=0)
-        print("shape", avg_data['overlap_gradient'].shape)
         N = avg_data["overlap"].diagonal()
         #Derivatives are only for the optimized wave function, so they miss
         # an index
         N_derivative = 2 * np.real(avg_data["overlap_gradient"][-1])
-        print(N_derivative.shape)
 
         Nij = np.outer(N, N)
         S = avg_data["overlap"] / np.sqrt(Nij)
-        print(avg_data['overlap'].shape)
         S_derivative = avg_data["overlap_gradient"] / Nij[-1, :, np.newaxis] - np.einsum(
             "j,m->jm", avg_data["overlap"][-1,:] / Nij[-1,:], N_derivative / N[-1]
         )
@@ -342,7 +341,7 @@ def optimize_orthogonal(
         total_derivative = (
             energy_derivative + overlap_derivative 
         )
-        #N_derivative = N_derivative[-1, :]
+
         print("############################# step ", step)
         format_str = "{:<15.10} " * 4
         print(format_str.format("Quantity", "value", "derivative norm", "cost derivative norm"))
@@ -386,7 +385,7 @@ def optimize_orthogonal(
                     parameters + conditioner(total_derivative, condition, tmp_tstep)
                 )
 
-            data = correlated_sample(wfs, coords, test_parameters, pgrad)
+            data = correlated_sampler(wfs, coords, test_parameters, pgrad, **correlated_options)
             yfit = []
             xfit = []
             row_format = "{:<15.10} " * 5 + "{:<15}"

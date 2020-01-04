@@ -20,7 +20,7 @@ def ortho_hdf(hdf_file, data, attr, configs):
 from pyqmc.mc import limdrift
 
 
-def sample_overlap(wfs, configs, pgrad, nsteps=100, tstep=0.1, hdf_file=None):
+def sample_overlap(wfs, configs, pgrad, nsteps=100, tstep=0.5):
     r"""
     Sample 
 
@@ -98,9 +98,7 @@ def sample_overlap(wfs, configs, pgrad, nsteps=100, tstep=0.1, hdf_file=None):
             ]
         )
         weight = 1.0 / np.sum(weight, axis=1)
-        # print(weight)
         dat = pgrad(configs, wfs[-1])
-        #dppsi = np.array([dat["dppsi"] for dat in dats])
         save_dat["overlap_gradient"] = np.mean(
             np.einsum("km,k,jk->jmk", dat['dppsi'], normalized_values[-1], normalized_values)
             / denominator,
@@ -109,12 +107,11 @@ def sample_overlap(wfs, configs, pgrad, nsteps=100, tstep=0.1, hdf_file=None):
         for k in dat.keys():
             save_dat[k] = np.average(dat[k], axis=0, weights=weight[-1]) 
         save_dat["weight"] = np.mean(weight, axis=1)
-        # print(save_dat['total'], save_dat['weight'])
         for k, it in save_dat.items():
             if k not in return_data:
                 return_data[k] = np.zeros((nsteps, *it.shape))
             return_data[k][step, ...] = it.copy()
-    return return_data
+    return return_data, configs
 
 
 def correlated_sample(wfs, configs, parameters, pgrad):
@@ -147,6 +144,8 @@ def correlated_sample(wfs, configs, parameters, pgrad):
 
     """
     p0 = pgrad.transform.serialize_parameters(wfs[-1].parameters)
+    for wf in wfs:
+        wf.recompute(configs)
     log_values0 = np.array([wf.value() for wf in wfs])
     nparms = len(parameters)
     nconfig = configs.configs.shape[0]
@@ -220,7 +219,7 @@ def optimize_orthogonal(
     wfs,
     coords,
     pgrad,
-    tstep=0.01,
+    tstep=0.1,
     nsteps=30,
     forcing=10.0,
     warmup=5,
@@ -235,7 +234,12 @@ def optimize_orthogonal(
     adam_epsilon=1e-8,
     step_offset=0,
     Ntol=0.05,
-    weight_boundaries = 0.3
+    weight_boundaries = 0.3,
+    sampler = sample_overlap,
+    sample_options = None,
+    correlated_sampler = correlated_sample,
+    correlated_options = None
+
 ):
     r"""
     Minimize 
@@ -283,12 +287,17 @@ def optimize_orthogonal(
         adam_epsilon=adam_epsilon,
     )
     conditioner = pyqmc.linemin.sd_update
+    if sample_options is None:
+        sample_options = {}
+
+    if correlated_options is None:
+        correlated_options = {}
     for step in range(nsteps):
         # we iterate until the normalization is reasonable
         # One could potentially save a little time here by not computing the gradients 
         # every time, but typically we don't have to renormalize if the moves are good
         while True:
-            return_data = sample_overlap(wfs, coords, pgrad)
+            return_data, coords = sampler(wfs, coords, pgrad, **sample_options)
             N = np.average(return_data["overlap"][warmup:, ...], axis=0).diagonal()[-1]
             print("Normalization", N)
             if abs(N - Ntarget) < Ntol:

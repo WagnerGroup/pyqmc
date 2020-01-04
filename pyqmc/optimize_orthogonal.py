@@ -6,15 +6,20 @@ import pyqmc
 import pyqmc.hdftools as hdftools
 
 
-def ortho_hdf(hdf_file, data, attr, configs):
+def ortho_hdf(hdf_file, data, attr, configs, parameters):
 
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
             if "configs" not in hdf.keys():
                 hdftools.setup_hdf(hdf, data, attr)
                 hdf.create_dataset("configs", configs.configs.shape)
+                for k, it in parameters.items():
+                    hdf.create_dataset("wf/" + k, data=it)
+
             hdftools.append_hdf(hdf, data)
             hdf["configs"][:, :, :] = configs.configs
+            for k, it in parameters.items():
+                hdf["wf/" + k][...] = it.copy()
 
 
 from pyqmc.mc import limdrift
@@ -421,4 +426,4 @@ def optimize_orthogonal(
             "norm_derivative_magnitude": np.linalg.norm(N_derivative),
         }
 
-        ortho_hdf(hdf_file, save_data, attr, coords)
+        ortho_hdf(hdf_file, save_data, attr, coords, pgrad.transform.deserialize(parameters))

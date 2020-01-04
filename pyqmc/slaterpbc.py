@@ -62,11 +62,12 @@ class PySCFSlaterPBC:
     The functions recompute() and updateinternals() change the state of the object, and 
     the rest compute and return values from that state. """
 
-    def __init__(self, supercell, mf):
+    def __init__(self, supercell, mf, twist=None):
         """
         Inputs:
-          supercell:
-          mf:
+          supercell: object returned by get_supercell(cell, S)
+          mf: scf object of primitive cell calculation. scf calculation must include k points that fold onto the gamma point of the supercell
+          twist: (3,) array, twisted boundary condition in fractional coordinates, i.e. as coefficients of the reciprocal lattice vectors of the supercell. Integer values are equivalent to zero.
         """
         for attribute in ["original_cell", "S"]:
             if not hasattr(supercell, attribute):
@@ -80,7 +81,11 @@ class PySCFSlaterPBC:
         self.real_tol = 1e4
 
         self.supercell = supercell
-        self._kpts = get_supercell_kpts(supercell)
+        if twist is None:
+            twist = np.zeros(3)
+        else:
+            twist = np.dot(np.linalg.inv(supercell.a), np.mod(twist, 1.0)) * 2 * np.pi
+        self._kpts = get_supercell_kpts(supercell) + twist
         kdiffs = mf.kpts[np.newaxis] - self._kpts[:, np.newaxis]
         self.kinds = np.nonzero(np.linalg.norm(kdiffs, axis=-1) < 1e-12)[1]
         self.nk = len(self._kpts)

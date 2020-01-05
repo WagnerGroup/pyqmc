@@ -225,7 +225,6 @@ def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs)
     df = {} 
     for k in keys:
         df[k] = np.array([x[0][k] for x in allresults])
-
     for k in df.keys():
         if k != 'weight' and k!= 'overlap' and k!= 'overlap_gradient':
             if len(df[k].shape) == 2:
@@ -237,7 +236,7 @@ def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs)
 
             else: 
                 raise NotImplementedError("too many/two few dimension in dist_sample_overlap")
-        else:
+        elif k!='weight':
             df[k] = np.mean(df[k],axis=0)
 
     df['weight'] = np.mean(df['weight'], axis=0)
@@ -264,9 +263,11 @@ def dist_correlated_sample(wfs, configs, *args, client, npartitions = None, **kw
     df = {}
     for k in allresults[0].keys():
         df[k] = np.array([x[k] for x in allresults])
-    df['total'] = np.sum(df['total'] * df["weight"],axis=0)/np.sum(df['weight'],axis=0)
+    wt = df['weight']*df["rhoprime"]
+    df['total'] = np.sum(df['total'] * wt,axis=0)/np.sum(wt,axis=0)
     df['overlap'] = np.mean(df['overlap'], axis=0)
     df['weight'] = np.mean(df['weight']*df["rhoprime"], axis=0)/np.mean(df["rhoprime"], axis=0)
+    #df["weight"] = np.mean(df["weight"], axis=0)
     df['rhoprime'] = np.mean(df['rhoprime'], axis=0)
     return df
 

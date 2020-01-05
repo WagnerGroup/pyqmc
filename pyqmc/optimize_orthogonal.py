@@ -205,12 +205,17 @@ def correlated_sample(wfs, configs, parameters, pgrad):
 
 def renormalize(wfs, N):
     """
-    b^2/(a^2 + b^2) = N
+    Normalize the last wave function, given a current value of the normalization. Assumes that we want N to be 0.5
 
-    b^2 = N a^2 /(1-N)
+    .. math:: 
+    
+        b^2/(a^2 + b^2) = N
 
-    f^2 b^2 = 0.5 a^2/0.5 = a^2 
-    f^2 = a^2/b^2 = (1-N)/N
+        b^2 = N a^2 /(1-N)
+
+        f^2 b^2 = 0.5 a^2/0.5 = a^2 
+
+        f^2 = a^2/b^2 = (1-N)/N
     """
     desired_n = 1.0 / len(wfs)
     current_n = N
@@ -220,6 +225,11 @@ def renormalize(wfs, N):
 
 def evaluate(wfs, coords, pgrad, sampler, sample_options, warmup):
     return_data, coords = sampler(wfs, coords, pgrad, **sample_options)
+    """ 
+    For wave functions wfs and coordinate set coords, evaluate the overlap and energy of the last wave function. 
+
+    Returns a dictionary with relevant information.
+    """
     avg_data = {}
     for k, it in return_data.items():
         avg_data[k] = np.average(it[warmup:, ...], axis=0)
@@ -252,11 +262,11 @@ def optimize_orthogonal(
     wfs,
     coords,
     pgrad,
+    Starget=0.0,
+    forcing=10.0,
     tstep=0.1,
     nsteps=30,
-    forcing=10.0,
     warmup=5,
-    Starget=0.0,
     Ntarget=0.5,
     max_step=10.0,
     hdf_file=None,
@@ -288,6 +298,30 @@ def optimize_orthogonal(
     The *'d and lambda values are respectively targets and forcings. f is the final wave function in the wave function array.
     We only optimize the parameters of the final wave function, so all 'p' values here represent a parameter in the final wave function. 
 
+    **Important arguments**
+
+        :wfs: a list of wave function objects. The last one is optimized; the rest are kept fixed and used as orthogonalization references
+
+        :coords: A Coord set
+
+        :pgrad: A Pgradient object
+
+        :tstep: Maximum timestep for line minimization, or timestep when line minimization is off
+
+        :nsteps: Number of optimization steps to take
+
+        :Starget: An array-like of length len(wfs)-1, which indicates the target overlap for each reference wave function.
+
+        :forcing: An array-like of length len(wfs)-1, which gives the penalty (lambda) for each reference wave function
+
+        :hdf_file: A string that gives the filename to save the optimization data in.
+
+    **Arguments for experts**
+
+        Other arguments should not be changed unless you know what you're doing.
+
+    **Details about the implementation**
+
     The derivatives are:
 
     .. math:: \partial_p N_f = 2 Re \langle \partial_p \Psi_f | \Psi_f \rangle
@@ -306,14 +340,16 @@ def optimize_orthogonal(
 
     It's important for the normalization of the wave functions to be similar; otherwise the weights of one dominate and only one of the wave functions gets sampled. 
     Some notes:
-    * One could modify the relative weights in the definition of rho, but it's more convenient to output wave functions that are normalized with respect to each other.
-    * Adding a penalty to the normalization turns out to be fairly unstable. 
-    * Moves to reduce the overlap and energy tend to change the normalization a lot (keep in mind that both the determinant and Jastrow parts can have gauge degrees of freedom). This can lead into a tailspin effect pretty quickly. 
+
+     * One could modify the relative weights in the definition of rho, but it's more convenient to output wave functions that are normalized with respect to each other.
+     * Adding a penalty to the normalization turns out to be fairly unstable. 
+     * Moves to reduce the overlap and energy tend to change the normalization a lot (keep in mind that both the determinant and Jastrow parts can have gauge degrees of freedom). This can lead into a tailspin effect pretty quickly. 
     
     In this implementation, we handle this using three techniques:
-    * Most importantly, the cost function derivative is orthogonalized to the derivative of the normalization. 
-    * In the line minimization, if the normalization deviates too far from 0.5 relative to the reference wave function, we do not consider the move. The correlated sampling is unreliable in that situation anyway.
-    * The wave function is renormalized if its normalization deviates too far from 0.5 relative to the first wave function.
+
+     * Most importantly, the cost function derivative is orthogonalized to the derivative of the normalization. 
+     * In the line minimization, if the normalization deviates too far from 0.5 relative to the reference wave function, we do not consider the move. The correlated sampling is unreliable in that situation anyway.
+     * The wave function is renormalized if its normalization deviates too far from 0.5 relative to the first wave function.
     """
 
     parameters = pgrad.transform.serialize_parameters(wfs[-1].parameters)

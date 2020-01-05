@@ -186,7 +186,7 @@ class SkAccumulator:
         nelec = configs.configs.shape[1]
         exp_ikr = np.exp(1j * np.inner(configs.configs, self.klist))
         sum_exp_ikr = exp_ikr.sum(axis=1)
-        d = {"Sk": sum_exp_ikr * sum_exp_ikr.conj() / nelec}
+        d = {"Sk": (sum_exp_ikr.real ** 2 + sum_exp_ikr.imag ** 2) / nelec}
         return d
 
     def avg(self, configs, wf):

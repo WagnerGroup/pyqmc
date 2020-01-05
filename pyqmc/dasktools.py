@@ -3,7 +3,8 @@ import pyqmc
 import numpy as np
 import pandas as pd
 import h5py
-
+import pyqmc
+import pyqmc.optimize_orthogonal
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -274,7 +275,6 @@ def dist_correlated_sample(wfs, configs, *args, client, npartitions = None, **kw
 
 
 def optimize_orthogonal(*args, client, **kwargs):
-    import pyqmc
     if "sample_options" not in kwargs:
         kwargs["sample_options"] = {}
     if "correlated_options" not in kwargs:

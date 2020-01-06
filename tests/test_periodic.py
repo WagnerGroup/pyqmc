@@ -108,7 +108,7 @@ def runtest(mol, mf, kind=0, do_mc=False):
             dm = np.sum(dm, axis=0)
     else:
         kpt = mf.kpts[kind]
-        wf = pyqmc.PySCFSlaterUHF(mol, mf, twist=np.dot(kpt, mol.a.T / np.pi))
+        wf = pyqmc.PySCFSlaterPBC(mol, mf, twist=np.dot(kpt, mol.a.T / np.pi))
         dm = mf.make_rdm1()
         print("original dm shape", dm.shape)
         if len(dm.shape) == 4:
@@ -155,6 +155,6 @@ if __name__ == "__main__":
     kind = 0
     nk = [2, 2, 2]
     # multislater(kind, nk)
-    # cubic_with_ecp(kind, nk)
+    cubic_with_ecp(kind, nk)
     test_RKS(kind, nk)
     test_noncubic(kind, nk)

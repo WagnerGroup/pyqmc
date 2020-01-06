@@ -5,8 +5,6 @@ if __name__ == "__main__":
     mol = pyscf.gto.M(atom = "He 0. 0. 0.", basis='bfd_vdz', ecp='bfd', unit='bohr')
 
     mf = pyscf.scf.RHF(mol).run()
-
-
     wf = pyqmc.slater_jastrow(mol, mf)
 
     nconfig = 1000

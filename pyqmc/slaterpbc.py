@@ -1,5 +1,6 @@
 import numpy as np
 from pyqmc import pbc, slateruhf
+from pyscf.pbc import scf
 
 
 def get_supercell_kpts(supercell):
@@ -112,22 +113,39 @@ class PySCFSlaterPBC:
         self.parameters["mo_coeff_beta"] = np.asarray(mcblist)
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
 
-        if len(mf.mo_coeff[0][0].shape) == 2:
-            self._nelec = [int(np.sum(np.concatenate(o))) for o in mf.mo_occ]
+        print("scf object is type", type(mf))
+        if isinstance(mf, scf.kuhf.KUHF):
+            # Then indices are (spin, kpt, basis, mo)
+            self._nelec = [int(np.sum([o[k] for k in self.kinds])) for o in mf.mo_occ]
+        elif isinstance(mf, scf.khf.KRHF):
+            # Then indices are (kpt, basis, mo)
+            self._nelec = [
+                int(np.sum([mf.mo_occ[k] > t for k in self.kinds])) for t in (0.9, 1.1)
+            ]
+            print("nelec", self._nelec)
         else:
+            print("Warning: not expecting scf object of type", type(mf))
             scale = np.linalg.det(self.supercell.S)
             self._nelec = [int(np.round(n * scale)) for n in self._cell.nelec]
+
+        # if len(mf.mo_coeff[0][0].shape) == 2:
+        #    self._nelec = [int(np.sum(np.concatenate(o))) for o in mf.mo_occ]
+        # else:
+        #    scale = np.linalg.det(self.supercell.S)
+        #    self._nelec = [int(np.round(n * scale)) for n in self._cell.nelec]
         self._nelec = tuple(self._nelec)
         self.get_phase = lambda x: np.exp(2j * np.pi * np.angle(x))
 
     def evaluate_orbitals(self, configs, mask=None, eval_str="PBCGTOval_sph"):
         mycoords = configs.configs
+        configswrap = configs.wrap
         if mask is not None:
             mycoords = mycoords[mask]
+            configswrap = configswrap[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
         # wrap supercell positions into primitive cell
         prim_coords, prim_wrap = pbc.enforce_pbc(self._cell.lattice_vectors(), mycoords)
-        configswrap = configs.wrap.reshape(prim_wrap.shape)
+        configswrap = configswrap.reshape(prim_wrap.shape)
         wrap = prim_wrap + np.dot(configswrap, self.supercell.S)
         kdotR = np.linalg.multi_dot(
             (self._kpts, self._cell.lattice_vectors().T, wrap.T)
@@ -181,7 +199,7 @@ class PySCFSlaterPBC:
 
     # identical to slateruhf
     def _updateval(self, ratio, s, mask):
-        self._dets[s][0][mask] *= self.get_phase(ratio)  # will not work for complex!
+        self._dets[s][0][mask] *= self.get_phase(ratio)
         self._dets[s][1][mask] += np.log(np.abs(ratio))
 
     ### not state-changing functions
@@ -222,7 +240,8 @@ class PySCFSlaterPBC:
         aos = self.evaluate_orbitals(epos, mask)
         mo_coeff = self.parameters[self._coefflookup[s]]
         mo = [np.dot(aos[k], mo_coeff[k]) for k in range(self.nk)]
-        mo = np.concatenate(mo, axis=-1).reshape(nmask, self._nelec[s])
+        mo = np.concatenate(mo, axis=-1)
+        mo = mo.reshape(nmask, *epos.configs.shape[1:-1], self._nelec[s])
         return self._testrow(e, mo, mask)
 
     def gradient(self, e, epos):

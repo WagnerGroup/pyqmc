@@ -1,9 +1,5 @@
-Important objects
-=================================
-
-----------------------
 Wave function objects
-----------------------
+=================================
 
 .. py:function:: __init__()
 
@@ -41,3 +37,31 @@ Return the laplacian Psi/ Psi. Conditions similar to gradient()
 Return the parameter gradient of Psi. 
 Returns d_p \Psi/\Psi as a dictionary of numpy arrays, which correspond to the parameter dictionary.
 
+----------------------
+Slater determinant
+----------------------
+
+.. automodule:: pyqmc.slateruhf
+   :members:
+   
+
+----------------------
+Jastrow factor
+----------------------
+
+.. automodule:: pyqmc.jastrowspin
+   :members:
+ 
+----------------------
+Multiple Slater determinant
+----------------------
+
+.. automodule:: pyqmc.multislater
+   :members:
+
+----------------------
+Multipy wave function
+----------------------
+
+.. automodule:: pyqmc.multiplywf
+   :members:

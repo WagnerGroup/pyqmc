@@ -3,7 +3,8 @@ import pyqmc
 import numpy as np
 import pandas as pd
 import h5py
-
+import pyqmc
+import pyqmc.optimize_orthogonal
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -147,6 +148,7 @@ def line_minimization(*args, client, **kwargs):
     return pyqmc.line_minimization(*args, vmc=distvmc, lm=dist_lm_sampler, **kwargs)
 
 
+
 def cvmc_optimize(*args, client, **kwargs):
     import pyqmc
     from pyqmc.cvmc import lm_cvmc
@@ -197,3 +199,89 @@ def distdmc_propagate(wf, configs, weights, *args, client, npartitions=None, **k
             df[k] = df[k] / df["weight"]
     print(df)
     return df, coordret, weightret
+
+
+
+
+def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs):
+    if npartitions is None:
+        npartitions = sum([x for x in client.nthreads().values()])
+
+    coord = configs.split(npartitions)
+    allruns = []
+        
+    for nodeconfigs in coord:
+        allruns.append(
+            client.submit(
+                pyqmc.optimize_orthogonal.sample_overlap, wfs, nodeconfigs, *args, **kwargs
+            )
+        )
+
+    allresults = [r.result() for r in allruns]
+    configs.join([x[1] for x in allresults])
+    coordret = configs
+    # Here we reweight the averages since each step on each node
+    # was done with a different average weight.
+    keys = allresults[0][0].keys()
+    df = {} 
+    for k in keys:
+        df[k] = np.array([x[0][k] for x in allresults])
+    for k in df.keys():
+        if k != 'weight' and k!= 'overlap' and k!= 'overlap_gradient':
+            if len(df[k].shape) == 2:
+                df[k] = np.sum(df[k] * df["weight"][:,:,-1],axis=0)/np.sum(df['weight'][:,:,-1],axis=0)
+            elif len(df[k].shape) == 3:
+                df[k] = np.sum(df[k] * df["weight"][:,:,-1,np.newaxis],axis=0)/np.sum(df['weight'][:,:,-1, np.newaxis],axis=0)
+            elif len(df[k].shape) == 4:
+                df[k] = np.sum(df[k] * df["weight"][:,:,-1,np.newaxis,np.newaxis],axis=0)/np.sum(df['weight'][:,:,-1, np.newaxis, np.newaxis],axis=0)
+
+            else: 
+                raise NotImplementedError("too many/two few dimension in dist_sample_overlap")
+        elif k!='weight':
+            df[k] = np.mean(df[k],axis=0)
+
+    df['weight'] = np.mean(df['weight'], axis=0)
+
+    return df, coordret
+
+
+def dist_correlated_sample(wfs, configs, *args, client, npartitions = None, **kwargs):
+    
+    if npartitions is None:
+        npartitions = sum([x for x in client.nthreads().values()])
+
+    coord = configs.split(npartitions)
+    allruns = []
+    for nodeconfigs in coord:
+        allruns.append(
+            client.submit(
+                pyqmc.optimize_orthogonal.correlated_sample, 
+                wfs, nodeconfigs, *args, **kwargs
+            )
+        )
+
+    allresults = [r.result() for r in allruns]
+    df = {}
+    for k in allresults[0].keys():
+        df[k] = np.array([x[k] for x in allresults])
+    wt = df['weight']*df["rhoprime"]
+    df['total'] = np.sum(df['total'] * wt,axis=0)/np.sum(wt,axis=0)
+    df['overlap'] = np.mean(df['overlap'], axis=0)
+    df['weight'] = np.mean(df['weight']*df["rhoprime"], axis=0)/np.mean(df["rhoprime"], axis=0)
+    #df["weight"] = np.mean(df["weight"], axis=0)
+    df['rhoprime'] = np.mean(df['rhoprime'], axis=0)
+    return df
+
+
+
+def optimize_orthogonal(*args, client, **kwargs):
+    if "sample_options" not in kwargs:
+        kwargs["sample_options"] = {}
+    if "correlated_options" not in kwargs:
+        kwargs["correlated_options"] = {}
+
+    kwargs["sample_options"]["client"] = client
+    kwargs["correlated_options"]["client"] = client
+
+    return pyqmc.optimize_orthogonal.optimize_orthogonal(*args, sampler=dist_sample_overlap, correlated_sampler = dist_correlated_sample,**kwargs)
+

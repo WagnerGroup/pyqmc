@@ -26,6 +26,7 @@ Welcome to pyQMC's documentation!
    optvariance
    slateruhf
    testwf
+   optimize_orthogonal
 
 Indices and tables
 ==================

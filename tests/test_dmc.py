@@ -45,10 +45,11 @@ def test():
         np.std(dfvmc["energytotal"]) / np.sqrt(len(dfvmc)),
     )
 
+    warmup = 200
     dfdmc, configs_, weights_ = rundmc(
         wf,
         configs,
-        nsteps=1800,
+        nsteps=1600 + warmup,
         branchtime=5,
         accumulators={"energy": EnergyAccumulator(mol)},
         ekey=("energy", "total"),
@@ -60,8 +61,7 @@ def test():
     dfdmc = pd.DataFrame(dfdmc)
     dfdmc.sort_values("step", inplace=True)
 
-    warmup = 200
-    dfprod = dfdmc[dfdmc.step > warmup]
+    dfprod = dfdmc[dfdmc.step >= warmup]
 
     rb_summary = reblock.reblock_summary(dfprod[["energytotal", "energyei"]], 20)
     print(rb_summary)

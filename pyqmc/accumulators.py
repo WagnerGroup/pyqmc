@@ -170,3 +170,27 @@ class PGradTransform:
         d["dpidpj"] = np.einsum("ij,ik->jk", dp, dp_regularized) / nconf
 
         return d
+
+
+class SkAccumulator:
+    r"""
+    Accumulates structure factor 
+
+    .. math:: S(\vec{k}) = \langle \rho_{\vec{k}} \rho_{-\vec{k}} \rangle
+                         = \langle \left| \sum_{j=1}^{N_e} e^{i\vec{k}\cdot\vec{r}_j} \right| \rangle
+
+    """
+
+    def __init__(self, klist):
+        self.klist = klist
+
+    def __call__(self, configs, wf):
+        nelec = configs.configs.shape[1]
+        exp_ikr = np.exp(1j * np.inner(configs.configs, self.klist))
+        sum_exp_ikr = exp_ikr.sum(axis=1)
+        d = {"Sk": (sum_exp_ikr.real ** 2 + sum_exp_ikr.imag ** 2) / nelec}
+        return d
+
+    def avg(self, configs, wf):
+        d = {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
+        return d

@@ -147,7 +147,7 @@ def dmc_propagate(
             else:
                 dat = energydat
             for m, res in dat.items():
-                avg[k + m] = np.dot(weights, res) / (nconfig * wavg)
+                avg[k + m] = np.einsum('...i,i...->...',weights,res) / (nconfig * wavg)
         avg["weight"] = wavg
         avg["weightvar"] = np.std(weights)
         avg["weightmin"] = np.amin(weights)

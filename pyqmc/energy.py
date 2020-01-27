@@ -72,6 +72,7 @@ def energy(mol, configs, wf, threshold):
     return {
         "ke": ke,
         "ee": ee,
-        "ei": ei + ecp_val,
+        "ei": ei,
+        "ecp": ecp_val,
         "total": ke + ee + ei + ecp_val + ii,
     }

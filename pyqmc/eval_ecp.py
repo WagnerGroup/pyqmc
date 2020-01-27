@@ -153,7 +153,7 @@ def ecp_ea(mol, configs, wf, e, at, threshold):
     Returns the ECP value between electron e and atom at, local+nonlocal.
     """
     nconf = configs.configs.shape[0]
-    ecp_val = np.zeros(nconf)
+    ecp_val = np.zeros(nconf, dtype=complex if wf.iscomplex else float)
 
     l_list, v_l = get_v_l(mol, configs, e, at)
     mask, prob = ecp_mask(v_l, threshold)
@@ -186,11 +186,12 @@ def ecp(mol, configs, wf, threshold):
     Returns the ECP value, summed over all the electrons and atoms.
     """
     nconf, nelec = configs.configs.shape[0:2]
-    ecp_tot = np.zeros(nconf)
+    ecp_tot = np.zeros(nconf, dtype=complex if wf.iscomplex else float)
     if mol._ecp != {}:
-        for e in range(nelec):
-            for at in range(len(mol._atom)):
-                ecp_tot += ecp_ea(mol, configs, wf, e, at, threshold)
+        for at in range(len(mol._atom)):
+            if mol._atom[at][0] in mol._ecp.keys():
+                for e in range(nelec):
+                    ecp_tot += ecp_ea(mol, configs, wf, e, at, threshold)
     return ecp_tot
 
 

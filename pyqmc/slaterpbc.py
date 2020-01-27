@@ -77,7 +77,6 @@ class PySCFSlaterPBC:
                 supercell.original_cell = supercell
                 supercell.S = np.eye(3)
 
-        self.occ = np.asarray(mf.mo_occ) > 0.9
         self.parameters = {}
         self.real_tol = 1e4
 
@@ -90,18 +89,16 @@ class PySCFSlaterPBC:
         kdiffs = mf.kpts[np.newaxis] - self._kpts[:, np.newaxis]
         self.kinds = np.nonzero(np.linalg.norm(kdiffs, axis=-1) < 1e-12)[1]
         self.nk = len(self._kpts)
-        print("nk", self.nk)
-        print(self.kinds)
+        print("nk", self.nk, self.kinds)
 
-        mo_coeff = np.asarray(mf.mo_coeff)
         self._cell = supercell.original_cell
 
         mcalist = []
         mcblist = []
         for kind in self.kinds:
             if len(mf.mo_coeff[0][0].shape) == 2:
-                mca = mo_coeff[0][kind][:, self.occ[0][kind]]
-                mcb = mo_coeff[1][kind][:, self.occ[1][kind]]
+                mca = mf.mo_coeff[0][kind][:, np.asarray(mf.mo_occ[0][kind] > 0.9)]
+                mcb = mf.mo_coeff[1][kind][:, np.asarray(mf.mo_occ[1][kind] > 0.9)]
             else:
                 mca = mf.mo_coeff[kind][:, np.asarray(mf.mo_occ[kind] > 0.9)]
                 mcb = mf.mo_coeff[kind][:, np.asarray(mf.mo_occ[kind] > 1.1)]
@@ -122,19 +119,19 @@ class PySCFSlaterPBC:
             self._nelec = [
                 int(np.sum([mf.mo_occ[k] > t for k in self.kinds])) for t in (0.9, 1.1)
             ]
-            print("nelec", self._nelec)
         else:
             print("Warning: not expecting scf object of type", type(mf))
             scale = np.linalg.det(self.supercell.S)
             self._nelec = [int(np.round(n * scale)) for n in self._cell.nelec]
-
-        # if len(mf.mo_coeff[0][0].shape) == 2:
-        #    self._nelec = [int(np.sum(np.concatenate(o))) for o in mf.mo_occ]
-        # else:
-        #    scale = np.linalg.det(self.supercell.S)
-        #    self._nelec = [int(np.round(n * scale)) for n in self._cell.nelec]
         self._nelec = tuple(self._nelec)
-        self.get_phase = lambda x: np.exp(2j * np.pi * np.angle(x))
+
+        self.iscomplex = np.iscomplexobj(
+            np.concatenate([p.ravel() for p in self.parameters.values()])
+        )
+        if self.iscomplex:
+            self.get_phase = lambda x: x / np.abs(x)
+        else:
+            self.get_phase = np.sign
 
     def evaluate_orbitals(self, configs, mask=None, eval_str="PBCGTOval_sph"):
         mycoords = configs.configs

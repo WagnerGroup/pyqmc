@@ -62,7 +62,8 @@ class PySCFSlaterUHF:
         if hasattr(mf, "kpts"):
             kind = np.where(
                 np.linalg.norm(
-                    np.dot(mf.kpts, mol.a.T) - np.array(twist) * np.pi, axis=1
+                    np.dot(mf.kpts, mol.lattice_vectors().T) - np.array(twist) * np.pi,
+                    axis=1,
                 )
                 < 1e-12
             )[0][0]
@@ -95,13 +96,11 @@ class PySCFSlaterUHF:
                     :, np.asarray(mf.mo_occ > 1.1)
                 ]
 
-        if (
-            np.iscomplexobj(
-                np.concatenate([p.ravel() for p in self.parameters.values()])
-            )
-            or np.linalg.norm(twist) != 0
-        ):
-            self.get_phase = lambda x: np.exp(2j * np.pi * np.angle(x))
+        self.iscomplex = np.iscomplexobj(
+            np.concatenate([p.ravel() for p in self.parameters.values()])
+        )
+        if self.iscomplex:
+            self.get_phase = lambda x: x / np.abs(x)
         else:
             self.get_phase = np.sign
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")

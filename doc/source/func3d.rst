@@ -1,4 +1,4 @@
-func3d.py
+3-dimensional functions
 **********************************
 
 .. automodule:: pyqmc.func3d

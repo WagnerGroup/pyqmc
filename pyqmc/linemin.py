@@ -37,13 +37,46 @@ def opt_hdf(hdf_file, data, attr, configs, parameters):
                 hdf["wf/" + k][...] = it.copy()
 
 
+def polyfit_relative(xfit, yfit, degree):
+    p = np.polyfit(xfit, yfit,degree)
+    ypred = np.polyval(p, xfit)
+    resid = (ypred-yfit)**2
+    relative_error = np.var(resid)/np.var(yfit)
+    return p, relative_error
+
+def stable_fit2(xfit, yfit, tolerance = 1e-2):
+    """ Try to fit to a quadratic. If the fit is not good, 
+    then just take the lowest value of yfit
+    """
+    steprange = np.max(xfit)
+    minstep = np.min(xfit)
+    pq, relative_errq = polyfit_relative(xfit, yfit, 2)
+    pl, relative_errl = polyfit_relative(xfit, yfit, 1)
+
+    print("relative errors in fit", relative_errq, relative_errl)
+    if relative_errl/relative_errq < 2:  #If a linear fit is about as good..
+        if pl[0] < 0:
+            return steprange
+        else: 
+            return minstep
+    elif relative_errq < tolerance and pq[0] > 0:
+        est_min = -pq[1] / (2 * pq[0])
+        if est_min > steprange:
+            est_min = steprange
+        if est_min < minstep:
+            est_min = minstep
+        return est_min
+    else: 
+        return xfit[np.argmin(yfit)]
+
+ 
+
+
 def stable_fit(xfit, yfit):
     p = np.polyfit(xfit, yfit, 2)
     steprange = np.max(xfit)
     minstep = np.min(xfit)
-    print("polynomial fit", p)
     est_min = -p[1] / (2 * p[0])
-    print("estimated minimum", est_min, flush=True)
     if est_min > steprange and p[0] > 0:  # minimum past the search radius
         est_min = steprange
     if est_min < minstep and p[0] > 0:  # mimimum behind the search radius
@@ -54,7 +87,7 @@ def stable_fit(xfit, yfit):
             est_min = steprange
         if plin[0] > 0:
             est_min = minstep
-    print("estimated minimum adjusted", est_min, flush=True)
+    #print("estimated minimum adjusted", est_min, flush=True)
     return est_min
 
 

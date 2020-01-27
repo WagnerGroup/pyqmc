@@ -271,7 +271,7 @@ def get_rot(mol, configs, e, at, naip):
             d1[i + 7] = np.pi - tha
             d2[i + 7] = (rk2 + 1) * fi0
 
-    epos_rot = apos + r_ea * (
+    epos_rot = (configs.configs[:, e] - r_ea_vec)[:, np.newaxis] + r_ea * (
         i_rot * np.sin(d1) * np.cos(d2)
         + j_rot * np.sin(d1) * np.sin(d2)
         + k_rot * np.cos(d1)

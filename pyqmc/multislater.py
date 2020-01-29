@@ -48,6 +48,14 @@ class MultiSlater:
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
         self.pbc_str = "PBC" if hasattr(mol, "a") else ""
 
+        self.iscomplex = np.iscomplexobj(
+            np.concatenate([p.ravel() for p in self.parameters.values()])
+        )
+        if self.iscomplex:
+            self.get_phase = lambda x: x / np.abs(x)
+        else:
+            self.get_phase = np.sign
+
     def _copy_ci(self, mc):
         """       
         Copies over determinant coefficients and MO occupations
@@ -154,12 +162,12 @@ class MultiSlater:
             ),
         )
 
-        wf_sign = np.sign(wf_val)
+        wf_sign = self.get_phase(wf_val)
         wf_val = np.log(np.abs(wf_val))
         return wf_sign, wf_val
 
     def _updateval(self, ratio, s, mask):
-        self._dets[s][0, mask, :] *= np.sign(ratio)
+        self._dets[s][0, mask, :] *= self.get_phase(ratio)
         self._dets[s][1, mask, :] += np.log(np.abs(ratio))
 
     def _testrow(self, e, vec, mask=None, spin=None):

@@ -131,9 +131,9 @@ def default_msj(mol, mf, mc):
     return wf, to_opt, freeze
 
 
-def default_sj(mol, mf):
+def default_sj(mol, mf, ion_cusp = False):
     wf1, to_opt1, freeze1 = default_slater(mol, mf)
-    wf2, to_opt2, freeze2 = default_jastrow(mol)
+    wf2, to_opt2, freeze2 = default_jastrow(mol, ion_cusp)
     wf = MultiplyWF(wf1, wf2)
     to_opt = ["wf1" + x for x in to_opt1] + ["wf2" + x for x in to_opt2]
     freeze = {}

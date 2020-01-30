@@ -53,6 +53,7 @@ class MultiplyWF:
         self.wf1 = wf1
         self.wf2 = wf2
         self.parameters = WFmerger(self.wf1.parameters, self.wf2.parameters)
+        self.iscomplex = wf1.iscomplex or wf2.iscomplex
 
     def recompute(self, configs):
         v1 = self.wf1.recompute(configs)

@@ -1,9 +1,10 @@
+import numpy as np
 class Parameters:
     def __init__(self, dicts):
         self.data = {}
         self.wf_count = len(dicts)
         for (i, d) in enumerate(dicts):
-            self.data["wf"+ str(i)] = d
+            self.data["wf"+ str(i+1)] = d
 
     def __setitem__(self, idx, value):
         k1 = idx[0:3]
@@ -22,19 +23,19 @@ class Parameters:
 
     def __iter__(self):
         for i in range(self.wf_count):
-            k1 = "wf"+str(i)
+            k1 = "wf"+str(i+1)
             for k2 in self.data[k1].keys():
                 yield k1 + k2
 
     def __len__(self):
         length = 0
-        for key in self:
-            length += len(self[key])
+        for i in self.data:
+            length += len(i)
         return length
 
     def items(self):
         for i in range(self.wf_count):
-            k1 = "wf"+str(i)
+            k1 = "wf"+str(i+1)
             for k2 in self.data[k1].keys():
                 yield k1 + k2, self.data[k1][k2]
 
@@ -43,16 +44,17 @@ class Parameters:
 
     def keys(self):
         for i in range(self.wf_count):
-            k1 = "wf"+str(i)
+            k1 = "wf"+str(i+1)
             for k2 in self.data[k1].keys():
                 yield k1 + k2
 
-class WaveFunction:
+class MultiplyNWF:
     """
     A general representation of a wavefunction as a product of multiple wf_factors 
     """
     def __init__(self, wf_factors):
         self.wf_factors = wf_factors
+        self.parameters = Parameters([wf.parameters for wf in wf_factors])
 
     def  recompute(self, configs):
         signs = np.ones(len(configs.configs))
@@ -87,7 +89,6 @@ class WaveFunction:
         grads = grad_laps[:,0]
         laps = grad_laps[:,1]
         corss_term = np.zeros(laps[0].shape)
-        print("cross_term shape", corss_term.shape)
         nwf = len(self.wf_factors)
         for i in range(nwf):
             for j in range(i+1,nwf):
@@ -96,6 +97,7 @@ class WaveFunction:
     
     def gradient_laplacian(self, e, epos):
         return self.gradient(e,epos), self.laplacian(e,epos)
+
     def pgradient(self):
         return Parameters([wf.pgradient() for wf in self.wf_factors])
 

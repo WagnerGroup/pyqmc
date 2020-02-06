@@ -61,7 +61,7 @@ class MultiplyWF:
         vals = np.zeros(len(configs.configs))
         for wf in self.wf_factors:
             results = wf.recompute(configs)
-            signs *= results[0]
+            signs = signs * results[0]
             vals += results[1]
         return signs, vals
 
@@ -85,15 +85,14 @@ class MultiplyWF:
     def laplacian(self, e, epos):
         grad_laps = [wf.gradient_laplacian(e, epos) for wf in self.wf_factors]
         grad_laps = np.array(grad_laps)
-        # print(grad_laps[1,1].shape)
         grads = grad_laps[:,0]
         laps = grad_laps[:,1]
-        corss_term = np.zeros(laps[0].shape)
+        cross_term = np.zeros(laps[0].shape)
         nwf = len(self.wf_factors)
         for i in range(nwf):
             for j in range(i+1,nwf):
-                corss_term += np.sum(grads[i]*grads[j], axis=0)
-        return np.sum(laps, axis=0) + corss_term*2
+                cross_term = cross_term + np.sum(grads[i]*grads[j], axis=0)
+        return np.sum(laps, axis=0) + cross_term * 2
 
     def gradient_laplacian(self, e, epos):
         return self.gradient(e,epos), self.laplacian(e,epos)

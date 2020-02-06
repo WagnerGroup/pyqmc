@@ -8,6 +8,17 @@ def is_complex(wf):
     cond3 = hasattr(wf, "wf2") and is_complex(wf.wf2)
     return cond1 or cond2 or cond3
 
+def test_mask(wf, e, epos, mask=None):
+    # testvalue
+    if mask is None:
+        num_e = len(wf.value()[1])
+        mask = np.random.randint(0,2,num_e).astype(bool)
+    ratio = wf.testvalue(e, epos, mask)
+    print(wf.testvalue(e, epos))
+    ratio_ref = wf.testvalue(e, epos)[mask]
+    assert(all(ratio == ratio_ref))
+    print("testcase for test_value() with mask passed")
+    # update internals
 
 def test_updateinternals(wf, configs):
     """

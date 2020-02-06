@@ -11,20 +11,15 @@ Welcome to pyQMC's documentation!
    :caption: Contents:
 
    install
-   objects
+
+   methods
+
+   wavefunction
+
    
-   mc
-   dmc
-   optsr
-   slater
-   jastrow
-   ecp
-   energy
-   ewald
    accumulators
+
    func3d
-   optvariance
-   slateruhf
    testwf
 
 Indices and tables

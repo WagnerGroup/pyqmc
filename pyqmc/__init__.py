@@ -45,21 +45,22 @@ def gradient_generator(mol, wf, to_opt=None, freeze=None, **ewald_kwargs):
     )
 
 
-
-def default_slater(mol, mf, optimize_orbitals = False):
+def default_slater(mol, mf, optimize_orbitals=False):
     import numpy as np
+
     wf = PySCFSlaterUHF(mol, mf)
     if optimize_orbitals:
-        to_opt = ['mo_coeff_alpha', 'mo_coeff_beta']
+        to_opt = ["mo_coeff_alpha", "mo_coeff_beta"]
         freeze = {}
-        for k in ['mo_coeff_alpha', 'mo_coeff_beta']:
+        for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             freeze[k] = np.zeros(wf.parameters[k].shape).astype(bool)
             maxval = np.argmax(np.abs(wf.parameters[k]))
             freeze[k][maxval] = True
-    else: 
+    else:
         to_opt = []
         freeze = {}
     return wf, to_opt, freeze
+
 
 def default_multislater(mol, mf, mc):
     import numpy as np
@@ -132,9 +133,9 @@ def default_msj(mol, mf, mc):
     return wf, to_opt, freeze
 
 
-def default_sj(mol, mf):
+def default_sj(mol, mf, ion_cusp=False):
     wf1, to_opt1, freeze1 = default_slater(mol, mf)
-    wf2, to_opt2, freeze2 = default_jastrow(mol)
+    wf2, to_opt2, freeze2 = default_jastrow(mol, ion_cusp)
     wf = MultiplyWF(wf1, wf2)
     to_opt = ["wf1" + x for x in to_opt1] + ["wf2" + x for x in to_opt2]
     freeze = {}

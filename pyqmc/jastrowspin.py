@@ -106,7 +106,7 @@ class JastrowSpin:
 
         u = np.sum(self._bvalues * self.parameters["bcoeff"], axis=(2, 1))
         u += np.einsum("ijkl,jkl->i", self._avalues, self.parameters["acoeff"])
-        return (1, u)
+        return (np.ones(len(u)), u)
 
     def updateinternals(self, e, epos, wrap=None, mask=None):
         r""" Update a and b sums. 
@@ -230,7 +230,7 @@ class JastrowSpin:
         u = np.sum(self._bvalues * self.parameters["bcoeff"], axis=(2, 1))
 
         u += np.einsum("ijkl,jkl->i", self._avalues, self.parameters["acoeff"])
-        return (1, u)
+        return (np.ones(len(u)), u)
 
     def gradient(self, e, epos):
         """We compute the gradient for electron e as

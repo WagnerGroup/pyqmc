@@ -143,15 +143,16 @@ def vmc(
         with h5py.File(hdf_file, "a") as hdf:
             if "configs" in hdf.keys():
                 configs.configs = np.array(hdf["configs"])
+                stepoffset = hdf["step"][-1] + 1
                 if verbose:
-                    print("Restarted calculation")
+                    print("Restarting calculation from step ", stepoffset)
 
     nconf, nelec, ndim = configs.configs.shape
     df = []
     wf.recompute(configs)
     for step in range(nsteps):
         if verbose:
-            print("step", step)
+            print("step", stepoffset + step)
         acc = []
         for e in range(nelec):
             # Propose move

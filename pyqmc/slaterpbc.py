@@ -49,9 +49,11 @@ def get_supercell(cell, S):
     supercell.a = superlattice
     supercell.atom = atom
     supercell.pseudo = cell.pseudo
+    supercell.ecp = cell.ecp
     supercell.basis = cell.basis
     supercell.unit = cell.unit
     supercell.spin = cell.spin * scale
+    supercell.exp_to_discard = cell.exp_to_discard
     supercell.build()
     supercell.original_cell = cell
     supercell.S = S

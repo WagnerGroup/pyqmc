@@ -1,6 +1,15 @@
-accumulators.py
+Accumulators
 **********************************
+
 
 .. automodule:: pyqmc.accumulators
    :members:
    
+.. automodule:: pyqmc.energy
+   :members:
+
+.. automodule:: pyqmc.eval_ecp
+   :members:
+
+.. automodule:: pyqmc.ewald
+   :members:

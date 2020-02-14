@@ -124,10 +124,11 @@ class PGradDescriptor:
         dp = self.transform.serialize_gradients(pgrad)
 
         node_cut, f = self._node_regr(configs, wf)
+        dp_regularized = dp * f[:, np.newaxis]
 
-        d["dpH"] = np.einsum("i,ij->ij", energy, dp * f[:, np.newaxis])
-        d["dppsi"] = dp
-        d["dpidpj"] = np.einsum("ij,ik->ijk", dp, dp * f[:, np.newaxis])
+        d["dpH"] = np.einsum("i,ij->ij", energy, dp_regularized)
+        d["dppsi"] = dp_regularized
+        d["dpidpj"] = np.einsum("ij,ik->ijk", dp, dp_regularized)
         raise NotImplementedError("define __call__ for PGradOBDMTransform")
         return d
 
@@ -144,16 +145,17 @@ class PGradDescriptor:
             descript.update(self.descriptors[dm_type](dms))
 
         node_cut, f = self._node_regr(configs, wf)
+        dp_regularized = dp * f[:, np.newaxis]
 
         d = {}
         for k, it in den.items():
             d[k] = np.mean(it, axis=0)
-        d["dpH"] = np.einsum("i,ij->j", energy, dp * f[:, np.newaxis]) / nconf
-        d["dppsi"] = np.mean(dp, axis=0)
-        d["dpidpj"] = np.einsum("ij,ik->jk", dp, dp * f[:, np.newaxis]) / nconf
+        d["dpH"] = np.einsum("i,ij->j", energy, dp_regularized) / nconf
+        d["dppsi"] = np.mean(dp_regularized, axis=0)
+        d["dpidpj"] = np.einsum("ij,ik->jk", dp, dp_regularized) / nconf
 
         for di, desc in descript.items():
-            d["dp" + di] = np.einsum("ij,i->j", dp * f[:, np.newaxis], desc) / nconf
+            d["dp" + di] = np.einsum("ij,i->j", dp_regularized, desc) / nconf
             d["avg" + di] = np.sum(desc) / nconf
         d["nodal_cutoff"] = np.sum(node_cut)
 

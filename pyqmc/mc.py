@@ -13,6 +13,10 @@ def initial_guess(mol, nconfig, r=1.0):
     """ Generate an initial guess by distributing electrons near atoms
     proportional to their charge.
 
+    assign electrons to atoms based on atom charges
+    assign the minimum number first, and assign the leftover ones randomly
+    this algorithm chooses atoms *with replacement* to assign leftover electrons
+
     Args: 
 
      mol: A PySCF-like molecule object. Should have atom_charges(), atom_coords(), and nelec
@@ -33,10 +37,6 @@ def initial_guess(mol, nconfig, r=1.0):
     wts = mol.atom_charges()
     wts = wts / np.sum(wts)
 
-    # assign electrons to atoms based on atom charges
-    # assign the minimum number first, and assign the leftover ones randomly
-    # this algorithm chooses atoms *with replacement* to assign leftover electrons
-
     for s in [0, 1]:
         neach = np.array(
             np.floor(mol.nelec[s] * wts), dtype=int
@@ -46,17 +46,15 @@ def initial_guess(mol, nconfig, r=1.0):
         )  # fraction of electron unassigned on each atom
         nassigned = np.sum(neach)  # number of electrons assigned
         totleft = int(mol.nelec[s] - nassigned)  # number of electrons not yet assigned
+        ind0 = s * mol.nelec[0]
+        epos[:, ind0 : ind0 + nassigned, :] = np.repeat(
+            mol.atom_coords(), neach, axis=0
+        )  # assign core electrons
         if totleft > 0:
             bins = np.cumsum(nleft) / totleft
             inds = np.argpartition(
                 np.random.random((nconfig, len(wts))), totleft, axis=1
             )[:, :totleft]
-            ind0 = s * mol.nelec[0]
-            epos[:, ind0 : ind0 + nassigned, :] = np.repeat(
-                mol.atom_coords(), neach, axis=0
-            )[
-                np.newaxis
-            ]  # assign core electrons
             epos[:, ind0 + nassigned : ind0 + mol.nelec[s], :] = mol.atom_coords()[
                 inds
             ]  # assign remaining electrons

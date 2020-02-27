@@ -92,9 +92,9 @@ def vmc_file(hdf_file, data, attr, configs):
         with h5py.File(hdf_file, "a") as hdf:
             if "configs" not in hdf.keys():
                 hdftools.setup_hdf(hdf, data, attr)
-                hdf.create_dataset("configs", configs.configs.shape)
+                configs.initialize_hdf(hdf)
             hdftools.append_hdf(hdf, data)
-            hdf["configs"][:, :, :] = configs.configs
+            configs.to_hdf(hdf)
 
 
 def vmc(
@@ -140,7 +140,7 @@ def vmc(
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
             if "configs" in hdf.keys():
-                configs.configs = np.array(hdf["configs"])
+                configs.load_hdf(hdf)
                 if verbose:
                     print("Restarted calculation")
 

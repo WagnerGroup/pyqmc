@@ -50,6 +50,10 @@ def initial_guess(mol, nconfig, r=1.0):
             mol.atom_coords(), neach, axis=0
         )  # assign core electrons
         totleft = int(mol.nelec[s] - nassigned)  # number of electrons not yet assigned
+        ind0 = s * mol.nelec[0]
+        epos[:, ind0 : ind0 + nassigned, :] = np.repeat(
+            mol.atom_coords(), neach, axis=0
+        )  # assign core electrons
         if totleft > 0:
             bins = np.cumsum(nleft) / totleft
             inds = np.argpartition(

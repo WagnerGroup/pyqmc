@@ -8,6 +8,9 @@ import pyqmc.optimize_orthogonal
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
+import dask.distributed
+dask.distributed.protocol.utils.msgpack_opts['strict_map_key'] = False
+
 
 
 def distvmc(

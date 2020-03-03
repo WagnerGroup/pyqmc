@@ -127,9 +127,7 @@ class PySCFSlaterPBC:
             self._nelec = [int(np.round(n * scale)) for n in self._cell.nelec]
         self._nelec = tuple(self._nelec)
 
-        self.iscomplex = np.iscomplexobj(
-            np.concatenate([p.ravel() for p in self.parameters.values()])
-        )
+        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
         if self.iscomplex:
             self.get_phase = lambda x: x / np.abs(x)
         else:

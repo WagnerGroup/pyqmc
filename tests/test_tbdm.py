@@ -233,7 +233,9 @@ def test(atom="He", total_spin=0, total_charge=0, scf_basis="sto-3g"):
                     df.loc[vmc_warmup:, k].values.tolist()
                 ).mean(axis=0)
     for k in avg_tbdm.keys():
-        tbdm_est[k] = normalize_tbdm(avg_tbdm[k].reshape(2,2,2,2), avg_norm["a"], avg_norm["b"])
+        tbdm_est[k] = normalize_tbdm(
+            avg_tbdm[k].reshape(2, 2, 2, 2), avg_norm["a"], avg_norm["b"]
+        )
     qmctbdm = np.array(
         [
             [tbdm_est["upupvalue"], tbdm_est["updownvalue"]],

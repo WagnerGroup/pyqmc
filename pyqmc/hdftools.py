@@ -1,6 +1,7 @@
 import h5py
 import numpy as np
 
+
 def setup_hdf(f, data, attr):
     """ 
     f should be an h5py file object
@@ -16,19 +17,21 @@ def setup_hdf(f, data, attr):
     for k, it in attr.items():
         f.attrs[k] = it
 
+
 def append_hdf(f, data):
     for k, it in data.items():
         currshape = f[k].shape
-        f[k].resize((currshape[0]+1,*currshape[1:]))
+        f[k].resize((currshape[0] + 1, *currshape[1:]))
         f[k][-1,] = it
 
-if __name__=="__main__":
-    import numpy as np
-    f = h5py.File("testfile.hdf5","a")
-    test = {'a':np.arange(1,5) } 
-    attr = {'testval':3.0 } 
-    setup_hdf(f,test,attr)
-    append_hdf(f,test)
-    append_hdf(f,test)
-    print(np.array(f['a']))
 
+if __name__ == "__main__":
+    import numpy as np
+
+    f = h5py.File("testfile.hdf5", "a")
+    test = {"a": np.arange(1, 5)}
+    attr = {"testval": 3.0}
+    setup_hdf(f, test, attr)
+    append_hdf(f, test)
+    append_hdf(f, test)
+    print(np.array(f["a"]))

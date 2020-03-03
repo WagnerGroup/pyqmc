@@ -27,24 +27,25 @@ def opt_hdf(hdf_file, data, attr, configs, parameters):
         with h5py.File(hdf_file, "a") as hdf:
             if "configs" not in hdf.keys():
                 hdftools.setup_hdf(hdf, data, attr)
-                hdf.create_dataset("configs", configs.configs.shape)
+                configs.initialize_hdf(hdf)
                 hdf.create_group("wf")
                 for k, it in parameters.items():
                     hdf.create_dataset("wf/" + k, data=it)
             hdftools.append_hdf(hdf, data)
-            hdf["configs"][:, :, :] = configs.configs
+            configs.to_hdf(hdf)
             for k, it in parameters.items():
                 hdf["wf/" + k][...] = it.copy()
 
 
 def polyfit_relative(xfit, yfit, degree):
-    p = np.polyfit(xfit, yfit,degree)
+    p = np.polyfit(xfit, yfit, degree)
     ypred = np.polyval(p, xfit)
-    resid = (ypred-yfit)**2
-    relative_error = np.var(resid)/np.var(yfit)
+    resid = (ypred - yfit) ** 2
+    relative_error = np.var(resid) / np.var(yfit)
     return p, relative_error
 
-def stable_fit2(xfit, yfit, tolerance = 1e-2):
+
+def stable_fit2(xfit, yfit, tolerance=1e-2):
     """ Try to fit to a quadratic. If the fit is not good, 
     then just take the lowest value of yfit
     """
@@ -54,10 +55,10 @@ def stable_fit2(xfit, yfit, tolerance = 1e-2):
     pl, relative_errl = polyfit_relative(xfit, yfit, 1)
 
     print("relative errors in fit", relative_errq, relative_errl)
-    if relative_errl/relative_errq < 2:  #If a linear fit is about as good..
+    if relative_errl / relative_errq < 2:  # If a linear fit is about as good..
         if pl[0] < 0:
             return steprange
-        else: 
+        else:
             return minstep
     elif relative_errq < tolerance and pq[0] > 0:
         est_min = -pq[1] / (2 * pq[0])
@@ -66,10 +67,8 @@ def stable_fit2(xfit, yfit, tolerance = 1e-2):
         if est_min < minstep:
             est_min = minstep
         return est_min
-    else: 
+    else:
         return xfit[np.argmin(yfit)]
-
- 
 
 
 def stable_fit(xfit, yfit):
@@ -87,7 +86,7 @@ def stable_fit(xfit, yfit):
             est_min = steprange
         if plin[0] > 0:
             est_min = minstep
-    #print("estimated minimum adjusted", est_min, flush=True)
+    # print("estimated minimum adjusted", est_min, flush=True)
     return est_min
 
 
@@ -165,6 +164,8 @@ def line_minimization(
                 grp = hdf["wf"]
                 for k in grp.keys():
                     wf.parameters[k] = np.array(grp[k])
+            if "configs" in hdf.keys():
+                coords.load_hdf(hdf)
 
     # Attributes for linemin
     attr = dict(maxiters=maxiters, npts=npts, steprange=steprange)

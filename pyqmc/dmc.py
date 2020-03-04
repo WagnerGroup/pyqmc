@@ -230,12 +230,12 @@ def dmc_file(hdf_file, data, attr, configs, weights):
         with h5py.File(hdf_file, "a") as hdf:
             if "configs" not in hdf.keys():
                 hdftools.setup_hdf(hdf, data.loc[0], attr)
-                hdf.create_dataset("configs", configs.configs.shape)
+                configs.initialize_hdf(hdf)
             if "weights" not in hdf.keys():
                 hdf.create_dataset("weights", weights.shape)
             for i in range(len(data)):
                 hdftools.append_hdf(hdf, data.loc[i])
-            hdf["configs"][:, :, :] = configs.configs
+            configs.to_hdf(hdf)
             hdf["weights"][:] = weights
 
 
@@ -296,7 +296,7 @@ def rundmc(
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
             if "configs" in hdf.keys():
-                configs.configs = np.array(hdf["configs"])
+                configs.load_hdf(hdf)
                 weights = np.array(hdf["weights"])
                 if verbose:
                     print("Restarted calculation")

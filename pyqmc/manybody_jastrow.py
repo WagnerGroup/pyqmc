@@ -40,8 +40,8 @@ class J3:
 
     def gradient(self, e, epos):
         _, e_grad = self._get_val_grad_lap(epos, mode = 'grad')
-        grad1 = np.einsum('mn, dcm, cjn -> dc', self.parameters["gcoeff"], e_grad[:,:,0,:], self.ao_val[:,e+1:,:])
-        grad2 = np.einsum('mn, cim, dcn -> dc', self.parameters["gcoeff"], self.ao_val[:,:e,:], e_grad[:,:,0,:])
+        grad1 = np.einsum('mn, dcm, cjn -> dc', self.parameters["gcoeff"], e_grad[:,:,0,:], self.ao_val[:,:e,:])
+        grad2 = np.einsum('mn, cim, dcn -> dc', self.parameters["gcoeff"], self.ao_val[:,e+1:,:], e_grad[:,:,0,:])
         return grad1 + grad2
 
     def laplacian(self, e,epos):
@@ -49,16 +49,16 @@ class J3:
         Return lap(psi)/ psi = lap(J) when psi = exp(J)
         """
         _, _, e_lap = self._get_val_grad_lap(epos)
-        lap1 = np.einsum('mn, dcm, cjn-> c', self.parameters["gcoeff"], e_lap[:,:,0,:], self.ao_val[:,e+1:,:])
-        lap2 = np.einsum('mn, cim, dcn -> c', self.parameters["gcoeff"], self.ao_val[:,:e,:], e_lap[:,:,0,:])
+        lap1 = np.einsum('mn, dcm, cjn-> c', self.parameters["gcoeff"], e_lap[:,:,0,:], self.ao_val[:,:e,:])
+        lap2 = np.einsum('mn, cim, dcn -> c', self.parameters["gcoeff"], self.ao_val[:,e+1:,:], e_lap[:,:,0,:])
         grad = self.gradient(e, epos)
         lap3 = np.einsum('dc,dc->c', grad, grad)
         return (lap1 +lap2+lap3)
 
     def gradient_laplacian(self, e, epos):
         _, _, e_lap = self._get_val_grad_lap(epos)
-        lap1 = np.einsum('mn, dcm, cjn-> c', self.parameters["gcoeff"], e_lap[:,:,0,:], self.ao_val[:,e+1:,:])
-        lap2 = np.einsum('mn, cim, dcn -> c', self.parameters["gcoeff"], self.ao_val[:,:e,:], e_lap[:,:,0,:])
+        lap1 = np.einsum('mn, dcm, cjn-> c', self.parameters["gcoeff"], e_lap[:,:,0,:], self.ao_val[:,:e,:])
+        lap2 = np.einsum('mn, cim, dcn -> c', self.parameters["gcoeff"], self.ao_val[:,e+1:,:], e_lap[:,:,0,:])
         grad = self.gradient(e, epos)
         lap3 = np.einsum('dc,dc->c', grad, grad)
         return grad, (lap1 +lap2+lap3)

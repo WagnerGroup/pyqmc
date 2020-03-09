@@ -56,6 +56,7 @@ def test_wfs():
             err = []
             for delta in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8]:
                 err.append(func(wf, epos, delta)[0])
+            print(fname, min(err))
             assert min(err) < epsilon, "epsilon {0}".format(epsilon)
 
 

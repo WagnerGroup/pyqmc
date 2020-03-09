@@ -2,8 +2,10 @@ name = "pyqmc"
 from pyqmc.mc import vmc, initial_guess
 from pyqmc.slateruhf import PySCFSlaterUHF
 from pyqmc.multislater import MultiSlater
-from pyqmc.multiplywf import MultiplyWF
+from pyqmc.wf import MultiplyNWF
+# from pyqmc.wf import WaveFunction
 from pyqmc.jastrowspin import JastrowSpin
+from pyqmc.manybody_jastrow import J3
 
 from pyqmc.accumulators import EnergyAccumulator, PGradTransform, LinearTransform
 from pyqmc.func3d import (
@@ -31,8 +33,8 @@ def slater_jastrow(mol, mf, abasis=None, bbasis=None):
             GaussianFunction(3.2),
         ]
 
-    wf = MultiplyWF(
-        PySCFSlaterUHF(mol, mf), JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
+    wf = MultiplyNWF(
+        [PySCFSlaterUHF(mol, mf), JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)]
     )
     return wf
 
@@ -131,9 +133,9 @@ def default_msj(mol, mf, mc):
     return wf, to_opt, freeze
 
 
-def default_sj(mol, mf):
+def default_sj(mol, mf, ion_cusp = False):
     wf1, to_opt1, freeze1 = default_slater(mol, mf)
-    wf2, to_opt2, freeze2 = default_jastrow(mol)
+    wf2, to_opt2, freeze2 = default_jastrow(mol, ion_cusp)
     wf = MultiplyWF(wf1, wf2)
     to_opt = ["wf1" + x for x in to_opt1] + ["wf2" + x for x in to_opt2]
     freeze = {}

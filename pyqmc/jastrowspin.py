@@ -60,7 +60,6 @@ class JastrowSpin:
         _a_partial is the array $A^p_{eIk} = a_k(r_{Ie}$, where $e$ is any electron
         _b_partial is the array $B^p_{els} = \sum_s b_l(r_{es}$, where $e$ is any electron, $s$ indexes over $\uparrow$ ($\alpha$) and $\downarrow$ ($\beta$) sums, not including $e$.
         """
-        u = 0.0
         self._configscurrent = configs.copy()
         nconf, nelec = configs.configs.shape[:2]
         nexpand = len(self.b_basis)
@@ -229,7 +228,7 @@ class JastrowSpin:
         u = np.sum(self._bvalues * self.parameters["bcoeff"], axis=(2, 1))
 
         u += np.einsum("ijkl,jkl->i", self._avalues, self.parameters["acoeff"])
-        return (1, u)
+        return (np.ones(len(u)), u)
 
     def gradient(self, e, epos):
         """We compute the gradient for electron e as

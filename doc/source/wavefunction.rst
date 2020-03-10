@@ -1,3 +1,4 @@
+=================================
 Wave function objects
 =================================
 
@@ -52,9 +53,10 @@ Jastrow factor
 .. automodule:: pyqmc.jastrowspin
    :members:
  
-----------------------
+--------------------------------------------
 Multiple Slater determinant
-----------------------
+--------------------------------------------
+
 
 .. automodule:: pyqmc.multislater
    :members:

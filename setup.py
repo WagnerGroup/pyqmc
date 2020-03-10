@@ -29,7 +29,6 @@ def setup_pyqmc():
             'Intended Audience :: Science/Research',
             'Programming Language :: Python',
             'License :: OSI Approved :: MIT License',
-            'Topic :: Scientific/Engineering :: Chemistry :: Physics',
         ],
     )
 

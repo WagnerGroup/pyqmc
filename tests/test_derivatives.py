@@ -35,7 +35,7 @@ def test_wfs():
         J3(mol),
         JastrowSpin(mol),
         MultiplyWF(PySCFSlaterUHF(mol, mf), JastrowSpin(mol)),
-        MultiplyWF(PySCFSlaterUHF(mol, mf), JastrowSpin(mol), J3(mol)),
+        MultiplyNWF([PySCFSlaterUHF(mol, mf), JastrowSpin(mol), J3(mol)]),
         PySCFSlaterUHF(mol, mf_uhf),
         PySCFSlaterUHF(mol, mf),
         PySCFSlaterUHF(mol, mf_rohf),

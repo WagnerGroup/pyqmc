@@ -3,9 +3,9 @@ from pyqmc.mc import vmc, initial_guess
 from pyqmc.slateruhf import PySCFSlaterUHF
 from pyqmc.multislater import MultiSlater
 
-#from pyqmc.wf import MultiplyNWF
-# from pyqmc.wf import WaveFunction
+from pyqmc.multiplywf import MultiplyWF
 from pyqmc.jastrowspin import JastrowSpin
+from pyqmc.multiplynwf import MultiplyNWF
 from pyqmc.manybody_jastrow import J3
 
 from pyqmc.accumulators import EnergyAccumulator, PGradTransform, LinearTransform
@@ -34,9 +34,7 @@ def slater_jastrow(mol, mf, abasis=None, bbasis=None):
             GaussianFunction(3.2),
         ]
 
-    #wf = MultiplyNWF(
-    #    [PySCFSlaterUHF(mol, mf), JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)]
-    #)
+    wf = MultiplyWF(PySCFSlaterUHF(mol, mf), JastrowSpin(mol, a_basis=abasis, b_basis=bbasis))
     return wf
 
 
@@ -45,8 +43,6 @@ def gradient_generator(mol, wf, to_opt=None, freeze=None, **ewald_kwargs):
         EnergyAccumulator(mol, **ewald_kwargs),
         LinearTransform(wf.parameters, to_opt, freeze),
     )
-
-
 
 def default_slater(mol, mf, optimize_orbitals = False):
     import numpy as np

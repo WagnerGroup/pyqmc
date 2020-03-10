@@ -15,7 +15,7 @@ def test_mask(wf, e, epos, mask=None):
         mask = np.random.randint(0,2,num_e).astype(bool)
     ratio = wf.testvalue(e, epos, mask)
     ratio_ref = wf.testvalue(e, epos)[mask]
-    assert(all(ratio == ratio_ref))
+    assert(np.sum(np.abs(ratio - ratio_ref)) < 1e-10)
     print("testcase for test_value() with mask passed")
     # update internals
 

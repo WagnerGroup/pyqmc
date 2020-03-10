@@ -132,12 +132,15 @@ class J3:
     def _get_val_grad_lap(self, configs, mode="lap", mask=None):
         if mask is None:
             mask = [True] * configs.configs.shape[0]
+
         coords = configs.configs[mask].reshape((-1, 3))
         nconf = np.sum(mask)
         nelec = int(coords.shape[0] / nconf)
 
         if mode == "val":
             ao = np.real_if_close(self.mol.eval_gto("GTOval_cart", coords), tol=1e4)
+            if nelec == 1:
+                return ao.reshape((nconf, -1))
             return ao.reshape((nconf, nelec, -1))
         elif mode == "grad":
             ao = np.real_if_close(
@@ -169,21 +172,22 @@ class J3:
         curr_val += np.einsum(
             "mn, cim, cn -> c",
             self.parameters["gcoeff"],
-            masked_ao_val[:, e + 1 :, :],
+            masked_ao_val[:, e + 1:, :],
             masked_ao_val[:, e, :],
         )
 
         new_ao_val = self._get_val_grad_lap(epos, mode="val", mask=mask)
         new_val = np.einsum(
-            "mn, cm, cjn -> c",
+            "mn, c...m, cjn -> c...",
             self.parameters["gcoeff"],
-            new_ao_val[:, 0, :],
+            new_ao_val,
             masked_ao_val[:, :e, :],
         )
         new_val += np.einsum(
-            "mn, cim, cn -> c",
+            "mn, cim, c...n -> c...",
             self.parameters["gcoeff"],
-            masked_ao_val[:, e + 1 :, :],
-            new_ao_val[:, 0, :],
+            masked_ao_val[:, e + 1:, :],
+            new_ao_val,
         )
-        return np.exp(new_val - curr_val)
+        
+        return np.exp((new_val.T - curr_val).T)

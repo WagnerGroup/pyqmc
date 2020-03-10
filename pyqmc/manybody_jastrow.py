@@ -44,9 +44,6 @@ class J3:
         return grad1 + grad2
 
     def laplacian(self, e,epos):
-        """
-        Return lap(psi)/ psi = lap(J) when psi = exp(J)
-        """
         _, e_grad, e_lap = self._get_val_grad_lap(epos)
         lap1 = np.einsum('mn, dcm, cjn-> c', self.parameters["gcoeff"], e_lap[:,:,0,:], self.ao_val[:,:e,:])
         lap2 = np.einsum('mn, cim, dcn -> c', self.parameters["gcoeff"], self.ao_val[:,e+1:,:], e_lap[:,:,0,:])
@@ -75,15 +72,13 @@ class J3:
         coeff_grad = np.einsum('cim, cjn, ij-> cmn', self.ao_val, self.ao_val, mask)
         return {"gcoeff":coeff_grad}
 
-    def _get_val_grad_lap(self, configs, mode='lap'):
-        shape = configs.configs.shape
-        if len(shape) == 3:
-            nconf, nelec= configs.configs.shape[:2]
-            coords = np.reshape(configs.configs, (nconf*nelec, 3))
-        else: 
-            nconf = shape[0]
-            nelec = 1
-            coords = configs.configs
+    def _get_val_grad_lap(self, configs, mode='lap', mask=None):
+        if mask is None:
+            mask = [True] * configs.configs.shape[0]
+        coords = configs.configs[mask].reshape((-1,3))
+        nconf = np.sum(mask)
+        nelec = int(coords.shape[0]/nconf)
+
         if mode == "val":
             ao = np.real_if_close(self.mol.eval_gto("GTOval_cart", coords), tol = 1e4)
             return ao.reshape((nconf, nelec, -1))
@@ -100,11 +95,14 @@ class J3:
             return (val, grad, lap)
 
     def testvalue(self, e, epos, mask=None):
-        curr_epos = self._configscurrent.configs[:, e, :].copy()
-        curr_val = self.value()
-        self._configscurrent.configs[:, e, :] = epos.configs
-        self.recompute(self._configscurrent)
-        after_val = self.value()
-        self._configscurrent.configs[:, e, :] = curr_epos
-        self.recompute(self._configscurrent)
-        return np.exp(after_val[0]*after_val[1]-curr_val[0]*curr_val[1])
+        if mask is None:
+            mask = [True] * epos.configs.shape[0]
+       
+        masked_ao_val = self.ao_val[mask]
+        curr_val =  np.einsum('mn, cm, cjn -> c', self.parameters["gcoeff"], masked_ao_val[:, e, :], masked_ao_val[:, :e, :])
+        curr_val += np.einsum('mn, cim, cn -> c', self.parameters["gcoeff"], masked_ao_val[:, e+1:, :], masked_ao_val[:, e, :])
+       
+        new_ao_val = self._get_val_grad_lap(epos, mode="val", mask=mask)
+        new_val  =  np.einsum('mn, cm, cjn -> c', self.parameters["gcoeff"], new_ao_val[:, 0, :], self.ao_val[:, :e, :])
+        new_val  += np.einsum('mn, cim, cn -> c', self.parameters["gcoeff"], self.ao_val[:, e+1:, :], new_ao_val[:, 0, :])
+        return np.exp(new_val - curr_val)

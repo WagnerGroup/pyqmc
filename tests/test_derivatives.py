@@ -19,6 +19,7 @@ def test_wfs():
     from pyqmc.slateruhf import PySCFSlaterUHF
     from pyqmc.jastrowspin import JastrowSpin
     from pyqmc.multiplywf import MultiplyWF
+    from pyqmc.multiplynwf import MultiplyNWF
     from pyqmc.coord import OpenConfigs
     from pyqmc.manybody_jastrow import J3
     import pyqmc
@@ -34,6 +35,7 @@ def test_wfs():
         J3(mol),
         JastrowSpin(mol),
         MultiplyWF(PySCFSlaterUHF(mol, mf), JastrowSpin(mol)),
+        MultiplyWF(PySCFSlaterUHF(mol, mf), JastrowSpin(mol), J3(mol)),
         PySCFSlaterUHF(mol, mf_uhf),
         PySCFSlaterUHF(mol, mf),
         PySCFSlaterUHF(mol, mf_rohf),

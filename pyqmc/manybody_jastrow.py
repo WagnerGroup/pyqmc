@@ -125,9 +125,11 @@ class J3:
         return grad, lap1 + lap2 + lap3
 
     def pgradient(self):
-        mask = np.tril(np.ones((self.nelec, self.nelec)), -1) # to prevent double counting of electron pairs
-        coeff_grad = np.einsum('cim, cjn, ij-> cmn', self.ao_val, self.ao_val, mask)
-        return {"gcoeff":coeff_grad}
+        mask = np.tril(
+            np.ones((self.nelec, self.nelec)), -1
+        )  # to prevent double counting of electron pairs
+        coeff_grad = np.einsum("cim, cjn, ij-> cmn", self.ao_val, self.ao_val, mask)
+        return {"gcoeff": coeff_grad}
 
     def _get_val_grad_lap(self, configs, mode="lap", mask=None):
         if mask is None:
@@ -172,7 +174,7 @@ class J3:
         curr_val += np.einsum(
             "mn, cim, cn -> c",
             self.parameters["gcoeff"],
-            masked_ao_val[:, e + 1:, :],
+            masked_ao_val[:, e + 1 :, :],
             masked_ao_val[:, e, :],
         )
 
@@ -186,8 +188,8 @@ class J3:
         new_val += np.einsum(
             "mn, cim, c...n -> c...",
             self.parameters["gcoeff"],
-            masked_ao_val[:, e + 1:, :],
+            masked_ao_val[:, e + 1 :, :],
             new_ao_val,
         )
-        
+
         return np.exp((new_val.T - curr_val).T)

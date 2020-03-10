@@ -103,6 +103,6 @@ class J3:
         curr_val += np.einsum('mn, cim, cn -> c', self.parameters["gcoeff"], masked_ao_val[:, e+1:, :], masked_ao_val[:, e, :])
        
         new_ao_val = self._get_val_grad_lap(epos, mode="val", mask=mask)
-        new_val  =  np.einsum('mn, cm, cjn -> c', self.parameters["gcoeff"], new_ao_val[:, 0, :], self.ao_val[:, :e, :])
-        new_val  += np.einsum('mn, cim, cn -> c', self.parameters["gcoeff"], self.ao_val[:, e+1:, :], new_ao_val[:, 0, :])
+        new_val  =  np.einsum('mn, cm, cjn -> c', self.parameters["gcoeff"], new_ao_val[:, 0, :], masked_ao_val[:, :e, :])
+        new_val  += np.einsum('mn, cim, cn -> c', self.parameters["gcoeff"], masked_ao_val[:, e+1:, :], new_ao_val[:, 0, :])
         return np.exp(new_val - curr_val)

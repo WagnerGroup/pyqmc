@@ -34,7 +34,9 @@ def slater_jastrow(mol, mf, abasis=None, bbasis=None):
             GaussianFunction(3.2),
         ]
 
-    wf = MultiplyWF(PySCFSlaterUHF(mol, mf), JastrowSpin(mol, a_basis=abasis, b_basis=bbasis))
+    wf = MultiplyWF(
+        PySCFSlaterUHF(mol, mf), JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
+    )
     return wf
 
 
@@ -44,7 +46,8 @@ def gradient_generator(mol, wf, to_opt=None, freeze=None, **ewald_kwargs):
         LinearTransform(wf.parameters, to_opt, freeze),
     )
 
-def default_slater(mol, mf, optimize_orbitals = False):
+
+def default_slater(mol, mf, optimize_orbitals=False):
     import numpy as np
 
     wf = PySCFSlaterUHF(mol, mf)

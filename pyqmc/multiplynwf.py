@@ -1,10 +1,12 @@
 import numpy as np
+
+
 class Parameters:
     def __init__(self, dicts):
         self.data = {}
         self.wf_count = len(dicts)
         for (i, d) in enumerate(dicts):
-            self.data["wf"+ str(i+1)] = d
+            self.data["wf" + str(i + 1)] = d
 
     def __setitem__(self, idx, value):
         k1 = idx[0:3]
@@ -23,7 +25,7 @@ class Parameters:
 
     def __iter__(self):
         for i in range(self.wf_count):
-            k1 = "wf"+str(i+1)
+            k1 = "wf" + str(i + 1)
             for k2 in self.data[k1].keys():
                 yield k1 + k2
 
@@ -35,7 +37,7 @@ class Parameters:
 
     def items(self):
         for i in range(self.wf_count):
-            k1 = "wf"+str(i+1)
+            k1 = "wf" + str(i + 1)
             for k2 in self.data[k1].keys():
                 yield k1 + k2, self.data[k1][k2]
 
@@ -44,19 +46,21 @@ class Parameters:
 
     def keys(self):
         for i in range(self.wf_count):
-            k1 = "wf"+str(i+1)
+            k1 = "wf" + str(i + 1)
             for k2 in self.data[k1].keys():
                 yield k1 + k2
+
 
 class MultiplyNWF:
     """
     A general representation of a wavefunction as a product of multiple wf_factors 
     """
+
     def __init__(self, wf_factors):
         self.wf_factors = wf_factors
         self.parameters = Parameters([wf.parameters for wf in wf_factors])
 
-    def  recompute(self, configs):
+    def recompute(self, configs):
         signs = np.ones(len(configs.configs))
         vals = np.zeros(len(configs.configs))
         for wf in self.wf_factors:
@@ -72,7 +76,7 @@ class MultiplyNWF:
     def value(self):
         results = [wf.value() for wf in self.wf_factors]
         results = np.array([*results])
-        return np.prod(results[:,0,:], axis=0), np.sum(results[:,1,:], axis=0)
+        return np.prod(results[:, 0, :], axis=0), np.sum(results[:, 1, :], axis=0)
 
     def gradient(self, e, epos):
         grads = [wf.gradient(e, epos) for wf in self.wf_factors]
@@ -86,35 +90,37 @@ class MultiplyNWF:
         grad_laps = [wf.gradient_laplacian(e, epos) for wf in self.wf_factors]
         grad_laps = np.array(grad_laps)
         # print(grad_laps[1,1].shape)
-        grads = grad_laps[:,0]
-        laps = grad_laps[:,1]
+        grads = grad_laps[:, 0]
+        laps = grad_laps[:, 1]
         corss_term = np.zeros(laps[0].shape)
         nwf = len(self.wf_factors)
         for i in range(nwf):
-            for j in range(i+1,nwf):
-                corss_term += np.sum(grads[i]*grads[j], axis=0)
-        return np.sum(laps, axis=0) + corss_term*2
-    
+            for j in range(i + 1, nwf):
+                corss_term += np.sum(grads[i] * grads[j], axis=0)
+        return np.sum(laps, axis=0) + corss_term * 2
+
     def gradient_laplacian(self, e, epos):
-        return self.gradient(e,epos), self.laplacian(e,epos)
+        return self.gradient(e, epos), self.laplacian(e, epos)
 
     def pgradient(self):
         return Parameters([wf.pgradient() for wf in self.wf_factors])
 
+
 def test_parameters():
     import numpy as np
+
     dicts = []
     for i in range(10):
-        dicts.append({"coeff"+str(i): np.random.rand(3)})
+        dicts.append({"coeff" + str(i): np.random.rand(3)})
     p = Parameters(dicts)
     # test len
-    assert(len(p) == 30)
+    assert len(p) == 30
     print("len test passed")
     # test getitem
-    assert(p["wf2coeff2"].all() == dicts[2]["coeff2"].all())
+    assert p["wf2coeff2"].all() == dicts[2]["coeff2"].all()
     print("getitem test passed")
     new_coeff = np.random.rand(5)
     # test setitem
     p["wf2coeff2"] = new_coeff
-    assert(p["wf2coeff2"].all() == new_coeff.all())
+    assert p["wf2coeff2"].all() == new_coeff.all()
     print("setitem test passed")

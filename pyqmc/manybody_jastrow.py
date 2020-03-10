@@ -10,7 +10,6 @@ class J3:
         dim = mol.eval_gto('GTOval_cart', randpos).shape[-1]
         self.parameters={}
         self.parameters["gcoeff"] = np.zeros((dim, dim))
-        # self.parameters["gcoeff"] = np.ones((dim, dim)) # for debugging purpose
     
     def recompute(self, configs):
         self._configscurrent = configs.copy()
@@ -48,17 +47,28 @@ class J3:
         """
         Return lap(psi)/ psi = lap(J) when psi = exp(J)
         """
-        _, _, e_lap = self._get_val_grad_lap(epos)
+        _, e_grad, e_lap = self._get_val_grad_lap(epos)
         lap1 = np.einsum('mn, dcm, cjn-> c', self.parameters["gcoeff"], e_lap[:,:,0,:], self.ao_val[:,:e,:])
         lap2 = np.einsum('mn, cim, dcn -> c', self.parameters["gcoeff"], self.ao_val[:,e+1:,:], e_lap[:,:,0,:])
-        grad = self.gradient(e, epos)
+       
+        grad1 = np.einsum('mn, dcm, cjn -> dc', self.parameters["gcoeff"], e_grad[:,:,0,:], self.ao_val[:,:e,:])
+        grad2 = np.einsum('mn, cim, dcn -> dc', self.parameters["gcoeff"], self.ao_val[:,e+1:,:], e_grad[:,:,0,:])
+        grad = grad1 + grad2
+        
         lap3 = np.einsum('dc,dc->c', grad, grad)
-        return (lap1 +lap2+lap3)
+        return lap1 + lap2 + lap3
 
     def gradient_laplacian(self, e, epos):
-        lap = self.laplacian(e, epos)
-        grad = self.gradient(e, epos)
-        return grad, lap #(lap1 +lap2+lap3)
+        _, e_grad, e_lap = self._get_val_grad_lap(epos)
+        lap1 = np.einsum('mn, dcm, cjn-> c', self.parameters["gcoeff"], e_lap[:,:,0,:], self.ao_val[:,:e,:])
+        lap2 = np.einsum('mn, cim, dcn -> c', self.parameters["gcoeff"], self.ao_val[:,e+1:,:], e_lap[:,:,0,:])
+       
+        grad1 = np.einsum('mn, dcm, cjn -> dc', self.parameters["gcoeff"], e_grad[:,:,0,:], self.ao_val[:,:e,:])
+        grad2 = np.einsum('mn, cim, dcn -> dc', self.parameters["gcoeff"], self.ao_val[:,e+1:,:], e_grad[:,:,0,:])
+        grad = grad1 + grad2
+        
+        lap3 = np.einsum('dc,dc->c', grad, grad)
+        return grad, lap1 + lap2 + lap3
 
     def pgradient(self):
         mask = np.tril(np.ones((self.nelec, self.nelec)), -1) # to prevent double counting of electron pairs

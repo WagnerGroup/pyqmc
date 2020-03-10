@@ -56,12 +56,9 @@ class J3:
         return (lap1 +lap2+lap3)
 
     def gradient_laplacian(self, e, epos):
-        _, _, e_lap = self._get_val_grad_lap(epos)
-        lap1 = np.einsum('mn, dcm, cjn-> c', self.parameters["gcoeff"], e_lap[:,:,0,:], self.ao_val[:,:e,:])
-        lap2 = np.einsum('mn, cim, dcn -> c', self.parameters["gcoeff"], self.ao_val[:,e+1:,:], e_lap[:,:,0,:])
+        lap = self.laplacian(e, epos)
         grad = self.gradient(e, epos)
-        lap3 = np.einsum('dc,dc->c', grad, grad)
-        return grad, (lap1 +lap2+lap3)
+        return grad, lap #(lap1 +lap2+lap3)
 
     def pgradient(self):
         mask = np.tril(np.ones((self.nelec, self.nelec)), -1) # to prevent double counting of electron pairs

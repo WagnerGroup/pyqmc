@@ -156,7 +156,7 @@ def dmc_propagate(
         avg["weightmax"] = np.amax(weights)
         avg["acceptance"] = np.mean(acc)
         avg["step"] = stepoffset + step
-
+        
         df.append(avg)
     return pd.DataFrame(df), configs, weights
 
@@ -325,6 +325,7 @@ def rundmc(
         drift_limiter=drift_limiter,
         **kwargs,
     )
+    
     df_ = pd.DataFrame(df_)
     eref = df_[ekey[0] + ekey[1]][0]
     esigma = np.abs(eref) / 100

@@ -83,7 +83,7 @@ def get_r_ea(mol, configs, e, at):
     return configs.dist.dist_i(apos, configs.configs[:, e, :]).reshape((-1, 3))
 
 
-def get_r_ea_i(mol, epos_rot, e, at):
+def get_r_ea_i(mol, epos_rot, e, at, dist):
     """
     Returns a nconf x naip x 3 array, distances between the rotated electron (e) and the atom at
     Parameters:
@@ -91,7 +91,8 @@ def get_r_ea_i(mol, epos_rot, e, at):
     Returns:
       epos_rot-apos, (rotated) electron-atom distances
     """
-    return epos_rot - np.array(mol._atom[at][1])[np.newaxis, np.newaxis]
+    apos = np.asarray(mol._atom[at][1])
+    return -dist(epos_rot, apos[np.newaxis])
 
 
 def get_v_l(mol, configs, e, at):
@@ -134,7 +135,7 @@ def get_P_l(mol, configs, weights, epos_rot, l_list, e, at):
 
     P_l_val = np.zeros([nconf, naip, len(l_list)])
     r_ea = get_r_ea(mol, configs, e, at)  # nconf x 3
-    r_ea_i = get_r_ea_i(mol, epos_rot, e, at)  # nconf x naip x 3
+    r_ea_i = get_r_ea_i(mol, epos_rot, e, at, configs.dist.dist_i)  # nconf x naip x 3
     rdotR = np.einsum("ik,ijk->ij", r_ea, r_ea_i)
     rdotR /= np.linalg.norm(r_ea, axis=1)[:, np.newaxis]
     rdotR /= np.linalg.norm(r_ea_i, axis=-1)

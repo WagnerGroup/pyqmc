@@ -51,7 +51,7 @@ def get_supercell(cell, S):
     supercell.pseudo = cell.pseudo
     supercell.ecp = cell.ecp
     supercell.basis = cell.basis
-    supercell.unit = cell.unit
+    supercell.unit = "Bohr"
     supercell.spin = cell.spin * scale
     supercell.exp_to_discard = cell.exp_to_discard
     supercell.build()

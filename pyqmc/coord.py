@@ -63,11 +63,23 @@ class OpenConfigs:
     def copy(self):
         return copy.deepcopy(self)
 
+    def initialize_hdf(self, hdf):
+        hdf.create_dataset("configs", self.configs.shape)
+
+    def to_hdf(self, hdf):
+        hdf["configs"][:, :, :] = self.configs
+
+    def load_hdf(self, hdf):
+        self.configs = np.array(hdf["configs"])
+
 
 class PeriodicConfigs:
     def __init__(self, configs, lattice_vectors, wrap=None):
+        configs, wrap_ = enforce_pbc(lattice_vectors, configs)
         self.configs = configs
-        self.wrap = np.zeros(configs.shape) if wrap is None else wrap
+        self.wrap = wrap_
+        if wrap is not None:
+            self.wrap += wrap
         self.lvecs = lattice_vectors
         self.dist = MinimalImageDistance(lattice_vectors)
 
@@ -131,6 +143,18 @@ class PeriodicConfigs:
 
     def copy(self):
         return copy.deepcopy(self)
+
+    def initialize_hdf(self, hdf):
+        hdf.create_dataset("configs", self.configs.shape)
+        hdf.create_dataset("wrap", self.wrap.shape)
+
+    def to_hdf(self, hdf):
+        hdf["configs"][:, :, :] = self.configs
+        hdf["wrap"][:, :, :] = self.wrap
+
+    def load_hdf(self, hdf):
+        self.configs = np.array(hdf["configs"])
+        self.wrap = np.array(hdf["wrap"])
 
 
 def test():

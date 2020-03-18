@@ -22,11 +22,7 @@ class J3:
         import time 
         start = time.time()
         self.ao_val, self.ao_grad, self.ao_lap = self._get_val_grad_lap(configs)
-        print("_get_val_grad_lap ", time.time() - start)
-        start = time.time()
-        x = self.value()
-        print("val ", time.time() - start)
-        return x
+        return self.value()
 
     def updateinternals(self, e, epos, mask=None):
         nconfig = epos.configs.shape[0]

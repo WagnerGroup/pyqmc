@@ -24,7 +24,7 @@ def test_wfs():
     from pyqmc.manybody_jastrow import J3
     import pyqmc
 
-    mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="cc-pvtz", unit="bohr")
+    mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="sto-3g", unit="bohr")
     mf = scf.RHF(mol).run()
     mf_rohf = scf.ROHF(mol).run()
     mf_uhf = scf.UHF(mol).run()
@@ -32,8 +32,8 @@ def test_wfs():
     nconf = 10
     epos = pyqmc.initial_guess(mol, nconf)
     for wf in [
-        J3(mol),
         JastrowSpin(mol),
+        J3(mol),
         MultiplyWF(PySCFSlaterUHF(mol, mf), JastrowSpin(mol)),
         MultiplyNWF([PySCFSlaterUHF(mol, mf), JastrowSpin(mol), J3(mol)]),
         PySCFSlaterUHF(mol, mf_uhf),

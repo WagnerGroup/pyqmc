@@ -1,7 +1,4 @@
-from pyscf.gto import eval_gto
-from pyscf import gto
 import numpy as np
-import pyqmc
 
 
 class J3:
@@ -19,8 +16,6 @@ class J3:
         # ao_val: (nconf, nelec, nbasis)
         # ao_grad: (3, nconf, nelec, nbasis)
         # ao_lap: (3, nconf, nelec, nbasis)
-        # import time 
-        # start = time.time()
         self.ao_val, self.ao_grad, self.ao_lap = self._get_val_grad_lap(configs)
         return self.value()
 

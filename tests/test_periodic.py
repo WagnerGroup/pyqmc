@@ -133,14 +133,14 @@ def runtest(mol, mf, kind=0, do_mc=False):
     df, coords = pyqmc.vmc(
         wf,
         coords,
-        nsteps=32 + warmup,
+        nsteps=100 + warmup,
         tstep=1,
         accumulators={"energy": pyqmc.accumulators.EnergyAccumulator(mol)},
         verbose=False,
     )
     print("VMC time", time.time() - start)
     df = pd.DataFrame(df)
-    dfke = reblock(df["energyke"][warmup:], 8)
+    dfke = reblock(df["energyke"][warmup:], 10)
     vmcke, err = dfke.mean(), dfke.sem()
     print("VMC kinetic energy: {0} +- {1}".format(vmcke, err))
 

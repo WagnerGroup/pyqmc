@@ -174,7 +174,6 @@ def cvmc_optimize(*args, client, **kwargs):
 
 def distdmc_propagate(wf, configs, weights, *args, client, npartitions=None, **kwargs):
     import pyqmc.dmc
-
     if npartitions is None:
         npartitions = sum([x for x in client.nthreads().values()])
 
@@ -193,7 +192,7 @@ def distdmc_propagate(wf, configs, weights, *args, client, npartitions=None, **k
     allresults = [r.result() for r in allruns]
     configs.join([x[1] for x in allresults])
     coordret = configs
-    weightret = np.vstack([x[2] for x in allresults])
+    weightret = np.hstack([x[2] for x in allresults])
     df = pd.concat([pd.DataFrame(x[0]) for x in allresults])
     notavg = ["weight", "weightvar", "weightmin", "weightmax", "acceptance", "step"]
     # Here we reweight the averages since each step on each node
@@ -206,7 +205,6 @@ def distdmc_propagate(wf, configs, weights, *args, client, npartitions=None, **k
     for k in df.keys():
         if k not in notavg:
             df[k] = df[k] / df["weight"]
-    print(df)
     return df, coordret, weightret
 
 

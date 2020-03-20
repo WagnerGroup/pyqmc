@@ -2,8 +2,11 @@ name = "pyqmc"
 from pyqmc.mc import vmc, initial_guess
 from pyqmc.slateruhf import PySCFSlaterUHF
 from pyqmc.multislater import MultiSlater
+
 from pyqmc.multiplywf import MultiplyWF
 from pyqmc.jastrowspin import JastrowSpin
+from pyqmc.multiplynwf import MultiplyNWF
+from pyqmc.manybody_jastrow import J3
 
 from pyqmc.accumulators import EnergyAccumulator, PGradTransform, LinearTransform
 from pyqmc.func3d import (

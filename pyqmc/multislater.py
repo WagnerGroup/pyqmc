@@ -61,7 +61,7 @@ class MultiSlater:
 
         # find multi slater determinant occupation
         detwt = []
-        occup = []
+        # occup = []
         deters = fci.addons.large_ci(mc.ci, norb, nelec, tol=-1)
 
         # Create map and occupation objects

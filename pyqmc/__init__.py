@@ -60,10 +60,10 @@ def default_slater(mol, mf, optimize_orbitals = False):
         freeze = {}
     return wf, to_opt, freeze
 
-def default_multislater(mol, mf, mc):
+def default_multislater(mol, mf, mc, tol=None):
     import numpy as np
 
-    wf = MultiSlater(mol, mf, mc)
+    wf = MultiSlater(mol, mf, mc, tol)
     freeze = {}
     freeze["det_coeff"] = np.zeros(wf.parameters["det_coeff"].shape).astype(bool)
     freeze["det_coeff"][0] = True  # Determinant coefficient pivot
@@ -117,8 +117,8 @@ def default_jastrow(mol, ion_cusp=False):
     return jastrow, to_opt, freeze
 
 
-def default_msj(mol, mf, mc):
-    wf1, to_opt1, freeze1 = default_multislater(mol, mf, mc)
+def default_msj(mol, mf, mc, tol=None):
+    wf1, to_opt1, freeze1 = default_multislater(mol, mf, mc, tol)
     wf2, to_opt2, freeze2 = default_jastrow(mol)
     wf = MultiplyWF(wf1, wf2)
     to_opt = ["wf1" + x for x in to_opt1] + ["wf2" + x for x in to_opt2]

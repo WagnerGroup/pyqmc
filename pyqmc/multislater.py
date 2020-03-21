@@ -33,7 +33,11 @@ class MultiSlater:
     to the PySCFSlaterUHF class.
     """
 
-    def __init__(self, mol, mf, mc):
+    def __init__(self, mol, mf, mc, tol=None):
+        if(tol is None): 
+            self.tol = -1
+        else: 
+            self.tol = tol
         self.parameters = {}
         self._mol = mol
         self._nelec = (mc.nelecas[0] + mc.ncore, mc.nelecas[1] + mc.ncore)
@@ -62,8 +66,8 @@ class MultiSlater:
         # find multi slater determinant occupation
         detwt = []
         occup = []
-        deters = fci.addons.large_ci(mc.ci, norb, nelec, tol=-1)
-
+        deters = fci.addons.large_ci(mc.ci, norb, nelec, tol=self.tol)
+        
         # Create map and occupation objects
         map_dets = [[], []]
         occup = [[], []]

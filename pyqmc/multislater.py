@@ -25,7 +25,6 @@ def binary_to_occ(S, ncore):
     max_orb = max(occup)
     return (occup, max_orb)
 
-
 class MultiSlater:
     """
     A multi-determinant wave function object initialized
@@ -33,7 +32,11 @@ class MultiSlater:
     to the PySCFSlaterUHF class.
     """
 
-    def __init__(self, mol, mf, mc):
+    def __init__(self, mol, mf, mc, tol=None):
+        if(tol is None): 
+            self.tol = -1
+        else: 
+            self.tol = tol
         self.parameters = {}
         self._mol = mol
         self._nelec = (mc.nelecas[0] + mc.ncore, mc.nelecas[1] + mc.ncore)
@@ -63,28 +66,30 @@ class MultiSlater:
         detwt = []
         # occup = []
         deters = fci.addons.large_ci(mc.ci, norb, nelec, tol=-1)
-
+        
         # Create map and occupation objects
         map_dets = [[], []]
         occup = [[], []]
         for x in deters:
-            detwt.append(x[0])
-            alpha_occ, __ = binary_to_occ(x[1], ncore)
-            beta_occ, __ = binary_to_occ(x[2], ncore)
+            if(np.abs(x[0]) > self.tol):
+                detwt.append(x[0])
+                alpha_occ, __ = binary_to_occ(x[1], ncore)
+                beta_occ, __ = binary_to_occ(x[2], ncore)
 
-            if alpha_occ not in occup[0]:
-                map_dets[0].append(len(occup[0]))
-                occup[0].append(alpha_occ)
-            else:
-                map_dets[0].append(occup[0].index(alpha_occ))
+                if alpha_occ not in occup[0]:
+                    map_dets[0].append(len(occup[0]))
+                    occup[0].append(alpha_occ)
+                else:
+                    map_dets[0].append(occup[0].index(alpha_occ))
 
-            if beta_occ not in occup[1]:
-                map_dets[1].append(len(occup[1]))
-                occup[1].append(beta_occ)
-            else:
-                map_dets[1].append(occup[1].index(beta_occ))
+                if beta_occ not in occup[1]:
+                    map_dets[1].append(len(occup[1]))
+                    occup[1].append(beta_occ)
+                else:
+                    map_dets[1].append(occup[1].index(beta_occ))
 
         self.parameters["det_coeff"] = np.array(detwt)
+        print(self.parameters["det_coeff"].shape)
         self._det_occup = occup  # Spin, [Ndet_up_unique, Ndet_dn_unique]
         self._det_map = np.array(map_dets)  # Spin, N_det
 

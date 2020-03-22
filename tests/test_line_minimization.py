@@ -20,10 +20,12 @@ def test():
     wf = slater_jastrow(mol, mf)
     nconf = 500
     wf, dfgrad = line_minimization(
-        wf, initial_guess(mol, nconf), gradient_generator(mol, wf),
-        hdf_file = "test_line_minimization.hdf5"
+        wf,
+        initial_guess(mol, nconf),
+        gradient_generator(mol, wf),
+        hdf_file="test_line_minimization.hdf5",
     )
-    
+
     dfgrad = pd.DataFrame(dfgrad)
     print(dfgrad)
     mfen = mf.energy_tot()

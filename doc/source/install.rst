@@ -5,11 +5,23 @@ Installation instructions
 Pip 
 -------------------------------
 
-The package and the dependencies can be installed by running in the directory which holds the `setup.py` file. 
+You can obtain releases by executing 
 
 .. code-block:: bash
 
-  pip install -e . 
+  pip install pyqmc --upgrade
+
+If you want parallel operation, execute
+
+.. code-block:: bash
+
+  pip install pyqmc dask distributed --upgrade
+
+The latest code can be installed as follows
+
+.. code-block:: bash
+
+  pip install git+git://github.com/WagnerGroup/pyqmc --upgrade
 
 GitHub
 --------------------------------

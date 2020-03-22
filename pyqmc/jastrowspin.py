@@ -4,12 +4,18 @@ from pyqmc.distance import RawDistance
 
 
 class JastrowSpin:
-    """
+    r"""
     1 body and 2 body jastrow factor
-    """
+
+            The Jastrow form is :math:`e^{U(R)}`, where 
+
+        .. math::  U(R) = \sum_{I, i, k} c^{a}_{Ik\sigma(i)} a_{k}(r_{Ii}) + \sum_{i,j,k} c^{b}_{k\sigma(i)\sigma(j)} b^{l}(r_{ij})
+        
+
+        """
 
     def __init__(self, mol, a_basis=None, b_basis=None):
-        """
+        r"""
         Args:
 
         mol : a pyscf molecule object
@@ -44,23 +50,15 @@ class JastrowSpin:
         self.parameters["acoeff"] = np.zeros((self._mol.natm, aexpand, 2))
 
     def recompute(self, configs):
-        r""" 
-        Jastrow form is $e^{U(R)}, where 
-        $$U(R) = 
-        \sum_{I, \alpha, k} c^{a}_{Ik\uparrow } a_{k}(r_{I\alpha}) + 
-        \sum_{I, \beta, k}  c^{a}_{Ik\downarrow } a_{k}(r_{I\beta}) +
-        \sum_{\alpha_1 < \alpha_2, l} c^{b}_{l\uparrow\uparrow} b^{l}(r_{\alpha_1\alpha_2}) + 
-        \sum_{\alpha, \beta, l} c^{b}_{l\uparrow\downarrow} b^{l}(r_{\alpha\beta})
-        \sum_{\beta_1 < \beta_2, l} c^{b}_{l\downarrow\downarrow} b^{l}(r_{\beta_1\beta_2}) + 
-        $$
-        the indices are $I$ for ions, $k$ for one-body (a) basis, $l$ for two-body (b) basis, $\alpha$ for up electrons, and $\beta$ for down electrons. $c^a, c^b$ are the coeffecient arrays. $r_{ij}$ denotes the distance between particles $i$ and $j$.
-        _avalues is the array for current configurations $A_{Iks} = \sum_s a_{k}(r_{Is})$ where $s$ indexes over $\uparrow$ ($\alpha$) and $\downarrow$ ($\beta$) sums.
-        _bvalues is the array for current configurations $B_{ls} = \sum_s b_{l}(r_{s})$ where $s$ indexes over $\uparrow\uparrow$ ($\alpha_1 < \alpha_2$), $\uparrow\downarrow$ ($\alpha, \beta$), and $\downarrow\downarrow$ ($\beta_1 < \beta_2$)  sums.
-        the partial sums store values before summing over electrons
-        _a_partial is the array $A^p_{eIk} = a_k(r_{Ie}$, where $e$ is any electron
-        _b_partial is the array $B^p_{els} = \sum_s b_l(r_{es}$, where $e$ is any electron, $s$ indexes over $\uparrow$ ($\alpha$) and $\downarrow$ ($\beta$) sums, not including $e$.
+        r"""
+
+        _avalues is the array for current configurations :math:`A_{Iks} = \sum_s a_{k}(r_{Is})` where :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums.
+        _bvalues is the array for current configurations :math:`B_{ls} = \sum_s b_{l}(r_{s})` where :math:`s` indexes over :math:`\uparrow\uparrow` (:math:`\alpha_1 < \alpha_2`), :math:`\uparrow\downarrow` (:math:`\alpha, \beta`), and :math:`\downarrow\downarrow` (:math:`\beta_1 < \beta_2`)  sums.
+ 
+         the partial sums store values before summing over electrons
+        _a_partial is the array :math:`A^p_{eIk} = a_k(r_{Ie}`, where :math:`e` is any electron
+        _b_partial is the array :math:`B^p_{els} = \sum_s b_l(r_{es}`, where :math:`e` is any electron, :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums, not including :math:`e`.
         """
-        u = 0.0
         self._configscurrent = configs.copy()
         nconf, nelec = configs.configs.shape[:2]
         nexpand = len(self.b_basis)
@@ -109,11 +107,9 @@ class JastrowSpin:
 
     def updateinternals(self, e, epos, wrap=None, mask=None):
         r""" Update a and b sums. 
-        _avalues is the array for current configurations $A_{Iks} = \sum_s a_{k}(r_{Is})$ where $s$ indexes over $\uparrow$ ($\alpha$) and $\downarrow$ ($\beta$) sums.
-        _bvalues is the array for current configurations $B_{ls} = \sum_s b_{l}(r_{s})$ where $s$ indexes over $\uparrow\uparrow$ ($\alpha_1 < \alpha_2$), $\uparrow\downarrow$ ($\alpha, \beta$), and $\downarrow\downarrow$ ($\beta_1 < \beta_2$)  sums.
-        The update for _avalues and _b_values from moving one electron only requires computing the new sum for that electron. The sums for the electron in the current configuration are stored in _a_partial and _b_partial.
-
-"""
+        _avalues is the array for current configurations :math:`A_{Iks} = \sum_s a_{k}(r_{Is})` where :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums.
+        _bvalues is the array for current configurations :math:`B_{ls} = \sum_s b_{l}(r_{s})` where :math:`s` indexes over :math:`\uparrow\uparrow` (:math:`\alpha_1 < \alpha_2`), :math:`\uparrow\downarrow` (:math:`\alpha, \beta`), and :math:`\downarrow\downarrow` (:math:`\beta_1 < \beta_2`)  sums.
+        The update for _avalues and _b_values from moving one electron only requires computing the new sum for that electron. The sums for the electron in the current configuration are stored in _a_partial and _b_partial """
         if mask is None:
             mask = [True] * self._configscurrent.configs.shape[0]
         edown = int(e >= self._mol.nelec[0])
@@ -128,7 +124,7 @@ class JastrowSpin:
     def _a_update(self, e, epos, mask):
         r"""
           Calculate a (e-ion) partial sum for electron e
-        _a_partial_e is the array $A^p_{iIk} = a_k(r^i_{Ie}$ with e fixed
+        _a_partial_e is the array :math:`A^p_{iIk} = a_k(r^i_{Ie}` with e fixed
         i is the configuration index
           Args:
               e: fixed electron index
@@ -145,8 +141,8 @@ class JastrowSpin:
     def _b_update(self, e, epos, mask):
         r"""
           Calculate b (e-e) partial sums for electron e
-        _b_partial_e is the array $B^p_{ils} = \sum_s b_l(r^i_{es}$, with e fixed; $s$ indexes over $\uparrow$ ($\alpha$) and $\downarrow$ ($\beta$) sums, not including electron e. 
-          $i$ is the configuration index.
+        _b_partial_e is the array :math:`B^p_{ils} = \sum_s b_l(r^i_{es}`, with e fixed; :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums, not including electron e. 
+          :math:`i` is the configuration index.
           Args:
               e: fixed electron index
               epos: configs object for electron e
@@ -171,8 +167,8 @@ class JastrowSpin:
     def _b_update_many(self, e, epos, mask, spin):
         r"""
           Calculate b (e-e) partial sums for electron e
-        _b_partial_e is the array $B^p_{ils} = \sum_s b_l(r^i_{es}$, with e fixed; $s$ indexes over $\uparrow$ ($\alpha$) and $\downarrow$ ($\beta$) sums, not including electron e. 
-          $i$ is the configuration index.
+        _b_partial_e is the array :math:`B^p_{ils} = \sum_s b_l(r^i_{es}`, with e fixed; :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums, not including electron e. 
+          :math:`i` is the configuration index.
           Args:
               e: fixed electron index
               epos: configs object for electron e
@@ -194,9 +190,9 @@ class JastrowSpin:
     def _update_b_partial(self, e, epos, mask):
         r"""
           Calculate b (e-e) partial sum contributions from electron e
-        _b_partial_e is the array $B^p_{ils} = \sum_s b_l(r^i_{es}$, with e fixed; $s$ indexes over $\uparrow$ ($\alpha$) and $\downarrow$ ($\beta$) sums, not including electron e. 
-          Since $B^p_{ils}$ is summed over other electrons, moving electron e will affect other partial sums. This function updates all the necessary partial sums instead of just evaluating the one for electron e.
-          $i$ is the configuration index.
+        _b_partial_e is the array :math:`B^p_{ils} = \sum_s b_l(r^i_{es}`, with e fixed; :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums, not including electron e. 
+          Since :math:`B^p_{ils}` is summed over other electrons, moving electron e will affect other partial sums. This function updates all the necessary partial sums instead of just evaluating the one for electron e.
+          :math:`i` is the configuration index.
           Args:
               e: fixed electron index
               epos: configs object for electron e
@@ -232,8 +228,8 @@ class JastrowSpin:
         return (np.ones(len(u)), u)
 
     def gradient(self, e, epos):
-        """We compute the gradient for electron e as
-        :math:`grad_e ln Psi_J = sum_k c_k sum_{j > e} grad_e b_k(r_{ej}) + sum_{i < e} grad_e b_k(r_{ie}) `
+        r"""We compute the gradient for electron e as
+        :math:`\nabla_e \ln \Psi_J = \sum_k c_k \left(\sum_{j > e} \nabla_e b_k(r_{ej}) + \sum_{i < e} \nabla_e b_k(r_{ie})\right)` 
         So we need to compute the gradient of the b's for these indices.
         Note that we need to compute distances between electron position given and the current electron distances.
         We will need this for laplacian() as well"""
@@ -301,12 +297,12 @@ class JastrowSpin:
 
     def testvalue(self, e, epos, mask=None):
         r"""
-        Compute the ratio $\Psi_{\rm new}/\Psi_{\rm old}$ for moving electron e to epos.
-        _avalues is the array for current configurations $A_{Iks} = \sum_s a_{k}(r_{Is})$ where $s$ indexes over $\uparrow$ ($\alpha$) and $\downarrow$ ($\beta$) sums.
-        _bvalues is the array for current configurations $B_{ls} = \sum_s b_{l}(r_{s})$ where $s$ indexes over $\uparrow\uparrow$ ($\alpha_1 < \alpha_2$), $\uparrow\downarrow$ ($\alpha, \beta$), and $\downarrow\downarrow$ ($\beta_1 < \beta_2$)  sums.
+        Compute the ratio :math:`\Psi_{\rm new}/\Psi_{\rm old}` for moving electron e to epos.
+        _avalues is the array for current configurations :math:`A_{Iks} = \sum_s a_{k}(r_{Is})` where :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums.
+        _bvalues is the array for current configurations :math:`B_{ls} = \sum_s b_{l}(r_{s})` where :math:`s` indexes over :math:`\uparrow\uparrow` (:math:`\alpha_1 < \alpha_2`), :math:`\uparrow\downarrow` (:math:`\alpha, \beta`), and :math:`\downarrow\downarrow` (:math:`\beta_1 < \beta_2`)  sums.
         The update for _avalues and _b_values from moving one electron only requires computing the new sum for that electron. The sums for the electron in the current configuration are stored in _a_partial and _b_partial.
-        deltaa = $a_{k}(r_{Ie})$, indexing (atom, a_basis)
-        deltab = $\sum_s b_{l}(r_{se})$, indexing (b_basis, spin s)
+        deltaa = :math:`a_{k}(r_{Ie})`, indexing (atom, a_basis)
+        deltab = :math:`\sum_s b_{l}(r_{se})`, indexing (b_basis, spin s)
         """
         if mask is None:
             mask = [True] * epos.configs.shape[0]
@@ -326,12 +322,12 @@ class JastrowSpin:
 
     def testvalue_many(self, e, epos, mask=None):
         r"""
-        Compute the ratio $\Psi_{\rm new}/\Psi_{\rm old}$ for moving electron e to epos.
-        _avalues is the array for current configurations $A_{Iks} = \sum_s a_{k}(r_{Is})$ where $s$ indexes over $\uparrow$ ($\alpha$) and $\downarrow$ ($\beta$) sums.
-        _bvalues is the array for current configurations $B_{ls} = \sum_s b_{l}(r_{s})$ where $s$ indexes over $\uparrow\uparrow$ ($\alpha_1 < \alpha_2$), $\uparrow\downarrow$ ($\alpha, \beta$), and $\downarrow\downarrow$ ($\beta_1 < \beta_2$)  sums.
+        Compute the ratio :math:`\Psi_{\rm new}/\Psi_{\rm old}` for moving electron e to epos.
+        _avalues is the array for current configurations :math:`A_{Iks} = \sum_s a_{k}(r_{Is})` where :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums.
+        _bvalues is the array for current configurations :math:`B_{ls} = \sum_s b_{l}(r_{s})` where :math:`s` indexes over :math:`\uparrow\uparrow` (:math:`\alpha_1 < \alpha_2`), :math:`\uparrow\downarrow` (:math:`\alpha, \beta`), and :math:`\downarrow\downarrow` (:math:`\beta_1 < \beta_2`)  sums.
         The update for _avalues and _b_values from moving one electron only requires computing the new sum for that electron. The sums for the electron in the current configuration are stored in _a_partial and _b_partial.
-        deltaa = $a_{k}(r_{Ie})$, indexing (atom, a_basis)
-        deltab = $\sum_s b_{l}(r_{se})$, indexing (b_basis, spin s)
+        deltaa = :math:`a_{k}(r_{Ie})`, indexing (atom, a_basis)
+        deltab = :math:`\sum_s b_{l}(r_{se})`, indexing (b_basis, spin s)
         """
         s = (e >= self._mol.nelec[0]).astype(int)
         if mask is None:

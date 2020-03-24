@@ -64,7 +64,6 @@ class MultiSlater:
 
         # find multi slater determinant occupation
         detwt = []
-        # occup = []
         deters = fci.addons.large_ci(mc.ci, norb, nelec, tol=-1)
         
         # Create map and occupation objects
@@ -89,7 +88,6 @@ class MultiSlater:
                     map_dets[1].append(occup[1].index(beta_occ))
 
         self.parameters["det_coeff"] = np.array(detwt)
-        print(self.parameters["det_coeff"].shape)
         self._det_occup = occup  # Spin, [Ndet_up_unique, Ndet_dn_unique]
         self._det_map = np.array(map_dets)  # Spin, N_det
 

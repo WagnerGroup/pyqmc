@@ -83,7 +83,7 @@ def get_r_ea(mol, configs, e, at):
     return configs.dist.dist_i(apos, configs.configs[:, e, :]).reshape((-1, 3))
 
 
-def get_r_ea_i(mol, epos_rot, e, at):
+def get_r_ea_i(mol, epos_rot, e, at, dist):
     """
     Returns a nconf x naip x 3 array, distances between the rotated electron (e) and the atom at
     Parameters:
@@ -91,7 +91,8 @@ def get_r_ea_i(mol, epos_rot, e, at):
     Returns:
       epos_rot-apos, (rotated) electron-atom distances
     """
-    return epos_rot - np.array(mol._atom[at][1])[np.newaxis, np.newaxis]
+    apos = np.asarray(mol._atom[at][1])
+    return -dist(epos_rot, apos[np.newaxis])
 
 
 def get_v_l(mol, configs, e, at):
@@ -134,7 +135,7 @@ def get_P_l(mol, configs, weights, epos_rot, l_list, e, at):
 
     P_l_val = np.zeros([nconf, naip, len(l_list)])
     r_ea = get_r_ea(mol, configs, e, at)  # nconf x 3
-    r_ea_i = get_r_ea_i(mol, epos_rot, e, at)  # nconf x naip x 3
+    r_ea_i = get_r_ea_i(mol, epos_rot, e, at, configs.dist.dist_i)  # nconf x naip x 3
     rdotR = np.einsum("ik,ijk->ij", r_ea, r_ea_i)
     rdotR /= np.linalg.norm(r_ea, axis=1)[:, np.newaxis]
     rdotR /= np.linalg.norm(r_ea_i, axis=-1)
@@ -153,7 +154,7 @@ def ecp_ea(mol, configs, wf, e, at, threshold):
     Returns the ECP value between electron e and atom at, local+nonlocal.
     """
     nconf = configs.configs.shape[0]
-    ecp_val = np.zeros(nconf)
+    ecp_val = np.zeros(nconf, dtype=complex if wf.iscomplex else float)
 
     l_list, v_l = get_v_l(mol, configs, e, at)
     mask, prob = ecp_mask(v_l, threshold)
@@ -186,11 +187,12 @@ def ecp(mol, configs, wf, threshold):
     Returns the ECP value, summed over all the electrons and atoms.
     """
     nconf, nelec = configs.configs.shape[0:2]
-    ecp_tot = np.zeros(nconf)
+    ecp_tot = np.zeros(nconf, dtype=complex if wf.iscomplex else float)
     if mol._ecp != {}:
-        for e in range(nelec):
-            for at in range(len(mol._atom)):
-                ecp_tot += ecp_ea(mol, configs, wf, e, at, threshold)
+        for at in range(len(mol._atom)):
+            if mol._atom[at][0] in mol._ecp.keys():
+                for e in range(nelec):
+                    ecp_tot += ecp_ea(mol, configs, wf, e, at, threshold)
     return ecp_tot
 
 
@@ -270,7 +272,7 @@ def get_rot(mol, configs, e, at, naip):
             d1[i + 7] = np.pi - tha
             d2[i + 7] = (rk2 + 1) * fi0
 
-    epos_rot = apos + r_ea * (
+    epos_rot = (configs.configs[:, e] - r_ea_vec)[:, np.newaxis] + r_ea * (
         i_rot * np.sin(d1) * np.cos(d2)
         + j_rot * np.sin(d1) * np.sin(d2)
         + k_rot * np.cos(d1)

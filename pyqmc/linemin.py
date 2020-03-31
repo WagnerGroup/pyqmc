@@ -106,6 +106,7 @@ def line_minimization(
     verbose=False,
     npts=5,
     hdf_file=None,
+    compute_Sij=True,
 ):
     """Optimizes energy by determining gradients with stochastic reconfiguration
         and minimizing the energy along gradient directions using correlated sampling.
@@ -138,6 +139,8 @@ def line_minimization(
 
       npts: number of points to fit to in each line minimization
 
+      compute_Sij: Whether you want to compute Sij or not
+
     Returns:
 
       wf: optimized wave function
@@ -156,6 +159,11 @@ def line_minimization(
         lmoptions = {}
     if update_kws is None:
         update_kws = {}
+
+    #If you dont want to spend the memory compute this, 
+    #then you can only use sd_update for now
+    if not compute_Sij:
+        update = sd_update
 
     # Restart
     if hdf_file is not None:
@@ -180,9 +188,11 @@ def line_minimization(
         en_err = np.std(df["pgradtotal"]) / np.sqrt(len(df))
         dpH = np.mean(df["pgraddpH"], axis=0)
         dp = np.mean(df["pgraddppsi"], axis=0)
-        dpdp = np.mean(df["pgraddpidpj"], axis=0)
         grad = 2 * np.real(dpH - en * dp)
-        Sij = np.real(dpdp - np.einsum("i,j->ij", dp, dp))
+        Sij = 0
+        if compute_Sij: 
+            dpdp = np.mean(df["pgraddpidpj"], axis=0)
+            Sij = np.real(dpdp - np.einsum("i,j->ij", dp, dp))
         return coords, df["pgradtotal"].values[-1], grad, Sij, en, en_err
 
     x0 = pgrad_acc.transform.serialize_parameters(wf.parameters)

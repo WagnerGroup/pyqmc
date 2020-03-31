@@ -126,3 +126,4 @@ dmypy.json
 
 #vim files
 *.swp
+.DS_Store

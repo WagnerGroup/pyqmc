@@ -79,7 +79,7 @@ def test_RKS(kind=0, nk=(1, 1, 1)):
     runtest(supercell, mf, kind=kind)
 
 
-def test_noncubic(kind=0, nk=(1, 1, 1)):
+def noncubic(kind=0, nk=(1, 1, 1)):
     L = 3
     mol = gto.M(
         atom="""H     {0}      {0}      {0}                
@@ -132,7 +132,7 @@ def runtest(mol, mf, kind=0, do_mc=False):
     #####################################
     ## evaluate KE integral with VMC
     #####################################
-    coords = pyqmc.initial_guess(mol, 1200, 0.7)
+    coords = pyqmc.initial_guess(mol, 800, 0.7)
     warmup = 5
     start = time.time()
     df, coords = pyqmc.vmc(
@@ -161,6 +161,6 @@ if __name__ == "__main__":
     kind = 0
     nk = [1, 1, 1]
     # multislater(kind, nk)
-    # cubic_with_ecp(kind, nk)
+    cubic_with_ecp(kind, nk)
     test_RKS(kind, nk)
-    test_noncubic(kind, nk)
+    # noncubic(kind, nk)

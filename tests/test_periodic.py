@@ -108,7 +108,7 @@ def runtest(mol, mf, kind=0, do_mc=False):
             dm = np.sum(dm, axis=0)
     else:
         kpt = mf.kpts[kind]
-        wf = pyqmc.PySCFSlaterUHF(mol, mf, twist=np.dot(kpt, mol.a.T / np.pi))
+        wf = pyqmc.PySCFSlaterPBC(mol, mf, twist=np.dot(kpt, mol.a.T / np.pi))
         dm = mf.make_rdm1()
         print("original dm shape", dm.shape)
         if len(dm.shape) == 4:

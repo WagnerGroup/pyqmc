@@ -1,6 +1,7 @@
 name = "pyqmc"
 from pyqmc.mc import vmc, initial_guess
 from pyqmc.slateruhf import PySCFSlaterUHF
+from pyqmc.slaterpbc import PySCFSlaterPBC
 from pyqmc.multislater import MultiSlater
 
 from pyqmc.multiplywf import MultiplyWF
@@ -62,6 +63,7 @@ def default_slater(mol, mf, optimize_orbitals=False):
         to_opt = []
         freeze = {}
     return wf, to_opt, freeze
+
 
 def default_multislater(mol, mf, mc, tol=None):
     import numpy as np

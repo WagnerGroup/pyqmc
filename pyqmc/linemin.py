@@ -150,6 +150,8 @@ def line_minimization(
         vmc = pyqmc.mc.vmc
     if vmcoptions is None:
         vmcoptions = {}
+    vmcoptions["warmup"] = warmup
+    vmcoptions["rolling_average"] = True
     if lm is None:
         lm = lm_sampler
     if lmoptions is None:
@@ -175,15 +177,12 @@ def line_minimization(
         for k in newparms:
             wf.parameters[k] = newparms[k]
         data, coords = vmc(wf, coords, accumulators={"pgrad": pgrad_acc}, **vmcoptions)
-        df = pd.DataFrame(data)[warmup:]
-        en = np.mean(df["pgradtotal"])
-        en_err = np.std(df["pgradtotal"]) / np.sqrt(len(df))
-        dpH = np.mean(df["pgraddpH"], axis=0)
-        dp = np.mean(df["pgraddppsi"], axis=0)
+        en = df["pgradtotal"]
+        dpH = df["pgraddpH"]
+        dp = df["pgraddppsi"]
         grad = 2 * np.real(dpH - en * dp)
-        dpdp = np.mean(df["pgraddpidpj"], axis=0)
-        Sij = np.real(dpdp - np.einsum("i,j->ij", dp, dp))
-        return coords, df["pgradtotal"].values[-1], grad, Sij, en, en_err
+        Sij = np.real(df["pgraddpidpj"] - np.einsum("i,j->ij", dp, dp))
+        return coords, grad, Sij, en
 
     x0 = pgrad_acc.transform.serialize_parameters(wf.parameters)
 
@@ -195,16 +194,15 @@ def line_minimization(
     # Gradient descent cycles
     for it in range(maxiters):
         # Calculate gradient accurately
-        coords, last_en, pgrad, Sij, en, en_err = gradient_energy_function(x0, coords)
+        coords, pgrad, Sij, en = gradient_energy_function(x0, coords)
         step_data = {}
         step_data["energy"] = en
-        step_data["energy_error"] = en_err
         step_data["x"] = x0
         step_data["pgradient"] = pgrad
         step_data["iteration"] = it
 
         if verbose:
-            print("descent en", en, en_err)
+            print("descent en", en)
             print("descent |grad|", np.linalg.norm(pgrad), flush=True)
 
         xfit = []

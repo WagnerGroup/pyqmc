@@ -101,11 +101,13 @@ def vmc(
     wf,
     configs,
     nsteps=100,
+    warmup=0,
     tstep=0.5,
     accumulators=None,
     verbose=False,
     stepoffset=0,
     hdf_file=None,
+    rolling_average=False,
 ):
     """Run a Monte Carlo sample of a given wave function.
 
@@ -124,6 +126,10 @@ def vmc(
       verbose: Print out step information 
 
       stepoffset: If continuing a run, what to start the step numbering at.
+  
+      hdf_file: Hdf_file to store vmc output.
+
+      rolling_average: whether to average over steps while running, useful if memory usage high
 
     Returns: (df,configs)
        df: A list of dictionaries nstep long that contains all results from the accumulators. These are averaged across all walkers.
@@ -147,7 +153,7 @@ def vmc(
     nconf, nelec, ndim = configs.configs.shape
     df = []
     wf.recompute(configs)
-    for step in range(nsteps):
+    for step in range(nsteps + warmup):
         if verbose:
             print("step", step)
         acc = []
@@ -172,15 +178,26 @@ def vmc(
             configs.move(e, newcoorde, accept)
             wf.updateinternals(e, newcoorde, mask=accept)
             acc.append(np.mean(accept))
-        avg = {}
-        for k, accumulator in accumulators.items():
-            dat = accumulator.avg(configs, wf)
-            for m, res in dat.items():
-                # print(m,res.nbytes/1024/1024)
-                avg[k + m] = res  # np.mean(res,axis=0)
-        avg["acceptance"] = np.mean(acc)
-        avg["step"] = stepoffset + step
-        avg["nconfig"] = nconf
-        vmc_file(hdf_file, avg, dict(tstep=tstep), configs)
-        df.append(avg)
+       
+        if step >= warmup:
+            avg = {}
+            for k, accumulator in accumulators.items():
+                dat = accumulator.avg(configs, wf)
+                for m, res in dat.items():
+                    avg[k + m] = res
+            avg["acceptance"] = np.mean(acc)
+            avg["nconfig"] = nconf
+           
+            if rolling_average:
+                for key in avg:
+                    avg[key] /= (nstep - warmup)
+                if not df: 
+                    df.append(avg)
+                else:
+                    for key in df[0]:  
+                        df[0][key] += avg[key]
+            else:
+                avg["step"] = stepoffset + step - warmup
+                vmc_file(hdf_file, avg, dict(tstep=tstep), configs)
+                df.append(avg)
     return df, configs

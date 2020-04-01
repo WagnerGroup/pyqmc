@@ -173,7 +173,6 @@ def cvmc_optimize(*args, client, **kwargs):
 
 def distdmc_propagate(wf, configs, weights, *args, client, npartitions=None, **kwargs):
     import pyqmc.dmc
-
     if npartitions is None:
         npartitions = sum([x for x in client.nthreads().values()])
 

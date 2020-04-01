@@ -149,14 +149,16 @@ def dmc_propagate(
             else:
                 dat = energydat
             for m, res in dat.items():
-                avg[k + m] = np.dot(weights, res) / (nconfig * wavg)
+                avg[k + m] = np.einsum("...i,i...->...", weights, res) / (
+                    nconfig * wavg
+                )
         avg["weight"] = wavg
         avg["weightvar"] = np.std(weights)
         avg["weightmin"] = np.amin(weights)
         avg["weightmax"] = np.amax(weights)
         avg["acceptance"] = np.mean(acc)
         avg["step"] = stepoffset + step
-
+        
         df.append(avg)
     return pd.DataFrame(df), configs, weights
 
@@ -325,6 +327,7 @@ def rundmc(
         drift_limiter=drift_limiter,
         **kwargs,
     )
+    
     df_ = pd.DataFrame(df_)
     eref = df_[ekey[0] + ekey[1]][0].real
     esigma = np.abs(eref) / 100

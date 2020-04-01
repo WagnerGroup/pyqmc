@@ -13,7 +13,9 @@ def setup_hdf(f, data, attr):
     """
     for k, it in data.items():
         itnp = np.array(it)
-        f.create_dataset(k, (0, *itnp.shape), maxshape=(None, *itnp.shape))
+        f.create_dataset(
+            k, (0, *itnp.shape), maxshape=(None, *itnp.shape), dtype=itnp.dtype
+        )
     for k, it in attr.items():
         f.attrs[k] = it
 

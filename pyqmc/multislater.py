@@ -25,6 +25,7 @@ def binary_to_occ(S, ncore):
     max_orb = max(occup)
     return (occup, max_orb)
 
+
 class MultiSlater:
     """
     A multi-determinant wave function object initialized
@@ -33,9 +34,9 @@ class MultiSlater:
     """
 
     def __init__(self, mol, mf, mc, tol=None):
-        if(tol is None): 
+        if tol is None:
             self.tol = -1
-        else: 
+        else:
             self.tol = tol
         self.parameters = {}
         self._mol = mol
@@ -51,6 +52,12 @@ class MultiSlater:
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
         self.pbc_str = "PBC" if hasattr(mol, "a") else ""
 
+        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
+        if self.iscomplex:
+            self.get_phase = lambda x: x / np.abs(x)
+        else:
+            self.get_phase = np.sign
+
     def _copy_ci(self, mc):
         """       
         Copies over determinant coefficients and MO occupations
@@ -65,12 +72,12 @@ class MultiSlater:
         # find multi slater determinant occupation
         detwt = []
         deters = fci.addons.large_ci(mc.ci, norb, nelec, tol=-1)
-        
+
         # Create map and occupation objects
         map_dets = [[], []]
         occup = [[], []]
         for x in deters:
-            if(np.abs(x[0]) > self.tol):
+            if np.abs(x[0]) > self.tol:
                 detwt.append(x[0])
                 alpha_occ, __ = binary_to_occ(x[1], ncore)
                 beta_occ, __ = binary_to_occ(x[2], ncore)
@@ -157,12 +164,12 @@ class MultiSlater:
             ),
         )
 
-        wf_sign = np.sign(wf_val)
+        wf_sign = self.get_phase(wf_val)
         wf_val = np.log(np.abs(wf_val))
         return wf_sign, wf_val
 
     def _updateval(self, ratio, s, mask):
-        self._dets[s][0, mask, :] *= np.sign(ratio)
+        self._dets[s][0, mask, :] *= self.get_phase(ratio)
         self._dets[s][1, mask, :] += np.log(np.abs(ratio))
 
     def _testrow(self, e, vec, mask=None, spin=None):

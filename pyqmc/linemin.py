@@ -177,6 +177,7 @@ def line_minimization(
         for k in newparms:
             wf.parameters[k] = newparms[k]
         data, coords = vmc(wf, coords, accumulators={"pgrad": pgrad_acc}, **vmcoptions)
+        df = data[0]
         en = df["pgradtotal"]
         dpH = df["pgraddpH"]
         dp = df["pgraddppsi"]

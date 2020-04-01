@@ -14,6 +14,14 @@ import dask.distributed
 dask.distributed.protocol.utils.msgpack_opts["strict_map_key"] = False
 
 
+def _avg_func(df):
+    group = df.groupby("step", as_index=False)
+    if np.dtype("O") in df.dtypes.values:
+        return group.apply(lambda y: y.stack().groupby(level=1).apply(np.mean, axis=0))
+    else: 
+        return group.mean()
+
+
 def distvmc(
     wf,
     coords,
@@ -44,7 +52,7 @@ def distvmc(
             if "configs" in hdf.keys():
                 coords.configs = np.array(hdf["configs"])
                 if verbose:
-                    print("Restarted calculation")
+                    print("Restarted calculation", flush=True)
 
     if accumulators is None:
         accumulators = {}
@@ -77,14 +85,7 @@ def distvmc(
             iterdata.extend(res[0])
             coord[i] = res[1]
 
-        collected_data = (
-            pd.DataFrame(iterdata)
-            .groupby("step", as_index=False)
-            .apply(
-                lambda x: x.stack().groupby(level=1).apply(np.mean, axis=0)
-            )  # Added for array returns, e.g. obdm, tbdm
-            .to_dict("records")
-        )
+        collected_data = _avg_func(pd.DataFrame(iterdata)).to_dict("records")
         if verbose:
             print("epoch", epoch, "finished", flush=True)
 
@@ -138,8 +139,6 @@ def dist_lm_sampler(
     for p in range(len(params)):
         df = {}
         for k in keys:
-            # print(k,flush=True)
-            # print(stepresults[0][p][k])
             df[k] = np.concatenate([x[p][k] for x in stepresults], axis=0)
         final_results.append(df)
 
@@ -192,22 +191,23 @@ def distdmc_propagate(wf, configs, weights, *args, client, npartitions=None, **k
 
     allresults = [r.result() for r in allruns]
     configs.join([x[1] for x in allresults])
-    coordret = configs
     weightret = np.vstack([x[2] for x in allresults])
-    df = pd.concat([pd.DataFrame(x[0]) for x in allresults])
+    df = pd.concat([pd.DataFrame(x[0]) for x in allresults], axis=0, ignore_index=True)
     notavg = ["weight", "weightvar", "weightmin", "weightmax", "acceptance", "step"]
     # Here we reweight the averages since each step on each node
     # was done with a different average weight.
 
     for k in df.keys():
         if k not in notavg:
-            df[k] = df[k] * df["weight"]
+            df[k] *= df["weight"].values
     df = df.groupby("step").aggregate(np.mean, axis=0).reset_index()
     for k in df.keys():
         if k not in notavg:
-            df[k] = df[k] / df["weight"]
-    print(df)
-    return df, coordret, weightret
+            df[k] /= df["weight"].values
+    print("df step weight acceptance\n", df[["step", "weight", "acceptance"]])
+    print("energytotal")
+    print(df["energytotal"].values)
+    return df, configs, weightret
 
 
 def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs):

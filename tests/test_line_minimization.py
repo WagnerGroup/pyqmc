@@ -30,7 +30,6 @@ def test():
     print(dfgrad)
     mfen = mf.energy_tot()
     enfinal = dfgrad["energy"].values[-1]
-    enfinal_err = dfgrad["energy_error"].values[-1]
     assert mfen > enfinal
 
 

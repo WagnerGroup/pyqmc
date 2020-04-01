@@ -190,7 +190,7 @@ def vmc(
            
             if rolling_average:
                 for key in avg:
-                    avg[key] /= (nstep - warmup)
+                    avg[key] /= (nsteps - warmup)
                 if not df: 
                     df.append(avg)
                 else:

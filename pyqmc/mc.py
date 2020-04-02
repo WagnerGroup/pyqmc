@@ -199,7 +199,7 @@ def vmc(
         
         # Append blocks
         block_avg["acceptance"] = np.mean(acc)
-        block_avg["nstep"] = stepoffset + block
+        block_avg["step"] = stepoffset + block
         block_avg["nconfig"] = nconf * nsteps_per_block
         vmc_file(hdf_file, block_avg, dict(tstep=tstep), configs)
         df.append(block_avg)

@@ -51,6 +51,11 @@ class MultiSlater:
             self.parameters["mo_coeff_beta"] = mc.mo_coeff[:, : mc.ncas + mc.ncore]
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
         self.pbc_str = "PBC" if hasattr(mol, "a") else ""
+        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
+        if self.iscomplex:
+            self.get_phase = lambda x: x / np.abs(x)
+        else:
+            self.get_phase = np.sign
 
         self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
         if self.iscomplex:

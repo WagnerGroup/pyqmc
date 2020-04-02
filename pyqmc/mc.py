@@ -165,7 +165,7 @@ def vmc(
         acc = []
         for step in range(nsteps_per_block):
             if verbose:
-                print("step", step)
+                print(f"block {block}, step {step}")
             for e in range(nelec):
                 # Propose move
                 grad = limdrift(np.real(wf.gradient(e, configs.electron(e)).T))

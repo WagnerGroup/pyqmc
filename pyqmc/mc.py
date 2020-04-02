@@ -100,8 +100,9 @@ def vmc_file(hdf_file, data, attr, configs):
 def vmc(
     wf,
     configs,
-    nsteps=100,
-    warmup=0,
+    nblocks=1,
+    nsteps_per_block=100,
+    nsteps=None,
     tstep=0.5,
     accumulators=None,
     verbose=False,
@@ -117,7 +118,11 @@ def vmc(
       
       configs: Initial electron coordinates
 
-      nsteps: Number of VMC steps to propagate
+      nblocks: Number of VMC blocks to run 
+
+      nsteps_per_block: Number of steps to run per block
+
+      nsteps: (Deprecated) Number of steps to run, maps to nblocks = 1, nsteps_per_block = nsteps
 
       tstep: Time step for move proposals. Only affects efficiency.
 
@@ -129,14 +134,16 @@ def vmc(
   
       hdf_file: Hdf_file to store vmc output.
 
-      rolling_average: whether to average over steps while running, useful if memory usage high
-
     Returns: (df,configs)
        df: A list of dictionaries nstep long that contains all results from the accumulators. These are averaged across all walkers.
 
        configs: The final coordinates from this calculation.
        
     """
+    if nsteps is not None:
+        nblocks = 1
+        nsteps_per_block = nsteps
+
     if accumulators is None:
         accumulators = {}
         if verbose:
@@ -153,51 +160,48 @@ def vmc(
     nconf, nelec, ndim = configs.configs.shape
     df = []
     wf.recompute(configs)
-    for step in range(nsteps + warmup):
-        if verbose:
-            print("step", step)
+    
+    for block in range(nblock):
+        block_avg = {}
         acc = []
-        for e in range(nelec):
-            # Propose move
-            grad = limdrift(np.real(wf.gradient(e, configs.electron(e)).T))
-            gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconf, 3))
-            newcoorde = configs.configs[:, e, :] + gauss + grad * tstep
-            newcoorde = configs.make_irreducible(e, newcoorde)
+        for step in range(nsteps_per_block):
+            if verbose:
+                print("step", step)
+            for e in range(nelec):
+                # Propose move
+                grad = limdrift(np.real(wf.gradient(e, configs.electron(e)).T))
+                gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconf, 3))
+                newcoorde = configs.configs[:, e, :] + gauss + grad * tstep
+                newcoorde = configs.make_irreducible(e, newcoorde)
 
-            # Compute reverse move
-            new_grad = limdrift(np.real(wf.gradient(e, newcoorde).T))
-            forward = np.sum(gauss ** 2, axis=1)
-            backward = np.sum((gauss + tstep * (grad + new_grad)) ** 2, axis=1)
+                # Compute reverse move
+                new_grad = limdrift(np.real(wf.gradient(e, newcoorde).T))
+                forward = np.sum(gauss ** 2, axis=1)
+                backward = np.sum((gauss + tstep * (grad + new_grad)) ** 2, axis=1)
 
-            # Acceptance
-            t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
-            ratio = np.multiply(wf.testvalue(e, newcoorde) ** 2, t_prob)
-            accept = ratio > np.random.rand(nconf)
+                # Acceptance
+                t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
+                ratio = np.multiply(wf.testvalue(e, newcoorde) ** 2, t_prob)
+                accept = ratio > np.random.rand(nconf)
 
-            # Update wave function
-            configs.move(e, newcoorde, accept)
-            wf.updateinternals(e, newcoorde, mask=accept)
-            acc.append(np.mean(accept))
-       
-        if step >= warmup:
-            avg = {}
+                # Update wave function
+                configs.move(e, newcoorde, accept)
+                wf.updateinternals(e, newcoorde, mask=accept)
+                acc.append(np.mean(accept))
+          
+            # Rolling average on step
             for k, accumulator in accumulators.items():
                 dat = accumulator.avg(configs, wf)
                 for m, res in dat.items():
-                    avg[k + m] = res
-            avg["acceptance"] = np.mean(acc)
-            avg["nconfig"] = nconf
-           
-            if rolling_average:
-                for key in avg:
-                    avg[key] /= (nsteps - warmup)
-                if not df: 
-                    df.append(avg)
-                else:
-                    for key in df[0]:  
-                        df[0][key] += avg[key]
-            else:
-                avg["step"] = stepoffset + step - warmup
-                vmc_file(hdf_file, avg, dict(tstep=tstep), configs)
-                df.append(avg)
+                    if not block_avg:
+                        block_avg[k + m] = res / nsteps_per_block
+                    else:
+                        block_avg[k + m] += res / nsteps_per_block
+        
+        # Append blocks
+        block_avg["acceptance"] = np.mean(acc)
+        block_avg["nstep"] = stepoffset + block
+        block_avg["nconfig"] = nconf * nstep_per_block
+        vmc_file(hdf_file, block_avg, dict(tstep=tstep), configs)
+        df.append(block_avg)
     return df, configs

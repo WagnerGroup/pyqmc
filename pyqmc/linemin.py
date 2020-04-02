@@ -163,7 +163,8 @@ def line_minimization(
             if "wf" in hdf.keys():
                 grp = hdf["wf"]
                 for k in grp.keys():
-                    wf.parameters[k] = np.array(grp[k])
+                    #Make sure that we only add parameters that aren't frozen 
+                    wf.parameters[k][not pgrad_acc.transform.frozen] = np.array(grp[k])
             if "configs" in hdf.keys():
                 coords.load_hdf(hdf)
 

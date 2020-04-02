@@ -47,13 +47,15 @@ def get_supercell(cell, S):
     supercell = gto.Cell()
     supercell.a = superlattice
     supercell.atom = atom
-    supercell.pseudo = cell.pseudo
+    supercell.ecp = cell.ecp
     supercell.basis = cell.basis
-    supercell.unit = cell.unit
+    supercell.exp_to_discard = cell.exp_to_discard
+    supercell.unit = "Bohr"
     supercell.spin = cell.spin * scale
     supercell.build()
     supercell.original_cell = cell
     supercell.S = S
+    supercell.scale = scale
     return supercell
 
 
@@ -113,12 +115,16 @@ class PySCFSlaterPBC:
             scale = np.linalg.det(self.supercell.S)
             self._nelec = [int(np.round(n * scale)) for n in self._cell.nelec]
         self._nelec = tuple(self._nelec)
+
         self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
         self.iscomplex = self.iscomplex or np.linalg.norm(self._kpts) > 1e-12
+        print("iscomplex:", self.iscomplex)
         if self.iscomplex:
             self.get_phase = lambda x: x / np.abs(x)
+            self.get_wrapphase = lambda x: np.exp(1j * x)
         else:
             self.get_phase = np.sign
+            self.get_wrapphase = lambda x: (-1) ** np.round(x / np.pi)
 
     def evaluate_orbitals(self, configs, mask=None, eval_str="PBCGTOval_sph"):
         mycoords = configs.configs
@@ -132,7 +138,7 @@ class PySCFSlaterPBC:
         kdotR = np.linalg.multi_dot(
             (self._kpts, self._cell.lattice_vectors().T, wrap.T)
         )
-        wrap_phase = np.exp(1j * kdotR)
+        wrap_phase = self.get_wrapphase(kdotR)
         # evaluate AOs for all electron positions
         ao = self._cell.eval_gto(eval_str, prim_coords, kpts=self._kpts)
         ao = [ao[k] * wrap_phase[k][:, np.newaxis] for k in range(self.nk)]
@@ -181,7 +187,7 @@ class PySCFSlaterPBC:
 
     # identical to slateruhf
     def _updateval(self, ratio, s, mask):
-        self._dets[s][0][mask] *= self.get_phase(ratio)  # will not work for complex!
+        self._dets[s][0][mask] *= self.get_phase(ratio)
         self._dets[s][1][mask] += np.log(np.abs(ratio))
 
     ### not state-changing functions

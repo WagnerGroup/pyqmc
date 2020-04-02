@@ -113,7 +113,12 @@ class PySCFSlaterPBC:
             scale = np.linalg.det(self.supercell.S)
             self._nelec = [int(np.round(n * scale)) for n in self._cell.nelec]
         self._nelec = tuple(self._nelec)
-        self.get_phase = lambda x: np.exp(2j * np.pi * np.angle(x))
+        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
+        self.iscomplex = self.iscomplex or np.linalg.norm(self._kpts) > 1e-12
+        if self.iscomplex:
+            self.get_phase = lambda x: x / np.abs(x)
+        else:
+            self.get_phase = np.sign
 
     def evaluate_orbitals(self, configs, mask=None, eval_str="PBCGTOval_sph"):
         mycoords = configs.configs

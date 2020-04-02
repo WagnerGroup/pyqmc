@@ -59,6 +59,7 @@ class MultiplyWF:
     def __init__(self, *wf_factors):
         self.wf_factors = [*wf_factors]
         self.parameters = Parameters([wf.parameters for wf in wf_factors])
+        self.iscomplex = bool(sum(wf.iscomplex for wf in wf_factors))
 
     def recompute(self, configs):
         signs = np.ones(len(configs.configs))

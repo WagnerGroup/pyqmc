@@ -95,13 +95,9 @@ class PySCFSlaterUHF:
                     :, np.asarray(mf.mo_occ > 1.1)
                 ]
 
-        if (
-            np.iscomplexobj(
-                np.concatenate([p.ravel() for p in self.parameters.values()])
-            )
-            or np.linalg.norm(twist) != 0
-        ):
-            self.get_phase = lambda x: np.exp(2j * np.pi * np.angle(x))
+        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
+        if self.iscomplex:
+            self.get_phase = lambda x: x / np.abs(x)
         else:
             self.get_phase = np.sign
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")

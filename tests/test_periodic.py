@@ -132,13 +132,13 @@ def runtest(mol, mf, kind=0, do_mc=False):
     #####################################
     ## evaluate KE integral with VMC
     #####################################
-    coords = pyqmc.initial_guess(mol, 800, 0.7)
-    warmup = 5
+    coords = pyqmc.initial_guess(mol, 1200, 0.7)
+    warmup = 10
     start = time.time()
     df, coords = pyqmc.vmc(
         wf,
         coords,
-        nsteps=40 + warmup,
+        nsteps=100 + warmup,
         tstep=1,
         accumulators={"energy": pyqmc.accumulators.EnergyAccumulator(mol)},
         verbose=False,

@@ -175,13 +175,14 @@ def line_minimization(
         for k in newparms:
             wf.parameters[k] = newparms[k]
         data, coords = vmc(wf, coords, accumulators={"pgrad": pgrad_acc}, **vmcoptions)
-        df = data[0]
-        en = df["pgradtotal"]
-        dpH = df["pgraddpH"]
-        dp = df["pgraddppsi"]
+        df = pd.DataFrame(data)[warmup:]
+        en = np.mean(df["pgradtotal"], axis=0)
+        en_err = np.std(df["pgradtotal"], axis=0) / np.sqrt(len(df))
+        dpH = np.mean(df["pgraddpH"], axis=0)
+        dp = np.mean(df["pgraddppsi"], axis=0)
         grad = 2 * np.real(dpH - en * dp)
-        Sij = np.real(df["pgraddpidpj"] - np.einsum("i,j->ij", dp, dp))
-        return coords, grad, Sij, en
+        Sij = np.real(np.mean(df["pgraddpidpj"], axis=0) - np.einsum("i,j->ij", dp, dp))
+        return coords, grad, Sij, en, en_err
 
     x0 = pgrad_acc.transform.serialize_parameters(wf.parameters)
 
@@ -193,7 +194,7 @@ def line_minimization(
     # Gradient descent cycles
     for it in range(maxiters):
         # Calculate gradient accurately
-        coords, pgrad, Sij, en = gradient_energy_function(x0, coords)
+        coords, pgrad, Sij, en, en_err = gradient_energy_function(x0, coords)
         step_data = {}
         step_data["energy"] = en
         step_data["x"] = x0
@@ -201,7 +202,7 @@ def line_minimization(
         step_data["iteration"] = it
 
         if verbose:
-            print("descent en", en)
+            print("descent en", en, en_err)
             print("descent |grad|", np.linalg.norm(pgrad), flush=True)
 
         xfit = []

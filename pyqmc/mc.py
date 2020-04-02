@@ -108,7 +108,6 @@ def vmc(
     verbose=False,
     stepoffset=0,
     hdf_file=None,
-    rolling_average=False,
 ):
     """Run a Monte Carlo sample of a given wave function.
 

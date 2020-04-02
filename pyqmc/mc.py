@@ -100,8 +100,8 @@ def vmc_file(hdf_file, data, attr, configs):
 def vmc(
     wf,
     configs,
-    nblocks=1,
-    nsteps_per_block=100,
+    nblocks=100,
+    nsteps_per_block=1,
     nsteps=None,
     tstep=0.5,
     accumulators=None,
@@ -140,8 +140,8 @@ def vmc(
        
     """
     if nsteps is not None:
-        nblocks = 1
-        nsteps_per_block = nsteps
+        nblocks = nsteps
+        nsteps_per_block = 1
 
     if accumulators is None:
         accumulators = {}
@@ -160,7 +160,7 @@ def vmc(
     df = []
     wf.recompute(configs)
     
-    for block in range(nblock):
+    for block in range(nblocks):
         block_avg = {}
         acc = []
         for step in range(nsteps_per_block):
@@ -192,7 +192,7 @@ def vmc(
             for k, accumulator in accumulators.items():
                 dat = accumulator.avg(configs, wf)
                 for m, res in dat.items():
-                    if not block_avg:
+                    if k + m not in block_avg:
                         block_avg[k + m] = res / nsteps_per_block
                     else:
                         block_avg[k + m] += res / nsteps_per_block
@@ -200,7 +200,7 @@ def vmc(
         # Append blocks
         block_avg["acceptance"] = np.mean(acc)
         block_avg["nstep"] = stepoffset + block
-        block_avg["nconfig"] = nconf * nstep_per_block
+        block_avg["nconfig"] = nconf * nsteps_per_block
         vmc_file(hdf_file, block_avg, dict(tstep=tstep), configs)
         df.append(block_avg)
     return df, configs

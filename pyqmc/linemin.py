@@ -176,8 +176,8 @@ def line_minimization(
             wf.parameters[k] = newparms[k]
         data, coords = vmc(wf, coords, accumulators={"pgrad": pgrad_acc}, **vmcoptions)
         df = pd.DataFrame(data)[warmup:]
-        en = np.mean(df["pgradtotal"], axis=0)
-        en_err = np.std(df["pgradtotal"], axis=0) / np.sqrt(len(df))
+        en = np.mean(df["pgradtotal"])
+        en_err = np.std(df["pgradtotal"]) / np.sqrt(len(df))
         dpH = np.mean(df["pgraddpH"], axis=0)
         dp = np.mean(df["pgraddppsi"], axis=0)
         grad = 2 * np.real(dpH - en * dp)

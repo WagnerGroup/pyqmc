@@ -150,8 +150,6 @@ def line_minimization(
         vmc = pyqmc.mc.vmc
     if vmcoptions is None:
         vmcoptions = {}
-    vmcoptions["warmup"] = warmup
-    vmcoptions["rolling_average"] = True
     if lm is None:
         lm = lm_sampler
     if lmoptions is None:

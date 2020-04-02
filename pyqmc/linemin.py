@@ -197,6 +197,7 @@ def line_minimization(
         coords, pgrad, Sij, en, en_err = gradient_energy_function(x0, coords)
         step_data = {}
         step_data["energy"] = en
+        step_data["energy_error"] = en_err
         step_data["x"] = x0
         step_data["pgradient"] = pgrad
         step_data["iteration"] = it

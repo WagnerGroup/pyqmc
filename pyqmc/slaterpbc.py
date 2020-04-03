@@ -227,7 +227,8 @@ class PySCFSlaterPBC:
         aos = self.evaluate_orbitals(epos, mask)
         mo_coeff = self.parameters[self._coefflookup[s]]
         mo = [np.dot(aos[k], mo_coeff[k]) for k in range(self.nk)]
-        mo = np.concatenate(mo, axis=-1).reshape(nmask, self._nelec[s])
+        mo = np.concatenate(mo, axis=-1)
+        mo = mo.reshape(nmask, *epos.configs.shape[1:-1], self._nelec[s])
         return self._testrow(e, mo, mask)
 
     def gradient(self, e, epos):

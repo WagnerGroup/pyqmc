@@ -10,39 +10,27 @@ from pyscf.scf.addons import remove_linear_dep_
 
 
 def test_cubic_with_ecp(kind=1, nk=(2, 2, 2)):
-    chkfile = "twistecptest2.chkfile"
-    try:
-        from pyscf import lib
+    from pyscf.pbc.dft.multigrid import multigrid
 
-        cell = gto.cell.loads(lib.chkfile.load(chkfile, "mol"))
-        kpts = cell.make_kpts([1, 1, 1])
-        mf = scf.KRKS(cell, kpts)
-        mf.__dict__.update(lib.chkfile.load(chkfile, "scf"))
-        print("reloaded chkfile", chkfile)
-    except:
-        print("could not reload chkfile, running from scratch", chkfile)
-        from pyscf.pbc.dft.multigrid import multigrid
-
-        L = 6.63 * 2
-        cell = gto.Cell(
-            atom="""Li     {0}      {0}      {0}                
-                      Li     {1}      {1}      {1}""".format(
-                0.0, L / 4
-            ),
-            basis="bfd-vdz",
-            ecp={"Li": "bfd"},
-            spin=0,
-            unit="bohr",
-        )
-        cell.exp_to_discard = 0.1
-        cell.build(a=np.eye(3) * L)
-        kpts = cell.make_kpts(nk)
-        mf = scf.KRKS(cell, kpts)
-        mf.chkfile = chkfile
-        mf.xc = "pbe"
-        mf = mf.density_fit()
-        mf = multigrid(mf)
-        mf = mf.run()
+    L = 6.63 * 2
+    cell = gto.Cell(
+        atom="""Li     {0}      {0}      {0}                
+                  Li     {1}      {1}      {1}""".format(
+            0.0, L / 4
+        ),
+        basis="bfd-vdz",
+        ecp={"Li": "bfd"},
+        spin=0,
+        unit="bohr",
+    )
+    cell.exp_to_discard = 0.1
+    cell.build(a=np.eye(3) * L)
+    kpts = cell.make_kpts(nk)
+    mf = scf.KRKS(cell, kpts)
+    mf.xc = "pbe"
+    mf = mf.density_fit()
+    mf = multigrid(mf)
+    mf = mf.run()
     runtest(cell, mf, kind=kind)
 
 

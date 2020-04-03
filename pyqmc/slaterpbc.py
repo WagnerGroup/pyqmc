@@ -77,7 +77,6 @@ class PySCFSlaterPBC:
                 supercell.original_cell = supercell
                 supercell.S = np.eye(3)
 
-        self.occ = np.asarray(mf.mo_occ) > 0.9
         self.parameters = {}
         self.real_tol = 1e4
 
@@ -89,15 +88,14 @@ class PySCFSlaterPBC:
         print("nk", self.nk)
         print(self.kinds)
 
-        mo_coeff = np.asarray(mf.mo_coeff)
         self._cell = supercell.original_cell
 
         mcalist = []
         mcblist = []
         for kind in self.kinds:
             if len(mf.mo_coeff[0][0].shape) == 2:
-                mca = mo_coeff[0][kind][:, self.occ[0][kind]]
-                mcb = mo_coeff[1][kind][:, self.occ[1][kind]]
+                mca = mf.mo_coeff[0][kind][:, np.asarray(mf.mo_occ[0][kind] > 0.9)]
+                mcb = mf.mo_coeff[1][kind][:, np.asarray(mf.mo_occ[1][kind] > 0.9)]
             else:
                 mca = mf.mo_coeff[kind][:, np.asarray(mf.mo_occ[kind] > 0.9)]
                 mcb = mf.mo_coeff[kind][:, np.asarray(mf.mo_occ[kind] > 1.1)]

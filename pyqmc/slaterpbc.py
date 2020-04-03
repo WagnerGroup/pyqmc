@@ -85,8 +85,7 @@ class PySCFSlaterPBC:
         kdiffs = mf.kpts[np.newaxis] - self._kpts[:, np.newaxis]
         self.kinds = np.nonzero(np.linalg.norm(kdiffs, axis=-1) < 1e-12)[1]
         self.nk = len(self._kpts)
-        print("nk", self.nk)
-        print(self.kinds)
+        print("nk", self.nk, self.kinds)
 
         self._cell = supercell.original_cell
 

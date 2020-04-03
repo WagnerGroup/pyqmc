@@ -128,12 +128,14 @@ class PySCFSlaterPBC:
 
     def evaluate_orbitals(self, configs, mask=None, eval_str="PBCGTOval_sph"):
         mycoords = configs.configs
+        configswrap = configs.wrap
         if mask is not None:
             mycoords = mycoords[mask]
+            configswrap = configswrap[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
         # wrap supercell positions into primitive cell
         prim_coords, prim_wrap = pbc.enforce_pbc(self._cell.lattice_vectors(), mycoords)
-        configswrap = configs.wrap.reshape(prim_wrap.shape)
+        configswrap = configswrap.reshape(prim_wrap.shape)
         wrap = prim_wrap + np.dot(configswrap, self.supercell.S)
         kdotR = np.linalg.multi_dot(
             (self._kpts, self._cell.lattice_vectors().T, wrap.T)

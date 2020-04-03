@@ -64,6 +64,7 @@ def default_slater(mol, mf, optimize_orbitals=False):
         freeze = {}
     return wf, to_opt, freeze
 
+
 def default_multislater(mol, mf, mc, tol=None):
     import numpy as np
 

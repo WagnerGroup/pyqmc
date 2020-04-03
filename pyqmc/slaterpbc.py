@@ -106,10 +106,18 @@ class PySCFSlaterPBC:
         self.parameters["mo_coeff_beta"] = np.asarray(mcblist)
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
 
-        if len(mf.mo_coeff[0][0].shape) == 2:
-            self._nelec = [int(np.sum(np.concatenate(o))) for o in mf.mo_occ]
+        print("scf object is type", type(mf))
+        if isinstance(mf, scf.kuhf.KUHF):
+            # Then indices are (spin, kpt, basis, mo)
+            self._nelec = [int(np.sum([o[k] for k in self.kinds])) for o in mf.mo_occ]
+        elif isinstance(mf, scf.khf.KRHF):
+            # Then indices are (kpt, basis, mo)
+            self._nelec = [
+                int(np.sum([mf.mo_occ[k] > t for k in self.kinds])) for t in (0.9, 1.1)
+            ]
         else:
-            scale = np.linalg.det(self.supercell.S)
+            print("Warning: not expecting scf object of type", type(mf))
+            scale = self.supercell.scale
             self._nelec = [int(np.round(n * scale)) for n in self._cell.nelec]
         self._nelec = tuple(self._nelec)
 

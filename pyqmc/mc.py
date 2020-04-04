@@ -166,7 +166,7 @@ def vmc(
 
             # Acceptance
             t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
-            ratio = t_prob * np.abs(wf.testvalue(e, newcoorde)) ** 2
+            ratio = np.abs(wf.testvalue(e, newcoorde)) ** 2 * t_prob
             accept = ratio > np.random.rand(nconf)
 
             # Update wave function

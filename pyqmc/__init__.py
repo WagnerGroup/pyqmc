@@ -24,6 +24,19 @@ from pyqmc.cvmc import cvmc_optimize
 from pyqmc.reblock import reblock as avg_reblock
 
 
+def default_sj_pgrad(mol, mf, slaterkwargs, jastrowkwargs, gradientkwargs):
+    if hasattr(mol, "lattice_vectors"):
+        slater = PySCFSlaterPBC(mol, mf, **slaterkwargs)
+    else:
+        slater = PySCFSlaterUHF(mol, mf, **slaterkwargs)
+    jastrow, to_opt, freeze = default_jastrow(mol)
+    to_opt = ["wf2" + x for x in to_opt]
+    freeze = {"wf2" + k: f for k, f in freeze.items()}
+    wf = MultiplyWF(slater, jastrow)
+    pgrad = gradient_generator(mol, wf, to_opt, freeze)
+    return wf, pgrad
+
+
 def slater_jastrow(mol, mf, abasis=None, bbasis=None):
     if abasis is None:
         abasis = [GaussianFunction(0.8), GaussianFunction(1.6), GaussianFunction(3.2)]
@@ -51,7 +64,10 @@ def gradient_generator(mol, wf, to_opt=None, freeze=None, **ewald_kwargs):
 def default_slater(mol, mf, optimize_orbitals=False):
     import numpy as np
 
-    wf = PySCFSlaterUHF(mol, mf)
+    if hasattr(mol, "lattice_vectors"):
+        wf = PySCFSlaterPBC(mol, mf)
+    else:
+        wf = PySCFSlaterUHF(mol, mf)
     if optimize_orbitals:
         to_opt = ["mo_coeff_alpha", "mo_coeff_beta"]
         freeze = {}

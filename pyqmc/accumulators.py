@@ -172,23 +172,23 @@ class PGradTransform:
         return d
 
 
-class SkAccumulator:
+class SqAccumulator:
     r"""
     Accumulates structure factor 
 
-    .. math:: S(\vec{k}) = \langle \rho_{\vec{k}} \rho_{-\vec{k}} \rangle
-                         = \langle \left| \sum_{j=1}^{N_e} e^{i\vec{k}\cdot\vec{r}_j} \right| \rangle
+    .. math:: S(\vec{q}) = \langle \rho_{\vec{q}} \rho_{-\vec{q}} \rangle
+                         = \langle \left| \sum_{j=1}^{N_e} e^{i\vec{q}\cdot\vec{r}_j} \right| \rangle
 
     """
 
-    def __init__(self, klist):
-        self.klist = klist
+    def __init__(self, qlist):
+        self.qlist = qlist
 
     def __call__(self, configs, wf):
         nelec = configs.configs.shape[1]
-        exp_ikr = np.exp(1j * np.inner(configs.configs, self.klist))
-        sum_exp_ikr = exp_ikr.sum(axis=1)
-        d = {"Sk": (sum_exp_ikr.real ** 2 + sum_exp_ikr.imag ** 2) / nelec}
+        exp_iqr = np.exp(1j * np.inner(configs.configs, self.qlist))
+        sum_exp_iqr = exp_iqr.sum(axis=1)
+        d = {"Sq": (sum_exp_iqr.real ** 2 + sum_exp_iqr.imag ** 2) / nelec}
         return d
 
     def avg(self, configs, wf):

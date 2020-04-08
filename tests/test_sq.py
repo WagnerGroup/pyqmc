@@ -1,6 +1,7 @@
 from pyqmc.accumulators import SqAccumulator
 from pyqmc.coord import PeriodicConfigs
 import numpy as np
+import pandas as pd
 
 
 def test_config():
@@ -53,6 +54,32 @@ def test_config():
     assert diff < 1e-14, diff
 
 
+def test_big_cell():
+    import time
+
+    a = 1
+    ncell = (2, 2, 2)
+    Lvecs = np.diag(ncell) * a
+    unit_cell = np.zeros((4, 3))
+    unit_cell[1:] = (np.ones((3, 3)) - np.eye(3)) * a / 2
+
+    grid = np.meshgrid(*map(np.arange, ncell), indexing="ij")
+    shifts = np.stack(list(map(np.ravel, grid)), axis=1)
+    supercell = (shifts[:, np.newaxis] + unit_cell[np.newaxis]).reshape(1, -1, 3)
+
+    configs = supercell.repeat(1000, axis=0)
+    configs += np.random.randn(*configs.shape) * 0.1
+
+    df = run(Lvecs, configs, 8)
+    df = df.groupby("qmag").mean().reset_index()
+
+    large_q = df[-35:-10]["Sq"]
+    mean = np.mean(large_q - 1)
+    rms = np.sqrt(np.mean((large_q - 1) ** 2))
+    assert np.abs(mean) < 0.01, mean
+    assert rms < 0.1, rms
+
+
 def run(Lvecs, configs, nq):
     Gvecs = np.linalg.inv(Lvecs).T * 2 * np.pi
     qvecs = np.stack([x.ravel() for x in np.meshgrid(*[np.arange(nq)] * 3)], axis=1)
@@ -61,10 +88,11 @@ def run(Lvecs, configs, nq):
 
     configs = PeriodicConfigs(configs, Lvecs)
     sqavg = sqacc.avg(configs, None)
-    df = {}
+    df = {"qmag": np.linalg.norm(qvecs, axis=1)}
     df.update(sqavg)
-    return df
+    return pd.DataFrame(df)
 
 
 if __name__ == "__main__":
+    test_big_cell()
     test_config()

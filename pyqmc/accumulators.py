@@ -182,8 +182,23 @@ class SqAccumulator:
 
     """
 
-    def __init__(self, qlist):
-        self.qlist = qlist
+    def __init__(self, qlist=None, Lvecs=None, nq=4):
+        """
+        Inputs:
+            qlist: (n, 3) array-like. If qlist is provided, Lvecs and nq are ignored
+            Lvecs: (3, 3) array-like of lattice vectors. Required if qlist is None
+            nq: int, if qlist is nonzero, use a uniform grid of shape (nq, nq, nq)
+        """
+        if qlist is not None:
+            self.qlist = qlist
+        else:
+            assert (
+                Lvecs is not None
+            ), "need to provide either list of q vectors or lattice vectors"
+            Gvecs = np.linalg.inv(Lvecs).T * 2 * np.pi
+            qvecs = list(map(np.ravel, np.meshgrid(*[np.arange(nq)] * 3)))
+            qvecs = np.stack(qvecs, axis=1)
+            self.qlist = np.dot(qvecs, Gvecs)
 
     def __call__(self, configs, wf):
         nelec = configs.configs.shape[1]

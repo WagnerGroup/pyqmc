@@ -33,7 +33,11 @@ class MultiSlater:
     to the PySCFSlaterUHF class.
     """
 
-    def __init__(self, mol, mf, mc):
+    def __init__(self, mol, mf, mc, tol=None):
+        if tol is None:
+            self.tol = -1
+        else:
+            self.tol = tol
         self.parameters = {}
         self._mol = mol
         self._nelec = (mc.nelecas[0] + mc.ncore, mc.nelecas[1] + mc.ncore)
@@ -47,6 +51,17 @@ class MultiSlater:
             self.parameters["mo_coeff_beta"] = mc.mo_coeff[:, : mc.ncas + mc.ncore]
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
         self.pbc_str = "PBC" if hasattr(mol, "a") else ""
+        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
+        if self.iscomplex:
+            self.get_phase = lambda x: x / np.abs(x)
+        else:
+            self.get_phase = np.sign
+
+        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
+        if self.iscomplex:
+            self.get_phase = lambda x: x / np.abs(x)
+        else:
+            self.get_phase = np.sign
 
     def _copy_ci(self, mc):
         """       
@@ -61,28 +76,28 @@ class MultiSlater:
 
         # find multi slater determinant occupation
         detwt = []
-        occup = []
         deters = fci.addons.large_ci(mc.ci, norb, nelec, tol=-1)
 
         # Create map and occupation objects
         map_dets = [[], []]
         occup = [[], []]
         for x in deters:
-            detwt.append(x[0])
-            alpha_occ, __ = binary_to_occ(x[1], ncore)
-            beta_occ, __ = binary_to_occ(x[2], ncore)
+            if np.abs(x[0]) > self.tol:
+                detwt.append(x[0])
+                alpha_occ, __ = binary_to_occ(x[1], ncore)
+                beta_occ, __ = binary_to_occ(x[2], ncore)
 
-            if alpha_occ not in occup[0]:
-                map_dets[0].append(len(occup[0]))
-                occup[0].append(alpha_occ)
-            else:
-                map_dets[0].append(occup[0].index(alpha_occ))
+                if alpha_occ not in occup[0]:
+                    map_dets[0].append(len(occup[0]))
+                    occup[0].append(alpha_occ)
+                else:
+                    map_dets[0].append(occup[0].index(alpha_occ))
 
-            if beta_occ not in occup[1]:
-                map_dets[1].append(len(occup[1]))
-                occup[1].append(beta_occ)
-            else:
-                map_dets[1].append(occup[1].index(beta_occ))
+                if beta_occ not in occup[1]:
+                    map_dets[1].append(len(occup[1]))
+                    occup[1].append(beta_occ)
+                else:
+                    map_dets[1].append(occup[1].index(beta_occ))
 
         self.parameters["det_coeff"] = np.array(detwt)
         self._det_occup = occup  # Spin, [Ndet_up_unique, Ndet_dn_unique]
@@ -154,12 +169,12 @@ class MultiSlater:
             ),
         )
 
-        wf_sign = np.sign(wf_val)
+        wf_sign = self.get_phase(wf_val)
         wf_val = np.log(np.abs(wf_val))
         return wf_sign, wf_val
 
     def _updateval(self, ratio, s, mask):
-        self._dets[s][0, mask, :] *= np.sign(ratio)
+        self._dets[s][0, mask, :] *= self.get_phase(ratio)
         self._dets[s][1, mask, :] += np.log(np.abs(ratio))
 
     def _testrow(self, e, vec, mask=None, spin=None):

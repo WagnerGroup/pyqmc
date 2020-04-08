@@ -46,17 +46,15 @@ def initial_guess(mol, nconfig, r=1.0):
         )  # fraction of electron unassigned on each atom
         nassigned = np.sum(neach)  # number of electrons assigned
         totleft = int(mol.nelec[s] - nassigned)  # number of electrons not yet assigned
+        ind0 = s * mol.nelec[0]
+        epos[:, ind0 : ind0 + nassigned, :] = np.repeat(
+            mol.atom_coords(), neach, axis=0
+        )  # assign core electrons
         if totleft > 0:
             bins = np.cumsum(nleft) / totleft
             inds = np.argpartition(
                 np.random.random((nconfig, len(wts))), totleft, axis=1
             )[:, :totleft]
-            ind0 = s * mol.nelec[0]
-            epos[:, ind0 : ind0 + nassigned, :] = np.repeat(
-                mol.atom_coords(), neach, axis=0
-            )[
-                np.newaxis
-            ]  # assign core electrons
             epos[:, ind0 + nassigned : ind0 + mol.nelec[s], :] = mol.atom_coords()[
                 inds
             ]  # assign remaining electrons
@@ -94,9 +92,9 @@ def vmc_file(hdf_file, data, attr, configs):
         with h5py.File(hdf_file, "a") as hdf:
             if "configs" not in hdf.keys():
                 hdftools.setup_hdf(hdf, data, attr)
-                hdf.create_dataset("configs", configs.configs.shape)
+                configs.initialize_hdf(hdf)
             hdftools.append_hdf(hdf, data)
-            hdf["configs"][:, :, :] = configs.configs
+            configs.to_hdf(hdf)
 
 
 def vmc(
@@ -142,16 +140,17 @@ def vmc(
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
             if "configs" in hdf.keys():
-                configs.configs = np.array(hdf["configs"])
+                stepoffset = hdf["step"][-1] + 1
+                configs.load_hdf(hdf)
                 if verbose:
-                    print("Restarted calculation")
+                    print("Restarting calculation from step ", stepoffset)
 
     nconf, nelec, ndim = configs.configs.shape
     df = []
     wf.recompute(configs)
     for step in range(nsteps):
         if verbose:
-            print("step", step)
+            print("step", stepoffset + step)
         acc = []
         for e in range(nelec):
             # Propose move
@@ -167,7 +166,7 @@ def vmc(
 
             # Acceptance
             t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
-            ratio = np.multiply(wf.testvalue(e, newcoorde) ** 2, t_prob)
+            ratio = np.abs(wf.testvalue(e, newcoorde)) ** 2 * t_prob
             accept = ratio > np.random.rand(nconf)
 
             # Update wave function

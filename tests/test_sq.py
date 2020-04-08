@@ -81,14 +81,10 @@ def test_big_cell():
 
 
 def run(Lvecs, configs, nq):
-    Gvecs = np.linalg.inv(Lvecs).T * 2 * np.pi
-    qvecs = np.stack([x.ravel() for x in np.meshgrid(*[np.arange(nq)] * 3)], axis=1)
-    qvecs = np.dot(qvecs, Gvecs)
-    sqacc = SqAccumulator(qvecs)
-
+    sqacc = SqAccumulator(Lvecs=Lvecs, nq=nq)
     configs = PeriodicConfigs(configs, Lvecs)
     sqavg = sqacc.avg(configs, None)
-    df = {"qmag": np.linalg.norm(qvecs, axis=1)}
+    df = {"qmag": np.linalg.norm(sqacc.qlist, axis=1)}
     df.update(sqavg)
     return pd.DataFrame(df)
 

@@ -123,7 +123,7 @@ class PySCFSlaterPBC:
             ]
         else:
             print("Warning: not expecting scf object of type", type(mf))
-            scale = np.linalg.det(self.supercell.S)
+            scale = self.supercell.scale
             self._nelec = [int(np.round(n * scale)) for n in self._cell.nelec]
         self._nelec = tuple(self._nelec)
 

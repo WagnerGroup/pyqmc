@@ -300,6 +300,7 @@ def rundmc(
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
             if "configs" in hdf.keys():
+                stepoffset = hdf["step"][-1] + 1
                 configs.load_hdf(hdf)
                 weights = np.array(hdf["weights"])
                 if verbose:

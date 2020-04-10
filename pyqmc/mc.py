@@ -160,7 +160,7 @@ def vmc(
     nconf, nelec, ndim = configs.configs.shape
     df = []
     wf.recompute(configs)
-    
+
     for block in range(nblocks):
         block_avg = {}
         acc = []
@@ -188,7 +188,7 @@ def vmc(
                 configs.move(e, newcoorde, accept)
                 wf.updateinternals(e, newcoorde, mask=accept)
                 acc.append(np.mean(accept))
-          
+
             # Rolling average on step
             for k, accumulator in accumulators.items():
                 dat = accumulator.avg(configs, wf)
@@ -197,7 +197,7 @@ def vmc(
                         block_avg[k + m] = res / nsteps_per_block
                     else:
                         block_avg[k + m] += res / nsteps_per_block
-        
+
         # Append blocks
         block_avg["acceptance"] = np.mean(acc)
         block_avg["step"] = stepoffset + block

@@ -97,7 +97,7 @@ def dmc_propagate(
     nconfig, nelec = configs.configs.shape[0:2]
     wf.recompute(configs)
 
-    eloc = accumulators[ekey[0]](configs, wf)[ekey[1]]
+    eloc = accumulators[ekey[0]](configs, wf)[ekey[1]].real
     # eref_mean = np.mean(weights * eloc) / np.mean(weights)
     # eref = eref_mean
     df = []
@@ -120,8 +120,10 @@ def dmc_propagate(
 
             # Acceptance -- fixed-node: reject if wf changes sign
             wfratio = wf.testvalue(e, newepos)
-            ratio = wfratio ** 2 * t_prob
-            accept = ratio * np.sign(wfratio) > np.random.rand(nconfig)
+            ratio = np.abs(wfratio) ** 2 * t_prob
+            if not wf.iscomplex:
+                ratio *= np.sign(wfratio)
+            accept = ratio > np.random.rand(nconfig)
 
             # Update wave function
             configs.move(e, newepos, accept)
@@ -131,7 +133,7 @@ def dmc_propagate(
         # weights
         elocold = eloc.copy()
         energydat = accumulators[ekey[0]](configs, wf)
-        eloc = energydat[ekey[1]]
+        eloc = energydat[ekey[1]].real
         tdamp = limit_timestep(
             weights, eloc, elocold, eref, branchcut_start, branchcut_stop
         )
@@ -156,7 +158,7 @@ def dmc_propagate(
         avg["weightmax"] = np.amax(weights)
         avg["acceptance"] = np.mean(acc)
         avg["step"] = stepoffset + step
-        
+
         df.append(avg)
     return pd.DataFrame(df), configs, weights
 
@@ -298,6 +300,7 @@ def rundmc(
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
             if "configs" in hdf.keys():
+                stepoffset = hdf["step"][-1] + 1
                 configs.load_hdf(hdf)
                 weights = np.array(hdf["weights"])
                 if verbose:
@@ -325,9 +328,9 @@ def rundmc(
         drift_limiter=drift_limiter,
         **kwargs,
     )
-    
+
     df_ = pd.DataFrame(df_)
-    eref = df_[ekey[0] + ekey[1]][0]
+    eref = df_[ekey[0] + ekey[1]][0].real
     esigma = np.abs(eref) / 100
     for step in range(npropagate):
         if verbose:
@@ -351,6 +354,8 @@ def rundmc(
         df_["eref"] = eref
         # print(df_)
         df.append(df_)
-        eref = df_[ekey[0] + ekey[1]].values[-1] - feedback * np.log(np.mean(weights))
+        eref = df_[ekey[0] + ekey[1]].values[-1].real - feedback * np.log(
+            np.mean(weights)
+        )
         configs, weights = branch(configs, weights)
     return pd.concat(df).reset_index(), configs, weights

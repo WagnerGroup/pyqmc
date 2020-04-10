@@ -152,9 +152,10 @@ def vmc(
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
             if "configs" in hdf.keys():
+                stepoffset = hdf["step"][-1] + 1
                 configs.load_hdf(hdf)
                 if verbose:
-                    print("Restarted calculation")
+                    print("Restarting calculation from step ", stepoffset)
 
     nconf, nelec, ndim = configs.configs.shape
     df = []

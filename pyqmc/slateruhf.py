@@ -17,55 +17,20 @@ class PySCFSlaterUHF:
     The functions recompute() and updateinternals() change the state of the object, and 
     the rest compute and return values from that state. """
 
-    def __init__(self, mol, mf, twist=[0, 0, 0]):
+    def __init__(self, mol, mf):
         """
         Inputs:
-          mol:
-          mf:
-          twist: (3,) array-like. k=pi*twist, real-valued twists are integer
+          mol: PySCF Mole object
+          mf: PySCF SCF object
         """
         self.occ = np.asarray(mf.mo_occ) > 0.9
         self.parameters = {}
         self.real_tol = 1e4
-        if np.linalg.norm(twist) == 0:
-            self.single_twist = lambda e, c: 1
-            self.single_twist_mask = lambda e, c, m: 1
-            self.all_twist = lambda c, i0, i1: 1
-        else:
-            assert hasattr(mol, "a"), "twist can only be nonzero for a periodic system"
-            if (np.abs(twist - np.rint(twist)) < 1e-14).all():  # real kpt
-                get_twist = lambda wrap: (-1) ** np.dot(wrap, twist)
-                print("real kpt", twist)
-            else:
-                get_twist = lambda wrap: np.exp(1j * np.pi * np.dot(wrap, twist))
-                print("cplx kpt", twist - np.array([1, 0, 1]), np.mod(twist, 1.0))
-
-            def get_full_twist(c, i0, i1):
-                self.wrap[:, i0:i1] = c.wrap[:, i0:i1]
-                return np.prod(get_twist(c.wrap[:, i0:i1]), axis=1)
-
-            def get_single_twist(e, c, mask=None):
-                twist = get_twist(c.wrap - self.wrap[:, e])
-                if mask is not None:
-                    twist = twist[mask]
-                return twist
-
-            self.single_twist = lambda e, c: get_twist(c.wrap - self.wrap[:, e])
-            self.single_twist_mask = lambda e, c, m: get_twist(
-                c.wrap[m] - self.wrap[m, e]
-            )
-            self.all_twist = lambda c, i0, i1: np.prod(
-                get_twist(c.wrap[:, i0:i1, :]), axis=1
-            )
 
         # Determine if we're initializing from an RHF or UHF object.
         if hasattr(mf, "kpts"):
-            kind = np.where(
-                np.linalg.norm(
-                    np.dot(mf.kpts, mol.a.T) - np.array(twist) * np.pi, axis=1
-                )
-                < 1e-12
-            )[0][0]
+            frac_k = np.dot(mf.kpts, mol.lattice_vectors().T)
+            kind = np.where(np.linalg.norm(frac_k, axis=1) < 1e-12)[0][0]
             if len(np.asarray(mf.mo_occ).shape) == 3:
                 self.parameters["mo_coeff_alpha"] = np.real_if_close(
                     mf.mo_coeff[0][kind][:, self.occ[0, kind]], tol=self.real_tol
@@ -95,13 +60,9 @@ class PySCFSlaterUHF:
                     :, np.asarray(mf.mo_occ > 1.1)
                 ]
 
-        if (
-            np.iscomplexobj(
-                np.concatenate([p.ravel() for p in self.parameters.values()])
-            )
-            or np.linalg.norm(twist) != 0
-        ):
-            self.get_phase = lambda x: np.exp(2j * np.pi * np.angle(x))
+        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
+        if self.iscomplex:
+            self.get_phase = lambda x: x / np.abs(x)
         else:
             self.get_phase = np.sign
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
@@ -113,7 +74,6 @@ class PySCFSlaterUHF:
         """This computes the value from scratch. Returns the logarithm of the wave function as
         (phase,logdet). If the wf is real, phase will be +/- 1."""
         nconf, nelec, ndim = configs.configs.shape
-        self.wrap = np.zeros((configs.configs.shape))  # only needed for PBC
         mycoords = configs.configs.reshape((nconf * nelec, ndim))
         ao = self._mol.eval_gto(self.pbc_str + "GTOval_sph", mycoords).reshape(
             (nconf, nelec, -1)
@@ -133,12 +93,8 @@ class PySCFSlaterUHF:
                 )
             # This could be done faster; we are doubling our effort here.
             phase, mag = np.linalg.slogdet(mo)
-            phase *= self.all_twist(
-                configs, s * self._nelec[0], self._nelec[0] + s * self._nelec[1]
-            )
             self._dets.append((phase, mag))
             self._inverse.append(np.linalg.inv(mo))
-            # Apply twist to phase
 
         return self.value()
 
@@ -155,7 +111,6 @@ class PySCFSlaterUHF:
         ratio, self._inverse[s][mask, :, :] = sherman_morrison_row(
             eeff, self._inverse[s][mask, :, :], mo[mask, :]
         )
-        ratio *= self.single_twist_mask(e, epos, mask)
         self._updateval(ratio, s, mask)
 
     ### not state-changing functions
@@ -235,8 +190,7 @@ class PySCFSlaterUHF:
         ).reshape((*eposmask.shape[:-1], -1))
         mo = ao.dot(self.parameters[self._coefflookup[s]])
         a = self._testrow(e, mo, mask)
-        b = self.single_twist_mask(e, epos, mask)
-        return a * b
+        return a
 
     def testvalue_many(self, e, epos, mask=None):
         """ return the ratio between the current wave function and the wave function if 

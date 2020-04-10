@@ -3,6 +3,7 @@ import pyqmc
 import pandas as pd
 from pyscf.pbc import gto, scf
 from pyqmc.reblock import reblock
+from pyqmc.slaterpbc import get_supercell
 from pyscf.pbc.dft.multigrid import multigrid
 from pyscf.scf.addons import remove_linear_dep_
 import time
@@ -31,7 +32,8 @@ def cubic_with_ecp(kind=0, nk=(1, 1, 1)):
     # mf = mf.density_fit()
     mf = multigrid(mf)
     mf = mf.run()
-    runtest(mol, mf, kind=kind)
+    supercell = get_supercell(mol, np.diag(nk))
+    runtest(supercell, mf, kind=kind)
 
 
 def multislater(kind=0, nk=(1, 1, 1)):
@@ -55,7 +57,8 @@ def multislater(kind=0, nk=(1, 1, 1)):
     mf.chkfile = "h_bcc.chkfile"
     mf = mf.run()
 
-    runtest(mol, mf, kind=kind, do_mc=True)
+    supercell = get_supercell(mol, np.diag(nk))
+    runtest(supercell, mf, kind=kind, do_mc=True)
 
 
 def test_RKS(kind=0, nk=(1, 1, 1)):
@@ -72,10 +75,11 @@ def test_RKS(kind=0, nk=(1, 1, 1)):
     # mf = mf.density_fit()
     mf = mf.run()
 
-    runtest(mol, mf, kind=kind)
+    supercell = get_supercell(mol, np.diag(nk))
+    runtest(supercell, mf, kind=kind)
 
 
-def test_noncubic(kind=0, nk=(1, 1, 1)):
+def noncubic(kind=0, nk=(1, 1, 1)):
     L = 3
     mol = gto.M(
         atom="""H     {0}      {0}      {0}                
@@ -92,7 +96,8 @@ def test_noncubic(kind=0, nk=(1, 1, 1)):
     mf.xc = "pbe"
     # mf = mf.density_fit()
     mf = mf.run()
-    runtest(mol, mf, kind=kind)
+    supercell = get_supercell(mol, np.diag(nk))
+    runtest(supercell, mf, kind=kind)
 
 
 def runtest(mol, mf, kind=0, do_mc=False):
@@ -108,7 +113,7 @@ def runtest(mol, mf, kind=0, do_mc=False):
             dm = np.sum(dm, axis=0)
     else:
         kpt = mf.kpts[kind]
-        wf = pyqmc.PySCFSlaterUHF(mol, mf, twist=np.dot(kpt, mol.a.T / np.pi))
+        wf = pyqmc.PySCFSlaterPBC(mol, mf)
         dm = mf.make_rdm1()
         print("original dm shape", dm.shape)
         if len(dm.shape) == 4:
@@ -141,6 +146,7 @@ def runtest(mol, mf, kind=0, do_mc=False):
     print("VMC time", time.time() - start)
     df = pd.DataFrame(df)
     dfke = reblock(df["energyke"][warmup:], 10)
+    dfke /= mol.scale
     vmcke, err = dfke.mean(), dfke.sem()
     print("VMC kinetic energy: {0} +- {1}".format(vmcke, err))
 
@@ -153,8 +159,8 @@ def runtest(mol, mf, kind=0, do_mc=False):
 
 if __name__ == "__main__":
     kind = 0
-    nk = [2, 2, 2]
+    nk = [1, 1, 1]
     # multislater(kind, nk)
-    # cubic_with_ecp(kind, nk)
+    cubic_with_ecp(kind, nk)
     test_RKS(kind, nk)
-    test_noncubic(kind, nk)
+    # noncubic(kind, nk)

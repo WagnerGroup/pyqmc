@@ -32,7 +32,7 @@ def test():
     wf1 = PySCFSlaterUHF(mol, mf)
     wf = wf1
     wf2 = JastrowSpin(mol, a_basis=[CutoffCuspFunction(5, 0.2)], b_basis=[])
-    wf2.parameters["acoeff"] = np.asarray([[[-1.0, 0]]])
+    wf2.parameters["acoeff"] = np.asarray([[[1.0, 0]]])
     wf = MultiplyWF(wf1, wf2)
 
     dfvmc, configs_ = vmc(

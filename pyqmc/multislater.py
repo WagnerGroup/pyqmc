@@ -216,7 +216,7 @@ class MultiSlater:
     def _testcol(self, det, i, s, vec):
         """vec is a nconfig,nmo vector which replaces column i 
         of spin s in determinant det"""
-  
+
         ratio = np.einsum("ij,ij->i", vec, self._inverse[s][:, det, i, :])
         return ratio
 
@@ -309,7 +309,7 @@ class MultiSlater:
         which correspond to the parameter dictionary."""
         d = {}
 
-        #Det coeff
+        # Det coeff
         det_coeff_grad = (
             self._dets[0][0, :, self._det_map[0]]
             * self._dets[1][0, :, self._det_map[1]]
@@ -323,27 +323,32 @@ class MultiSlater:
         d["det_coeff"] = (
             det_coeff_grad.T / (curr_val[0] * np.exp(curr_val[1]))[:, np.newaxis]
         )
-        
-        #Mo_coeff, adapted from SlaterUHF
+
+        # Mo_coeff, adapted from SlaterUHF
         for parm in ["mo_coeff_alpha", "mo_coeff_beta"]:
             s = 0
-            if "beta" in parm: s = 1
-            
+            if "beta" in parm:
+                s = 1
+
             ao = self._aovals[
                 :, s * self._nelec[0] : self._nelec[s] + s * self._nelec[0], :
-            ] 
+            ]
             pgrad_shape = (ao.shape[0],) + self.parameters[parm].shape
             pgrad = np.zeros(pgrad_shape)
 
             largest_mo = np.max(np.ravel(self._det_occup[s]))
-            for i in range(largest_mo + 1):                              # MO loop
-                for det in range(self.parameters['det_coeff'].shape[0]): # Det loop
-                    if i in self._det_occup[s][self._det_map[s][det]]:  # Check if MO in det
+            for i in range(largest_mo + 1):  # MO loop
+                for det in range(self.parameters["det_coeff"].shape[0]):  # Det loop
+                    if (
+                        i in self._det_occup[s][self._det_map[s][det]]
+                    ):  # Check if MO in det
                         col = self._det_occup[s][self._det_map[s][det]].index(i)
                         for j in range(ao.shape[2]):
                             vec = ao[:, :, j]
-                            pgrad[:, j, i] +=\
-                                self.parameters['det_coeff'][det] * d['det_coeff'][:, det] *\
-                                self._testcol(self._det_map[s][det], col, s, vec)
+                            pgrad[:, j, i] += (
+                                self.parameters["det_coeff"][det]
+                                * d["det_coeff"][:, det]
+                                * self._testcol(self._det_map[s][det], col, s, vec)
+                            )
             d[parm] = np.array(pgrad)
         return d

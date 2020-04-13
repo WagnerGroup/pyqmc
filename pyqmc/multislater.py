@@ -336,17 +336,14 @@ class MultiSlater:
             pgrad = np.zeros(pgrad_shape)
 
             largest_mo = np.max(np.ravel(self._det_occup[s]))
-            for i in range(largest_mo + 1):                     # MO loop
-                for det in range(self.parameters['det_coeff']): # Det loop
-                    try:                                        # Check if MO in det
+            for i in range(largest_mo + 1):                              # MO loop
+                for det in range(self.parameters['det_coeff'].shape[0]): # Det loop
+                    if i in self._det_occup[s][self._det_map[s][det]]:  # Check if MO in det
                         col = self._det_occup[s][self._det_map[s][det]].index(i)
                         for j in range(ao.shape[2]):
                             vec = ao[:, :, j]
                             pgrad[:, j, i] +=\
-                                self.parameters['det_coeff'][det] * d['det_coeff'][det] *
+                                self.parameters['det_coeff'][det] * d['det_coeff'][:, det] *\
                                 self._testcol(self._det_map[s][det], col, s, vec)
-                    except:
-                        pass
-            
             d[parm] = np.array(pgrad)
         return d

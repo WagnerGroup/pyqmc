@@ -6,7 +6,10 @@ from pyqmc import pbc
 
 
 class OBDMAccumulator:
-    """ Return the obdm as an array with indices rho[spin][i][k] = <c_{spin,i}c^+_{spin,j}>
+    r""" Return the obdm as an array with indices rho[spin][i][j] = <c_{spin,i}c^+_{spin,j}>
+
+  .. math:: \rho^\sigma_{ij} = \langle c_{\sigma, i} c^\dagger_{\sigma, j} \rangle
+
   Args:
 
     mol (Mole): PySCF Mole object.
@@ -165,7 +168,7 @@ class OBDMAccumulator:
         return extra_configs, auxassignments
 
     def sample_onebody(self, configs, nsamples=1):
-        """ For a set of orbitals defined by orb_coeff, return samples from f(r) = \sum_i phi_i(r)^2. """
+        r""" For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i phi_i(r)^2`. """
         n = configs.configs.shape[0]
         borb = self.evaluate_orbitals(configs)
         fsum = (np.abs(borb) ** 2).sum(axis=1)
@@ -213,7 +216,7 @@ class OBDMAccumulator:
 
 
 def sample_onebody(mol, orb_coeff, configs, tstep=2.0):
-    """ For a set of orbitals defined by orb_coeff, return samples from f(r) = \sum_i phi_i(r)^2. """
+    r""" For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i phi_i(r)^2`. """
     n = configs.shape[0]
     config_pack = np.concatenate([configs, configs], axis=0)
     config_pack[n:] += np.sqrt(tstep) * np.random.randn(*configs.shape)

@@ -48,15 +48,16 @@ def get_supercell(cell, S):
     supercell = gto.Cell()
     supercell.a = superlattice
     supercell.atom = atom
-    supercell.pseudo = cell.pseudo
     supercell.ecp = cell.ecp
     supercell.basis = cell.basis
+    supercell.exp_to_discard = cell.exp_to_discard
     supercell.unit = "Bohr"
     supercell.spin = cell.spin * scale
     supercell.exp_to_discard = cell.exp_to_discard
     supercell.build()
     supercell.original_cell = cell
     supercell.S = S
+    supercell.scale = scale
     return supercell
 
 
@@ -123,15 +124,19 @@ class PySCFSlaterPBC:
             ]
         else:
             print("Warning: not expecting scf object of type", type(mf))
-            scale = np.linalg.det(self.supercell.S)
+            scale = self.supercell.scale
             self._nelec = [int(np.round(n * scale)) for n in self._cell.nelec]
         self._nelec = tuple(self._nelec)
 
         self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
+        self.iscomplex = self.iscomplex or np.linalg.norm(self._kpts) > 1e-12
+        print("iscomplex:", self.iscomplex)
         if self.iscomplex:
             self.get_phase = lambda x: x / np.abs(x)
+            self.get_wrapphase = lambda x: np.exp(1j * x)
         else:
             self.get_phase = np.sign
+            self.get_wrapphase = lambda x: (-1) ** np.round(x / np.pi)
 
     def evaluate_orbitals(self, configs, mask=None, eval_str="PBCGTOval_sph"):
         mycoords = configs.configs
@@ -147,7 +152,7 @@ class PySCFSlaterPBC:
         kdotR = np.linalg.multi_dot(
             (self._kpts, self._cell.lattice_vectors().T, wrap.T)
         )
-        wrap_phase = np.exp(1j * kdotR)
+        wrap_phase = self.get_wrapphase(kdotR)
         # evaluate AOs for all electron positions
         ao = self._cell.eval_gto(eval_str, prim_coords, kpts=self._kpts)
         ao = [ao[k] * wrap_phase[k][:, np.newaxis] for k in range(self.nk)]
@@ -207,17 +212,14 @@ class PySCFSlaterPBC:
         return self._dets[0][0] * self._dets[1][0], self._dets[0][1] + self._dets[1][1]
 
     # identical to slateruhf
-    def _testrow(self, e, vec, mask=None):
+    def _testrow(self, e, vec, mask=None, spin=None):
         """vec is a nconfig,nmo vector which replaces row e"""
-        s = int(e >= self._nelec[0])
+        s = int(e >= self._nelec[0]) if spin is None else spin
+        elec = e - s * self._nelec[0]
         if mask is None:
-            return np.einsum(
-                "i...j,ij->i...", vec, self._inverse[s][:, :, e - s * self._nelec[0]]
-            )
+            return np.einsum("i...j,ij...->i...", vec, self._inverse[s][:, :, elec])
 
-        return np.einsum(
-            "i...j,ij->i...", vec, self._inverse[s][mask, :, e - s * self._nelec[0]]
-        )
+        return np.einsum("i...j,ij...->i...", vec, self._inverse[s][mask, :, elec])
 
     # identical to slateruhf
     def _testcol(self, i, s, vec):
@@ -240,6 +242,30 @@ class PySCFSlaterPBC:
         mo = np.concatenate(mo, axis=-1)
         mo = mo.reshape(nmask, *epos.configs.shape[1:-1], self._nelec[s])
         return self._testrow(e, mo, mask)
+
+    def testvalue_many(self, e, epos, mask=None):
+        """ return the ratio between the current wave function and the wave function if 
+        an electron's position is replaced by epos for each electron"""
+        s = (e >= self._nelec[0]).astype(int)
+        if mask is None:
+            mask = [True] * epos.configs.shape[0]
+        nmask = np.sum(mask)
+        if nmask == 0:
+            return np.zeros((0, epos.configs.shape[1]))
+        aos = self.evaluate_orbitals(epos, mask)
+
+        ratios = np.zeros(
+            (epos.configs.shape[0], e.shape[0]),
+            dtype=complex if self.iscomplex else float,
+        )
+        for spin in [0, 1]:
+            ind = s == spin
+            mo_coeff = self.parameters[self._coefflookup[spin]]
+            mo = [np.dot(aos[k], mo_coeff[k]) for k in range(self.nk)]
+            mo = np.concatenate(mo, axis=-1)
+            mo = mo.reshape(nmask, *epos.configs.shape[1:-1], self._nelec[spin])
+            ratios[:, ind] = self._testrow(e[ind], mo, spin=spin)
+        return ratios
 
     def gradient(self, e, epos):
         """ Compute the gradient of the log wave function 

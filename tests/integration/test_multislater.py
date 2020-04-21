@@ -72,7 +72,7 @@ def test():
 
         # Quick VMC test
         nconf = 1000
-        nsteps = 100
+        nsteps = 200
         warmup = 10
         coords = initial_guess(mol, nconf)
         df, coords = vmc(

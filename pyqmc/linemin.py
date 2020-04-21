@@ -218,7 +218,9 @@ def line_minimization(
         params = [x0 + update(pgrad, Sij, step, **update_kws) for step in steps]
         stepsdata = lm(wf, coords, params, pgrad_acc, **lmoptions)
         for data, p, step in zip(stepsdata, params, steps):
-            en = np.mean(data["total"] * data["weight"]) / np.mean(data["weight"])
+            en = np.real(
+                np.mean(data["total"] * data["weight"]) / np.mean(data["weight"])
+            )
             yfit.append(en)
             if verbose:
                 print(

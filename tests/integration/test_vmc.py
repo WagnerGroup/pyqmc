@@ -31,6 +31,7 @@ def test_vmc():
         (PySCFSlaterUHF(mol, mf_uhf), mf_uhf),
     ]:
 
+        #Without blocks
         coords = initial_guess(mol, nconf)
         df, coords = vmc(
             wf, coords, nsteps=nsteps, accumulators={"energy": EnergyAccumulator(mol)}
@@ -41,7 +42,21 @@ def test_vmc():
         en = df.mean()
         err = df.sem()
         assert en - mf.energy_tot() < 5 * err, "pyscf {0}, vmc {1}, err {2}".format(
-            en, mf.energy_tot(), err
+            mf.energy_tot(), en, err
+        )
+
+        #With blocks
+        coords = initial_guess(mol, nconf)
+        df, coords = vmc(
+            wf, coords, nblocks=int(nsteps/30), nsteps_per_block=30, 
+            accumulators={"energy": EnergyAccumulator(mol)}
+        )
+
+        df = pd.DataFrame(df)["energytotal"][int(warmup/30):]
+        en = df.mean()
+        err = df.sem()
+        assert en - mf.energy_tot() < 5 * err, "pyscf {0}, vmc {1}, err {2}".format(
+            mf.energy_tot(), en, err
         )
 
 

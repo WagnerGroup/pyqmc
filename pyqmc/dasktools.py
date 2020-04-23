@@ -18,7 +18,9 @@ def distvmc(
     wf,
     coords,
     accumulators=None,
-    nsteps=100,
+    nblocks=100,
+    nsteps_per_block=1,
+    nsteps=None,
     hdf_file=None,
     npartitions=None,
     nsteps_per=None,
@@ -32,12 +34,20 @@ def distvmc(
 
     coords: nconf x nelec x 3 
 
-    nsteps: how many steps to move each walker
+    nblocks: number of VMC blocks
 
+    nsteps_per_block: number of steps per block
+
+    nsteps: (Deprecated) how many steps to move each walker, maps to nblocks = 100, nsteps_per_blocks = 1 
 
     """
+
+    if nsteps is not None:
+        nblocks = nsteps
+        nsteps_per_block = 1
+
     if nsteps_per is None:
-        nsteps_per = nsteps
+        nsteps_per = nblocks
 
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
@@ -51,7 +61,7 @@ def distvmc(
     if npartitions is None:
         npartitions = sum([x for x in client.nthreads().values()])
     allruns = []
-    niterations = int(nsteps / nsteps_per)
+    niterations = int(nblocks / nsteps_per)
     coord = coords.split(npartitions)
     alldata = []
     for epoch in range(niterations):
@@ -65,7 +75,8 @@ def distvmc(
             wfs,
             thiscoord,
             **{
-                "nsteps": nsteps_per,
+                "nblocks": nsteps_per,
+                "nsteps_per_block": nsteps_per_block,
                 "accumulators": accumulators,
                 "stepoffset": epoch * nsteps_per,
             },
@@ -174,6 +185,7 @@ def cvmc_optimize(*args, client, **kwargs):
 
 def distdmc_propagate(wf, configs, weights, *args, client, npartitions=None, **kwargs):
     import pyqmc.dmc
+
     if npartitions is None:
         npartitions = sum([x for x in client.nthreads().values()])
 

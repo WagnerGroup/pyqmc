@@ -29,10 +29,19 @@ class OpenConfigs:
         Change coordinates of one electron
         Args:
           e: int, electron index
-          vec: OpenConfigs with (nconfig, 3) new coordinates
+          new: OpenConfigs with (nconfig, 3) new coordinates
           accept: (nconfig,) boolean for which configs to update
         """
         self.configs[accept, e, :] = new.configs[accept, :]
+
+    def move_all(self, new, accept):
+        """
+        Change coordinates of all electrons
+        Args:
+          new: OpenConfigs with configs.shape new coordinates
+          accept: (nconfig,) boolean for which configs to update
+        """
+        self.configs[accept] = new.configs[accept]
 
     def resample(self, newinds):
         """
@@ -63,11 +72,26 @@ class OpenConfigs:
     def copy(self):
         return copy.deepcopy(self)
 
+    def reshape(self, shape):
+        self.configs = self.configs.reshape(shape)
+
+    def initialize_hdf(self, hdf):
+        hdf.create_dataset("configs", self.configs.shape)
+
+    def to_hdf(self, hdf):
+        hdf["configs"][:, :, :] = self.configs
+
+    def load_hdf(self, hdf):
+        self.configs = np.array(hdf["configs"])
+
 
 class PeriodicConfigs:
     def __init__(self, configs, lattice_vectors, wrap=None):
+        configs, wrap_ = enforce_pbc(lattice_vectors, configs)
         self.configs = configs
-        self.wrap = np.zeros(configs.shape) if wrap is None else wrap
+        self.wrap = wrap_
+        if wrap is not None:
+            self.wrap += wrap
         self.lvecs = lattice_vectors
         self.dist = MinimalImageDistance(lattice_vectors)
 
@@ -99,6 +123,16 @@ class PeriodicConfigs:
         self.configs[accept, e, :] = new.configs[accept, :]
         self.wrap[accept, e, :] = new.wrap[accept, :]
 
+    def move_all(self, new, accept):
+        """
+        Change coordinates of all electrons
+        Args:
+          new: PeriodicConfigs with configs.shape new coordinates
+          accept: (nconfig,) boolean for which configs to update
+        """
+        self.configs[accept] = new.configs[accept]
+        self.wrap[accept] = new.wrap[accept]
+
     def resample(self, newinds):
         """
         Resample configs by new indices (e.g. for DMC branching)
@@ -124,13 +158,29 @@ class PeriodicConfigs:
         """
         Merge configs into this object to collect from parallelization
         Args:
-          configslist: list of OpenConfigs objects; total number of configs must match
+          configslist: list of PeriodicConfigs objects; total number of configs must match
         """
         self.configs[:] = np.concatenate([c.configs for c in configslist], axis=0)[:]
         self.wrap[:] = np.concatenate([c.wrap for c in configslist], axis=0)[:]
 
     def copy(self):
         return copy.deepcopy(self)
+
+    def reshape(self, shape):
+        self.configs = self.configs.reshape(shape)
+        self.wrap = self.wrap.reshape(shape)
+
+    def initialize_hdf(self, hdf):
+        hdf.create_dataset("configs", self.configs.shape)
+        hdf.create_dataset("wrap", self.wrap.shape)
+
+    def to_hdf(self, hdf):
+        hdf["configs"][:, :, :] = self.configs
+        hdf["wrap"][:, :, :] = self.wrap
+
+    def load_hdf(self, hdf):
+        self.configs = np.array(hdf["configs"])
+        self.wrap = np.array(hdf["wrap"])
 
 
 def test():

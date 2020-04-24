@@ -19,10 +19,12 @@ def test_wfs():
     from pyqmc.slateruhf import PySCFSlaterUHF
     from pyqmc.jastrowspin import JastrowSpin
     from pyqmc.multiplywf import MultiplyWF
+    from pyqmc.multiplynwf import MultiplyNWF
     from pyqmc.coord import OpenConfigs
+    from pyqmc.manybody_jastrow import J3
     import pyqmc
 
-    mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="cc-pvtz", unit="bohr")
+    mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="sto-3g", unit="bohr")
     mf = scf.RHF(mol).run()
     mf_rohf = scf.ROHF(mol).run()
     mf_uhf = scf.UHF(mol).run()
@@ -31,7 +33,9 @@ def test_wfs():
     epos = pyqmc.initial_guess(mol, nconf)
     for wf in [
         JastrowSpin(mol),
+        J3(mol),
         MultiplyWF(PySCFSlaterUHF(mol, mf), JastrowSpin(mol)),
+        MultiplyNWF([PySCFSlaterUHF(mol, mf), JastrowSpin(mol), J3(mol)]),
         PySCFSlaterUHF(mol, mf_uhf),
         PySCFSlaterUHF(mol, mf),
         PySCFSlaterUHF(mol, mf_rohf),
@@ -39,6 +43,12 @@ def test_wfs():
         for k in wf.parameters:
             if k != "mo_coeff":
                 wf.parameters[k] = np.random.rand(*wf.parameters[k].shape)
+        for k, item in testwf.test_updateinternals(wf, epos).items():
+            print(k, item)
+            assert item < epsilon
+        
+        testwf.test_mask(wf, 0, epos)
+
         for fname, func in zip(
             ["gradient", "laplacian", "pgradient"],
             [
@@ -53,9 +63,6 @@ def test_wfs():
             print(fname, min(err))
             assert min(err) < epsilon, "epsilon {0}".format(epsilon)
 
-        for k, item in testwf.test_updateinternals(wf, epos).items():
-            print(k, item)
-            assert item < epsilon
 
 
 def test_pbc_wfs():

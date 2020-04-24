@@ -95,8 +95,8 @@ class PySCFSlaterPBC:
 
         self._cell = supercell.original_cell
 
-        mcalist = []
-        mcblist = []
+        self.parameters["mo_coeff_alpha"] = []
+        self.parameters["mo_coeff_beta"] = []
         for kind in self.kinds:
             if len(mf.mo_coeff[0][0].shape) == 2:
                 mca = mf.mo_coeff[0][kind][:, np.asarray(mf.mo_occ[0][kind] > 0.9)]
@@ -106,10 +106,8 @@ class PySCFSlaterPBC:
                 mcb = mf.mo_coeff[kind][:, np.asarray(mf.mo_occ[kind] > 1.1)]
             mca = np.real_if_close(mca, tol=self.real_tol)
             mcb = np.real_if_close(mcb, tol=self.real_tol)
-            mcalist.append(mca / np.sqrt(self.nk))
-            mcblist.append(mcb / np.sqrt(self.nk))
-        self.parameters["mo_coeff_alpha"] = np.asarray(mcalist)
-        self.parameters["mo_coeff_beta"] = np.asarray(mcblist)
+            self.parameters["mo_coeff_alpha"].append(mca / np.sqrt(self.nk))
+            self.parameters["mo_coeff_beta"].append(mcb / np.sqrt(self.nk))
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
 
         print("scf object is type", type(mf))
@@ -127,8 +125,9 @@ class PySCFSlaterPBC:
             self._nelec = [int(np.round(n * scale)) for n in self._cell.nelec]
         self._nelec = tuple(self._nelec)
 
-        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
-        self.iscomplex = self.iscomplex or np.linalg.norm(self._kpts) > 1e-12
+        self.iscomplex = np.linalg.norm(self._kpts) > 1e-12
+        for v in self.parameters.values():
+            self.iscomplex = self.iscomplex or bool(sum(map(np.iscomplexobj, v)))
         print("iscomplex:", self.iscomplex)
         if self.iscomplex:
             self.get_phase = lambda x: x / np.abs(x)

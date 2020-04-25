@@ -32,22 +32,12 @@ def test_wfs():
     nconf = 10
     epos = pyqmc.initial_guess(mol, nconf)
     for wf in [
-<<<<<<< HEAD:tests/test_derivatives.py
         J3(mol),
         #JastrowSpin(mol),
         #MultiplyWF(PySCFSlaterUHF(mol, mf), JastrowSpin(mol)),
         #PySCFSlaterUHF(mol, mf_uhf),
         #PySCFSlaterUHF(mol, mf),
         #PySCFSlaterUHF(mol, mf_rohf),
-=======
-        JastrowSpin(mol),
-        J3(mol),
-        MultiplyWF(PySCFSlaterUHF(mol, mf), JastrowSpin(mol)),
-        MultiplyNWF([PySCFSlaterUHF(mol, mf), JastrowSpin(mol), J3(mol)]),
-        PySCFSlaterUHF(mol, mf_uhf),
-        PySCFSlaterUHF(mol, mf),
-        PySCFSlaterUHF(mol, mf_rohf),
->>>>>>> c3cf0fb1c6f2dfaec80c0c7b490da7f539436057:tests/unit/test_derivatives.py
     ]:
         for k in wf.parameters:
             if k != "mo_coeff":
@@ -56,11 +46,6 @@ def test_wfs():
             print(k, item)
             assert item < epsilon
 
-<<<<<<< HEAD:tests/test_derivatives.py
-=======
-        testwf.test_mask(wf, 0, epos)
-
->>>>>>> c3cf0fb1c6f2dfaec80c0c7b490da7f539436057:tests/unit/test_derivatives.py
         for fname, func in zip(
             ["gradient", "laplacian", "pgradient"],
             [
@@ -75,10 +60,6 @@ def test_wfs():
             print(fname, min(err))
             assert min(err) < epsilon, "epsilon {0}".format(epsilon)
 
-<<<<<<< HEAD:tests/test_derivatives.py
-
-=======
->>>>>>> c3cf0fb1c6f2dfaec80c0c7b490da7f539436057:tests/unit/test_derivatives.py
 
 def test_pbc_wfs():
     """

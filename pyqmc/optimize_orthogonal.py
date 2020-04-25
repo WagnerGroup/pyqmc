@@ -131,7 +131,7 @@ def sample_overlap(wfs, configs, pgrad, nblocks=100, nsteps_per_block=1, nsteps=
         for k, it in block_avg.items():
             if k not in return_data:
                 return_data[k] = np.zeros((nblocks, *it.shape))
-            return_data[k][step, ...] = it.copy()
+            return_data[k][block, ...] = it.copy()
     return return_data, configs
 
 

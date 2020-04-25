@@ -59,7 +59,7 @@ class OpenConfigs:
         Returns:
           configslist: list of new configs objects
         """
-        return [OpenConfigs(c) for c in np.split(self.configs, npartitions)]
+        return [OpenConfigs(c) for c in np.array_split(self.configs, npartitions)]
 
     def join(self, configslist):
         """

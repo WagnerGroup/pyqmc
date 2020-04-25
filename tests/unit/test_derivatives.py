@@ -32,12 +32,13 @@ def test_wfs():
     nconf = 10
     epos = pyqmc.initial_guess(mol, nconf)
     for wf in [
+        JastrowSpin(mol),
         J3(mol),
-        #JastrowSpin(mol),
-        #MultiplyWF(PySCFSlaterUHF(mol, mf), JastrowSpin(mol)),
-        #PySCFSlaterUHF(mol, mf_uhf),
-        #PySCFSlaterUHF(mol, mf),
-        #PySCFSlaterUHF(mol, mf_rohf),
+        MultiplyWF(PySCFSlaterUHF(mol, mf), JastrowSpin(mol)),
+        MultiplyNWF([PySCFSlaterUHF(mol, mf), JastrowSpin(mol), J3(mol)]),
+        PySCFSlaterUHF(mol, mf_uhf),
+        PySCFSlaterUHF(mol, mf),
+        PySCFSlaterUHF(mol, mf_rohf),
     ]:
         for k in wf.parameters:
             if k != "mo_coeff":
@@ -45,6 +46,8 @@ def test_wfs():
         for k, item in testwf.test_updateinternals(wf, epos).items():
             print(k, item)
             assert item < epsilon
+
+        testwf.test_mask(wf, 0, epos)
 
         for fname, func in zip(
             ["gradient", "laplacian", "pgradient"],

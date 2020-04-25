@@ -1,5 +1,6 @@
-import numpy as np
 import copy
+import time
+import numpy as np
 
 
 def is_complex(wf):
@@ -8,16 +9,18 @@ def is_complex(wf):
     cond3 = hasattr(wf, "wf2") and is_complex(wf.wf2)
     return cond1 or cond2 or cond3
 
+
 def test_mask(wf, e, epos, mask=None):
     # testvalue
     if mask is None:
         num_e = len(wf.value()[1])
-        mask = np.random.randint(0,2,num_e).astype(bool)
+        mask = np.random.randint(0, 2, num_e).astype(bool)
     ratio = wf.testvalue(e, epos, mask)
     ratio_ref = wf.testvalue(e, epos)[mask]
-    assert(all(ratio == ratio_ref))
+    assert np.sum(np.abs(ratio - ratio_ref)) < 1e-10
     print("testcase for test_value() with mask passed")
     # update internals
+
 
 def test_updateinternals(wf, configs):
     """
@@ -25,7 +28,7 @@ def test_updateinternals(wf, configs):
     wf: a wave function object to be tested
     configs: nconf x nelec x 3 position array
 
-    Returns: 
+    Returns:
     tuple which 
 
     """
@@ -105,7 +108,6 @@ def test_wf_gradient(wf, configs, delta=1e-5):
 
 def test_wf_pgradient(wf, configs, delta=1e-5):
     iscomplex = 1j if is_complex(wf) else 1
-    pkeys = wf.parameters.keys()
     baseval = wf.recompute(configs)
     gradient = wf.pgradient()
     error = {}
@@ -138,9 +140,10 @@ def test_wf_pgradient(wf, configs, delta=1e-5):
 
 
 def test_wf_laplacian(wf, configs, delta=1e-5):
-    """ 
+    """
     Parameters:
-        wf: a wavefunction object with functions wf.recompute(configs), wf.gradient(e,configs) and wf.laplacian(e,configs)
+        wf: a wavefunction object with functions wf.recompute(configs), 
+             wf.gradient(e,configs) and wf.laplacian(e,configs)
         configs: nconf x nelec x 3 position array to set the wf object
         delta: the finite difference step; 1e-5 to 1e-6 seem to be the best compromise between accuracy and machine precision
     Tests wf.laplacian(e,epos) against numerical derivatives of wf.gradient(e,epos)
@@ -148,7 +151,7 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
         e is the electron index
         epos is nconf x 3 positions of electron e
     wf.gradient(e,epos) should return grad ln Psi(epos), while keeping all the other electrons at current position. epos may be different from the current position of electron e
-    wf.laplacian(e,epos) should behave the same as gradient, except lap(\Psi(epos))/Psi(epos)
+    wf.laplacian(e,epos) should behave the same as gradient, except lap(Psi(epos))/Psi(epos)
     """
     nconf, nelec = configs.configs.shape[0:2]
     iscomplex = 1j if is_complex(wf) else 1
@@ -181,8 +184,6 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
 
 
 def test_wf_gradient_laplacian(wf, configs):
-    import time
-
     nconf, nelec = configs.configs.shape[0:2]
     iscomplex = 1j if is_complex(wf) else 1
     wf.recompute(configs)
@@ -218,35 +219,3 @@ def test_wf_gradient_laplacian(wf, configs):
     d.append({"error": norm_grad, "deriv": "grad", "type": "norm"})
     d.append({"error": norm_lap, "deriv": "lap", "type": "norm"})
     return d
-
-
-if __name__ == "__main__":
-    from pyscf import lib, gto, scf
-    import pyqmc
-    from pyqmc.slateruhf import PySCFSlaterUHF
-
-    # from pyqmc.jastrow import Jastrow2B
-    from pyqmc.coord import OpenConfigs
-    import time
-    import pandas as pd
-
-    mol = gto.M(atom="Li 0. 0. 0.; Li 0. 0. 1.5", basis="cc-pvtz", unit="bohr")
-    mf = scf.UHF(mol).run()
-    wf = PySCFSlaterUHF(mol, mf)
-
-    # wf=Jastrow2B(10,mol)
-    df = []
-    for i in range(5):
-        configs = OpenConfigs(np.random.randn(18000, np.sum(mol.nelec), 3))
-        res = test_wf_gradient_laplacian(wf, configs)
-        for d in res:
-            d.update({"step": i})
-        df.extend(res)
-    print("testing gradient: errors\n", pd.DataFrame(df))
-    quit()
-    for i in range(5):
-        configs = OpenConfigs(np.random.randn(10, np.sum(mol.nelec), 3))
-        print("testing gradient: errors", test_wf_gradient(wf, configs, delta=1e-5))
-    for i in range(5):
-        configs = OpenConfigs(np.random.randn(10, np.sum(mol.nelec), 3))
-        print("testing laplacian: errors", test_wf_laplacian(wf, configs, delta=1e-5))

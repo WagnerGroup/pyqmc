@@ -25,13 +25,13 @@ def ortho_hdf(hdf_file, data, attr, configs, parameters):
 from pyqmc.mc import limdrift
 
 
-def sample_overlap(wfs, configs, pgrad, nsteps=100, tstep=0.5):
+def sample_overlap(wfs, configs, pgrad, nblocks=100, nsteps_per_block=1, nsteps=None, tstep=0.5):
     r"""
     Sample 
 
     .. math:: \rho(R) = \sum_i |\Psi_i(R)|^2
 
-    `pgrad` is expected to be a gradient generator. returns data as follows:
+10706890    `pgrad` is expected to be a gradient generator. returns data as follows:
 
     `overlap` : 
 
@@ -46,77 +46,93 @@ def sample_overlap(wfs, configs, pgrad, nsteps=100, tstep=0.5):
     In addition, any key returned by `pgrad` will be saved for the final wave function.
     """
     nconf, nelec, ndim = configs.configs.shape
+    
+    is nsteps is not None:
+        nblocks = nsteps
+        nsteps_per_block = 1
 
     for wf in wfs:
         wf.recompute(configs)
 
     return_data = {}
-    for step in range(nsteps):
-        # print("step", step)
-        for e in range(nelec):
-            # Propose move
-            grads = [np.real(wf.gradient(e, configs.electron(e)).T) for wf in wfs]
+    for block in range(nblocks):
+        block_avg = {}
+        for step in range(nsteps_per_block):
+            # print("step", step)
+            for e in range(nelec):
+                # Propose move
+                grads = [np.real(wf.gradient(e, configs.electron(e)).T) for wf in wfs]
 
-            grad = limdrift(np.mean(grads, axis=0))
-            gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconf, 3))
-            newcoorde = configs.configs[:, e, :] + gauss + grad * tstep
-            newcoorde = configs.make_irreducible(e, newcoorde)
+                grad = limdrift(np.mean(grads, axis=0))
+                gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconf, 3))
+                newcoorde = configs.configs[:, e, :] + gauss + grad * tstep
+                newcoorde = configs.make_irreducible(e, newcoorde)
 
-            # Compute reverse move
-            grads = [np.real(wf.gradient(e, newcoorde).T) for wf in wfs]
-            new_grad = limdrift(np.mean(grads, axis=0))
-            forward = np.sum(gauss ** 2, axis=1)
-            backward = np.sum((gauss + tstep * (grad + new_grad)) ** 2, axis=1)
+                # Compute reverse move
+                grads = [np.real(wf.gradient(e, newcoorde).T) for wf in wfs]
+                new_grad = limdrift(np.mean(grads, axis=0))
+                forward = np.sum(gauss ** 2, axis=1)
+                backward = np.sum((gauss + tstep * (grad + new_grad)) ** 2, axis=1)
 
-            # Acceptance
-            t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
-            wf_ratios = np.array([wf.testvalue(e, newcoorde) ** 2 for wf in wfs])
-            log_values = np.array([wf.value()[1] for wf in wfs])
-            ref = log_values[0]
-            weights = np.exp(2 * (log_values - ref))
+                # Acceptance
+                t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
+                wf_ratios = np.array([wf.testvalue(e, newcoorde) ** 2 for wf in wfs])
+                log_values = np.array([wf.value()[1] for wf in wfs])
+                ref = log_values[0]
+                weights = np.exp(2 * (log_values - ref))
 
-            ratio = (
-                t_prob * np.sum(wf_ratios * weights, axis=0) / np.sum(weights, axis=0)
+                ratio = (
+                    t_prob * np.sum(wf_ratios * weights, axis=0) / np.sum(weights, axis=0)
+                )
+                accept = ratio > np.random.rand(nconf)
+
+                # Update wave function
+                configs.move(e, newcoorde, accept)
+                for wf in wfs:
+                    wf.updateinternals(e, newcoorde, mask=accept)
+                # print("accept", np.mean(accept))
+
+            log_values = np.array([wf.value() for wf in wfs])
+            # print(log_values.shape)
+            ref = np.max(log_values[:, 1, :], axis=0)
+            save_dat = {}
+            denominator = np.sum(np.exp(2 * (log_values[:, 1, :] - ref)), axis=0)
+            normalized_values = log_values[:, 0, :] * np.exp(log_values[:, 1, :] - ref)
+            save_dat["overlap"] = np.mean(
+                np.einsum("ik,jk->ijk", normalized_values, normalized_values) / denominator,
+                axis=-1,
             )
-            accept = ratio > np.random.rand(nconf)
-
-            # Update wave function
-            configs.move(e, newcoorde, accept)
-            for wf in wfs:
-                wf.updateinternals(e, newcoorde, mask=accept)
-            # print("accept", np.mean(accept))
-
-        log_values = np.array([wf.value() for wf in wfs])
-        # print(log_values.shape)
-        ref = np.max(log_values[:, 1, :], axis=0)
-        save_dat = {}
-        denominator = np.sum(np.exp(2 * (log_values[:, 1, :] - ref)), axis=0)
-        normalized_values = log_values[:, 0, :] * np.exp(log_values[:, 1, :] - ref)
-        save_dat["overlap"] = np.mean(
-            np.einsum("ik,jk->ijk", normalized_values, normalized_values) / denominator,
-            axis=-1,
-        )
-        weight = np.array(
-            [
-                np.exp(-2 * (log_values[i, 1, :] - log_values[:, 1, :]))
-                for i in range(len(wfs))
-            ]
-        )
-        weight = 1.0 / np.sum(weight, axis=1)
-        dat = pgrad(configs, wfs[-1])
-        save_dat["overlap_gradient"] = np.mean(
-            np.einsum(
-                "km,k,jk->jmk", dat["dppsi"], normalized_values[-1], normalized_values
+            weight = np.array(
+                [
+                    np.exp(-2 * (log_values[i, 1, :] - log_values[:, 1, :]))
+                    for i in range(len(wfs))
+                ]
             )
-            / denominator,
-            axis=-1,
-        )
-        for k in dat.keys():
-            save_dat[k] = np.average(dat[k], axis=0, weights=weight[-1])
-        save_dat["weight"] = np.mean(weight, axis=1)
-        for k, it in save_dat.items():
+            weight = 1.0 / np.sum(weight, axis=1)
+            dat = pgrad(configs, wfs[-1])
+            save_dat["overlap_gradient"] = np.mean(
+                np.einsum(
+                    "km,k,jk->jmk", dat["dppsi"], normalized_values[-1], normalized_values
+                )
+                / denominator,
+                axis=-1,
+            )
+            for k in dat.keys():
+                if k not in block_avg:
+                    block_avg[k] = np.zeros(*it.shape)
+                block_avg[k] = np.average(dat[k], axis=0, weights=weight[-1])
+            block_avg["weight"] = np.mean(weight, axis=1)
+
+            #Rolling average within block
+            for k, it in save_dat.items():
+                if k not in block_avg:
+                  block_avg[k] = np.zeros(*it.shape)
+                block_avg[k] += save_data[k] / nsteps_per_block
+
+        #Blocks stored
+        for k, it in block_avg.items():
             if k not in return_data:
-                return_data[k] = np.zeros((nsteps, *it.shape))
+                return_data[k] = np.zeros((nblocks, *it.shape))
             return_data[k][step, ...] = it.copy()
     return return_data, configs
 

@@ -8,6 +8,7 @@ class J3:
         dim = mol.eval_gto("GTOval_cart", randpos).shape[-1]
         self.parameters = {}
         self.parameters["gcoeff"] = np.zeros((dim, dim))
+        self.iscomplex = False
 
     def recompute(self, configs):
         self._configscurrent = configs.copy()

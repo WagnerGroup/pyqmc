@@ -118,16 +118,14 @@ def sample_overlap(wfs, configs, pgrad, nblocks=100, nsteps_per_block=1, nsteps=
                 axis=-1,
             )
             for k in dat.keys():
-                if k not in block_avg:
-                    block_avg[k] = np.zeros(*it.shape)
-                block_avg[k] = np.average(dat[k], axis=0, weights=weight[-1])
-            block_avg["weight"] = np.mean(weight, axis=1)
+                save_dat[k] = np.average(dat[k], axis=0, weights=weight[-1])
+            save_dat["weight"] = np.mean(weight, axis=1)
 
             #Rolling average within block
             for k, it in save_dat.items():
                 if k not in block_avg:
-                  block_avg[k] = np.zeros(*it.shape)
-                block_avg[k] += save_data[k] / nsteps_per_block
+                    block_avg[k] = np.zeros((*it.shape, ))
+                block_avg[k] += save_dat[k] / nsteps_per_block
 
         #Blocks stored
         for k, it in block_avg.items():

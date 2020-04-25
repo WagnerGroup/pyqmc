@@ -95,8 +95,8 @@ class PySCFSlaterPBC:
 
         self._cell = supercell.original_cell
 
-        mcalist = []
-        mcblist = []
+        self.parameters["mo_coeff_alpha"] = []
+        self.parameters["mo_coeff_beta"] = []
         for kind in self.kinds:
             if len(mf.mo_coeff[0][0].shape) == 2:
                 mca = mf.mo_coeff[0][kind][:, np.asarray(mf.mo_occ[0][kind] > 0.9)]
@@ -106,10 +106,8 @@ class PySCFSlaterPBC:
                 mcb = mf.mo_coeff[kind][:, np.asarray(mf.mo_occ[kind] > 1.1)]
             mca = np.real_if_close(mca, tol=self.real_tol)
             mcb = np.real_if_close(mcb, tol=self.real_tol)
-            mcalist.append(mca / np.sqrt(self.nk))
-            mcblist.append(mcb / np.sqrt(self.nk))
-        self.parameters["mo_coeff_alpha"] = np.asarray(mcalist)
-        self.parameters["mo_coeff_beta"] = np.asarray(mcblist)
+            self.parameters["mo_coeff_alpha"].append(mca / np.sqrt(self.nk))
+            self.parameters["mo_coeff_beta"].append(mcb / np.sqrt(self.nk))
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
 
         print("scf object is type", type(mf))
@@ -127,8 +125,9 @@ class PySCFSlaterPBC:
             self._nelec = [int(np.round(n * scale)) for n in self._cell.nelec]
         self._nelec = tuple(self._nelec)
 
-        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
-        self.iscomplex = self.iscomplex or np.linalg.norm(self._kpts) > 1e-12
+        self.iscomplex = np.linalg.norm(self._kpts) > 1e-12
+        for v in self.parameters.values():
+            self.iscomplex = self.iscomplex or bool(sum(map(np.iscomplexobj, v)))
         print("iscomplex:", self.iscomplex)
         if self.iscomplex:
             self.get_phase = lambda x: x / np.abs(x)
@@ -211,17 +210,14 @@ class PySCFSlaterPBC:
         return self._dets[0][0] * self._dets[1][0], self._dets[0][1] + self._dets[1][1]
 
     # identical to slateruhf
-    def _testrow(self, e, vec, mask=None):
+    def _testrow(self, e, vec, mask=None, spin=None):
         """vec is a nconfig,nmo vector which replaces row e"""
-        s = int(e >= self._nelec[0])
+        s = int(e >= self._nelec[0]) if spin is None else spin
+        elec = e - s * self._nelec[0]
         if mask is None:
-            return np.einsum(
-                "i...j,ij->i...", vec, self._inverse[s][:, :, e - s * self._nelec[0]]
-            )
+            return np.einsum("i...j,ij...->i...", vec, self._inverse[s][:, :, elec])
 
-        return np.einsum(
-            "i...j,ij->i...", vec, self._inverse[s][mask, :, e - s * self._nelec[0]]
-        )
+        return np.einsum("i...j,ij...->i...", vec, self._inverse[s][mask, :, elec])
 
     # identical to slateruhf
     def _testcol(self, i, s, vec):
@@ -244,6 +240,30 @@ class PySCFSlaterPBC:
         mo = np.concatenate(mo, axis=-1)
         mo = mo.reshape(nmask, *epos.configs.shape[1:-1], self._nelec[s])
         return self._testrow(e, mo, mask)
+
+    def testvalue_many(self, e, epos, mask=None):
+        """ return the ratio between the current wave function and the wave function if 
+        an electron's position is replaced by epos for each electron"""
+        s = (e >= self._nelec[0]).astype(int)
+        if mask is None:
+            mask = [True] * epos.configs.shape[0]
+        nmask = np.sum(mask)
+        if nmask == 0:
+            return np.zeros((0, epos.configs.shape[1]))
+        aos = self.evaluate_orbitals(epos, mask)
+
+        ratios = np.zeros(
+            (epos.configs.shape[0], e.shape[0]),
+            dtype=complex if self.iscomplex else float,
+        )
+        for spin in [0, 1]:
+            ind = s == spin
+            mo_coeff = self.parameters[self._coefflookup[spin]]
+            mo = [np.dot(aos[k], mo_coeff[k]) for k in range(self.nk)]
+            mo = np.concatenate(mo, axis=-1)
+            mo = mo.reshape(nmask, *epos.configs.shape[1:-1], self._nelec[spin])
+            ratios[:, ind] = self._testrow(e[ind], mo, spin=spin)
+        return ratios
 
     def gradient(self, e, epos):
         """ Compute the gradient of the log wave function 

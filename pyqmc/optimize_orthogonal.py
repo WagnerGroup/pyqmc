@@ -47,7 +47,7 @@ def sample_overlap(wfs, configs, pgrad, nblocks=100, nsteps_per_block=1, nsteps=
     """
     nconf, nelec, ndim = configs.configs.shape
     
-    is nsteps is not None:
+    if nsteps is not None:
         nblocks = nsteps
         nsteps_per_block = 1
 
@@ -58,7 +58,7 @@ def sample_overlap(wfs, configs, pgrad, nblocks=100, nsteps_per_block=1, nsteps=
     for block in range(nblocks):
         block_avg = {}
         for step in range(nsteps_per_block):
-            # print("step", step)
+            print("block", block, " step", step)
             for e in range(nelec):
                 # Propose move
                 grads = [np.real(wf.gradient(e, configs.electron(e)).T) for wf in wfs]

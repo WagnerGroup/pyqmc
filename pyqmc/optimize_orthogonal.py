@@ -109,16 +109,24 @@ def sample_overlap(wfs, configs, pgrad, nblocks=100, nsteps_per_block=1, nsteps=
                 ]
             )
             weight = 1.0 / np.sum(weight, axis=1)
-            dat = pgrad(configs, wfs[-1])
+            
+            #Fast evaluation of dppsi_reg
+            dppsi = pgrad.transform.serialize_gradients(wfs[-1].pgradient())
+            node_cut, f = pgrad._node_regr(configs, wfs[-1])
+            dppsi_regularized = dppsi * f[:, np.newaxis]
+
             save_dat["overlap_gradient"] = np.mean(
                 np.einsum(
-                    "km,k,jk->jmk", dat["dppsi"], normalized_values[-1], normalized_values
+                    "km,k,jk->jmk", dppsi_regularized, normalized_values[-1], normalized_values
                 )
                 / denominator,
                 axis=-1,
             )
+
+            #Weighted average on rest
+            dat = pgrad.avg(configs, wf, weight[-1])
             for k in dat.keys():
-                save_dat[k] = np.average(dat[k], axis=0, weights=weight[-1])
+                save_dat[k] = dat[k]
             save_dat["weight"] = np.mean(weight, axis=1)
 
             #Rolling average within block

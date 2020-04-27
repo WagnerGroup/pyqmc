@@ -82,20 +82,19 @@ def distvmc(
             },
             **kwargs
         )
+        confweight = np.array([len(c.configs) for c in coord], dtype=float)
+        confweight /= confweight.mean()
         iterdata = []
         for i, r in enumerate(runs):
             res = r.result()
-            iterdata.extend(res[0])
+            df_ = pd.DataFrame(res[0])
+            df_.loc[:, df_.columns != "step"] *= confweight[i]
+            iterdata.append(df_)
             coord[i] = res[1]
 
-        collected_data = (
-            pd.DataFrame(iterdata)
-            .groupby("step", as_index=False)
-            .apply(
-                lambda x: x.stack().groupby(level=1).apply(np.mean, axis=0)
-            )  # Added for array returns, e.g. obdm, tbdm
-            .to_dict("records")
-        )
+        df = pd.concat(iterdata, ignore_index=True)
+        df = df.groupby("step").aggregate(np.mean, axis=0).reset_index()
+        collected_data = df.to_dict("records")
         if verbose:
             print("epoch", epoch, "finished", flush=True)
 
@@ -201,11 +200,17 @@ def distdmc_propagate(wf, configs, weights, *args, client, npartitions=None, **k
 
     import pandas as pd
 
-    allresults = [r.result() for r in allruns]
-    configs.join([x[1] for x in allresults])
+    allresults = list(zip(*[r.result() for r in allruns]))
+    configs.join(allresults[1])
     coordret = configs
-    weightret = np.hstack([x[2] for x in allresults])
-    df = pd.concat([pd.DataFrame(x[0]) for x in allresults])
+    weightret = np.hstack(allresults[2])
+
+    confweight = np.array([len(c.configs) for c in coord], dtype=float)
+    confweight /= confweight.mean()
+    iterdata = list(map(pd.DataFrame, allresults[0]))
+    for i, df_ in enumerate(iterdata):
+        df_.loc[:, df_.columns != "step"] *= confweight[i]
+    df = pd.concat(iterdata)
     notavg = ["weight", "weightvar", "weightmin", "weightmax", "acceptance", "step"]
     # Here we reweight the averages since each step on each node
     # was done with a different average weight.
@@ -247,6 +252,10 @@ def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs)
     df = {}
     for k in keys:
         df[k] = np.array([x[0][k] for x in allresults])
+
+    confweight = np.array([len(c.configs) for c in coord], dtype=float)
+    confweight /= confweight.mean()
+    df["weight"] *= confweight
     for k in df.keys():
         if k != "weight" and k != "overlap" and k != "overlap_gradient":
             if len(df[k].shape) == 2:
@@ -264,10 +273,10 @@ def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs)
 
             else:
                 raise NotImplementedError(
-                    "too many/two few dimension in dist_sample_overlap"
+                    "too many/too few dimension in dist_sample_overlap"
                 )
         elif k != "weight":
-            df[k] = np.mean(df[k], axis=0)
+            df[k] = np.average(df[k], weights=confweight, axis=0)
 
     df["weight"] = np.mean(df["weight"], axis=0)
 
@@ -296,14 +305,16 @@ def dist_correlated_sample(wfs, configs, *args, client, npartitions=None, **kwar
     df = {}
     for k in allresults[0].keys():
         df[k] = np.array([x[k] for x in allresults])
-    wt = df["weight"] * df["rhoprime"]
-    df["total"] = np.sum(df["total"] * wt, axis=0) / np.sum(wt, axis=0)
-    df["overlap"] = np.mean(df["overlap"], axis=0)
-    df["weight"] = np.mean(df["weight"] * df["rhoprime"], axis=0) / np.mean(
-        df["rhoprime"], axis=0
-    )
+    confweight = np.array([len(c.configs) for c in coord], dtype=float)
+    confweight /= confweight.mean()
+    rhowt = np.einsum("i...,i->i...", df["rhoprime"], confweight)
+    wt = df["weight"] * rhowt
+    df["total"] = np.average(df["total"], weights=wt, axis=0)
+    df["overlap"] = np.average(df["overlap"], weights=confweight, axis=0)
+    df["weight"] = np.average(df["weight"], weights=rhowt, axis=0)
+
     # df["weight"] = np.mean(df["weight"], axis=0)
-    df["rhoprime"] = np.mean(df["rhoprime"], axis=0)
+    df["rhoprime"] = np.mean(rhowt, axis=0)
     return df
 
 

@@ -189,7 +189,7 @@ def distdmc_propagate(wf, configs, weights, *args, client, npartitions=None, **k
         npartitions = sum([x for x in client.nthreads().values()])
 
     coord = configs.split(npartitions)
-    weight = np.split(weights, npartitions)
+    weight = np.array_split(weights, npartitions)
     allruns = []
     for nodeconfigs, nodeweight in zip(coord, weight):
         allruns.append(

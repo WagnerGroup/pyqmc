@@ -31,7 +31,7 @@ def sample_overlap(wfs, configs, pgrad, nblocks=100, nsteps_per_block=1, nsteps=
 
     .. math:: \rho(R) = \sum_i |\Psi_i(R)|^2
 
-10706890    `pgrad` is expected to be a gradient generator. returns data as follows:
+    `pgrad` is expected to be a gradient generator. returns data as follows:
 
     `overlap` : 
 

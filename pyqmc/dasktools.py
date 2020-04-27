@@ -247,7 +247,7 @@ def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs)
     df = {}
 
     for k in keys:
-        df[k] = np.zeros((allresults[0][0][k].shape, ))
+        df[k] = np.zeros(allresults[0][0][k].shape)
     
     for k in keys:
         if k != "weight" and k != "overlap" and k != "overlap_gradient":

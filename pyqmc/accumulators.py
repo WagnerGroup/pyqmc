@@ -173,9 +173,9 @@ class PGradTransform:
         d = {}
         for k, it in den.items():
             d[k] = np.average(it, weights = weights, axis=0)
-        d["dpH"] = np.einsum("i,ij->j", energy, weights * dp_regularized) / np.sum(weights)
+        d["dpH"] = np.einsum("i,ij->j", energy, weights[:, np.newaxis] * dp_regularized) / np.sum(weights)
         d["dppsi"] = np.average(dp_regularized, weights = weights, axis=0)
-        d["dpidpj"] = np.einsum("ij,ik->jk", dp, weights * dp_regularized) / np.sum(weights)
+        d["dpidpj"] = np.einsum("ij,ik->jk", dp, weights[:, np.newaxis] * dp_regularized) / np.sum(weights)
 
         return d
 

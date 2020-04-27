@@ -202,7 +202,7 @@ def correlated_sample(wfs, configs, parameters, pgrad):
             wf.parameters[k] = it
         wf.recompute(configs)
         val = wf.value()
-        dat = pgrad(configs, wf)
+        dat = pgrad.enacc(configs, wf)
 
         wt = 1.0 / np.sum(
             np.exp(2 * log_values0[:, 1, :] - 2 * val[1][np.newaxis, :]), axis=0

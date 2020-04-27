@@ -319,7 +319,6 @@ class MultiSlater:
         )
 
         # Mo_coeff, adapted from SlaterUHF
-        '''
         for parm in ["mo_coeff_alpha", "mo_coeff_beta"]:
             s = 0
             if "beta" in parm:
@@ -346,5 +345,4 @@ class MultiSlater:
                                 * self._testcol(self._det_map[s][det], col, s, vec)
                             )
             d[parm] = np.array(pgrad)
-        '''
         return d

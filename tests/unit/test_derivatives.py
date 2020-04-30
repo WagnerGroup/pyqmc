@@ -46,7 +46,7 @@ def test_wfs():
         for k, item in testwf.test_updateinternals(wf, epos).items():
             print(k, item)
             assert item < epsilon
-        
+
         testwf.test_mask(wf, 0, epos)
 
         for fname, func in zip(
@@ -62,7 +62,6 @@ def test_wfs():
                 err.append(func(wf, epos, delta)[0])
             print(fname, min(err))
             assert min(err) < epsilon, "epsilon {0}".format(epsilon)
-
 
 
 def test_pbc_wfs():
@@ -94,7 +93,7 @@ def test_pbc_wfs():
         # PySCFSlaterPBC(supercell, mf_rohf),
     ]:
         for k in wf.parameters:
-            if k != "mo_coeff":
+            if "mo_coeff" not in k:
                 wf.parameters[k] = np.random.rand(*wf.parameters[k].shape)
         for fname, func in zip(
             ["gradient", "laplacian", "pgradient"],

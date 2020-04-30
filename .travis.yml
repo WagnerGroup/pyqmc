@@ -4,4 +4,4 @@ matrix:
 before_install: 
   - sudo apt-get install -y git cmake make build-essential g++ liblapack-dev liblapack-pic liblapack3  gfortran 
   - pip install numpy scipy matplotlib pandas h5py pytest pyscf
-script: PYTHONPATH=$TRAVIS_BUILD_DIR:$PYTHONPATH pytest
+script: PYTHONPATH=$TRAVIS_BUILD_DIR:$PYTHONPATH pytest --durations=100

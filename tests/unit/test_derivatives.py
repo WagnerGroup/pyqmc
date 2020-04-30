@@ -71,29 +71,42 @@ def test_pbc_wfs():
 
     from pyscf.pbc import lib, gto, scf
     from pyqmc.slaterpbc import PySCFSlaterPBC, get_supercell
+    from pyqmc.multislaterpbc import MultiSlaterPBC
     from pyqmc.jastrowspin import JastrowSpin
     from pyqmc.multiplywf import MultiplyWF
     from pyqmc.coord import OpenConfigs
     import pyqmc
 
     mol = gto.M(
-        atom="H 0. 0. 0.; H 1. 1. 1.", basis="sto-3g", unit="bohr", a=np.eye(3) * 4
+        atom="H 0. 0. 0.; H 1. 1. 1.",
+        basis="sto-3g",
+        unit="bohr",
+        a=(np.ones((3, 3)) - np.eye(3)) * 4,
     )
-    mf = scf.KRKS(mol).run()
+    mf = scf.KRKS(mol, mol.make_kpts((2, 2, 2))).run()
     # mf_rohf = scf.KROKS(mol).run()
     # mf_uhf = scf.KUKS(mol).run()
     epsilon = 1e-5
     nconf = 10
-    supercell = get_supercell(mol, S=np.eye(3))
+    supercell = get_supercell(mol, S=(np.ones((3, 3)) - 2 * np.eye(3)))
     epos = pyqmc.initial_guess(supercell, nconf)
+    # For multislaterpbc
+    kinds = 0, 3, 5, 6  # G, X, Y, Z
+    d1 = {kind: [0] for kind in kinds}
+    d2 = d1.copy()
+    d2.update({0: [], 3: [0, 1]})
+    detwt = [2 ** 0.5, 2 ** 0.5]
+    occup = [[d1, d2], [d1]]
+    map_dets = [[0, 1], [0, 0]]
     for wf in [
-        MultiplyWF(PySCFSlaterPBC(supercell, mf), JastrowSpin(mol)),
+        MultiplyWF(PySCFSlaterPBC(supercell, mf), JastrowSpin(supercell)),
         PySCFSlaterPBC(supercell, mf),
+        MultiSlaterPBC(supercell, mf, detwt=detwt, occup=occup, map_dets=map_dets),
         # PySCFSlaterPBC(supercell, mf_uhf),
         # PySCFSlaterPBC(supercell, mf_rohf),
     ]:
         for k in wf.parameters:
-            if "mo_coeff" not in k:
+            if "mo_coeff" not in k and k != "det_coeff":
                 wf.parameters[k] = np.random.rand(*wf.parameters[k].shape)
         for fname, func in zip(
             ["gradient", "laplacian", "pgradient"],

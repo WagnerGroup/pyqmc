@@ -99,11 +99,11 @@ def test_pbc():
 
     ### Test OBDM calculation.
     nconf = 800
-    nsteps = 30
+    nsteps = 50
     warmup = 6
     wf = PySCFSlaterPBC(mol, mf)
     configs = initial_guess(mol, nconf)
-    obdm_dict = dict(mol=mol, orb_coeff=lowdin, kpts=kpts, nsweeps=3, warmup=10)
+    obdm_dict = dict(mol=mol, orb_coeff=lowdin, kpts=kpts, nsweeps=4, warmup=10)
     obdm = OBDMAccumulator(**obdm_dict)
     obdm_up = OBDMAccumulator(**obdm_dict, spin=0)
     obdm_down = OBDMAccumulator(**obdm_dict, spin=1)

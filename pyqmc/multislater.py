@@ -57,12 +57,6 @@ class MultiSlater:
         else:
             self.get_phase = np.sign
 
-        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
-        if self.iscomplex:
-            self.get_phase = lambda x: x / np.abs(x)
-        else:
-            self.get_phase = np.sign
-
     def _copy_ci(self, mc):
         """       
         Copies over determinant coefficients and MO occupations

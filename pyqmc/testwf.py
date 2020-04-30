@@ -3,13 +3,6 @@ import time
 import numpy as np
 
 
-def is_complex(wf):
-    cond1 = hasattr(wf, "nk")
-    cond2 = hasattr(wf, "wf1") and is_complex(wf.wf1)
-    cond3 = hasattr(wf, "wf2") and is_complex(wf.wf2)
-    return cond1 or cond2 or cond3
-
-
 def test_mask(wf, e, epos, mask=None):
     # testvalue
     if mask is None:
@@ -36,7 +29,7 @@ def test_updateinternals(wf, configs):
     nconf, ne, ndim = configs.configs.shape
     delta = 1e-2
 
-    iscomplex = 1j if is_complex(wf) else 1
+    iscomplex = 1j if wf.iscomplex else 1
     updatevstest = np.zeros((ne, nconf)) * iscomplex
     recomputevstest = np.zeros((ne, nconf)) * iscomplex
     recomputevsupdate = np.zeros((ne, nconf)) * iscomplex
@@ -81,7 +74,7 @@ def test_wf_gradient(wf, configs, delta=1e-5):
     
     """
     nconf, nelec = configs.configs.shape[0:2]
-    iscomplex = 1j if is_complex(wf) else 1
+    iscomplex = 1j if wf.iscomplex else 1
     wf.recompute(configs)
     maxerror = 0
     grad = np.zeros(configs.configs.shape) * iscomplex
@@ -107,7 +100,7 @@ def test_wf_gradient(wf, configs, delta=1e-5):
 
 
 def test_wf_pgradient(wf, configs, delta=1e-5):
-    iscomplex = 1j if is_complex(wf) else 1
+    iscomplex = 1j if wf.iscomplex else 1
     baseval = wf.recompute(configs)
     gradient = wf.pgradient()
     error = {}
@@ -154,7 +147,7 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
     wf.laplacian(e,epos) should behave the same as gradient, except lap(Psi(epos))/Psi(epos)
     """
     nconf, nelec = configs.configs.shape[0:2]
-    iscomplex = 1j if is_complex(wf) else 1
+    iscomplex = 1j if wf.iscomplex else 1
     wf.recompute(configs)
     maxerror = 0
     lap = np.zeros(configs.configs.shape[:2]) * iscomplex
@@ -185,7 +178,7 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
 
 def test_wf_gradient_laplacian(wf, configs):
     nconf, nelec = configs.configs.shape[0:2]
-    iscomplex = 1j if is_complex(wf) else 1
+    iscomplex = 1j if wf.iscomplex else 1
     wf.recompute(configs)
     maxerror = 0
     lap = np.zeros(configs.configs.shape[:2]) * iscomplex

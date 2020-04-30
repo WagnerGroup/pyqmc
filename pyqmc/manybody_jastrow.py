@@ -8,6 +8,7 @@ class J3:
         dim = mol.eval_gto("GTOval_cart", randpos).shape[-1]
         self.parameters = {}
         self.parameters["gcoeff"] = np.zeros((dim, dim))
+        self.iscomplex = False
 
     def recompute(self, configs):
         self._configscurrent = configs.copy()
@@ -37,7 +38,7 @@ class J3:
             self.ao_val,
             self.ao_val,
             mask,
-            optimize='greedy'
+            optimize="greedy",
         )
         signs = np.ones(len(vals))
         return (signs, vals)
@@ -49,14 +50,14 @@ class J3:
             self.parameters["gcoeff"],
             e_grad[:, :, 0, :],
             self.ao_val[:, :e, :],
-            optimize='greedy'
+            optimize="greedy",
         )
         grad2 = np.einsum(
             "mn, cim, dcn -> dc",
             self.parameters["gcoeff"],
             self.ao_val[:, e + 1 :, :],
             e_grad[:, :, 0, :],
-            optimize='greedy'
+            optimize="greedy",
         )
         return grad1 + grad2
 
@@ -67,14 +68,14 @@ class J3:
             self.parameters["gcoeff"],
             e_lap[:, :, 0, :],
             self.ao_val[:, :e, :],
-            optimize='greedy'
+            optimize="greedy",
         )
         lap2 = np.einsum(
             "mn, cim, dcn -> c",
             self.parameters["gcoeff"],
             self.ao_val[:, e + 1 :, :],
             e_lap[:, :, 0, :],
-            optimize='greedy'
+            optimize="greedy",
         )
 
         grad1 = np.einsum(
@@ -82,14 +83,14 @@ class J3:
             self.parameters["gcoeff"],
             e_grad[:, :, 0, :],
             self.ao_val[:, :e, :],
-            optimize='greedy'
+            optimize="greedy",
         )
         grad2 = np.einsum(
             "mn, cim, dcn -> dc",
             self.parameters["gcoeff"],
             self.ao_val[:, e + 1 :, :],
             e_grad[:, :, 0, :],
-            optimize='greedy'
+            optimize="greedy",
         )
         grad = grad1 + grad2
 
@@ -103,14 +104,14 @@ class J3:
             self.parameters["gcoeff"],
             e_lap[:, :, 0, :],
             self.ao_val[:, :e, :],
-            optimize='greedy'
+            optimize="greedy",
         )
         lap2 = np.einsum(
             "mn, cim, dcn -> c",
             self.parameters["gcoeff"],
             self.ao_val[:, e + 1 :, :],
             e_lap[:, :, 0, :],
-            optimize='greedy'
+            optimize="greedy",
         )
 
         grad1 = np.einsum(
@@ -118,14 +119,14 @@ class J3:
             self.parameters["gcoeff"],
             e_grad[:, :, 0, :],
             self.ao_val[:, :e, :],
-            optimize='greedy'
+            optimize="greedy",
         )
         grad2 = np.einsum(
             "mn, cim, dcn -> dc",
             self.parameters["gcoeff"],
             self.ao_val[:, e + 1 :, :],
             e_grad[:, :, 0, :],
-            optimize='greedy'
+            optimize="greedy",
         )
         grad = grad1 + grad2
 
@@ -136,7 +137,9 @@ class J3:
         mask = np.tril(
             np.ones((self.nelec, self.nelec)), -1
         )  # to prevent double counting of electron pairs
-        coeff_grad = np.einsum("cim, cjn, ij-> cmn", self.ao_val, self.ao_val, mask, optimize='greedy')
+        coeff_grad = np.einsum(
+            "cim, cjn, ij-> cmn", self.ao_val, self.ao_val, mask, optimize="greedy"
+        )
         return {"gcoeff": coeff_grad}
 
     def _get_val_grad_lap(self, configs, mode="lap", mask=None):
@@ -178,14 +181,14 @@ class J3:
             self.parameters["gcoeff"],
             masked_ao_val[:, e, :],
             masked_ao_val[:, :e, :],
-            optimize='greedy'
+            optimize="greedy",
         )
         curr_val += np.einsum(
             "mn, cim, cn -> c",
             self.parameters["gcoeff"],
             masked_ao_val[:, e + 1 :, :],
             masked_ao_val[:, e, :],
-            optimize='greedy'
+            optimize="greedy",
         )
 
         new_ao_val = self._get_val_grad_lap(epos, mode="val", mask=mask)
@@ -194,14 +197,14 @@ class J3:
             self.parameters["gcoeff"],
             new_ao_val,
             masked_ao_val[:, :e, :],
-            optimize='greedy'
+            optimize="greedy",
         )
         new_val += np.einsum(
             "mn, cim, c...n -> c...",
             self.parameters["gcoeff"],
             masked_ao_val[:, e + 1 :, :],
             new_ao_val,
-            optimize='greedy'
+            optimize="greedy",
         )
 
         return np.exp((new_val.T - curr_val).T)

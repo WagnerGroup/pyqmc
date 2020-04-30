@@ -156,6 +156,14 @@ class PySCFSlaterPBC:
         ao = [ao[k] * wrap_phase[k][:, np.newaxis] for k in range(self.nk)]
         return ao
 
+    def evaluate_mos(self, aos, s):
+        """
+        Evaluate MOs for spin s given aos
+        """
+        p = self.parameters[self._coefflookup[s]]
+        mo = [ao.dot(p[k]) for k, ao in enumerate(aos)]
+        return np.concatenate(mo, axis=-1)
+
     def recompute(self, configs):
         """This computes the value from scratch. Returns the logarithm of the wave function as
         (phase,logdet). If the wf is real, phase will be +/- 1."""
@@ -166,13 +174,9 @@ class PySCFSlaterPBC:
         self._dets = []
         self._inverse = []
         for s in [0, 1]:
-            mo = []
             i0, i1 = s * self._nelec[0], self._nelec[0] + s * self._nelec[1]
-            for k in range(self.nk):
-                mo_coeff = self.parameters[self._coefflookup[s]][k]
-                mo.append(np.dot(aos[k, :, i0:i1], mo_coeff))
             ne = self._nelec[s]
-            mo = np.concatenate(mo, axis=-1).reshape(nconf, ne, ne)
+            mo = self.evaluate_mos(aos[:, :, i0:i1], s).reshape(nconf, ne, ne)
             phase, mag = np.linalg.slogdet(mo)
             self._dets.append((phase, mag))
             self._inverse.append(np.linalg.inv(mo))
@@ -186,12 +190,7 @@ class PySCFSlaterPBC:
         eeff = e - s * self._nelec[0]
         aos = self.evaluate_orbitals(epos)
         self._aovals[:, :, e, :] = np.asarray(aos)
-        mo = []
-        for k in range(self.nk):
-            mo_coeff = self.parameters[self._coefflookup[s]][k]
-            mo.append(np.dot(aos[k], mo_coeff))
-        ne = self._nelec[s]
-        mo = np.concatenate(mo, axis=-1).reshape(len(mask), ne)
+        mo = self.evaluate_mos(aos, s).reshape(len(mask), -1)
         ratio, self._inverse[s][mask, :, :] = slateruhf.sherman_morrison_row(
             eeff, self._inverse[s][mask, :, :], mo[mask, :]
         )
@@ -235,9 +234,7 @@ class PySCFSlaterPBC:
         if nmask == 0:
             return np.zeros((0, epos.configs.shape[1]))
         aos = self.evaluate_orbitals(epos, mask)
-        mo_coeff = self.parameters[self._coefflookup[s]]
-        mo = [np.dot(aos[k], mo_coeff[k]) for k in range(self.nk)]
-        mo = np.concatenate(mo, axis=-1)
+        mo = self.evaluate_mos(aos, s)
         mo = mo.reshape(nmask, *epos.configs.shape[1:-1], self._nelec[s])
         return self._testrow(e, mo, mask)
 
@@ -250,19 +247,17 @@ class PySCFSlaterPBC:
         nmask = np.sum(mask)
         if nmask == 0:
             return np.zeros((0, epos.configs.shape[1]))
-        aos = self.evaluate_orbitals(epos, mask)
 
+        aos = self.evaluate_orbitals(epos, mask)
         ratios = np.zeros(
             (epos.configs.shape[0], e.shape[0]),
             dtype=complex if self.iscomplex else float,
         )
         for spin in [0, 1]:
             ind = s == spin
-            mo_coeff = self.parameters[self._coefflookup[spin]]
-            mo = [np.dot(aos[k], mo_coeff[k]) for k in range(self.nk)]
-            mo = np.concatenate(mo, axis=-1)
+            mo = self.evaluate_mos(aos, spin)
             mo = mo.reshape(nmask, *epos.configs.shape[1:-1], self._nelec[spin])
-            ratios[:, ind] = self._testrow(e[ind], mo, spin=spin)
+            ratios[:, ind] = self._testrow(e[ind], mo, mask=mask, spin=spin)
         return ratios
 
     def gradient(self, e, epos):
@@ -271,36 +266,26 @@ class PySCFSlaterPBC:
         if epos differs from the current position of electron e."""
         s = int(e >= self._nelec[0])
         aograd = self.evaluate_orbitals(epos, eval_str="PBCGTOval_sph_deriv1")
-        mo_coeff = self.parameters[self._coefflookup[s]]
-        mograd = [ak.dot(mo_coeff[k]) for k, ak in enumerate(aograd)]
-        mograd = np.concatenate(mograd, axis=-1)
+        mograd = self.evaluate_mos(aograd, s)
         ratios = np.asarray([self._testrow(e, x) for x in mograd])
         return ratios[1:] / ratios[:1]
 
     def laplacian(self, e, epos):
         s = int(e >= self._nelec[0])
         ao = self.evaluate_orbitals(epos, eval_str="PBCGTOval_sph_deriv2")
-        mo_coeff = self.parameters[self._coefflookup[s]]
-        mo = [
-            np.dot([ak[0], ak[[4, 7, 9]].sum(axis=0)], mo_coeff[k])
-            for k, ak in enumerate(ao)
-        ]
-        mo = np.concatenate(mo, axis=-1)
-        ratios = self._testrow(e, mo[1])
-        testvalue = self._testrow(e, mo[0])
-        return ratios / testvalue
+        aostack = [np.stack([ak[0], ak[[4, 7, 9]].sum(axis=0)], axis=0) for ak in ao]
+        mo = self.evaluate_mos(aostack, s)
+        ratios = np.asarray([self._testrow(e, x) for x in mo])
+        return ratios[1] / ratios[0]
 
     def gradient_laplacian(self, e, epos):
         s = int(e >= self._nelec[0])
         ao = self.evaluate_orbitals(epos, eval_str="PBCGTOval_sph_deriv2")
-        mo = [
-            np.dot(
-                np.concatenate([ak[0:4], ak[[4, 7, 9]].sum(axis=0, keepdims=True)]),
-                self.parameters[self._coefflookup[s]][k],
-            )
-            for k, ak in enumerate(ao)
+        aostack = [
+            np.concatenate([ak[0:4], ak[[4, 7, 9]].sum(axis=0, keepdims=True)], axis=0)
+            for ak in ao
         ]
-        mo = np.concatenate(mo, axis=-1)
+        mo = self.evaluate_mos(aostack, s)
         ratios = np.asarray([self._testrow(e, x) for x in mo])
         return ratios[1:-1] / ratios[:1], ratios[-1] / ratios[0]
 

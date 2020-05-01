@@ -413,7 +413,7 @@ def optimize_orthogonal(
         N_derivative = np.zeros(len(parameters))
         condition = np.zeros((len(parameters), len(parameters)))
         overlaps  = np.zeros(nwf - 1)
-        overlap_derivatives = np.zeros(nwf - 1, len(parameters)))
+        overlap_derivatives = np.zeros((nwf - 1, len(parameters)))
 
         while True:
             tmp_deriv = evaluate(
@@ -429,7 +429,7 @@ def optimize_orthogonal(
                 N_derivative += tmp_deriv["N_derivative"]/(nwf - 1)
                 condition += tmp_deriv["condition"]/(nwf - 1)
                 overlaps[0] = tmp_deriv["S"][-1, 0]
-                overlap_derivatives[0] = tmp_deriv["S"][0, :]
+                overlap_derivatives[0] = tmp_deriv["S_derivative"][0, :]
                 break
             else:
                 renormalize([wfs[0], wfs[-1]], N)
@@ -450,7 +450,7 @@ def optimize_orthogonal(
             N_derivative += tmp_deriv["N_derivative"]/(nwf - 1)
             condition += tmp_deriv["condition"]/(nwf - 1)
             overlaps[i + 1] = tmp_deriv["S"][-1, 0]
-            overlap_derivatives[i + 1] = tmp_deriv["S"][0, :]
+            overlap_derivatives[i + 1] = tmp_deriv["S_derivative"][0, :]
         print("normalization", normalization)
         
         overlap_derivative = np.sum(

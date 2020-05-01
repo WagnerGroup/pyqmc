@@ -444,13 +444,13 @@ def optimize_orthogonal(
                     sample_options,
                     warmup,
             )
-            normalization[i + 1] = tmp_deriv["N"][-1]
-            total_energy += tmp_deriv["total"]/(nwf - 1)
-            energy_derivative += tmp_deriv["energy_derivative"]/(nwf - 1)
-            N_derivative += tmp_deriv["N_derivative"]/(nwf - 1)
-            condition += tmp_deriv["condition"]/(nwf - 1)
-            overlaps[i + 1] = tmp_deriv["S"][-1, 0]
-            overlap_derivatives[i + 1] = tmp_deriv["S_derivative"][0, :]
+            normalization[i + 1] = deriv_data["N"][-1]
+            total_energy += deriv_data["total"]/(nwf - 1)
+            energy_derivative += deriv_data["energy_derivative"]/(nwf - 1)
+            N_derivative += deriv_data["N_derivative"]/(nwf - 1)
+            condition += deriv_data["condition"]/(nwf - 1)
+            overlaps[i + 1] = deriv_data["S"][-1, 0]
+            overlap_derivatives[i + 1] = deriv_data["S_derivative"][0, :]
         print("normalization", normalization)
         
         overlap_derivative = np.sum(

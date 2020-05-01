@@ -138,6 +138,7 @@ class MultiSlater:
         ao = np.real_if_close(
             self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs), tol=1e4
         )
+        self._aovals[:, e, :] = ao
         mo = ao.dot(self.parameters[self._coefflookup[s]])
 
         mo_vals = mo[:, self._det_occup[s]]

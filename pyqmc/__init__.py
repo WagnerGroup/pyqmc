@@ -67,6 +67,8 @@ def default_slater(mol, mf, optimize_orbitals=False):
 
 def default_multislater(mol, mf, mc, tol=None, freeze_orb=None):
     import numpy as np
+    
+    # Nothing provided, nothing frozen
     if freeze_orb is None:
         freeze_orb = [[],[]]
 
@@ -79,8 +81,12 @@ def default_multislater(mol, mf, mc, tol=None, freeze_orb=None):
     freeze['mo_coeff_beta'] = np.zeros(wf.parameters['mo_coeff_beta'].shape, dtype=bool)
     freeze['mo_coeff_alpha'][:, freeze_orb[0]] = True
     freeze['mo_coeff_alpha'][:, freeze_orb[1]] = True
-    
-    to_opt = ["det_coeff", "mo_coeff_alpha", "mo_coeff_beta"]
+   
+    # If everything frozen, then don't add to to_opt
+    to_opt = []
+    for key in freeze.keys():
+        if freeze[key].sum() > 0: 
+            to_opt.append(key)
     return wf, to_opt, freeze
 
 

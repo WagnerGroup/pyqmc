@@ -154,12 +154,12 @@ class PGradTransform:
         return d
 
     def avg(self, configs, wf, weights=None):
-        '''
+        """
         Compute (weighted) average
-        '''
+        """
 
         nconf = configs.configs.shape[0]
-        if weights is None: 
+        if weights is None:
             weights = np.ones(nconf)
 
         pgrad = wf.pgradient()
@@ -172,10 +172,14 @@ class PGradTransform:
 
         d = {}
         for k, it in den.items():
-            d[k] = np.average(it, weights = weights, axis=0)
-        d["dpH"] = np.einsum("i,ij->j", energy, weights[:, np.newaxis] * dp_regularized) / np.sum(weights)
-        d["dppsi"] = np.average(dp_regularized, weights = weights, axis=0)
-        d["dpidpj"] = np.einsum("ij,ik->jk", dp, weights[:, np.newaxis] * dp_regularized) / np.sum(weights)
+            d[k] = np.average(it, weights=weights, axis=0)
+        d["dpH"] = np.einsum(
+            "i,ij->j", energy, weights[:, np.newaxis] * dp_regularized
+        ) / np.sum(weights)
+        d["dppsi"] = np.average(dp_regularized, weights=weights, axis=0)
+        d["dpidpj"] = np.einsum(
+            "ij,ik->jk", dp, weights[:, np.newaxis] * dp_regularized
+        ) / np.sum(weights)
 
         return d
 

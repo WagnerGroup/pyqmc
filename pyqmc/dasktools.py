@@ -237,10 +237,10 @@ def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs)
                 **kwargs
             )
         )
-   
+
     # Here we reweight the averages since each step on each node
     # was done with a different average weight.
-    
+
     # Memory efficient implementation, bit more verbose
     final_coords = []
     df = {}
@@ -257,22 +257,25 @@ def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs)
                 elif len(df[k].shape) == 2:
                     df[k] += result[0][k] * result[0]["weight"][:, -1, np.newaxis]
                 elif len(df[k].shape) == 3:
-                    df[k] += result[0][k] * result[0]["weight"][:, -1, np.newaxis, np.newaxis]
+                    df[k] += (
+                        result[0][k]
+                        * result[0]["weight"][:, -1, np.newaxis, np.newaxis]
+                    )
                 else:
                     raise NotImplementedError(
                         "too many/too few dimension in dist_sample_overlap"
                     )
-            else :
+            else:
                 df[k] += result[0][k] / len(allruns)
-   
+
     for k in keys:
         if k != "weight" and k != "overlap" and k != "overlap_gradient":
             if len(df[k].shape) == 1:
-                df[k] /= ((i + 1) * df["weight"][:, -1])
+                df[k] /= (i + 1) * df["weight"][:, -1]
             elif len(df[k].shape) == 2:
-                df[k] /= ((i + 1) * df["weight"][:, -1, np.newaxis])
+                df[k] /= (i + 1) * df["weight"][:, -1, np.newaxis]
             elif len(df[k].shape) == 3:
-                df[k] /= ((i + 1) * df["weight"][:, -1, np.newaxis, np.newaxis])
+                df[k] /= (i + 1) * df["weight"][:, -1, np.newaxis, np.newaxis]
 
     configs.join(final_coords)
     coordret = configs

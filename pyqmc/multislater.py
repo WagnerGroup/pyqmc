@@ -217,7 +217,9 @@ class MultiSlater:
         """vec is a nconfig,nmo vector which replaces column i 
         of spin s in determinant det"""
 
-        ratio = np.einsum("ij...,ij->i...", vec, self._inverse[s][:, det, i, :],optimize='greedy')
+        ratio = np.einsum(
+            "ij...,ij->i...", vec, self._inverse[s][:, det, i, :], optimize="greedy"
+        )
         return ratio
 
     def gradient(self, e, epos):
@@ -308,7 +310,7 @@ class MultiSlater:
         Returns d_p \Psi/\Psi as a dictionary of numpy arrays,
         which correspond to the parameter dictionary."""
         d = {}
-        
+
         # Det coeff
         det_coeff_grad = (
             self._dets[0][0, :, self._det_map[0]]

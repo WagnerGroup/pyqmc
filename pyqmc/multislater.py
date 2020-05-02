@@ -340,7 +340,7 @@ class MultiSlater:
                         col = self._det_occup[s][self._det_map[s][det]].index(i)
                         pgrad[:, :, i] += (
                             self.parameters["det_coeff"][det]
-                            * d["det_coeff"][:, det]
+                            * d["det_coeff"][:, det, np.newaxis]
                             * self._testcol(self._det_map[s][det], col, s, ao)
                         )
             d[parm] = np.array(pgrad)

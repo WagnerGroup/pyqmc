@@ -67,12 +67,20 @@ def default_slater(mol, mf, optimize_orbitals=False):
 
 def default_multislater(mol, mf, mc, tol=None, freeze_orb=None):
     import numpy as np
+    if freeze_orb is None:
+        freeze_orb = [[],[]]
 
     wf = MultiSlater(mol, mf, mc, tol, freeze_orb)
     freeze = {}
     freeze["det_coeff"] = np.zeros(wf.parameters["det_coeff"].shape).astype(bool)
     freeze["det_coeff"][0] = True  # Determinant coefficient pivot
-    to_opt = ["det_coeff"]  # Don't have orbital coeff opt on this yet
+    
+    freeze['mo_coeff_alpha'] = np.zeros(wf.parameters['mo_coeff_alpha'].shape, dtype=bool)
+    freeze['mo_coeff_beta'] = np.zeros(wf.parameters['mo_coeff_beta'].shape, dtype=bool)
+    freeze['mo_coeff_alpha'][:, freeze_orb[0]] = True
+    freeze['mo_coeff_alpha'][:, freeze_orb[1]] = True
+    
+    to_opt = ["det_coeff", "mo_coeff_alpha", "mo_coeff_beta"]
     return wf, to_opt, freeze
 
 

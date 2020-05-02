@@ -33,7 +33,7 @@ class MultiSlater:
     to the PySCFSlaterUHF class.
     """
 
-    def __init__(self, mol, mf, mc, tol=None):
+    def __init__(self, mol, mf, mc, tol=None, freeze_orb=None):
         if tol is None:
             self.tol = -1
         else:
@@ -56,6 +56,11 @@ class MultiSlater:
             self.get_phase = lambda x: x / np.abs(x)
         else:
             self.get_phase = np.sign
+
+        if freeze_orb == None:
+            self.freeze_orb = [[], []]
+        else:
+            self.freeze_orb = freeze_orb
 
     def _copy_ci(self, mc):
         """       
@@ -333,15 +338,16 @@ class MultiSlater:
 
             largest_mo = np.max(np.ravel(self._det_occup[s]))
             for i in range(largest_mo + 1):  # MO loop
-                for det in range(self.parameters["det_coeff"].shape[0]):  # Det loop
-                    if (
-                        i in self._det_occup[s][self._det_map[s][det]]
-                    ):  # Check if MO in det
-                        col = self._det_occup[s][self._det_map[s][det]].index(i)
-                        pgrad[:, :, i] += (
-                            self.parameters["det_coeff"][det]
-                            * d["det_coeff"][:, det, np.newaxis]
-                            * self._testcol(self._det_map[s][det], col, s, ao)
-                        )
+                if i not in self.freeze_orb[s]:
+                    for det in range(self.parameters["det_coeff"].shape[0]):  # Det loop
+                        if (
+                            i in self._det_occup[s][self._det_map[s][det]]
+                        ):  # Check if MO in det
+                            col = self._det_occup[s][self._det_map[s][det]].index(i)
+                            pgrad[:, :, i] += (
+                                self.parameters["det_coeff"][det]
+                                * d["det_coeff"][:, det, np.newaxis]
+                                * self._testcol(self._det_map[s][det], col, s, ao)
+                            )
             d[parm] = np.array(pgrad)
         return d

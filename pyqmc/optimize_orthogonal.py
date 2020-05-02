@@ -590,6 +590,5 @@ def optimize_orthogonal(
         ortho_hdf(
             hdf_file, save_data, attr, coords, pgrad.transform.deserialize(parameters)
         )
-        for wf in wfs:
-            print(wf.parameters["wf1det_coeff"])
+    
     return wfs

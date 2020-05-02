@@ -73,22 +73,19 @@ def default_multislater(mol, mf, mc, tol=None, freeze_orb=None):
         freeze_orb = [[],[]]
 
     wf = MultiSlater(mol, mf, mc, tol, freeze_orb)
+    to_opt = ["det_coeff"]
     freeze = {}
     freeze["det_coeff"] = np.zeros(wf.parameters["det_coeff"].shape).astype(bool)
     freeze["det_coeff"][0] = True  # Determinant coefficient pivot
     
-    freeze['mo_coeff_alpha'] = np.zeros(wf.parameters['mo_coeff_alpha'].shape, dtype=bool)
-    freeze['mo_coeff_beta'] = np.zeros(wf.parameters['mo_coeff_beta'].shape, dtype=bool)
-    freeze['mo_coeff_alpha'][:, freeze_orb[0]] = True
-    freeze['mo_coeff_alpha'][:, freeze_orb[1]] = True
-   
-    # If everything frozen, then don't add to to_opt
-    to_opt = []
-    for key in freeze.keys():
-        if freeze[key].sum() > 0: 
-            to_opt.append(key)
-    return wf, to_opt, freeze
+    for s, k in enumerate(['mo_coeff_alpha','mo_coeff_beta']):
+        to_freeze = np.zeros(wf.parameters[k].shape, dtype=bool)
+        to_freeze[:, freeze_orb[s]] = True
+        if to_freeze.sum() < np.prod(to_freeze.shape):
+            freeze[k] = to_freeze
+            to_opt.append(k)
 
+    return wf, to_opt, freeze
 
 def default_jastrow(mol, ion_cusp=False, rcut = 7.5):
     """         

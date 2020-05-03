@@ -217,7 +217,7 @@ class PySCFSlaterPBC:
         if mask is None:
             return np.einsum("i...j,ij...->i...", vec, self._inverse[s][:, :, elec])
 
-        return np.einsum("i...j,ij...->i...", vec, self._inverse[s][mask, :, elec])
+        return np.einsum("i...j,ij...->i...", vec, self._inverse[s][mask][:, :, elec])
 
     # identical to slateruhf
     def _testcol(self, i, s, vec):
@@ -229,9 +229,7 @@ class PySCFSlaterPBC:
         """ return the ratio between the current wave function and the wave function if 
         electron e's position is replaced by epos"""
         s = int(e >= self._nelec[0])
-        if mask is None:
-            mask = [True] * epos.configs.shape[0]
-        nmask = np.sum(mask)
+        nmask = epos.configs.shape[0] if mask is None else np.sum(mask)
         if nmask == 0:
             return np.zeros((0, epos.configs.shape[1]))
         aos = self.evaluate_orbitals(epos, mask)
@@ -243,9 +241,7 @@ class PySCFSlaterPBC:
         """ return the ratio between the current wave function and the wave function if 
         an electron's position is replaced by epos for each electron"""
         s = (e >= self._nelec[0]).astype(int)
-        if mask is None:
-            mask = [True] * epos.configs.shape[0]
-        nmask = np.sum(mask)
+        nmask = epos.configs.shape[0] if mask is None else np.sum(mask)
         if nmask == 0:
             return np.zeros((0, epos.configs.shape[1]))
 

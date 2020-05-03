@@ -54,20 +54,19 @@ class MultiSlaterPBC:
             for o in occup
         ]
 
-        self.parameters["mo_coeff_alpha"] = []
-        self.parameters["mo_coeff_beta"] = []
-        for kind in self.kinds:
-            if len(mf.mo_coeff[0][0].shape) == 2:
-                mca = mf.mo_coeff[0][kind][:, : maxorb[0][kind]]
-                mcb = mf.mo_coeff[1][kind][:, : maxorb[1][kind]]
-            else:
-                mca = mf.mo_coeff[kind][:, : maxorb[0][kind]]
-                mcb = mf.mo_coeff[kind][:, : maxorb[1][kind]]
-            mca = np.real_if_close(mca, tol=self.real_tol)
-            mcb = np.real_if_close(mcb, tol=self.real_tol)
-            self.parameters["mo_coeff_alpha"].append(mca / np.sqrt(self.nk))
-            self.parameters["mo_coeff_beta"].append(mcb / np.sqrt(self.nk))
+        self.param_split = {}
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
+        for s, lookup in enumerate(self._coefflookup):
+            mclist = []
+            for kind in self.kinds:
+                if len(mf.mo_coeff[0][0].shape) == 2:
+                    mca = mf.mo_coeff[s][kind][:, : maxorb[s][kind]]
+                else:
+                    mca = mf.mo_coeff[kind][:, : maxorb[s][kind]]
+                mca = np.real_if_close(mca, tol=self.real_tol)
+                mclist.append(mca / np.sqrt(self.nk))
+            self.param_split[lookup] = np.cumsum([m.shape[1] for m in mclist])
+            self.parameters[lookup] = np.concatenate(mclist, axis=-1)
 
         # _det_occup: Spin, [(Ndet_up_unique, nup), (Ndet_dn_unique, ndn)]
         self._det_occup = [
@@ -84,9 +83,9 @@ class MultiSlaterPBC:
         print("_det_occup\n", self._det_occup)
         print("_det_map\n", self._det_map)
 
-        self.iscomplex = np.linalg.norm(self._kpts) > 1e-12
-        for v in self.parameters.values():
-            self.iscomplex = self.iscomplex or bool(sum(map(np.iscomplexobj, v)))
+        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
+        self.iscomplex = self.iscomplex or np.linalg.norm(self._kpts) > 1e-12
+        self.dtype = complex if self.iscomplex else float
         if self.iscomplex:
             self.get_phase = lambda x: x / np.abs(x)
             self.get_wrapphase = lambda x: np.exp(1j * x)
@@ -113,7 +112,8 @@ class MultiSlaterPBC:
         return ao
 
     def evaluate_mos(self, aos, s):
-        p = self.parameters[self._coefflookup[s]]
+        l = self._coefflookup[s]
+        p = np.split(self.parameters[l], self.param_split[l], axis=-1)
         mo = [np.dot(ao, p[k]) for k, ao in enumerate(aos)]
         mo = np.concatenate(mo, axis=-1)
         return mo[..., self._det_occup[s]]
@@ -217,7 +217,7 @@ class MultiSlaterPBC:
         """vec is a nconfig,nmo vector which replaces column i 
         of spin s in determinant det"""
 
-        ratio = np.einsum("ij,ij->i", vec, self._inverse[s][:, det, i, :])
+        ratio = np.einsum("ij...,ij->i...", vec, self._inverse[s][:, det, i, :])
         return ratio
 
     # identical to slaterpbc
@@ -247,10 +247,7 @@ class MultiSlaterPBC:
             return np.zeros((0, epos.configs.shape[1]))
 
         ao = self.evaluate_orbitals(epos, mask=mask)
-        ratios = np.zeros(
-            (epos.configs.shape[0], e.shape[0]),
-            dtype=complex if self.iscomplex else float,
-        )
+        ratios = np.zeros((epos.configs.shape[0], e.shape[0]), dtype=self.dtype)
         for spin in [0, 1]:
             ind = s == spin
             mo = self.evaluate_mos(aos, spin)
@@ -296,47 +293,37 @@ class MultiSlaterPBC:
         Returns :math:`\frac{\partial_p \Psi}{\Psi}` as a dictionary of numpy arrays,
         which correspond to the parameter dictionary."""
         d = {}
+        # Det coeff
+        det_coeff_grad = (
+            self._dets[0][0, :, self._det_map[0]]
+            * self._dets[1][0, :, self._det_map[1]]
+            * np.exp(
+                self._dets[0][1, :, self._det_map[0]]
+                + self._dets[1][1, :, self._det_map[1]]
+            )
+        )
 
-        ## Det coeff
-        # det_coeff_grad = (
-        #     self._dets[0][0, :, self._det_map[0]]
-        #     * self._dets[1][0, :, self._det_map[1]]
-        #     * np.exp(
-        #         self._dets[0][1, :, self._det_map[0]]
-        #         + self._dets[1][1, :, self._det_map[1]]
-        #     )
-        # )
+        curr_val = self.value()
+        d["det_coeff"] = (
+            det_coeff_grad.T / (curr_val[0] * np.exp(curr_val[1]))[:, np.newaxis]
+        )
 
-        # curr_val = self.value()
-        # d["det_coeff"] = (
-        #     det_coeff_grad.T / (curr_val[0] * np.exp(curr_val[1]))[:, np.newaxis]
-        # )
+        for s, parm in enumerate(["mo_coeff_alpha", "mo_coeff_beta"]):
+            i0, i1 = s * self._nelec[0], self._nelec[0] + s * self._nelec[1]
+            ao = self._aovals[:, :, i0:i1, :]  # nk, nconf, nelec, nao
+            pgrad_shape = (ao.shape[1],) + self.parameters[parm].shape
+            pgrad = np.zeros(pgrad_shape, dtype=self.dtype)
+            split_sizes = np.diff([0] + list(self.param_split[parm]))
+            k = np.repeat(np.arange(self.nk), split_sizes)
 
-        ## Mo_coeff, adapted from SlaterUHF
-        # for parm in ["mo_coeff_alpha", "mo_coeff_beta"]:
-        #     s = 0
-        #     if "beta" in parm:
-        #         s = 1
-
-        #     ao = self._aovals[
-        #         :, :, s * self._nelec[0] : self._nelec[s] + s * self._nelec[0], :
-        #     ]
-        #     pgrad_shape = (ao.shape[0],) + self.parameters[parm].shape
-        #     pgrad = np.zeros(pgrad_shape)
-
-        #     largest_mo = np.max(np.ravel(self._det_occup[s]))
-        #     for i in range(largest_mo + 1):  # MO loop
-        #         for det in range(self.parameters["det_coeff"].shape[0]):  # Det loop
-        #             if (
-        #                 i in self._det_occup[s][self._det_map[s][det]]
-        #             ):  # Check if MO in det
-        #                 col = self._det_occup[s][self._det_map[s][det]].index(i)
-        #                 for j in range(ao.shape[2]):
-        #                     vec = ao[:, :, j]
-        #                     pgrad[:, j, i] += (
-        #                         self.parameters["det_coeff"][det]
-        #                         * d["det_coeff"][:, det]
-        #                         * self._testcol(self._det_map[s][det], col, s, vec)
-        #                     )
-        #     d[parm] = np.array(pgrad)
+            largest_mo = np.max(np.ravel(self._det_occup[s]))
+            for det, detwt in enumerate(self.parameters["det_coeff"]):  # Det loop
+                mapdet = self._det_map[s][det]
+                for col, i in enumerate(self._det_occup[s][mapdet]):
+                    pgrad[:, :, i] += (
+                        detwt
+                        * d["det_coeff"][:, det, np.newaxis]
+                        * self._testcol(mapdet, col, s, ao[k[i]])
+                    )
+            d[parm] = np.array(pgrad)
         return d

@@ -123,10 +123,8 @@ def test_wf_pgradient(wf, configs, delta=1e-5):
             flt[i] += delta
             wf.parameters[k] = flt.reshape(wf.parameters[k].shape)
 
-        error[k] = (
-            np.amax(np.abs(gradient[k].reshape((-1, nparms)) - numgrad)),
-            np.mean(np.abs(gradient[k].reshape((-1, nparms)) - numgrad)),
-        )
+        pgerr = np.abs(gradient[k].reshape((-1, nparms)) - numgrad)
+        error[k] = (np.amax(pgerr), np.mean(pgerr))
     if len(error) == 0:
         return (0, 0)
     return error[max(error)]  # Return maximum coefficient error

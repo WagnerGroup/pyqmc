@@ -8,6 +8,7 @@ class J3:
         dim = mol.eval_gto("GTOval_cart", randpos).shape[-1]
         self.parameters = {}
         self.parameters["gcoeff"] = np.zeros((dim, dim))
+        self.iscomplex = False
 
     def recompute(self, configs):
         self._configscurrent = configs.copy()
@@ -131,6 +132,7 @@ class J3:
 
         lap3 = np.einsum("dc,dc->c", grad, grad)
         return grad, lap1 + lap2 + lap3
+
 
     def pgradient(self):
         mask = np.tril(

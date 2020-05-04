@@ -87,6 +87,10 @@ class MultiplyWF:
         testvalues = [wf.testvalue(e, epos, mask=mask) for wf in self.wf_factors]
         return np.prod(testvalues, axis=0)
 
+    def testvalue_many(self, e, epos, mask=None):
+        testvalues = [wf.testvalue_many(e, epos, mask=mask) for wf in self.wf_factors]
+        return np.prod(testvalues, axis=0)
+
     def laplacian(self, e, epos):
         grad_laps = [wf.gradient_laplacian(e, epos) for wf in self.wf_factors]
         grad_laps = np.array(grad_laps)

@@ -298,8 +298,8 @@ class MultiSlater:
         return ratios
 
     def pgradient(self):
-        """Compute the parameter gradient of Psi. 
-        Returns d_p \Psi/\Psi as a dictionary of numpy arrays,
+        r"""Compute the parameter gradient of Psi. 
+        Returns :math:`\frac{\partial_p \Psi}{\Psi}` as a dictionary of numpy arrays,
         which correspond to the parameter dictionary."""
         d = {}
 

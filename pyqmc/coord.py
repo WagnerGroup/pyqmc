@@ -29,10 +29,19 @@ class OpenConfigs:
         Change coordinates of one electron
         Args:
           e: int, electron index
-          vec: OpenConfigs with (nconfig, 3) new coordinates
+          new: OpenConfigs with (nconfig, 3) new coordinates
           accept: (nconfig,) boolean for which configs to update
         """
         self.configs[accept, e, :] = new.configs[accept, :]
+
+    def move_all(self, new, accept):
+        """
+        Change coordinates of all electrons
+        Args:
+          new: OpenConfigs with configs.shape new coordinates
+          accept: (nconfig,) boolean for which configs to update
+        """
+        self.configs[accept] = new.configs[accept]
 
     def resample(self, newinds):
         """
@@ -50,7 +59,7 @@ class OpenConfigs:
         Returns:
           configslist: list of new configs objects
         """
-        return [OpenConfigs(c) for c in np.split(self.configs, npartitions)]
+        return [OpenConfigs(c) for c in np.array_split(self.configs, npartitions)]
 
     def join(self, configslist):
         """
@@ -62,6 +71,9 @@ class OpenConfigs:
 
     def copy(self):
         return copy.deepcopy(self)
+
+    def reshape(self, shape):
+        self.configs = self.configs.reshape(shape)
 
     def initialize_hdf(self, hdf):
         hdf.create_dataset("configs", self.configs.shape)
@@ -111,6 +123,16 @@ class PeriodicConfigs:
         self.configs[accept, e, :] = new.configs[accept, :]
         self.wrap[accept, e, :] = new.wrap[accept, :]
 
+    def move_all(self, new, accept):
+        """
+        Change coordinates of all electrons
+        Args:
+          new: PeriodicConfigs with configs.shape new coordinates
+          accept: (nconfig,) boolean for which configs to update
+        """
+        self.configs[accept] = new.configs[accept]
+        self.wrap[accept] = new.wrap[accept]
+
     def resample(self, newinds):
         """
         Resample configs by new indices (e.g. for DMC branching)
@@ -128,21 +150,25 @@ class PeriodicConfigs:
         Returns:
           configslist: list of new configs objects
         """
-        clist = np.split(self.configs, npartitions)
-        wlist = np.split(self.wrap, npartitions)
+        clist = np.array_split(self.configs, npartitions)
+        wlist = np.array_split(self.wrap, npartitions)
         return [PeriodicConfigs(c, self.lvecs, w) for c, w in zip(clist, wlist)]
 
     def join(self, configslist):
         """
         Merge configs into this object to collect from parallelization
         Args:
-          configslist: list of OpenConfigs objects; total number of configs must match
+          configslist: list of PeriodicConfigs objects; total number of configs must match
         """
         self.configs[:] = np.concatenate([c.configs for c in configslist], axis=0)[:]
         self.wrap[:] = np.concatenate([c.wrap for c in configslist], axis=0)[:]
 
     def copy(self):
         return copy.deepcopy(self)
+
+    def reshape(self, shape):
+        self.configs = self.configs.reshape(shape)
+        self.wrap = self.wrap.reshape(shape)
 
     def initialize_hdf(self, hdf):
         hdf.create_dataset("configs", self.configs.shape)

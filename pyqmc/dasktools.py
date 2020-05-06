@@ -16,7 +16,7 @@ dask.distributed.protocol.utils.msgpack_opts["strict_map_key"] = False
 
 def _avg_func(df):
     scalar_df = df.loc[:, df.dtypes.values != np.dtype("O")]
-    scalar_df = scalar_df.groupby("step", as_index=True).mean()
+    scalar_df = scalar_df.groupby("step", as_index=False).mean()
 
     steps = df["step"].values
     obj_cols = df.columns.values[df.dtypes.values == np.dtype("O")]

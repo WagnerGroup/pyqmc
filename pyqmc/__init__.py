@@ -6,7 +6,6 @@ from pyqmc.multislater import MultiSlater
 
 from pyqmc.multiplywf import MultiplyWF
 from pyqmc.jastrowspin import JastrowSpin
-from pyqmc.multiplynwf import MultiplyNWF
 from pyqmc.manybody_jastrow import J3
 
 from pyqmc.accumulators import EnergyAccumulator, PGradTransform, LinearTransform
@@ -67,18 +66,18 @@ def default_slater(mol, mf, optimize_orbitals=False):
 
 def default_multislater(mol, mf, mc, tol=None, freeze_orb=None):
     import numpy as np
-    
+
     # Nothing provided, nothing frozen
     if freeze_orb is None:
-        freeze_orb = [[],[]]
+        freeze_orb = [[], []]
 
     wf = MultiSlater(mol, mf, mc, tol, freeze_orb)
     to_opt = ["det_coeff"]
     freeze = {}
     freeze["det_coeff"] = np.zeros(wf.parameters["det_coeff"].shape).astype(bool)
     freeze["det_coeff"][0] = True  # Determinant coefficient pivot
-    
-    for s, k in enumerate(['mo_coeff_alpha','mo_coeff_beta']):
+
+    for s, k in enumerate(["mo_coeff_alpha", "mo_coeff_beta"]):
         to_freeze = np.zeros(wf.parameters[k].shape, dtype=bool)
         to_freeze[:, freeze_orb[s]] = True
         if to_freeze.sum() < np.prod(to_freeze.shape):
@@ -87,7 +86,8 @@ def default_multislater(mol, mf, mc, tol=None, freeze_orb=None):
 
     return wf, to_opt, freeze
 
-def default_jastrow(mol, ion_cusp=False, rcut = 7.5):
+
+def default_jastrow(mol, ion_cusp=False):
     """         
     Default 2-body jastrow from qwalk,
     Args:
@@ -111,12 +111,12 @@ def default_jastrow(mol, ion_cusp=False, rcut = 7.5):
     beta_abasis = expand_beta_qwalk(0.2, 4)
     beta_bbasis = expand_beta_qwalk(0.5, 3)
     if ion_cusp:
-        abasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
+        abasis = [CutoffCuspFunction(gamma=24, rcut=7.5)]
     else:
         abasis = []
-    abasis += [PolyPadeFunction(beta=beta_abasis[i], rcut=rcut) for i in range(4)]
-    bbasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
-    bbasis += [PolyPadeFunction(beta=beta_bbasis[i], rcut=rcut) for i in range(3)]
+    abasis += [PolyPadeFunction(beta=beta_abasis[i], rcut=7.5) for i in range(4)]
+    bbasis = [CutoffCuspFunction(gamma=24, rcut=7.5)]
+    bbasis += [PolyPadeFunction(beta=beta_bbasis[i], rcut=7.5) for i in range(3)]
 
     jastrow = JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
     if ion_cusp:
@@ -133,9 +133,9 @@ def default_jastrow(mol, ion_cusp=False, rcut = 7.5):
     return jastrow, to_opt, freeze
 
 
-def default_msj(mol, mf, mc, tol=None, rcut=7.5, freeze_orb=None):
+def default_msj(mol, mf, mc, tol=None, freeze_orb=None):
     wf1, to_opt1, freeze1 = default_multislater(mol, mf, mc, tol, freeze_orb)
-    wf2, to_opt2, freeze2 = default_jastrow(mol, rcut = rcut)
+    wf2, to_opt2, freeze2 = default_jastrow(mol)
     wf = MultiplyWF(wf1, wf2)
     to_opt = ["wf1" + x for x in to_opt1] + ["wf2" + x for x in to_opt2]
     freeze = {}

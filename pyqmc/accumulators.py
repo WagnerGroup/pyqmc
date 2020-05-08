@@ -163,9 +163,7 @@ class PGradTransform:
         node_cut, f = self._node_regr(configs, wf)
         dp_regularized = dp * f[:, np.newaxis]
 
-        d = {}
-        for k, it in den.items():
-            d[k] = np.mean(it, axis=0)
+        d = {k: np.mean(it, axis=0) for k, it in den.items()}
         d["dpH"] = np.einsum("i,ij->j", energy, dp_regularized) / nconf
         d["dppsi"] = np.mean(dp_regularized, axis=0)
         d["dpidpj"] = np.einsum("ij,ik->jk", dp, dp_regularized) / nconf

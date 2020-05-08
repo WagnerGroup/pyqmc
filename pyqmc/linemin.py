@@ -150,6 +150,7 @@ def line_minimization(
         vmc = pyqmc.mc.vmc
     if vmcoptions is None:
         vmcoptions = {}
+    vmcoptions.update({"verbose": verbose})
     if lm is None:
         lm = lm_sampler
     if lmoptions is None:

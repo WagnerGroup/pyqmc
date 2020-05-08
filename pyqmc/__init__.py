@@ -147,4 +147,3 @@ def default_sj(mol, mf, ion_cusp=False):
         freeze["wf2" + k] = freeze2[k]
 
     return wf, to_opt, freeze
-

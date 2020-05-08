@@ -178,7 +178,7 @@ class PGradTransform:
         d["dpidpj"] = np.einsum(
             "ij,ik->jk", dp, weights[:, np.newaxis] * dp_regularized
         ) / np.sum(weights)
-        
+
         return d
 
 

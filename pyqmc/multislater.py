@@ -346,4 +346,3 @@ class MultiSlater:
                             )
             d[parm] = np.array(pgrad)
         return d
-

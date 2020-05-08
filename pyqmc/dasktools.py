@@ -285,11 +285,11 @@ def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs)
     for k in keys:
         if k != "weight" and k != "overlap" and k != "overlap_gradient":
             if len(df[k].shape) == 1:
-                df[k] /= (len(allruns) * df["weight"][:, -1])
+                df[k] /= len(allruns) * df["weight"][:, -1]
             elif len(df[k].shape) == 2:
-                df[k] /= (len(allruns) * df["weight"][:, -1, np.newaxis])
+                df[k] /= len(allruns) * df["weight"][:, -1, np.newaxis]
             elif len(df[k].shape) == 3:
-                df[k] /= (len(allruns) * df["weight"][:, -1, np.newaxis, np.newaxis])
+                df[k] /= len(allruns) * df["weight"][:, -1, np.newaxis, np.newaxis]
 
     configs.join(final_coords)
     coordret = configs

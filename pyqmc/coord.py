@@ -59,7 +59,7 @@ class OpenConfigs:
         Returns:
           configslist: list of new configs objects
         """
-        return [OpenConfigs(c) for c in np.split(self.configs, npartitions)]
+        return [OpenConfigs(c) for c in np.array_split(self.configs, npartitions)]
 
     def join(self, configslist):
         """
@@ -150,8 +150,8 @@ class PeriodicConfigs:
         Returns:
           configslist: list of new configs objects
         """
-        clist = np.split(self.configs, npartitions)
-        wlist = np.split(self.wrap, npartitions)
+        clist = np.array_split(self.configs, npartitions)
+        wlist = np.array_split(self.wrap, npartitions)
         return [PeriodicConfigs(c, self.lvecs, w) for c, w in zip(clist, wlist)]
 
     def join(self, configslist):

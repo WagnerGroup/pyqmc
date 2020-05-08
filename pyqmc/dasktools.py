@@ -14,6 +14,16 @@ import dask.distributed
 dask.distributed.protocol.utils.msgpack_opts["strict_map_key"] = False
 
 
+def _avg_func(df):
+    scalar_df = df.loc[:, df.dtypes.values != np.dtype("O")]
+    scalar_df = scalar_df.groupby("step", as_index=False).mean()
+
+    steps = df["step"].values
+    obj_cols = df.columns.values[df.dtypes.values == np.dtype("O")]
+    obj_dfs = [df[col].groupby(steps).apply(np.mean, axis=0) for col in obj_cols]
+    return pd.concat([scalar_df] + obj_dfs, axis=1).reset_index()
+
+
 def distvmc(
     wf,
     coords,
@@ -54,13 +64,12 @@ def distvmc(
             if "configs" in hdf.keys():
                 coords.configs = np.array(hdf["configs"])
                 if verbose:
-                    print("Restarted calculation")
+                    print("Restarted calculation", flush=True)
 
     if accumulators is None:
         accumulators = {}
     if npartitions is None:
         npartitions = sum([x for x in client.nthreads().values()])
-    allruns = []
     niterations = int(nblocks / nsteps_per)
     coord = coords.split(npartitions)
     alldata = []
@@ -70,6 +79,7 @@ def distvmc(
         for i in range(npartitions):
             wfs.append(wf)
             thiscoord.append(coord[i])
+
         runs = client.map(
             pyqmc.vmc,
             wfs,
@@ -82,26 +92,21 @@ def distvmc(
             },
             **kwargs
         )
+
+        allresults = list(zip(*[r.result() for r in runs]))
+        coords.join(allresults[1])
+        iterdata = list(map(pd.DataFrame, allresults[0]))
         confweight = np.array([len(c.configs) for c in coord], dtype=float)
         confweight /= confweight.mean()
-        iterdata = []
-        for i, r in enumerate(runs):
-            res = r.result()
-            df_ = pd.DataFrame(res[0])
+        for i, df_ in enumerate(iterdata):
             df_.loc[:, df_.columns != "step"] *= confweight[i]
-            iterdata.append(df_)
-            coord[i] = res[1]
-
-        df = pd.concat(iterdata, ignore_index=True)
-        df = df.groupby("step").aggregate(np.mean, axis=0).reset_index()
-        collected_data = df.to_dict("records")
-        if verbose:
-            print("epoch", epoch, "finished", flush=True)
-
-        coords.join(coord)
+        df = pd.concat(iterdata)
+        collected_data = _avg_func(df).to_dict("records")
         alldata.extend(collected_data)
         for d in collected_data:
             pyqmc.mc.vmc_file(hdf_file, d, kwargs, coords)
+        if verbose:
+            print("epoch", epoch, "finished", flush=True)
 
     return alldata, coords
 
@@ -148,8 +153,6 @@ def dist_lm_sampler(
     for p in range(len(params)):
         df = {}
         for k in keys:
-            # print(k,flush=True)
-            # print(stepresults[0][p][k])
             df[k] = np.concatenate([x[p][k] for x in stepresults], axis=0)
         final_results.append(df)
 
@@ -217,12 +220,15 @@ def distdmc_propagate(wf, configs, weights, *args, client, npartitions=None, **k
 
     for k in df.keys():
         if k not in notavg:
-            df[k] = df[k] * df["weight"]
+            df[k] *= df["weight"].values
     df = df.groupby("step").aggregate(np.mean, axis=0).reset_index()
     for k in df.keys():
         if k not in notavg:
-            df[k] = df[k] / df["weight"]
-    return df, coordret, weightret
+            df[k] /= df["weight"].values
+    print("df step weight acceptance\n", df[["step", "weight", "acceptance"]])
+    print("energytotal")
+    print(df["energytotal"].values)
+    return df, configs, weightret
 
 
 def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs):

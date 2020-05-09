@@ -153,8 +153,15 @@ class PGradTransform:
 
         return d
 
-    def avg(self, configs, wf):
+    def avg(self, configs, wf, weights=None):
+        """
+        Compute (weighted) average
+        """
+
         nconf = configs.configs.shape[0]
+        if weights is None:
+            weights = np.ones(nconf)
+
         pgrad = wf.pgradient()
         den = self.enacc(configs, wf)
         energy = den["total"]
@@ -163,10 +170,14 @@ class PGradTransform:
         node_cut, f = self._node_regr(configs, wf)
         dp_regularized = dp * f[:, np.newaxis]
 
-        d = {k: np.mean(it, axis=0) for k, it in den.items()}
-        d["dpH"] = np.einsum("i,ij->j", energy, dp_regularized) / nconf
-        d["dppsi"] = np.mean(dp_regularized, axis=0)
-        d["dpidpj"] = np.einsum("ij,ik->jk", dp, dp_regularized) / nconf
+        d = {k: np.average(it, weights=weights, axis=0) for k, it in den.items()}
+        d["dpH"] = np.einsum(
+            "i,ij->j", energy, weights[:, np.newaxis] * dp_regularized
+        ) / np.sum(weights)
+        d["dppsi"] = np.average(dp_regularized, weights=weights, axis=0)
+        d["dpidpj"] = np.einsum(
+            "ij,ik->jk", dp, weights[:, np.newaxis] * dp_regularized
+        ) / np.sum(weights)
 
         return d
 

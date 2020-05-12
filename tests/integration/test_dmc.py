@@ -53,7 +53,7 @@ def test():
         branchtime=5,
         accumulators={"energy": EnergyAccumulator(mol)},
         ekey=("energy", "total"),
-        tstep=0.005,
+        tstep=0.01,
         drift_limiter=limdrift,
         verbose=False,
     )

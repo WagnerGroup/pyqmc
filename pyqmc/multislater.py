@@ -33,7 +33,7 @@ class MultiSlater:
     to the PySCFSlaterUHF class.
     """
 
-    def __init__(self, mol, mf, mc, tol=None):
+    def __init__(self, mol, mf, mc, tol=None, freeze_orb=None):
         if tol is None:
             self.tol = -1
         else:
@@ -56,6 +56,11 @@ class MultiSlater:
             self.get_phase = lambda x: x / np.abs(x)
         else:
             self.get_phase = np.sign
+
+        if freeze_orb == None:
+            self.freeze_orb = [[], []]
+        else:
+            self.freeze_orb = freeze_orb
 
     def _copy_ci(self, mc):
         """       
@@ -138,6 +143,7 @@ class MultiSlater:
         ao = np.real_if_close(
             self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs), tol=1e4
         )
+        self._aovals[:, e, :] = ao
         mo = ao.dot(self.parameters[self._coefflookup[s]])
 
         mo_vals = mo[:, self._det_occup[s]]
@@ -211,7 +217,9 @@ class MultiSlater:
         """vec is a nconfig,nmo vector which replaces column i 
         of spin s in determinant det"""
 
-        ratio = np.einsum("ij,ij->i", vec, self._inverse[s][:, det, i, :])
+        ratio = np.einsum(
+            "ij...,ij->i...", vec, self._inverse[s][:, det, i, :], optimize="greedy"
+        )
         return ratio
 
     def gradient(self, e, epos):
@@ -298,8 +306,8 @@ class MultiSlater:
         return ratios
 
     def pgradient(self):
-        r"""Compute the parameter gradient of Psi. 
-        Returns :math:`\frac{\partial_p \Psi}{\Psi}` as a dictionary of numpy arrays,
+        """Compute the parameter gradient of Psi. 
+        Returns d_p \Psi/\Psi as a dictionary of numpy arrays,
         which correspond to the parameter dictionary."""
         d = {}
 
@@ -332,17 +340,16 @@ class MultiSlater:
 
             largest_mo = np.max(np.ravel(self._det_occup[s]))
             for i in range(largest_mo + 1):  # MO loop
-                for det in range(self.parameters["det_coeff"].shape[0]):  # Det loop
-                    if (
-                        i in self._det_occup[s][self._det_map[s][det]]
-                    ):  # Check if MO in det
-                        col = self._det_occup[s][self._det_map[s][det]].index(i)
-                        for j in range(ao.shape[2]):
-                            vec = ao[:, :, j]
-                            pgrad[:, j, i] += (
+                if i not in self.freeze_orb[s]:
+                    for det in range(self.parameters["det_coeff"].shape[0]):  # Det loop
+                        if (
+                            i in self._det_occup[s][self._det_map[s][det]]
+                        ):  # Check if MO in det
+                            col = self._det_occup[s][self._det_map[s][det]].index(i)
+                            pgrad[:, :, i] += (
                                 self.parameters["det_coeff"][det]
-                                * d["det_coeff"][:, det]
-                                * self._testcol(self._det_map[s][det], col, s, vec)
+                                * d["det_coeff"][:, det, np.newaxis]
+                                * self._testcol(self._det_map[s][det], col, s, ao)
                             )
             d[parm] = np.array(pgrad)
         return d

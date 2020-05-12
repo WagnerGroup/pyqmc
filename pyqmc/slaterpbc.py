@@ -295,7 +295,6 @@ class PySCFSlaterPBC:
             # Compute derivatives w.r.t. MO coefficients
             split_sizes = np.diff([0] + list(self.param_split[parm]))
             k = np.repeat(np.arange(self.nk), split_sizes)
-            print("klist", k)
             for i in range(self._nelec[s]):  # MO loop
                 pgrad[:, :, i] = self._testcol(i, s, ao[k[i]])
             d[parm] = np.asarray(pgrad)

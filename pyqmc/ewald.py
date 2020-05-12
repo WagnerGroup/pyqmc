@@ -225,6 +225,14 @@ class Ewald:
         ion_ion = ion_ion_real + ion_ion_rec
         return ion_ion
 
+    def _real_cij(self, dists):
+        r = np.zeros(dists.shape[:-1])
+        cij = np.zeros(r.shape)
+        for ld in self.lattice_displacements:
+            r[:] = np.linalg.norm(dists + ld, axis=-1)
+            cij += erfc(self.alpha * r) / r
+        return cij
+
     def ewald_electron(self, configs):
         r"""
         Compute the Ewald sum for e-e and e-ion
@@ -258,27 +266,19 @@ class Ewald:
         # Real space electron-ion part
         # ei_distances shape (elec, conf, atom, dim)
         ei_distances = configs.dist.dist_i(self.atom_coords, configs.configs)
-        rvec = ei_distances[:, :, :, np.newaxis, :] + self.lattice_displacements
-        r = np.linalg.norm(rvec, axis=-1)
-        ei_real_separated = np.einsum(
-            "k,ijkl->ji", -self.atom_charges, erfc(self.alpha * r) / r
-        )
+        ei_cij = self._real_cij(ei_distances)
+        ei_real_separated = np.einsum("k,ijk->ji", -self.atom_charges, ei_cij)
 
         # Real space electron-electron part
+        ee_real_separated = np.zeros((nconf, nelec))
         if nelec > 1:
             ee_distances, ee_inds = configs.dist.dist_matrix(configs.configs)
-            rvec = ee_distances[:, :, np.newaxis, :] + self.lattice_displacements
-            r = np.linalg.norm(rvec, axis=-1)
-            ee_cij = np.sum(erfc(self.alpha * r) / r, axis=-1)
+            ee_cij = self._real_cij(ee_distances)
 
-            ee_matrix = np.zeros((nconf, nelec, nelec))
-            # ee_matrix[:, ee_inds] = ee_cij
             for ((i, j), val) in zip(ee_inds, ee_cij.T):
-                ee_matrix[:, i, j] = val
-                ee_matrix[:, j, i] = val
-            ee_real_separated = ee_matrix.sum(axis=-1) / 2
-        else:
-            ee_real_separated = np.zeros(nelec)
+                ee_real_separated[:, i] += val
+                ee_real_separated[:, j] += val
+            ee_real_separated /= 2
 
         # Reciprocal space electron-electron part
         e_GdotR = np.dot(configs.configs, self.gpoints.T)

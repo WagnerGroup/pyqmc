@@ -24,20 +24,7 @@ from pyqmc.reblock import reblock as avg_reblock
 
 
 def slater_jastrow(mol, mf, abasis=None, bbasis=None):
-    if abasis is None:
-        abasis = [GaussianFunction(0.8), GaussianFunction(1.6), GaussianFunction(3.2)]
-    if bbasis is None:
-        bbasis = [
-            CutoffCuspFunction(2.0, 1.5),
-            GaussianFunction(0.8),
-            GaussianFunction(1.6),
-            GaussianFunction(3.2),
-        ]
-
-    wf = MultiplyWF(
-        PySCFSlaterUHF(mol, mf), JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
-    )
-    return wf
+    raise NotImplementedError("slater_jastrow() is no longer supported. Please use default_sj instead.")
 
 
 def gradient_generator(mol, wf, to_opt=None, freeze=None, **ewald_kwargs):

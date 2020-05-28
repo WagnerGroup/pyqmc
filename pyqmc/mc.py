@@ -166,7 +166,7 @@ def vmc(
         acc = []
         for step in range(nsteps_per_block):
             if verbose:
-                print(f"block {block}, step {step}")
+                print(f"-",end='',flush=True)
             for e in range(nelec):
                 # Propose move
                 grad = limdrift(np.real(wf.gradient(e, configs.electron(e)).T))
@@ -204,4 +204,6 @@ def vmc(
         block_avg["nconfig"] = nconf * nsteps_per_block
         vmc_file(hdf_file, block_avg, dict(tstep=tstep), configs)
         df.append(block_avg)
+    if verbose:
+        print("vmc done")
     return df, configs

@@ -334,7 +334,7 @@ def rundmc(
     esigma = np.abs(eref) / 100
     for step in range(npropagate):
         if verbose:
-            print("branch step", step, flush=True)
+            print("-", end='', flush=True)
         df_, configs, weights = propagate(
             wf,
             configs,
@@ -358,4 +358,6 @@ def rundmc(
             np.mean(weights)
         )
         configs, weights = branch(configs, weights)
+    if verbose: 
+        print("dmc done")
     return pd.concat(df).reset_index(), configs, weights

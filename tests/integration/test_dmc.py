@@ -55,7 +55,7 @@ def test():
         ekey=("energy", "total"),
         tstep=0.01,
         drift_limiter=limdrift,
-        verbose=False,
+        verbose=True,
     )
 
     dfdmc = pd.DataFrame(dfdmc)

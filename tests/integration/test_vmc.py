@@ -34,7 +34,7 @@ def test_vmc():
         #Without blocks
         coords = initial_guess(mol, nconf)
         df, coords = vmc(
-            wf, coords, nsteps=nsteps, accumulators={"energy": EnergyAccumulator(mol)}
+            wf, coords, nsteps=nsteps, accumulators={"energy": EnergyAccumulator(mol)}, verbose=True
         )
 
         df = pd.DataFrame(df)

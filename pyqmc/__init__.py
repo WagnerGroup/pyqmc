@@ -120,9 +120,9 @@ def default_jastrow(mol, ion_cusp=False):
     return jastrow, to_opt, freeze
 
 
-def default_msj(mol, mf, mc, tol=None, freeze_orb=None):
+def default_msj(mol, mf, mc, tol=None, freeze_orb=None, ion_cusp=False):
     wf1, to_opt1, freeze1 = default_multislater(mol, mf, mc, tol, freeze_orb)
-    wf2, to_opt2, freeze2 = default_jastrow(mol)
+    wf2, to_opt2, freeze2 = default_jastrow(mol, ion_cusp)
     wf = MultiplyWF(wf1, wf2)
     to_opt = ["wf1" + x for x in to_opt1] + ["wf2" + x for x in to_opt2]
     freeze = {}

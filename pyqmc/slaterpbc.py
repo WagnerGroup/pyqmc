@@ -14,8 +14,7 @@ def get_supercell_kpts(supercell):
     in_unit_box = (possible_kpts >= 0) * (possible_kpts < 1 - 1e-12)
     select = np.where(np.all(in_unit_box, axis=1))[0]
     reclatvec = np.linalg.inv(supercell.original_cell.lattice_vectors()).T * 2 * np.pi
-    kpts = np.dot(possible_kpts[select], reclatvec)
-    return kpts
+    return np.dot(possible_kpts[select], reclatvec)
 
 
 def get_supercell(cell, S):
@@ -36,8 +35,7 @@ def get_supercell(cell, S):
         possible_pts = np.dot(np.stack([x.ravel() for x in mesh]).T, Sinv.T)
         in_unit_box = (possible_pts >= 0) * (possible_pts < 1 - 1e-12)
         select = np.where(np.all(in_unit_box, axis=1))[0]
-        pts = np.linalg.multi_dot((possible_pts[select], S, latvec))
-        return pts
+        return np.linalg.multi_dot((possible_pts[select], S, latvec))
 
     scale = np.abs(int(np.round(np.linalg.det(S))))
     superlattice = np.dot(S, cell.lattice_vectors())
@@ -222,8 +220,7 @@ class PySCFSlaterPBC:
     # identical to slateruhf
     def _testcol(self, i, s, vec):
         """vec is a nconfig,nmo vector which replaces column i"""
-        ratio = np.einsum("ij...,ij->i...", vec, self._inverse[s][:, i, :])
-        return ratio
+        return np.einsum("ij...,ij->i...", vec, self._inverse[s][:, i, :])
 
     def testvalue(self, e, epos, mask=None):
         """ return the ratio between the current wave function and the wave function if 
@@ -322,10 +319,8 @@ class PySCFSlaterPBC:
             mca = np.real_if_close(mca, tol=self.real_tol)
             coeff.append(mca)
 
-        mo = []
         nsorb = int(np.round(np.linalg.det(self.S) * norb))
-        for k in range(self.nk):
-            mo.append(np.dot(ao[k], coeff[k]))
+        mo = [np.dot(ao[k], coeff[k]) for k in range(self.nk)]
         mo = np.concatenate(mo, axis=-1).reshape(-1, nsorb)
 
         for i in range(nsorb):
@@ -336,11 +331,13 @@ class PySCFSlaterPBC:
     def generate_cube(self, fname, vals, nx, ny, nz, comment="HEADER LINE\n"):
         import cubetools
 
-        cube = {}
-        cube["comment"] = comment
-        cube["type"] = "\n"
-        cube["natoms"] = self.supercell.natm
-        cube["origin"] = np.zeros(3)
+        cube = {
+            'comment': comment,
+            'type': '\n',
+            'natoms': self.supercell.natm,
+            'origin': np.zeros(3),
+        }
+
         cube["ints"] = np.array([nx, ny, nz])
         cube["latvec"] = self.supercell.lattice_vectors()
         cube["latvec"] = cube["latvec"] / cube["ints"][:, np.newaxis]

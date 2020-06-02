@@ -251,8 +251,6 @@ def renormalize(wfs, N):
 
         f^2 = a^2/b^2 = (1-N)/N
     """
-    desired_n = 1.0 / len(wfs)
-    current_n = N
     wfs[-1].parameters["wf1det_coeff"] *= np.sqrt((1 - N) / N)
 
 

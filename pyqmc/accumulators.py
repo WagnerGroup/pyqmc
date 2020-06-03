@@ -213,9 +213,7 @@ class SqAccumulator:
         nelec = configs.configs.shape[1]
         exp_iqr = np.exp(1j * np.inner(configs.configs, self.qlist))
         sum_exp_iqr = exp_iqr.sum(axis=1)
-        d = {"Sq": (sum_exp_iqr.real ** 2 + sum_exp_iqr.imag ** 2) / nelec}
-        return d
+        return {"Sq": (sum_exp_iqr.real ** 2 + sum_exp_iqr.imag ** 2) / nelec}
 
     def avg(self, configs, wf):
-        d = {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
-        return d
+        return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}

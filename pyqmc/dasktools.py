@@ -69,7 +69,7 @@ def distvmc(
     if accumulators is None:
         accumulators = {}
     if npartitions is None:
-        npartitions = sum([x for x in client.nthreads().values()])
+        npartitions = sum(client.nthreads().values())
     niterations = int(nblocks / nsteps_per)
     coord = coords.split(npartitions)
     alldata = []
@@ -136,21 +136,19 @@ def dist_lm_sampler(
         from pyqmc.linemin import lm_sampler
 
     if npartitions is None:
-        npartitions = sum([x for x in client.nthreads().values()])
+        npartitions = sum(client.nthreads().values())
 
     configspart = configs.split(npartitions)
-    allruns = []
-    for p in range(npartitions):
-        allruns.append(client.submit(lm_sampler, wf, configspart[p], params, pgrad_acc))
+    allruns = [
+        client.submit(lm_sampler, wf, configspart[p], params, pgrad_acc)
+        for p in range(npartitions)
+    ]
 
-    stepresults = []
-    for r in allruns:
-        stepresults.append(r.result())
-
+    stepresults = [r.result() for r in allruns]
     keys = stepresults[0][0].keys()
     # This will be a list of dictionaries
     final_results = []
-    for p in range(len(params)):
+    for param in params:
         df = {}
         for k in keys:
             df[k] = np.concatenate([x[p][k] for x in stepresults], axis=0)
@@ -233,7 +231,7 @@ def distdmc_propagate(wf, configs, weights, *args, client, npartitions=None, **k
 
 def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs):
     if npartitions is None:
-        npartitions = sum([x for x in client.nthreads().values()])
+        npartitions = sum(client.nthreads().values())
 
     coord = configs.split(npartitions)
     allruns = []
@@ -265,7 +263,7 @@ def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs)
         for k in keys:
             if k not in df:
                 df[k] = np.zeros(result[0][k].shape)
-            if k != "weight" and k != "overlap" and k != "overlap_gradient":
+            if k not in ["weight", "overlap", "overlap_gradient"]:
                 if len(df[k].shape) == 1:
                     df[k] += result[0][k] * result[0]["weight"][:, -1]
                 elif len(df[k].shape) == 2:
@@ -283,7 +281,7 @@ def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs)
                 df[k] += result[0][k] * confweight[i] / len(allruns)
 
     for k in keys:
-        if k != "weight" and k != "overlap" and k != "overlap_gradient":
+        if k not in ["weight", "overlap", "overlap_gradient"]:
             if len(df[k].shape) == 1:
                 df[k] /= len(allruns) * df["weight"][:, -1]
             elif len(df[k].shape) == 2:
@@ -299,7 +297,7 @@ def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs)
 def dist_correlated_sample(wfs, configs, *args, client, npartitions=None, **kwargs):
 
     if npartitions is None:
-        npartitions = sum([x for x in client.nthreads().values()])
+        npartitions = sum(client.nthreads().values())
 
     coord = configs.split(npartitions)
     allruns = []

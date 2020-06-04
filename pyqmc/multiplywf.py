@@ -30,10 +30,7 @@ class Parameters:
                 yield k1 + k2
 
     def __len__(self):
-        length = 0
-        for i in self.data:
-            length += len(i)
-        return length
+        return sum(len(i) for i in self.data)
 
     def items(self):
         for i in range(self.wf_count):
@@ -112,9 +109,7 @@ class MultiplyWF:
 def test_parameters():
     import numpy as np
 
-    dicts = []
-    for i in range(10):
-        dicts.append({"coeff" + str(i): np.random.rand(3)})
+    dicts = [{"coeff" + str(i): np.random.rand(3)} for i in range(10)]
     p = Parameters(dicts)
     # test len
     assert len(p) == 30

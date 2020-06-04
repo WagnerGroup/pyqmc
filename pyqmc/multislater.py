@@ -34,10 +34,7 @@ class MultiSlater:
     """
 
     def __init__(self, mol, mf, mc, tol=None, freeze_orb=None):
-        if tol is None:
-            self.tol = -1
-        else:
-            self.tol = tol
+        self.tol = -1 if tol is None else tol
         self.parameters = {}
         self._mol = mol
         self._nelec = (mc.nelecas[0] + mc.ncore, mc.nelecas[1] + mc.ncore)
@@ -52,15 +49,8 @@ class MultiSlater:
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
         self.pbc_str = "PBC" if hasattr(mol, "a") else ""
         self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
-        if self.iscomplex:
-            self.get_phase = lambda x: x / np.abs(x)
-        else:
-            self.get_phase = np.sign
-
-        if freeze_orb == None:
-            self.freeze_orb = [[], []]
-        else:
-            self.freeze_orb = freeze_orb
+        self.get_phase = (lambda x: x / np.abs(x)) if self.iscomplex else np.sign
+        self.freeze_orb = [[], []] if freeze_orb is None else freeze_orb
 
     def _copy_ci(self, mc):
         """       
@@ -179,11 +169,7 @@ class MultiSlater:
 
     def _testrow(self, e, vec, mask=None, spin=None):
         """vec is a nconfig,nmo vector which replaces row e"""
-        if spin is None:
-            s = int(e >= self._nelec[0])
-        else:
-            s = spin
-
+        s = int(e >= self._nelec[0]) if spin is None else spin
         if mask is None:
             mask = [True] * vec.shape[0]
 
@@ -217,10 +203,9 @@ class MultiSlater:
         """vec is a nconfig,nmo vector which replaces column i 
         of spin s in determinant det"""
 
-        ratio = np.einsum(
-            "ij...,ij->i...", vec, self._inverse[s][:, det, i, :], optimize="greedy"
-        )
-        return ratio
+        return np.einsum(
+                "ij...,ij->i...", vec, self._inverse[s][:, det, i, :], optimize="greedy"
+            )
 
     def gradient(self, e, epos):
         """ Compute the gradient of the log wave function 

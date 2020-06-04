@@ -144,10 +144,7 @@ def dmc_propagate(
 
         avg = {}
         for k, accumulator in accumulators.items():
-            if k != ekey[0]:
-                dat = accumulator(configs, wf)
-            else:
-                dat = energydat
+            dat = accumulator(configs, wf) if k != ekey[0] else energydat
             for m, res in dat.items():
                 avg[k + m] = np.einsum("...i,i...->...", weights, res) / (
                     nconfig * wavg
@@ -197,8 +194,7 @@ def limit_timestep(weights, elocnew, elocold, eref, start, stop):
     )
     eloc = np.stack([elocnew, elocold])
     fbet = np.amax(eref - eloc, axis=0)
-    tdamp = np.clip((1 - (fbet - start)) / (stop - start), 0, 1)
-    return tdamp
+    return np.clip((1 - (fbet - start)) / (stop - start), 0, 1)
 
 
 def branch(configs, weights):
@@ -306,7 +302,7 @@ def rundmc(
                 if verbose:
                     print("Restarted calculation")
 
-    nconfig, nelec = configs.configs.shape[0:2]
+    nconfig = configs.configs.shape[0]
     if weights is None:
         weights = np.ones(nconfig)
 

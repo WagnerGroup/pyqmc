@@ -16,7 +16,6 @@ from pyqmc.func3d import (
     CutoffCuspFunction,
 )
 from pyqmc.optvariance import optvariance
-from pyqmc.optsr import gradient_descent
 from pyqmc.linemin import line_minimization
 from pyqmc.dmc import rundmc
 from pyqmc.cvmc import cvmc_optimize
@@ -38,16 +37,15 @@ def default_slater(mol, mf, optimize_orbitals=False):
     import numpy as np
 
     wf = PySCFSlaterUHF(mol, mf)
+    freeze = {}
     if optimize_orbitals:
         to_opt = ["mo_coeff_alpha", "mo_coeff_beta"]
-        freeze = {}
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             freeze[k] = np.zeros(wf.parameters[k].shape).astype(bool)
             maxval = np.argmax(np.abs(wf.parameters[k]))
             freeze[k][maxval] = True
     else:
         to_opt = []
-        freeze = {}
     return wf, to_opt, freeze
 
 
@@ -60,8 +58,7 @@ def default_multislater(mol, mf, mc, tol=None, freeze_orb=None):
 
     wf = MultiSlater(mol, mf, mc, tol, freeze_orb)
     to_opt = ["det_coeff"]
-    freeze = {}
-    freeze["det_coeff"] = np.zeros(wf.parameters["det_coeff"].shape).astype(bool)
+    freeze = {'det_coeff': np.zeros(wf.parameters['det_coeff'].shape).astype(bool)}
     freeze["det_coeff"][0] = True  # Determinant coefficient pivot
 
     for s, k in enumerate(["mo_coeff_alpha", "mo_coeff_beta"]):

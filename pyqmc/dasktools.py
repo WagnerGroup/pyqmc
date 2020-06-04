@@ -11,7 +11,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 import dask.distributed
 
-dask.distributed.protocol.utils.msgpack_opts["strict_map_key"] = False
+#dask.distributed.protocol.utils.msgpack_opts["strict_map_key"] = False
 
 
 def _avg_func(df):

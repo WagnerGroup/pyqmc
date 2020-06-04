@@ -148,7 +148,7 @@ def dist_lm_sampler(
     keys = stepresults[0][0].keys()
     # This will be a list of dictionaries
     final_results = []
-    for param in params:
+    for p,param in enumerate(params):
         df = {}
         for k in keys:
             df[k] = np.concatenate([x[p][k] for x in stepresults], axis=0)

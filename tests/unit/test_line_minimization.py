@@ -7,7 +7,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 import pandas as pd
 from pyscf import lib, gto, scf
-from pyqmc import slater_jastrow, line_minimization, initial_guess, gradient_generator
+from pyqmc import default_sj, line_minimization, initial_guess, gradient_generator
 import h5py
 
 
@@ -17,13 +17,13 @@ def test():
 
     mol = gto.M(atom="He 0. 0. 0.", basis="bfd_vdz", ecp="bfd", unit="bohr")
     mf = scf.RHF(mol).run()
-    wf = slater_jastrow(mol, mf)
+    wf, to_opt, freeze = default_sj(mol, mf)
+    print(to_opt, freeze)
     nconf = 500
     wf, dfgrad = line_minimization(
         wf,
         initial_guess(mol, nconf),
-        gradient_generator(mol, wf),
-        hdf_file="test_line_minimization.hdf5",
+        gradient_generator(mol, wf, to_opt, freeze)
     )
 
     dfgrad = pd.DataFrame(dfgrad)

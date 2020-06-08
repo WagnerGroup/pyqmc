@@ -60,7 +60,7 @@ def sample_overlap(
     for block in range(nblocks):
         block_avg = {}
         for step in range(nsteps_per_block):
-            print("block", block, " step", step)
+            print("-", end='',flush=True)
             for e in range(nelec):
                 # Propose move
                 grads = [np.real(wf.gradient(e, configs.electron(e)).T) for wf in wfs]
@@ -148,6 +148,7 @@ def sample_overlap(
             if k not in return_data:
                 return_data[k] = np.zeros((nblocks, *it.shape))
             return_data[k][block, ...] = it.copy()
+    print("vmc done", flush=True)
     return return_data, configs
 
 
@@ -250,8 +251,6 @@ def renormalize(wfs, N):
 
         f^2 = a^2/b^2 = (1-N)/N
     """
-    desired_n = 1.0 / len(wfs)
-    current_n = N
     wfs[-1].parameters["wf1det_coeff"] *= np.sqrt((1 - N) / N)
 
 

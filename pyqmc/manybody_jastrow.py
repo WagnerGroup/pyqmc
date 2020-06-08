@@ -6,8 +6,7 @@ class J3:
         self.mol = mol
         randpos = np.random.random((1, 3))
         dim = mol.eval_gto("GTOval_cart", randpos).shape[-1]
-        self.parameters = {}
-        self.parameters["gcoeff"] = np.zeros((dim, dim))
+        self.parameters = {'gcoeff': np.zeros((dim, dim))}
         self.iscomplex = False
         self.optimize = "greedy"
 

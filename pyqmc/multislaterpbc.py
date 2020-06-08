@@ -178,11 +178,7 @@ class MultiSlaterPBC:
     # identical to multislater.py
     def _testrow(self, e, vec, mask=None, spin=None):
         """vec is a nconfig,nmo vector which replaces row e"""
-        if spin is None:
-            s = int(e >= self._nelec[0])
-        else:
-            s = spin
-
+        s = int(e >= self._nelec[0]) if spin is None else spin
         if mask is None:
             mask = [True] * vec.shape[0]
 
@@ -217,8 +213,7 @@ class MultiSlaterPBC:
         """vec is a nconfig,nmo vector which replaces column i 
         of spin s in determinant det"""
 
-        ratio = np.einsum("ij...,ij->i...", vec, self._inverse[s][:, det, i, :])
-        return ratio
+        return np.einsum("ij...,ij->i...", vec, self._inverse[s][:, det, i, :])
 
     # identical to slaterpbc
     def testvalue(self, e, epos, mask=None):

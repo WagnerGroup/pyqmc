@@ -68,6 +68,7 @@ class LinearTransform:
 
         self.shapes = np.array([parameters[k].shape for k in self.to_opt])
         self.slices = np.array([np.prod(s) for s in self.shapes])
+        self.dtypes = [parameters[k].dtype for k in self.to_opt]
 
     def serialize_parameters(self, parameters):
         """Convert the dictionary to a linear list
@@ -99,7 +100,7 @@ class LinearTransform:
             mask = self.frozen[k].flatten()
             n_p = np.sum(~mask)
 
-            flat_parms = np.zeros(self.slices[i])
+            flat_parms = np.zeros(self.slices[i], dtype=self.dtypes[i])
             flat_parms[mask] = self.frozen_parms[k].compressed()
             flat_parms[~mask] = parameters[n : n + n_p]
             d[k] = flat_parms.reshape(self.shapes[i])

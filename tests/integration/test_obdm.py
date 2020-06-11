@@ -64,7 +64,7 @@ def test():
 
 def test_pbc():
     from pyscf.pbc import gto, scf
-    from pyqmc import slaterpbc
+    from pyqmc import supercell
     import scipy
 
     lvecs = (np.ones((3, 3)) - 2 * np.eye(3)) * 2.0
@@ -79,8 +79,8 @@ def test_pbc():
     mf = mf.run()
 
     S = np.ones((3, 3)) - np.eye(3)
-    mol = slaterpbc.get_supercell(mol, S)
-    kpts = slaterpbc.get_supercell_kpts(mol)[:2]
+    mol = supercell.get_supercell(mol, S)
+    kpts = supercell.get_supercell_kpts(mol)[:2]
     kdiffs = mf.kpts[np.newaxis] - kpts[:, np.newaxis]
     kinds = np.nonzero(np.linalg.norm(kdiffs, axis=-1) < 1e-12)[1]
 

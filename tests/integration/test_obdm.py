@@ -67,7 +67,7 @@ def test_pbc():
     from pyqmc import slaterpbc
     import scipy
 
-    lvecs = (np.ones((3, 3)) - np.eye(3)) * 2.0
+    lvecs = (np.ones((3, 3)) - 2 * np.eye(3)) * 2.0
     mol = gto.M(
         atom="H 0. 0. -{0}; H 0. 0. {0}".format(0.7),
         basis="sto-3g",
@@ -78,7 +78,7 @@ def test_pbc():
     mf = scf.KRHF(mol, kpts=mol.make_kpts((2, 2, 2)))
     mf = mf.run()
 
-    S = np.ones((3, 3)) - 2 * np.eye(3)
+    S = np.ones((3, 3)) - np.eye(3)
     mol = slaterpbc.get_supercell(mol, S)
     kpts = slaterpbc.get_supercell_kpts(mol)[:2]
     kdiffs = mf.kpts[np.newaxis] - kpts[:, np.newaxis]

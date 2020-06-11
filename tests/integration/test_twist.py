@@ -78,8 +78,8 @@ def runtest(mol, mf, kind=0):
     twist = np.dot(kpt, mol.lattice_vectors().T / (2 * np.pi))
     print("kpt", kpt)
     print("twist", twist)
-    wf0 = pyqmc.PySCFSlaterPBC(mol, mf)
-    wft = pyqmc.PySCFSlaterPBC(mol, mf, twist=twist)
+    wf0 = pyqmc.PySCFSlater(mol, mf)
+    wft = pyqmc.PySCFSlater(mol, mf, twist=twist)
 
     #####################################
     ## compare values across boundary

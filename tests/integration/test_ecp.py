@@ -1,7 +1,7 @@
 import pandas as pd
 from pyqmc.mc import vmc, initial_guess
 from pyscf import gto, scf
-from pyqmc.slateruhf import PySCFSlaterUHF
+from pyqmc.slater import PySCFSlater
 from pyqmc.accumulators import EnergyAccumulator
 import numpy as np
 
@@ -11,7 +11,7 @@ def test_ecp():
     mol = gto.M(atom="C 0. 0. 0.", ecp="bfd", basis="bfd_vtz")
     mf = scf.RHF(mol).run()
     nconf = 5000
-    wf = PySCFSlaterUHF(mol, mf)
+    wf = PySCFSlater(mol, mf)
     coords = initial_guess(mol, nconf)
     df, coords = vmc(
         wf, coords, nsteps=100, accumulators={"energy": EnergyAccumulator(mol)}

@@ -7,7 +7,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
 from pyscf import gto, scf, lo
 from numpy.linalg import solve
-from pyqmc import PySCFSlaterUHF
+from pyqmc import PySCFSlater
 from pyqmc.mc import initial_guess, vmc
 from pandas import DataFrame
 from pyqmc.obdm import OBDMAccumulator, normalize_obdm
@@ -33,7 +33,7 @@ def test():
     nconf = 500
     nsteps = 400
     warmup = 15
-    wf = PySCFSlaterUHF(mol, mf)
+    wf = PySCFSlater(mol, mf)
     configs = initial_guess(mol, nconf)
     obdm_dict = dict(mol=mol, orb_coeff=lowdin, nsweeps=5, warmup=15)
     obdm = OBDMAccumulator(**obdm_dict)
@@ -64,7 +64,6 @@ def test():
 
 def test_pbc():
     from pyscf.pbc import gto, scf
-    from pyqmc import PySCFSlaterUHF, PySCFSlaterPBC
     from pyqmc import slaterpbc
     import scipy
 
@@ -101,7 +100,7 @@ def test_pbc():
     nconf = 800
     nsteps = 50
     warmup = 6
-    wf = PySCFSlaterPBC(mol, mf)
+    wf = PySCFSlater(mol, mf)
     configs = initial_guess(mol, nconf)
     obdm_dict = dict(mol=mol, orb_coeff=lowdin, kpts=kpts, nsweeps=4, warmup=10)
     obdm = OBDMAccumulator(**obdm_dict)

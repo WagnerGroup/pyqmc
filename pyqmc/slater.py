@@ -1,100 +1,111 @@
 import numpy as np
-from pyqmc import pbc, slateruhf
-from pyscf.pbc import scf
+from pyqmc import pbc
 
 
-def get_supercell_kpts(supercell):
-    Sinv = np.linalg.inv(supercell.S).T
-    u = [0, 1]
-    unit_box = np.stack([x.ravel() for x in np.meshgrid(*[u] * 3, indexing="ij")]).T
-    unit_box_ = np.dot(unit_box, supercell.S.T)
-    xyz_range = np.stack([f(unit_box_, axis=0) for f in (np.amin, np.amax)]).T
-    kptmesh = np.meshgrid(*[np.arange(*r) for r in xyz_range], indexing="ij")
-    possible_kpts = np.dot(np.stack([x.ravel() for x in kptmesh]).T, Sinv)
-    in_unit_box = (possible_kpts >= 0) * (possible_kpts < 1 - 1e-12)
-    select = np.where(np.all(in_unit_box, axis=1))[0]
-    reclatvec = np.linalg.inv(supercell.original_cell.lattice_vectors()).T * 2 * np.pi
-    return np.dot(possible_kpts[select], reclatvec)
+def sherman_morrison_row(e, inv, vec):
+    ratio = np.einsum("ij,ij->i", vec, inv[:, :, e])
+    tmp = np.einsum("ek,ekj->ej", vec, inv)
+    invnew = (
+        inv
+        - np.einsum("ki,kj->kij", inv[:, :, e], tmp) / ratio[:, np.newaxis, np.newaxis]
+    )
+    invnew[:, :, e] = inv[:, :, e] / ratio[:, np.newaxis]
+    return ratio, invnew
 
 
-def get_supercell(cell, S):
-    """
-    Inputs:
-        cell: pyscf Cell object
-        S: (3, 3) supercell matrix for QMC from cell defined by cell.a. In other words, the QMC calculation cell is qmc_cell = np.dot(S, cell.lattice_vectors()). For a 2x2x2 supercell, S is [[2, 0, 0], [0, 2, 0], [0, 0, 2]].
-    """
-    from pyscf.pbc import gto
-
-    def get_supercell_copies(latvec, S):
-        Sinv = np.linalg.inv(S).T
-        u = [0, 1]
-        unit_box = np.stack([x.ravel() for x in np.meshgrid(*[u] * 3, indexing="ij")]).T
-        unit_box_ = np.dot(unit_box, S)
-        xyz_range = np.stack([f(unit_box_, axis=0) for f in (np.amin, np.amax)]).T
-        mesh = np.meshgrid(*[np.arange(*r) for r in xyz_range], indexing="ij")
-        possible_pts = np.dot(np.stack([x.ravel() for x in mesh]).T, Sinv.T)
-        in_unit_box = (possible_pts >= 0) * (possible_pts < 1 - 1e-12)
-        select = np.where(np.all(in_unit_box, axis=1))[0]
-        return np.linalg.multi_dot((possible_pts[select], S, latvec))
-
-    scale = np.abs(int(np.round(np.linalg.det(S))))
-    superlattice = np.dot(S, cell.lattice_vectors())
-    Rpts = get_supercell_copies(cell.lattice_vectors(), S)
-    atom = []
-    for (name, xyz) in cell._atom:
-        atom.extend([(name, xyz + R) for R in Rpts])
-    supercell = gto.Cell()
-    supercell.a = superlattice
-    supercell.atom = atom
-    supercell.ecp = cell.ecp
-    supercell.basis = cell.basis
-    supercell.exp_to_discard = cell.exp_to_discard
-    supercell.unit = "Bohr"
-    supercell.spin = cell.spin * scale
-    supercell.build()
-    supercell.original_cell = cell
-    supercell.S = S
-    supercell.scale = scale
-    return supercell
+_gldict = {"laplacian": np.s_[:1], "gradient_laplacian": np.s_[0:4]}
 
 
-class PySCFSlaterPBC:
+def _aostack_mol(ao, gl):
+    return np.concatenate(
+        [ao[_gldict[gl]], ao[[4, 7, 9]].sum(axis=0, keepdims=True)], axis=0
+    )
+
+
+def _aostack_pbc(ao, gl):
+    return [_aostack_mol(ak, gl) for ak in ao]
+
+
+class PySCFSlater:
     """A wave function object has a state defined by a reference configuration of electrons.
     The functions recompute() and updateinternals() change the state of the object, and 
     the rest compute and return values from that state. """
 
-    def __init__(self, supercell, mf, twist=None):
+    def __init__(self, mol, mf, twist=None):
         """
         Inputs:
           supercell: object returned by get_supercell(cell, S)
           mf: scf object of primitive cell calculation. scf calculation must include k points that fold onto the gamma point of the supercell
           twist: (3,) array, twisted boundary condition in fractional coordinates, i.e. as coefficients of the reciprocal lattice vectors of the supercell. Integer values are equivalent to zero.
         """
-        for attribute in ["original_cell", "S"]:
-            if not hasattr(supercell, attribute):
+        self.parameters = {}
+        self.real_tol = 1e4
+        self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
+
+        if hasattr(mol, "a"):
+            self._init_pbc(mol, mf, twist)
+        else:
+            self._init_mol(mol, mf)
+        self.pbc_str = "PBC" if hasattr(mol, "a") else ""
+        self._aostack = _aostack_pbc if hasattr(mol, "a") else _aostack_mol
+
+        print("scf object is type", type(mf))
+        print("iscomplex:", self.iscomplex)
+        self.dtype = complex if self.iscomplex else float
+        if self.iscomplex:
+            self.get_phase = lambda x: x / np.abs(x)
+            self.get_wrapphase = lambda x: np.exp(1j * x)
+        else:
+            self.get_phase = np.sign
+            self.get_wrapphase = lambda x: (-1) ** np.round(x / np.pi)
+
+    def _init_mol(self, mol, mf):
+        from pyscf import scf
+
+        for s, lookup in enumerate(self._coefflookup):
+            if len(mf.mo_occ.shape) == 2:
+                self.parameters[lookup] = mf.mo_coeff[s][
+                    :, np.asarray(mf.mo_occ[s] > 0.9)
+                ]
+            else:
+                minocc = (0.9, 1.1)[s]
+                self.parameters[lookup] = mf.mo_coeff[:, np.asarray(mf.mo_occ > minocc)]
+        self._nelec = tuple(mol.nelec)
+        self._mol = mol
+        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters)))
+        self.evaluate_orbitals = self._evaluate_orbitals_mol
+        self.evaluate_mos = self._evaluate_mos_mol
+
+    def _init_pbc(self, cell, mf, twist):
+        from pyscf.pbc import scf
+        from pyqmc.supercell import get_supercell_kpts
+
+        # Make sure supercell has attributes S and original_cell
+        for attribute in ["original_cell", "S", "scale"]:
+            if not hasattr(cell, attribute):
                 print('Warning: supercell is missing attribute "%s"' % attribute)
                 print("setting original_cell=supercell and S=np.eye(3)")
-                supercell.original_cell = supercell
-                supercell.S = np.eye(3)
+                cell.original_cell = cell
+                cell.S = np.eye(3)
+                cell.scale = 1
+        self.supercell = cell
+        self._cell = cell.original_cell
 
-        self.parameters = {}
-        self.param_split = {}
-        self.real_tol = 1e4
-
-        self.supercell = supercell
+        # Define kpts
         if twist is None:
             twist = np.zeros(3)
         else:
-            twist = np.dot(np.linalg.inv(supercell.a), np.mod(twist, 1.0)) * 2 * np.pi
-        self._kpts = get_supercell_kpts(supercell) + twist
+            twist = np.dot(np.linalg.inv(cell.a), np.mod(twist, 1.0)) * 2 * np.pi
+        self._kpts = get_supercell_kpts(cell) + twist
         kdiffs = mf.kpts[np.newaxis] - self._kpts[:, np.newaxis]
         self.kinds = np.nonzero(np.linalg.norm(kdiffs, axis=-1) < 1e-12)[1]
         self.nk = len(self._kpts)
         print("nk", self.nk, self.kinds)
+        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters)))
+        self.iscomplex = self.iscomplex or np.linalg.norm(self._kpts) > 1e-12
 
-        self._cell = supercell.original_cell
-
-        self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
+        # Define parameters
+        self.param_split = {}
         for s, lookup in enumerate(self._coefflookup):
             mclist = []
             for kind in self.kinds:
@@ -108,7 +119,7 @@ class PySCFSlaterPBC:
             self.param_split[lookup] = np.cumsum([m.shape[1] for m in mclist])
             self.parameters[lookup] = np.concatenate(mclist, axis=-1)
 
-        print("scf object is type", type(mf))
+        # Define nelec
         if isinstance(mf, scf.kuhf.KUHF):
             # Then indices are (spin, kpt, basis, mo)
             self._nelec = [int(np.sum([o[k] for k in self.kinds])) for o in mf.mo_occ]
@@ -123,18 +134,18 @@ class PySCFSlaterPBC:
             self._nelec = [int(np.round(n * scale)) for n in self._cell.nelec]
         self._nelec = tuple(self._nelec)
 
-        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters)))
-        self.iscomplex = self.iscomplex or np.linalg.norm(self._kpts) > 1e-12
-        print("iscomplex:", self.iscomplex)
-        self.dtype = complex if self.iscomplex else float
-        if self.iscomplex:
-            self.get_phase = lambda x: x / np.abs(x)
-            self.get_wrapphase = lambda x: np.exp(1j * x)
-        else:
-            self.get_phase = np.sign
-            self.get_wrapphase = lambda x: (-1) ** np.round(x / np.pi)
+        self.evaluate_orbitals = self._evaluate_orbitals_pbc
+        self.evaluate_mos = self._evaluate_mos_pbc
 
-    def evaluate_orbitals(self, configs, mask=None, eval_str="PBCGTOval_sph"):
+    def _evaluate_orbitals_mol(self, configs, mask=None, eval_str="GTOval_sph"):
+        mycoords = configs.configs if mask is None else configs.configs[mask]
+        mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
+        return self._mol.eval_gto(eval_str, mycoords)
+
+    def _evaluate_mos_mol(self, ao, s):
+        return ao.dot(self.parameters[self._coefflookup[s]])
+
+    def _evaluate_orbitals_pbc(self, configs, mask=None, eval_str="GTOval_sph"):
         mycoords = configs.configs
         configswrap = configs.wrap
         if mask is not None:
@@ -150,11 +161,11 @@ class PySCFSlaterPBC:
         )
         wrap_phase = self.get_wrapphase(kdotR)
         # evaluate AOs for all electron positions
-        ao = self._cell.eval_gto(eval_str, prim_coords, kpts=self._kpts)
+        ao = self._cell.eval_gto("PBC" + eval_str, prim_coords, kpts=self._kpts)
         ao = [ao[k] * wrap_phase[k][:, np.newaxis] for k in range(self.nk)]
         return ao
 
-    def evaluate_mos(self, aos, s):
+    def _evaluate_mos_pbc(self, aos, s):
         """
         Evaluate MOs for spin s given aos
         """
@@ -168,7 +179,11 @@ class PySCFSlaterPBC:
         (phase,logdet). If the wf is real, phase will be +/- 1."""
         nconf, nelec, ndim = configs.configs.shape
         aos = self.evaluate_orbitals(configs)
-        aos = np.reshape(aos, (self.nk, nconf, nelec, -1))
+        if hasattr(self, "nk"):
+            aos_shape = (self.nk, nconf, nelec, -1)
+        else:
+            aos_shape = (1, nconf, nelec, -1)
+        aos = np.reshape(aos, aos_shape)
         self._aovals = aos
         self._dets = []
         self._inverse = []
@@ -188,26 +203,23 @@ class PySCFSlaterPBC:
             mask = [True] * epos.configs.shape[0]
         eeff = e - s * self._nelec[0]
         aos = self.evaluate_orbitals(epos)
-        self._aovals[:, :, e, :] = np.asarray(aos)
+        self._aovals[:, :, e, :] = np.asarray(aos)  # (kpt, config, ao)
         mo = self.evaluate_mos(aos, s).reshape(len(mask), -1)
-        ratio, self._inverse[s][mask, :, :] = slateruhf.sherman_morrison_row(
+        ratio, self._inverse[s][mask, :, :] = sherman_morrison_row(
             eeff, self._inverse[s][mask, :, :], mo[mask, :]
         )
         self._updateval(ratio, s, mask)
 
-    # identical to slateruhf
     def _updateval(self, ratio, s, mask):
         self._dets[s][0][mask] *= self.get_phase(ratio)
         self._dets[s][1][mask] += np.log(np.abs(ratio))
 
     ### not state-changing functions
 
-    # identical to slateruhf
     def value(self):
         """Return logarithm of the wave function as noted in recompute()"""
         return self._dets[0][0] * self._dets[1][0], self._dets[0][1] + self._dets[1][1]
 
-    # identical to slateruhf
     def _testrow(self, e, vec, mask=None, spin=None):
         """vec is a nconfig,nmo vector which replaces row e"""
         s = int(e >= self._nelec[0]) if spin is None else spin
@@ -217,7 +229,6 @@ class PySCFSlaterPBC:
 
         return np.einsum("i...j,ij...->i...", vec, self._inverse[s][mask][:, :, elec])
 
-    # identical to slateruhf
     def _testcol(self, i, s, vec):
         """vec is a nconfig,nmo vector which replaces column i"""
         return np.einsum("ij...,ij->i...", vec, self._inverse[s][:, i, :])
@@ -256,27 +267,22 @@ class PySCFSlaterPBC:
         Note that this can be called even if the internals have not been updated for electron e,
         if epos differs from the current position of electron e."""
         s = int(e >= self._nelec[0])
-        aograd = self.evaluate_orbitals(epos, eval_str="PBCGTOval_sph_deriv1")
+        aograd = self.evaluate_orbitals(epos, eval_str="GTOval_sph_deriv1")
         mograd = self.evaluate_mos(aograd, s)
         ratios = np.asarray([self._testrow(e, x) for x in mograd])
         return ratios[1:] / ratios[:1]
 
     def laplacian(self, e, epos):
         s = int(e >= self._nelec[0])
-        ao = self.evaluate_orbitals(epos, eval_str="PBCGTOval_sph_deriv2")
-        aostack = [np.stack([ak[0], ak[[4, 7, 9]].sum(axis=0)], axis=0) for ak in ao]
-        mo = self.evaluate_mos(aostack, s)
+        ao = self.evaluate_orbitals(epos, eval_str="GTOval_sph_deriv2")
+        mo = self.evaluate_mos(self._aostack(ao, "laplacian"), s)
         ratios = np.asarray([self._testrow(e, x) for x in mo])
         return ratios[1] / ratios[0]
 
     def gradient_laplacian(self, e, epos):
         s = int(e >= self._nelec[0])
-        ao = self.evaluate_orbitals(epos, eval_str="PBCGTOval_sph_deriv2")
-        aostack = [
-            np.concatenate([ak[0:4], ak[[4, 7, 9]].sum(axis=0, keepdims=True)], axis=0)
-            for ak in ao
-        ]
-        mo = self.evaluate_mos(aostack, s)
+        ao = self.evaluate_orbitals(epos, eval_str="GTOval_sph_deriv2")
+        mo = self.evaluate_mos(self._aostack(ao, "gradient_laplacian"), s)
         ratios = np.asarray([self._testrow(e, x) for x in mo])
         return ratios[1:-1] / ratios[:1], ratios[-1] / ratios[0]
 
@@ -286,13 +292,18 @@ class PySCFSlaterPBC:
             s = int("beta" in parm)
             # Get AOs for our spin channel only
             i0, i1 = s * self._nelec[0], self._nelec[0] + s * self._nelec[1]
-            ao = self._aovals[:, :, i0:i1]  # (kpt, config, electron, ao)
-            pgrad_shape = (ao.shape[1],) + self.parameters[parm].shape
-            pgrad = np.zeros(pgrad_shape, dtype=self.dtype)
+            ao = self._aovals[:, :, i0:i1, :]  # (kpt, config, electron, ao)
+            pgrad_shape = (ao.shape[-3],) + self.parameters[parm].shape
+            pgrad = np.zeros(pgrad_shape, dtype=self.dtype)  # (nconf, coeff)
             # Compute derivatives w.r.t. MO coefficients
-            split_sizes = np.diff([0] + list(self.param_split[parm]))
-            k = np.repeat(np.arange(self.nk), split_sizes)
-            for i in range(self._nelec[s]):  # MO loop
-                pgrad[:, :, i] = self._testcol(i, s, ao[k[i]])
+            if ao.shape[0] > 1:  # multiple kpts
+                split_sizes = np.diff([0] + list(self.param_split[parm]))
+                k = np.repeat(np.arange(self.nk), split_sizes)
+                for i in range(self._nelec[s]):  # MO loop
+                    pgrad[:, :, i] = self._testcol(i, s, ao[k[i]])
+            else:
+                ao = ao[0]
+                for i in range(self._nelec[s]):  # MO loop
+                    pgrad[:, :, i] = self._testcol(i, s, ao)
             d[parm] = np.asarray(pgrad)
         return d

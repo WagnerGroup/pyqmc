@@ -1,5 +1,4 @@
 import numpy as np
-from pyqmc import pbc, slateruhf
 import pyqmc
 
 

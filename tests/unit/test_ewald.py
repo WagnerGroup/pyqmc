@@ -1,7 +1,7 @@
 import numpy as np
 import pyqmc
 from pyqmc.coord import PeriodicConfigs
-from pyqmc.slaterpbc import get_supercell
+from pyqmc.slater import get_supercell
 from pyscf.pbc import gto, scf
 
 

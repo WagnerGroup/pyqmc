@@ -1,6 +1,6 @@
 import numpy as np
 from pyqmc.multislater import sherman_morrison_ms
-from pyqmc.slaterpbc import get_supercell_kpts
+from pyqmc.supercell import get_supercell_kpts
 from pyqmc import pbc
 
 

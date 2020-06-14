@@ -184,6 +184,15 @@ def line_minimization(
         dpdp = np.mean(df["pgraddpidpj"], axis=0)
         grad = 2 * np.real(dpH - en * dp)
         Sij = np.real(dpdp - np.einsum("i,j->ij", dp, dp))
+
+        if np.any(np.isnan(grad)):
+            for nm, quant in {'dpH':dpH,
+                              'dp':dp,
+                              'en':en
+                            }.items():
+                print(nm, quant)
+            raise ValueError("NaN detected in derivatives")
+        
         return coords, df["pgradtotal"].values[-1], grad, Sij, en, en_err
 
     x0 = pgrad_acc.transform.serialize_parameters(wf.parameters)

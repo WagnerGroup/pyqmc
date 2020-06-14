@@ -43,7 +43,8 @@ def default_slater(mol, mf, optimize_orbitals=False):
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             freeze[k] = np.zeros(wf.parameters[k].shape).astype(bool)
             maxval = np.argmax(np.abs(wf.parameters[k]))
-            freeze[k][maxval] = True
+            #print(maxval)
+            #freeze[k][maxval] = True
     else:
         to_opt = []
     return wf, to_opt, freeze

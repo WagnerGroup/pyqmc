@@ -16,10 +16,9 @@ def test_wfs():
     """
 
     from pyscf import lib, gto, scf
-    from pyqmc.slateruhf import PySCFSlaterUHF
+    from pyqmc.slater import PySCFSlater
     from pyqmc.jastrowspin import JastrowSpin
     from pyqmc.multiplywf import MultiplyWF
-    from pyqmc.coord import OpenConfigs
     from pyqmc.manybody_jastrow import J3
     import pyqmc
 
@@ -33,11 +32,11 @@ def test_wfs():
     for wf in [
         JastrowSpin(mol),
         J3(mol),
-        MultiplyWF(PySCFSlaterUHF(mol, mf), JastrowSpin(mol)),
-        MultiplyWF(PySCFSlaterUHF(mol, mf), JastrowSpin(mol), J3(mol)),
-        PySCFSlaterUHF(mol, mf_uhf),
-        PySCFSlaterUHF(mol, mf),
-        PySCFSlaterUHF(mol, mf_rohf),
+        MultiplyWF(PySCFSlater(mol, mf), JastrowSpin(mol)),
+        MultiplyWF(PySCFSlater(mol, mf), JastrowSpin(mol), J3(mol)),
+        PySCFSlater(mol, mf_uhf),
+        PySCFSlater(mol, mf),
+        PySCFSlater(mol, mf_rohf),
     ]:
         for k in wf.parameters:
             if k != "mo_coeff":
@@ -69,11 +68,11 @@ def test_pbc_wfs():
     """
 
     from pyscf.pbc import lib, gto, scf
-    from pyqmc.slaterpbc import PySCFSlaterPBC, get_supercell
+    from pyqmc.supercell import get_supercell
+    from pyqmc.slater import PySCFSlater
     from pyqmc.multislaterpbc import MultiSlaterPBC
     from pyqmc.jastrowspin import JastrowSpin
     from pyqmc.multiplywf import MultiplyWF
-    from pyqmc.coord import OpenConfigs
     import pyqmc
 
     mol = gto.M(
@@ -98,8 +97,8 @@ def test_pbc_wfs():
     occup = [[d1, d2], [d1]]
     map_dets = [[0, 1], [0, 0]]
     for wf in [
-        MultiplyWF(PySCFSlaterPBC(supercell, mf), JastrowSpin(supercell)),
-        PySCFSlaterPBC(supercell, mf),
+        MultiplyWF(PySCFSlater(supercell, mf), JastrowSpin(supercell)),
+        PySCFSlater(supercell, mf),
         MultiSlaterPBC(supercell, mf, detwt=detwt, occup=occup, map_dets=map_dets),
         # PySCFSlaterPBC(supercell, mf_uhf),
         # PySCFSlaterPBC(supercell, mf_rohf),

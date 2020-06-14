@@ -34,7 +34,7 @@ def reblock(df, nblocks):
         rbdf = {col: _reblock(df[col].values, nblocks) for col in df.columns}
         return pd.DataFrame(rbdf)
     elif isinstance(df, np.ndarray):
-        return _reblock(df, nblocks)
+        return np.stack(_reblock(df, nblocks), axis=0)
     else:
         print("WARNING: can't reblock data of type", type(df), "-- not reblocking.")
         return df

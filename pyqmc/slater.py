@@ -49,8 +49,6 @@ class PySCFSlater:
         self.pbc_str = "PBC" if hasattr(mol, "a") else ""
         self._aostack = _aostack_pbc if hasattr(mol, "a") else _aostack_mol
 
-        print("scf object is type", type(mf))
-        print("iscomplex:", self.iscomplex)
         self.dtype = complex if self.iscomplex else float
         if self.iscomplex:
             self.get_phase = lambda x: x / np.abs(x)
@@ -100,7 +98,6 @@ class PySCFSlater:
         kdiffs = mf.kpts[np.newaxis] - self._kpts[:, np.newaxis]
         self.kinds = np.nonzero(np.linalg.norm(kdiffs, axis=-1) < 1e-12)[1]
         self.nk = len(self._kpts)
-        print("nk", self.nk, self.kinds)
         self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters)))
         self.iscomplex = self.iscomplex or np.linalg.norm(self._kpts) > 1e-12
 

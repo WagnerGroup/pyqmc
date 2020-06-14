@@ -76,12 +76,14 @@ class OpenConfigs:
         self.configs = self.configs.reshape(shape)
 
     def initialize_hdf(self, hdf):
-        hdf.create_dataset("configs", self.configs.shape)
+        hdf.create_dataset("configs", self.configs.shape, chunks=True, maxshape=(None,*self.configs.shape[1:]))
 
     def to_hdf(self, hdf):
-        hdf["configs"][:, :, :] = self.configs
+        hdf["configs"].resize(self.configs.shape)
+        hdf["configs"][...] = self.configs
 
     def load_hdf(self, hdf):
+        """Note that the number of configurations will change to reflect the number in the hdf file."""
         self.configs = np.array(hdf["configs"])
 
 
@@ -171,10 +173,12 @@ class PeriodicConfigs:
         self.wrap = self.wrap.reshape(shape)
 
     def initialize_hdf(self, hdf):
-        hdf.create_dataset("configs", self.configs.shape)
-        hdf.create_dataset("wrap", self.wrap.shape)
+        hdf.create_dataset("configs", self.configs.shape, chunks=True, maxshape=(None,*self.configs.shape[1:]))
+        hdf.create_dataset("wrap", self.wrap.shape, chunks=True, maxshape=(None, *self.wrap.shape[1:]))
 
     def to_hdf(self, hdf):
+        hdf["configs"].resize(self.configs.shape)
+        hdf["configs"].resize(self.wrap.shape)
         hdf["configs"][:, :, :] = self.configs
         hdf["wrap"][:, :, :] = self.wrap
 

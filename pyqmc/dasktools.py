@@ -11,7 +11,17 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 import dask.distributed
 
-dask.distributed.protocol.utils.msgpack_opts["strict_map_key"] = False
+#dask.distributed.protocol.utils.msgpack_opts["strict_map_key"] = False
+
+
+def _avg_func(df):
+    scalar_df = df.loc[:, df.dtypes.values != np.dtype("O")]
+    scalar_df = scalar_df.groupby("step", as_index=False).mean()
+
+    steps = df["step"].values
+    obj_cols = df.columns.values[df.dtypes.values == np.dtype("O")]
+    obj_dfs = [df[col].groupby(steps).apply(np.mean, axis=0) for col in obj_cols]
+    return pd.concat([scalar_df] + obj_dfs, axis=1).reset_index()
 
 
 def distvmc(
@@ -54,13 +64,12 @@ def distvmc(
             if "configs" in hdf.keys():
                 coords.configs = np.array(hdf["configs"])
                 if verbose:
-                    print("Restarted calculation")
+                    print("Restarted calculation", flush=True)
 
     if accumulators is None:
         accumulators = {}
     if npartitions is None:
-        npartitions = sum([x for x in client.nthreads().values()])
-    allruns = []
+        npartitions = sum(client.nthreads().values())
     niterations = int(nblocks / nsteps_per)
     coord = coords.split(npartitions)
     alldata = []
@@ -70,6 +79,7 @@ def distvmc(
         for i in range(npartitions):
             wfs.append(wf)
             thiscoord.append(coord[i])
+
         runs = client.map(
             pyqmc.vmc,
             wfs,
@@ -82,27 +92,21 @@ def distvmc(
             },
             **kwargs
         )
-        iterdata = []
-        for i, r in enumerate(runs):
-            res = r.result()
-            iterdata.extend(res[0])
-            coord[i] = res[1]
 
-        collected_data = (
-            pd.DataFrame(iterdata)
-            .groupby("step", as_index=False)
-            .apply(
-                lambda x: x.stack().groupby(level=1).apply(np.mean, axis=0)
-            )  # Added for array returns, e.g. obdm, tbdm
-            .to_dict("records")
-        )
-        if verbose:
-            print("epoch", epoch, "finished", flush=True)
-
-        coords.join(coord)
+        allresults = list(zip(*[r.result() for r in runs]))
+        coords.join(allresults[1])
+        iterdata = list(map(pd.DataFrame, allresults[0]))
+        confweight = np.array([len(c.configs) for c in coord], dtype=float)
+        confweight /= confweight.mean()
+        for i, df_ in enumerate(iterdata):
+            df_.loc[:, df_.columns != "step"] *= confweight[i]
+        df = pd.concat(iterdata)
+        collected_data = _avg_func(df).to_dict("records")
         alldata.extend(collected_data)
         for d in collected_data:
             pyqmc.mc.vmc_file(hdf_file, d, kwargs, coords)
+        if verbose:
+            print("epoch", epoch, "finished", flush=True)
 
     return alldata, coords
 
@@ -132,25 +136,21 @@ def dist_lm_sampler(
         from pyqmc.linemin import lm_sampler
 
     if npartitions is None:
-        npartitions = sum([x for x in client.nthreads().values()])
+        npartitions = sum(client.nthreads().values())
 
     configspart = configs.split(npartitions)
-    allruns = []
-    for p in range(npartitions):
-        allruns.append(client.submit(lm_sampler, wf, configspart[p], params, pgrad_acc))
+    allruns = [
+        client.submit(lm_sampler, wf, configspart[p], params, pgrad_acc)
+        for p in range(npartitions)
+    ]
 
-    stepresults = []
-    for r in allruns:
-        stepresults.append(r.result())
-
+    stepresults = [r.result() for r in allruns]
     keys = stepresults[0][0].keys()
     # This will be a list of dictionaries
     final_results = []
-    for p in range(len(params)):
+    for p,param in enumerate(params):
         df = {}
         for k in keys:
-            # print(k,flush=True)
-            # print(stepresults[0][p][k])
             df[k] = np.concatenate([x[p][k] for x in stepresults], axis=0)
         final_results.append(df)
 
@@ -190,7 +190,7 @@ def distdmc_propagate(wf, configs, weights, *args, client, npartitions=None, **k
         npartitions = sum([x for x in client.nthreads().values()])
 
     coord = configs.split(npartitions)
-    weight = np.split(weights, npartitions)
+    weight = np.array_split(weights, npartitions)
     allruns = []
     for nodeconfigs, nodeweight in zip(coord, weight):
         allruns.append(
@@ -201,28 +201,37 @@ def distdmc_propagate(wf, configs, weights, *args, client, npartitions=None, **k
 
     import pandas as pd
 
-    allresults = [r.result() for r in allruns]
-    configs.join([x[1] for x in allresults])
+    allresults = list(zip(*[r.result() for r in allruns]))
+    configs.join(allresults[1])
     coordret = configs
-    weightret = np.hstack([x[2] for x in allresults])
-    df = pd.concat([pd.DataFrame(x[0]) for x in allresults])
+    weightret = np.hstack(allresults[2])
+
+    confweight = np.array([len(c.configs) for c in coord], dtype=float)
+    confweight /= confweight.mean()
+    iterdata = list(map(pd.DataFrame, allresults[0]))
+    for i, df_ in enumerate(iterdata):
+        df_.loc[:, df_.columns != "step"] *= confweight[i]
+    df = pd.concat(iterdata)
     notavg = ["weight", "weightvar", "weightmin", "weightmax", "acceptance", "step"]
     # Here we reweight the averages since each step on each node
     # was done with a different average weight.
 
     for k in df.keys():
         if k not in notavg:
-            df[k] = df[k] * df["weight"]
+            df[k] *= df["weight"].values
     df = df.groupby("step").aggregate(np.mean, axis=0).reset_index()
     for k in df.keys():
         if k not in notavg:
-            df[k] = df[k] / df["weight"]
-    return df, coordret, weightret
+            df[k] /= df["weight"].values
+    print("df step weight acceptance\n", df[["step", "weight", "acceptance"]])
+    print("energytotal")
+    print(df["energytotal"].values)
+    return df, configs, weightret
 
 
 def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs):
     if npartitions is None:
-        npartitions = sum([x for x in client.nthreads().values()])
+        npartitions = sum(client.nthreads().values())
 
     coord = configs.split(npartitions)
     allruns = []
@@ -238,46 +247,57 @@ def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs)
             )
         )
 
-    allresults = [r.result() for r in allruns]
-    configs.join([x[1] for x in allresults])
-    coordret = configs
     # Here we reweight the averages since each step on each node
     # was done with a different average weight.
-    keys = allresults[0][0].keys()
+    confweight = np.array([len(c.configs) for c in coord], dtype=float)
+    confweight /= confweight.mean()
+
+    # Memory efficient implementation, bit more verbose
+    final_coords = []
     df = {}
-    for k in keys:
-        df[k] = np.array([x[0][k] for x in allresults])
-    for k in df.keys():
-        if k != "weight" and k != "overlap" and k != "overlap_gradient":
-            if len(df[k].shape) == 2:
-                df[k] = np.sum(df[k] * df["weight"][:, :, -1], axis=0) / np.sum(
-                    df["weight"][:, :, -1], axis=0
-                )
-            elif len(df[k].shape) == 3:
-                df[k] = np.sum(
-                    df[k] * df["weight"][:, :, -1, np.newaxis], axis=0
-                ) / np.sum(df["weight"][:, :, -1, np.newaxis], axis=0)
-            elif len(df[k].shape) == 4:
-                df[k] = np.sum(
-                    df[k] * df["weight"][:, :, -1, np.newaxis, np.newaxis], axis=0
-                ) / np.sum(df["weight"][:, :, -1, np.newaxis, np.newaxis], axis=0)
-
+    for i, r in enumerate(allruns):
+        result = r.result()
+        result[0]["weight"] *= confweight[i]
+        final_coords.append(result[1])
+        keys = result[0].keys()
+        for k in keys:
+            if k not in df:
+                df[k] = np.zeros(result[0][k].shape)
+            if k not in ["weight", "overlap", "overlap_gradient"]:
+                if len(df[k].shape) == 1:
+                    df[k] += result[0][k] * result[0]["weight"][:, -1]
+                elif len(df[k].shape) == 2:
+                    df[k] += result[0][k] * result[0]["weight"][:, -1, np.newaxis]
+                elif len(df[k].shape) == 3:
+                    df[k] += (
+                        result[0][k]
+                        * result[0]["weight"][:, -1, np.newaxis, np.newaxis]
+                    )
+                else:
+                    raise NotImplementedError(
+                        "too many/too few dimension in dist_sample_overlap"
+                    )
             else:
-                raise NotImplementedError(
-                    "too many/two few dimension in dist_sample_overlap"
-                )
-        elif k != "weight":
-            df[k] = np.mean(df[k], axis=0)
+                df[k] += result[0][k] * confweight[i] / len(allruns)
 
-    df["weight"] = np.mean(df["weight"], axis=0)
+    for k in keys:
+        if k not in ["weight", "overlap", "overlap_gradient"]:
+            if len(df[k].shape) == 1:
+                df[k] /= len(allruns) * df["weight"][:, -1]
+            elif len(df[k].shape) == 2:
+                df[k] /= len(allruns) * df["weight"][:, -1, np.newaxis]
+            elif len(df[k].shape) == 3:
+                df[k] /= len(allruns) * df["weight"][:, -1, np.newaxis, np.newaxis]
 
+    configs.join(final_coords)
+    coordret = configs
     return df, coordret
 
 
 def dist_correlated_sample(wfs, configs, *args, client, npartitions=None, **kwargs):
 
     if npartitions is None:
-        npartitions = sum([x for x in client.nthreads().values()])
+        npartitions = sum(client.nthreads().values())
 
     coord = configs.split(npartitions)
     allruns = []
@@ -296,14 +316,16 @@ def dist_correlated_sample(wfs, configs, *args, client, npartitions=None, **kwar
     df = {}
     for k in allresults[0].keys():
         df[k] = np.array([x[k] for x in allresults])
-    wt = df["weight"] * df["rhoprime"]
-    df["total"] = np.sum(df["total"] * wt, axis=0) / np.sum(wt, axis=0)
-    df["overlap"] = np.mean(df["overlap"], axis=0)
-    df["weight"] = np.mean(df["weight"] * df["rhoprime"], axis=0) / np.mean(
-        df["rhoprime"], axis=0
-    )
+    confweight = np.array([len(c.configs) for c in coord], dtype=float)
+    confweight /= confweight.mean()
+    rhowt = np.einsum("i...,i->i...", df["rhoprime"], confweight)
+    wt = df["weight"] * rhowt
+    df["total"] = np.average(df["total"], weights=wt, axis=0)
+    df["overlap"] = np.average(df["overlap"], weights=confweight, axis=0)
+    df["weight"] = np.average(df["weight"], weights=rhowt, axis=0)
+
     # df["weight"] = np.mean(df["weight"], axis=0)
-    df["rhoprime"] = np.mean(df["rhoprime"], axis=0)
+    df["rhoprime"] = np.mean(rhowt, axis=0)
     return df
 
 

@@ -1,5 +1,5 @@
 import numpy as np
-from pyqmc.slateruhf import sherman_morrison_row
+from pyqmc.slater import sherman_morrison_row
 
 
 def sherman_morrison_ms(e, inv, vec):
@@ -33,11 +33,8 @@ class MultiSlater:
     to the PySCFSlaterUHF class.
     """
 
-    def __init__(self, mol, mf, mc, tol=None):
-        if tol is None:
-            self.tol = -1
-        else:
-            self.tol = tol
+    def __init__(self, mol, mf, mc, tol=None, freeze_orb=None):
+        self.tol = -1 if tol is None else tol
         self.parameters = {}
         self._mol = mol
         self._nelec = (mc.nelecas[0] + mc.ncore, mc.nelecas[1] + mc.ncore)
@@ -52,10 +49,8 @@ class MultiSlater:
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
         self.pbc_str = "PBC" if hasattr(mol, "a") else ""
         self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
-        if self.iscomplex:
-            self.get_phase = lambda x: x / np.abs(x)
-        else:
-            self.get_phase = np.sign
+        self.get_phase = (lambda x: x / np.abs(x)) if self.iscomplex else np.sign
+        self.freeze_orb = [[], []] if freeze_orb is None else freeze_orb
 
     def _copy_ci(self, mc):
         """       
@@ -138,6 +133,7 @@ class MultiSlater:
         ao = np.real_if_close(
             self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs), tol=1e4
         )
+        self._aovals[:, e, :] = ao
         mo = ao.dot(self.parameters[self._coefflookup[s]])
 
         mo_vals = mo[:, self._det_occup[s]]
@@ -173,11 +169,7 @@ class MultiSlater:
 
     def _testrow(self, e, vec, mask=None, spin=None):
         """vec is a nconfig,nmo vector which replaces row e"""
-        if spin is None:
-            s = int(e >= self._nelec[0])
-        else:
-            s = spin
-
+        s = int(e >= self._nelec[0]) if spin is None else spin
         if mask is None:
             mask = [True] * vec.shape[0]
 
@@ -211,8 +203,9 @@ class MultiSlater:
         """vec is a nconfig,nmo vector which replaces column i 
         of spin s in determinant det"""
 
-        ratio = np.einsum("ij,ij->i", vec, self._inverse[s][:, det, i, :])
-        return ratio
+        return np.einsum(
+            "ij...,ij->i...", vec, self._inverse[s][:, det, i, :], optimize="greedy"
+        )
 
     def gradient(self, e, epos):
         """ Compute the gradient of the log wave function 
@@ -332,17 +325,16 @@ class MultiSlater:
 
             largest_mo = np.max(np.ravel(self._det_occup[s]))
             for i in range(largest_mo + 1):  # MO loop
-                for det in range(self.parameters["det_coeff"].shape[0]):  # Det loop
-                    if (
-                        i in self._det_occup[s][self._det_map[s][det]]
-                    ):  # Check if MO in det
-                        col = self._det_occup[s][self._det_map[s][det]].index(i)
-                        for j in range(ao.shape[2]):
-                            vec = ao[:, :, j]
-                            pgrad[:, j, i] += (
+                if i not in self.freeze_orb[s]:
+                    for det in range(self.parameters["det_coeff"].shape[0]):  # Det loop
+                        if (
+                            i in self._det_occup[s][self._det_map[s][det]]
+                        ):  # Check if MO in det
+                            col = self._det_occup[s][self._det_map[s][det]].index(i)
+                            pgrad[:, :, i] += (
                                 self.parameters["det_coeff"][det]
-                                * d["det_coeff"][:, det]
-                                * self._testcol(self._det_map[s][det], col, s, vec)
+                                * d["det_coeff"][:, det, np.newaxis]
+                                * self._testcol(self._det_map[s][det], col, s, ao)
                             )
             d[parm] = np.array(pgrad)
         return d

@@ -26,8 +26,7 @@ class GaussianFunction:
     """
 
     def __init__(self, exponent):
-        self.parameters = {}
-        self.parameters["exponent"] = exponent
+        self.parameters = {'exponent': exponent}
 
     def value(self, x, r):
         """Returns function exp(-exponent*r^2).
@@ -94,8 +93,7 @@ class PadeFunction:
     """
 
     def __init__(self, alphak):
-        self.parameters = {}
-        self.parameters["alphak"] = alphak
+        self.parameters = {'alphak': alphak}
 
     def value(self, rvec, r):
         """
@@ -117,8 +115,7 @@ class PadeFunction:
           grad: same dimensions as rvec
         """
         a = self.parameters["alphak"] * r[..., np.newaxis]
-        grad = 2 * self.parameters["alphak"] ** 2 / (1 + a) ** 3 * rvec
-        return grad
+        return 2 * self.parameters["alphak"] ** 2 / (1 + a) ** 3 * rvec
 
     def laplacian(self, rvec, r):
         """
@@ -174,9 +171,7 @@ class PolyPadeFunction:
     """
 
     def __init__(self, beta, rcut):
-        self.parameters = {}
-        self.parameters["beta"] = beta
-        self.parameters["rcut"] = rcut
+        self.parameters = {'beta': beta, 'rcut': rcut}
 
     def value(self, rvec, r):
         """Returns 
@@ -190,7 +185,7 @@ class PolyPadeFunction:
         z = r / self.parameters["rcut"]
         p = z * z * (6 - 8 * z + 3 * z * z)
         func = (1 - p) / (1 + self.parameters["beta"] * p)
-        func[z > 1] = 0.0
+        func[z >= 1] = 0.0
         return func
 
     def gradient(self, rvec, r):
@@ -201,7 +196,7 @@ class PolyPadeFunction:
           grad: (nconf,...,3)
         """
         grad = np.zeros(rvec.shape)
-        mask = r > self.parameters["rcut"]
+        mask = r >= self.parameters["rcut"]
         r = r[..., np.newaxis]
         z = r / self.parameters["rcut"]
         p = z * z * (6 - 8 * z + 3 * z * z)
@@ -221,7 +216,7 @@ class PolyPadeFunction:
               returns components of laplacian d^2/dx_i^2 separately
         """
         lapl = np.zeros(rvec.shape)
-        mask = r > self.parameters["rcut"]
+        mask = r >= self.parameters["rcut"]
         r = r[..., np.newaxis]
         rvec = rvec
         z = r / self.parameters["rcut"]
@@ -248,7 +243,7 @@ class PolyPadeFunction:
         Returns:
           grad, lap: (nconfig,...,3) vectors (components of laplacian d^2/dx_i^2 separately)
         """
-        mask = r > self.parameters["rcut"]
+        mask = r >= self.parameters["rcut"]
         r = r[..., np.newaxis]
         rvec = rvec
         z = r / self.parameters["rcut"]
@@ -300,9 +295,7 @@ class CutoffCuspFunction:
     """
 
     def __init__(self, gamma, rcut):
-        self.parameters = {}
-        self.parameters["gamma"] = gamma
-        self.parameters["rcut"] = rcut
+        self.parameters = {'gamma': gamma, 'rcut': rcut}
 
     def value(self, rvec, r):
         """Returns 

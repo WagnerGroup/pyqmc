@@ -13,6 +13,10 @@ def initial_guess(mol, nconfig, r=1.0):
     """ Generate an initial guess by distributing electrons near atoms
     proportional to their charge.
 
+    assign electrons to atoms based on atom charges
+    assign the minimum number first, and assign the leftover ones randomly
+    this algorithm chooses atoms *with replacement* to assign leftover electrons
+
     Args: 
 
      mol: A PySCF-like molecule object. Should have atom_charges(), atom_coords(), and nelec
@@ -32,10 +36,6 @@ def initial_guess(mol, nconfig, r=1.0):
     epos = np.zeros((nconfig, np.sum(mol.nelec), 3))
     wts = mol.atom_charges()
     wts = wts / np.sum(wts)
-
-    # assign electrons to atoms based on atom charges
-    # assign the minimum number first, and assign the leftover ones randomly
-    # this algorithm chooses atoms *with replacement* to assign leftover electrons
 
     for s in [0, 1]:
         neach = np.array(
@@ -166,7 +166,7 @@ def vmc(
         acc = []
         for step in range(nsteps_per_block):
             if verbose:
-                print(f"block {block}, step {step}")
+                print(f"-",end='',flush=True)
             for e in range(nelec):
                 # Propose move
                 grad = limdrift(np.real(wf.gradient(e, configs.electron(e)).T))
@@ -204,4 +204,6 @@ def vmc(
         block_avg["nconfig"] = nconf * nsteps_per_block
         vmc_file(hdf_file, block_avg, dict(tstep=tstep), configs)
         df.append(block_avg)
+    if verbose:
+        print("vmc done")
     return df, configs

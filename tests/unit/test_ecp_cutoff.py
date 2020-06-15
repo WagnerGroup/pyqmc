@@ -1,7 +1,7 @@
 import pandas as pd
 from pyqmc.mc import vmc, initial_guess
 from pyscf import gto, scf, mcscf
-from pyqmc.slateruhf import PySCFSlaterUHF
+from pyqmc.slater import PySCFSlater
 from pyqmc.jastrowspin import JastrowSpin
 from pyqmc.accumulators import EnergyAccumulator
 from pyqmc.multiplywf import MultiplyWF
@@ -25,9 +25,9 @@ def test_ecp():
     label = ["S", "J", "SJ"]
     ind = 0
     for wf in [
-        PySCFSlaterUHF(mol, mf),
+        PySCFSlater(mol, mf),
         JastrowSpin(mol),
-        MultiplyWF(PySCFSlaterUHF(mol, mf), JastrowSpin(mol)),
+        MultiplyWF(PySCFSlater(mol, mf), JastrowSpin(mol)),
     ]:
         wf.recompute(coords)
         print(label[ind])

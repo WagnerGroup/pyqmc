@@ -30,10 +30,7 @@ class Parameters:
                 yield k1 + k2
 
     def __len__(self):
-        length = 0
-        for i in self.data:
-            length += len(i)
-        return length
+        return sum(len(i) for i in self.data)
 
     def items(self):
         for i in range(self.wf_count):
@@ -60,6 +57,7 @@ class MultiplyWF:
         self.wf_factors = [*wf_factors]
         self.parameters = Parameters([wf.parameters for wf in wf_factors])
         self.iscomplex = bool(sum(wf.iscomplex for wf in wf_factors))
+        self.dtype = complex if self.iscomplex else float
 
     def recompute(self, configs):
         signs = np.ones(len(configs.configs))
@@ -87,20 +85,22 @@ class MultiplyWF:
         testvalues = [wf.testvalue(e, epos, mask=mask) for wf in self.wf_factors]
         return np.prod(testvalues, axis=0)
 
-    def laplacian(self, e, epos):
+    def testvalue_many(self, e, epos, mask=None):
+        testvalues = [wf.testvalue_many(e, epos, mask=mask) for wf in self.wf_factors]
+        return np.prod(testvalues, axis=0)
+
+    def gradient_laplacian(self, e, epos):
         grad_laps = [wf.gradient_laplacian(e, epos) for wf in self.wf_factors]
-        grad_laps = np.array(grad_laps)
-        grads = grad_laps[:, 0]
-        laps = grad_laps[:, 1]
-        cross_term = np.zeros(laps[0].shape)
+        grads, laps = list(zip(*grad_laps))
+        cross_term = np.zeros(laps[0].shape, dtype=self.dtype)
         nwf = len(self.wf_factors)
         for i in range(nwf):
             for j in range(i + 1, nwf):
-                cross_term = cross_term + np.sum(grads[i] * grads[j], axis=0)
-        return np.sum(laps, axis=0) + cross_term * 2
+                cross_term += np.sum(grads[i] * grads[j], axis=0)
+        return np.sum(grads, axis=0), np.sum(laps, axis=0) + cross_term * 2
 
-    def gradient_laplacian(self, e, epos):
-        return self.gradient(e, epos), self.laplacian(e, epos)
+    def laplacian(self, e, epos):
+        return self.gradient_laplacian(e, epos)[1]
 
     def pgradient(self):
         return Parameters([wf.pgradient() for wf in self.wf_factors])
@@ -109,9 +109,7 @@ class MultiplyWF:
 def test_parameters():
     import numpy as np
 
-    dicts = []
-    for i in range(10):
-        dicts.append({"coeff" + str(i): np.random.rand(3)})
+    dicts = [{"coeff" + str(i): np.random.rand(3)} for i in range(10)]
     p = Parameters(dicts)
     # test len
     assert len(p) == 30

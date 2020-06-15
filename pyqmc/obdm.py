@@ -40,14 +40,14 @@ class OBDMAccumulator:
         kpts=None,
     ):
 
-        if not (spin is None):
+        if spin is not None:
             if spin == 0:
                 self._electrons = np.arange(0, mol.nelec[0])
             elif spin == 1:
                 self._electrons = np.arange(mol.nelec[0], np.sum(mol.nelec))
             else:
                 raise ValueError("Spin not equal to 0 or 1")
-        elif not (electrons is None):
+        elif electrons is not None:
             self._electrons = electrons
         else:
             self._electrons = np.arange(0, np.sum(mol.nelec))
@@ -196,8 +196,7 @@ class OBDMAccumulator:
 
     def _evaluate_orbitals(self, configs):
         ao = self._mol.eval_gto("GTOval_sph", configs.configs.reshape(-1, 3))
-        borb = ao.dot(self._orb_coeff)
-        return borb
+        return ao.dot(self._orb_coeff)
 
     def _evaluate_orbitals_pbc(self, configs):
         # wrap supercell positions into primitive cell

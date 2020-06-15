@@ -1,12 +1,10 @@
 name = "pyqmc"
 from pyqmc.mc import vmc, initial_guess
-from pyqmc.slateruhf import PySCFSlaterUHF
-from pyqmc.slaterpbc import PySCFSlaterPBC
+from pyqmc.slater import PySCFSlater
 from pyqmc.multislater import MultiSlater
 
 from pyqmc.multiplywf import MultiplyWF
 from pyqmc.jastrowspin import JastrowSpin
-from pyqmc.multiplynwf import MultiplyNWF
 from pyqmc.manybody_jastrow import J3
 
 from pyqmc.accumulators import EnergyAccumulator, PGradTransform, LinearTransform
@@ -17,7 +15,6 @@ from pyqmc.func3d import (
     CutoffCuspFunction,
 )
 from pyqmc.optvariance import optvariance
-from pyqmc.optsr import gradient_descent
 from pyqmc.linemin import line_minimization
 from pyqmc.dmc import rundmc
 from pyqmc.cvmc import cvmc_optimize
@@ -38,20 +35,9 @@ def default_sj_pgrad(mol, mf, slaterkwargs, jastrowkwargs, gradientkwargs):
 
 
 def slater_jastrow(mol, mf, abasis=None, bbasis=None):
-    if abasis is None:
-        abasis = [GaussianFunction(0.8), GaussianFunction(1.6), GaussianFunction(3.2)]
-    if bbasis is None:
-        bbasis = [
-            CutoffCuspFunction(2.0, 1.5),
-            GaussianFunction(0.8),
-            GaussianFunction(1.6),
-            GaussianFunction(3.2),
-        ]
-
-    wf = MultiplyWF(
-        PySCFSlaterUHF(mol, mf), JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
+    raise NotImplementedError(
+        "slater_jastrow() is no longer supported. Please use default_sj instead."
     )
-    return wf
 
 
 def gradient_generator(mol, wf, to_opt=None, freeze=None, **ewald_kwargs):
@@ -64,31 +50,39 @@ def gradient_generator(mol, wf, to_opt=None, freeze=None, **ewald_kwargs):
 def default_slater(mol, mf, optimize_orbitals=False):
     import numpy as np
 
-    if hasattr(mol, "lattice_vectors"):
-        wf = PySCFSlaterPBC(mol, mf)
-    else:
-        wf = PySCFSlaterUHF(mol, mf)
+    wf = PySCFSlater(mol, mf)
+    freeze = {}
     if optimize_orbitals:
         to_opt = ["mo_coeff_alpha", "mo_coeff_beta"]
-        freeze = {}
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             freeze[k] = np.zeros(wf.parameters[k].shape).astype(bool)
             maxval = np.argmax(np.abs(wf.parameters[k]))
-            freeze[k][maxval] = True
+            # print(maxval)
+            # freeze[k][maxval] = True
     else:
         to_opt = []
-        freeze = {}
     return wf, to_opt, freeze
 
 
-def default_multislater(mol, mf, mc, tol=None):
+def default_multislater(mol, mf, mc, tol=None, freeze_orb=None):
     import numpy as np
 
-    wf = MultiSlater(mol, mf, mc, tol)
-    freeze = {}
-    freeze["det_coeff"] = np.zeros(wf.parameters["det_coeff"].shape).astype(bool)
+    # Nothing provided, nothing frozen
+    if freeze_orb is None:
+        freeze_orb = [[], []]
+
+    wf = MultiSlater(mol, mf, mc, tol, freeze_orb)
+    to_opt = ["det_coeff"]
+    freeze = {"det_coeff": np.zeros(wf.parameters["det_coeff"].shape).astype(bool)}
     freeze["det_coeff"][0] = True  # Determinant coefficient pivot
-    to_opt = ["det_coeff"]  # Don't have orbital coeff opt on this yet
+
+    for s, k in enumerate(["mo_coeff_alpha", "mo_coeff_beta"]):
+        to_freeze = np.zeros(wf.parameters[k].shape, dtype=bool)
+        to_freeze[:, freeze_orb[s]] = True
+        if to_freeze.sum() < np.prod(to_freeze.shape):
+            freeze[k] = to_freeze
+            to_opt.append(k)
+
     return wf, to_opt, freeze
 
 
@@ -138,9 +132,9 @@ def default_jastrow(mol, ion_cusp=False):
     return jastrow, to_opt, freeze
 
 
-def default_msj(mol, mf, mc, tol=None):
-    wf1, to_opt1, freeze1 = default_multislater(mol, mf, mc, tol)
-    wf2, to_opt2, freeze2 = default_jastrow(mol)
+def default_msj(mol, mf, mc, tol=None, freeze_orb=None, ion_cusp=False):
+    wf1, to_opt1, freeze1 = default_multislater(mol, mf, mc, tol, freeze_orb)
+    wf2, to_opt2, freeze2 = default_jastrow(mol, ion_cusp)
     wf = MultiplyWF(wf1, wf2)
     to_opt = ["wf1" + x for x in to_opt1] + ["wf2" + x for x in to_opt2]
     freeze = {}

@@ -59,7 +59,7 @@ class OpenConfigs:
         Returns:
           configslist: list of new configs objects
         """
-        return [OpenConfigs(c) for c in np.split(self.configs, npartitions)]
+        return [OpenConfigs(c) for c in np.array_split(self.configs, npartitions)]
 
     def join(self, configslist):
         """
@@ -76,12 +76,14 @@ class OpenConfigs:
         self.configs = self.configs.reshape(shape)
 
     def initialize_hdf(self, hdf):
-        hdf.create_dataset("configs", self.configs.shape)
+        hdf.create_dataset("configs", self.configs.shape, chunks=True, maxshape=(None,*self.configs.shape[1:]))
 
     def to_hdf(self, hdf):
-        hdf["configs"][:, :, :] = self.configs
+        hdf["configs"].resize(self.configs.shape)
+        hdf["configs"][...] = self.configs
 
     def load_hdf(self, hdf):
+        """Note that the number of configurations will change to reflect the number in the hdf file."""
         self.configs = np.array(hdf["configs"])
 
 
@@ -150,8 +152,8 @@ class PeriodicConfigs:
         Returns:
           configslist: list of new configs objects
         """
-        clist = np.split(self.configs, npartitions)
-        wlist = np.split(self.wrap, npartitions)
+        clist = np.array_split(self.configs, npartitions)
+        wlist = np.array_split(self.wrap, npartitions)
         return [PeriodicConfigs(c, self.lvecs, w) for c, w in zip(clist, wlist)]
 
     def join(self, configslist):
@@ -171,79 +173,15 @@ class PeriodicConfigs:
         self.wrap = self.wrap.reshape(shape)
 
     def initialize_hdf(self, hdf):
-        hdf.create_dataset("configs", self.configs.shape)
-        hdf.create_dataset("wrap", self.wrap.shape)
+        hdf.create_dataset("configs", self.configs.shape, chunks=True, maxshape=(None,*self.configs.shape[1:]))
+        hdf.create_dataset("wrap", self.wrap.shape, chunks=True, maxshape=(None, *self.wrap.shape[1:]))
 
     def to_hdf(self, hdf):
+        hdf["configs"].resize(self.configs.shape)
+        hdf["configs"].resize(self.wrap.shape)
         hdf["configs"][:, :, :] = self.configs
         hdf["wrap"][:, :, :] = self.wrap
 
     def load_hdf(self, hdf):
         self.configs = np.array(hdf["configs"])
         self.wrap = np.array(hdf["wrap"])
-
-
-def test():
-    from pyscf.pbc import gto, scf
-    import pyqmc
-    import pandas as pd
-
-    L = 4
-    mol = gto.M(
-        atom="""H     {0}      {0}      {0}""".format(0.0),
-        basis="sto-3g",
-        a=np.eye(3) * L,
-        spin=1,
-        unit="bohr",
-    )
-    mf = scf.UKS(mol)
-    mf.xc = "pbe"
-    mf = mf.density_fit().run()
-    wf = pyqmc.PySCFSlaterUHF(mol, mf)
-
-    #####################################
-    ## evaluate KE in PySCF
-    #####################################
-    ke_mat = mol.pbc_intor("int1e_kin", hermi=1, kpts=np.array([0, 0, 0]))
-    dm = mf.make_rdm1()
-    pyscfke = np.einsum("ij,ji", ke_mat, dm[0])
-    print("PySCF kinetic energy: {0}".format(pyscfke))
-
-    #####################################
-    ## evaluate KE integral on grid
-    #####################################
-    X = np.linspace(0, 1, 20, endpoint=False)
-    XYZ = np.meshgrid(X, X, X, indexing="ij")
-    pts = [np.outer(p.ravel(), mol.a[i]) for i, p in enumerate(XYZ)]
-    coords = np.sum(pts, axis=0).reshape((-1, 1, 3))
-
-    phase, logdet = wf.recompute(coords)
-    psi = phase * np.exp(logdet)
-    lap = wf.laplacian(0, coords.reshape((-1, 3)))
-    gridke = np.sum(-0.5 * lap * psi ** 2) / np.sum(psi ** 2)
-    print("grid kinetic energy: {0}".format(gridke))
-
-    #####################################
-    ## evaluate KE integral with VMC
-    #####################################
-    coords = pyqmc.initial_guess(mol, 600, 0.7)
-    coords = PeriodicConfigs(coords, mol.a)
-    warmup = 10
-    df, coords = pyqmc.vmc(
-        wf,
-        coords,
-        nsteps=128 + warmup,
-        tstep=L * 0.6,
-        accumulators={"energy": pyqmc.accumulators.EnergyAccumulator(mol)},
-    )
-    df = pd.DataFrame(df)
-    reblocked = pyqmc.reblock.optimally_reblocked(df["energyke"][warmup:])
-    print(
-        "VMC kinetic energy: {0} $\pm$ {1}".format(
-            reblocked["mean"], reblocked["standard error"]
-        )
-    )
-
-
-if __name__ == "__main__":
-    test()

@@ -104,6 +104,7 @@ def default_jastrow(mol, ion_cusp=False):
         jastrow.parameters["acoeff"][:, 0, :] = mol.atom_charges()[:, None]
     jastrow.parameters["bcoeff"][0, [0, 1, 2]] = np.array([-0.25, -0.50, -0.25])
 
+    to_opt = {}
     to_opt["acoeff"] = np.ones(jastrow.parameters["acoeff"].shape).astype(bool)
     if ion_cusp:
         to_opt["acoeff"][:, 0, :] = False  # Cusp conditions

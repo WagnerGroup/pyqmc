@@ -53,7 +53,7 @@ class LinearTransform:
             to_opt = {k: np.ones(p.shape, dtype=bool) for k, p in parameters.items()}
         self.to_opt = to_opt
 
-        self.frozen_parms = {parameters[k][~opt] for k, opt in self.to_opt.items()}
+        self.frozen_parms = {k: parameters[k][~opt] for k, opt in self.to_opt.items()}
 
         self.shapes = {k: parameters[k].shape for k in self.to_opt}
         self.slices = {k: np.prod(s) for k, s in self.shapes.items()}

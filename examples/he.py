@@ -17,7 +17,7 @@ if __name__ == "__main__":
     pyqmc.rundmc(
         wf,
         configs,
-        nsteps=50,  # 5000,
+        nsteps=5000,
         accumulators={"energy": pyqmc.EnergyAccumulator(mol)},
         tstep=0.02,
         hdf_file="he_dmc.hdf5",

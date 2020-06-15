@@ -17,13 +17,11 @@ def test():
 
     mol = gto.M(atom="He 0. 0. 0.", basis="bfd_vdz", ecp="bfd", unit="bohr")
     mf = scf.RHF(mol).run()
-    wf, to_opt, freeze = default_sj(mol, mf)
-    print(to_opt, freeze)
+    wf, to_opt = default_sj(mol, mf)
+    print(to_opt)
     nconf = 500
     wf, dfgrad = line_minimization(
-        wf,
-        initial_guess(mol, nconf),
-        gradient_generator(mol, wf, to_opt, freeze)
+        wf, initial_guess(mol, nconf), gradient_generator(mol, wf, to_opt)
     )
 
     dfgrad = pd.DataFrame(dfgrad)

@@ -3,10 +3,11 @@ import pyqmc
 import pandas as pd
 from pyscf.pbc import gto, scf
 from pyqmc.reblock import reblock
-from pyqmc.slaterpbc import get_supercell
+from pyqmc.supercell import get_supercell
 from pyscf.pbc.dft.multigrid import multigrid
 from pyscf.scf.addons import remove_linear_dep_
 import time
+import uuid
 
 
 def cubic_with_ecp(kind=0, nk=(1, 1, 1)):
@@ -113,7 +114,7 @@ def runtest(mol, mf, kind=0, do_mc=False):
             dm = np.sum(dm, axis=0)
     else:
         kpt = mf.kpts[kind]
-        wf = pyqmc.PySCFSlaterPBC(mol, mf)
+        wf = pyqmc.PySCFSlater(mol, mf)
         dm = mf.make_rdm1()
         print("original dm shape", dm.shape)
         if len(dm.shape) == 4:
@@ -142,6 +143,7 @@ def runtest(mol, mf, kind=0, do_mc=False):
         tstep=1,
         accumulators={"energy": pyqmc.accumulators.EnergyAccumulator(mol)},
         verbose=False,
+        hdf_file=str(uuid.uuid4())
     )
     print("VMC time", time.time() - start)
     df = pd.DataFrame(df)

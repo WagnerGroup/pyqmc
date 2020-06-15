@@ -8,7 +8,7 @@ import pandas as pd
 from pyqmc.mc import vmc, initial_guess
 from pyscf import lib, gto, scf
 from pyqmc.reblock import reblock
-from pyqmc.slateruhf import PySCFSlaterUHF
+from pyqmc.slater import PySCFSlater
 from pyqmc.accumulators import EnergyAccumulator
 
 
@@ -27,14 +27,18 @@ def test_vmc():
     warmup = 30
 
     for wf, mf in [
-        (PySCFSlaterUHF(mol, mf_rhf), mf_rhf),
-        (PySCFSlaterUHF(mol, mf_uhf), mf_uhf),
+        (PySCFSlater(mol, mf_rhf), mf_rhf),
+        (PySCFSlater(mol, mf_uhf), mf_uhf),
     ]:
 
-        #Without blocks
+        # Without blocks
         coords = initial_guess(mol, nconf)
         df, coords = vmc(
-            wf, coords, nsteps=nsteps, accumulators={"energy": EnergyAccumulator(mol)}, verbose=True
+            wf,
+            coords,
+            nsteps=nsteps,
+            accumulators={"energy": EnergyAccumulator(mol)},
+            verbose=True,
         )
 
         df = pd.DataFrame(df)
@@ -45,14 +49,17 @@ def test_vmc():
             mf.energy_tot(), en, err
         )
 
-        #With blocks
+        # With blocks
         coords = initial_guess(mol, nconf)
         df, coords = vmc(
-            wf, coords, nblocks=int(nsteps/30), nsteps_per_block=30, 
-            accumulators={"energy": EnergyAccumulator(mol)}
+            wf,
+            coords,
+            nblocks=int(nsteps / 30),
+            nsteps_per_block=30,
+            accumulators={"energy": EnergyAccumulator(mol)},
         )
 
-        df = pd.DataFrame(df)["energytotal"][int(warmup/30):]
+        df = pd.DataFrame(df)["energytotal"][int(warmup / 30) :]
         en = df.mean()
         err = df.sem()
         assert en - mf.energy_tot() < 5 * err, "pyscf {0}, vmc {1}, err {2}".format(
@@ -67,7 +74,7 @@ def test_accumulator():
     from pyqmc.mc import vmc, initial_guess
     from pyscf import gto, scf
     from pyqmc.energy import energy
-    from pyqmc.slateruhf import PySCFSlaterUHF
+    from pyqmc.slater import PySCFSlater
     from pyqmc.accumulators import EnergyAccumulator
 
     mol = gto.M(
@@ -75,7 +82,7 @@ def test_accumulator():
     )
     mf = scf.RHF(mol).run()
     nconf = 5000
-    wf = PySCFSlaterUHF(mol, mf)
+    wf = PySCFSlater(mol, mf)
     coords = initial_guess(mol, nconf)
 
     df, coords = vmc(

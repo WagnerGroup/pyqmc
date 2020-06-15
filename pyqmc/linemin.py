@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import scipy
 import h5py
+import os
 
 
 def sr_update(pgrad, Sij, step, eps=0.1):
@@ -159,14 +160,16 @@ def line_minimization(
         update_kws = {}
 
     # Restart
-    if hdf_file is not None:
-        with h5py.File(hdf_file, "a") as hdf:
+    iteration_offset=0
+    if hdf_file is not None and os.path.isfile(hdf_file):
+        with h5py.File(hdf_file, "r") as hdf:
             if "wf" in hdf.keys():
                 grp = hdf["wf"]
                 for k in grp.keys():
                     wf.parameters[k] = np.array(grp[k])
-            if "configs" in hdf.keys():
-                coords.load_hdf(hdf)
+            if 'iteration' in hdf.keys():
+                iteration_offset = np.max(hdf['iteration'][...])+1
+
 
     # Attributes for linemin
     attr = dict(maxiters=maxiters, npts=npts, steprange=steprange)
@@ -184,6 +187,15 @@ def line_minimization(
         dpdp = np.mean(df["pgraddpidpj"], axis=0)
         grad = 2 * np.real(dpH - en * dp)
         Sij = np.real(dpdp - np.einsum("i,j->ij", dp, dp))
+
+        if np.any(np.isnan(grad)):
+            for nm, quant in {'dpH':dpH,
+                              'dp':dp,
+                              'en':en
+                            }.items():
+                print(nm, quant)
+            raise ValueError("NaN detected in derivatives")
+        
         return coords, df["pgradtotal"].values[-1], grad, Sij, en, en_err
 
     x0 = pgrad_acc.transform.serialize_parameters(wf.parameters)
@@ -202,7 +214,8 @@ def line_minimization(
         step_data["energy_error"] = en_err
         step_data["x"] = x0
         step_data["pgradient"] = pgrad
-        step_data["iteration"] = it
+        step_data["iteration"] = it+iteration_offset
+        step_data['nconfig'] = coords.configs.shape[0]
 
         if verbose:
             print("descent en", en, en_err)

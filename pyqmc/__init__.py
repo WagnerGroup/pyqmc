@@ -1,7 +1,6 @@
 name = "pyqmc"
 from pyqmc.mc import vmc, initial_guess
-from pyqmc.slateruhf import PySCFSlaterUHF
-from pyqmc.slaterpbc import PySCFSlaterPBC
+from pyqmc.slater import PySCFSlater
 from pyqmc.multislater import MultiSlater
 
 from pyqmc.multiplywf import MultiplyWF
@@ -23,7 +22,9 @@ from pyqmc.reblock import reblock as avg_reblock
 
 
 def slater_jastrow(mol, mf, abasis=None, bbasis=None):
-    raise NotImplementedError("slater_jastrow() is no longer supported. Please use default_sj instead.")
+    raise NotImplementedError(
+        "slater_jastrow() is no longer supported. Please use default_sj instead."
+    )
 
 
 def gradient_generator(mol, wf, to_opt=None, freeze=None, **ewald_kwargs):
@@ -36,14 +37,15 @@ def gradient_generator(mol, wf, to_opt=None, freeze=None, **ewald_kwargs):
 def default_slater(mol, mf, optimize_orbitals=False):
     import numpy as np
 
-    wf = PySCFSlaterUHF(mol, mf)
+    wf = PySCFSlater(mol, mf)
     freeze = {}
     if optimize_orbitals:
         to_opt = ["mo_coeff_alpha", "mo_coeff_beta"]
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             freeze[k] = np.zeros(wf.parameters[k].shape).astype(bool)
             maxval = np.argmax(np.abs(wf.parameters[k]))
-            freeze[k][maxval] = True
+            #print(maxval)
+            #freeze[k][maxval] = True
     else:
         to_opt = []
     return wf, to_opt, freeze
@@ -58,7 +60,7 @@ def default_multislater(mol, mf, mc, tol=None, freeze_orb=None):
 
     wf = MultiSlater(mol, mf, mc, tol, freeze_orb)
     to_opt = ["det_coeff"]
-    freeze = {'det_coeff': np.zeros(wf.parameters['det_coeff'].shape).astype(bool)}
+    freeze = {"det_coeff": np.zeros(wf.parameters["det_coeff"].shape).astype(bool)}
     freeze["det_coeff"][0] = True  # Determinant coefficient pivot
 
     for s, k in enumerate(["mo_coeff_alpha", "mo_coeff_beta"]):

@@ -1,5 +1,5 @@
 import numpy as np
-from pyqmc.slateruhf import sherman_morrison_row
+from pyqmc.slater import sherman_morrison_row
 
 
 def sherman_morrison_ms(e, inv, vec):
@@ -204,8 +204,8 @@ class MultiSlater:
         of spin s in determinant det"""
 
         return np.einsum(
-                "ij...,ij->i...", vec, self._inverse[s][:, det, i, :], optimize="greedy"
-            )
+            "ij...,ij->i...", vec, self._inverse[s][:, det, i, :], optimize="greedy"
+        )
 
     def gradient(self, e, epos):
         """ Compute the gradient of the log wave function 

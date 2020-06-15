@@ -5,7 +5,7 @@ if __name__ == "__main__":
     mol = pyscf.gto.M(atom = "He 0. 0. 0.", basis='bfd_vdz', ecp='bfd', unit='bohr')
 
     mf = pyscf.scf.RHF(mol).run()
-    wf = pyqmc.slater_jastrow(mol, mf)
+    wf, to_opt, freeze = pyqmc.default_sj(mol, mf)
 
     nconfig = 1000
     configs = pyqmc.initial_guess(mol, nconfig)

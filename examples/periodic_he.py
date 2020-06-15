@@ -45,30 +45,14 @@ if __name__ == "__main__":
         # Set up wf and configs
         S = np.eye(3) * nk
         supercell = get_supercell(cell, S)
-        slater = PySCFSlaterPBC(supercell, kmf)
-        configs = pyqmc.initial_guess(supercell, nconfig)
-
-        # Jastrow
-        abasis = [PolyPadeFunction(beta=0.8 * 2 ** i, rcut=7.5) for i in range(3)]
-        bbasis = [CutoffCuspFunction(gamma=8, rcut=7.5)]
-        bbasis += [PolyPadeFunction(beta=0.8 * 2 ** i, rcut=7.5) for i in range(3)]
-        jastrow = JastrowSpin(supercell, a_basis=abasis, b_basis=bbasis)
-        jastrow.parameters["bcoeff"][0, [0, 1, 2]] = np.array([-0.25, -0.50, -0.25])
-        freeze = {}
-        freeze["wf2acoeff"] = np.zeros(jastrow.parameters["acoeff"].shape).astype(bool)
-        freeze["wf2bcoeff"] = np.zeros(jastrow.parameters["bcoeff"].shape).astype(bool)
-        freeze["wf2bcoeff"][0, [0, 1, 2]] = True  # Cusp conditions
-        to_opt = ["wf2acoeff", "wf2bcoeff"]
-
-        # Multiply
-        wf = MultiplyWF(slater, jastrow)
+        wf, to_opt = pyqmc.default_sj(supercell, kmf)
         configs = pyqmc.initial_guess(supercell, nconfig)
 
         # Warm up VMC
         df, configs = pyqmc.vmc(wf, configs, nsteps=5, verbose=True)
 
         # Initialize energy accumulator (and Ewald)
-        pgrad = pyqmc.gradient_generator(supercell, wf, to_opt=to_opt, freeze=freeze)
+        pgrad = pyqmc.gradient_generator(supercell, wf, to_opt=to_opt)
 
         # Optimize jastrow
         hdf_file = "linemin_nk{0}.hdf".format(nk)

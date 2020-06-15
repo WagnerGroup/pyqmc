@@ -42,42 +42,28 @@ class EnergyAccumulator:
 
 class LinearTransform:
     """
-    Linearize a dictionary of wf parameters, only to_opt
-    terms optimized. A dict freeze can be used to freeze
-    certain wf parameters.
+    Linearize a dictionary of wf parameters. 
+    to_opt is a dictionary with the keys to optimize, and its values are boolean arrays indicating which specific elements to optimize
+    Note: to_opt[k] can't be boolean scalar; it has to be an array with the same dimension as parameters[k]. 
+    to_opt doesn't have to have all the keys of parameters, but all keys of to_opt must be keys of parameters.
     """
 
-    def __init__(self, parameters, to_opt=None, freeze=None):
+    def __init__(self, parameters, to_opt=None):
         if to_opt is None:
-            self.to_opt = list(parameters.keys())
-        else:
-            self.to_opt = to_opt
+            to_opt = {k: np.ones(p.shape, dtype=bool) for k, p in parameters.items()}
+        self.to_opt = to_opt
 
-        if freeze is None:
-            freeze = {}
-            for i, k in enumerate(parameters):
-                freeze[k] = np.zeros(parameters[k].shape).astype(bool)
-            self.frozen = freeze
-        else:
-            self.frozen = freeze
+        self.frozen_parms = {parameters[k][~opt] for k, opt in self.to_opt.items()}
 
-        self.frozen_parms = {}
-        for k in self.to_opt:
-            mask = self.frozen[k]
-            self.frozen_parms[k] = np.ma.array(parameters[k], mask=~mask)
-
-        self.shapes = np.array([parameters[k].shape for k in self.to_opt])
-        self.slices = np.array([np.prod(s) for s in self.shapes])
-        self.dtypes = [parameters[k].dtype for k in self.to_opt]
+        self.shapes = {k: parameters[k].shape for k in self.to_opt}
+        self.slices = {k: np.prod(s) for k, s in self.shapes.items()}
+        self.dtypes = {k: parameters[k].dtype for k in self.to_opt}
 
     def serialize_parameters(self, parameters):
         """Convert the dictionary to a linear list
         of gradients
         """
-        params = []
-        for k in self.to_opt:
-            mask = self.frozen[k]
-            params.append(np.ma.array(parameters[k], mask=mask).compressed())
+        params = [parameters[k][opt] for k, opt in self.to_opt.items()]
         return np.concatenate(params)
 
     def serialize_gradients(self, pgrad):
@@ -85,8 +71,8 @@ class LinearTransform:
         of gradients, mask allows for certain fixed parameters
         """
         grads = []
-        for k in self.to_opt:
-            mask = np.repeat(self.frozen[k][np.newaxis, :], pgrad[k].shape[0], axis=0)
+        for k, opt in self.to_opt.items():
+            mask = ~np.repeat(opt[np.newaxis, :], pgrad[k].shape[0], axis=0)
             mask_grads = np.ma.array(pgrad[k], mask=mask).reshape(pgrad[k].shape[0], -1)
             grads.append(np.ma.compress_cols(mask_grads))
         return np.concatenate(grads, axis=1)
@@ -96,14 +82,14 @@ class LinearTransform:
         """
         n = 0
         d = {}
-        for i, k in enumerate(self.to_opt):
-            mask = self.frozen[k].flatten()
-            n_p = np.sum(~mask)
+        for k, opt in self.to_opt.items():
+            opt_ = opt.flatten()
+            n_p = np.sum(opt_)
 
-            flat_parms = np.zeros(self.slices[i], dtype=self.dtypes[i])
-            flat_parms[mask] = self.frozen_parms[k].compressed()
-            flat_parms[~mask] = parameters[n : n + n_p]
-            d[k] = flat_parms.reshape(self.shapes[i])
+            flat_parms = np.zeros(self.slices[k], dtype=self.dtypes[k])
+            flat_parms[~opt_] = self.frozen_parms[k]
+            flat_parms[opt_] = parameters[n : n + n_p]
+            d[k] = flat_parms.reshape(self.shapes[k])
             n += n_p
         return d
 
@@ -162,7 +148,7 @@ class PGradTransform:
         nconf = configs.configs.shape[0]
         if weights is None:
             weights = np.ones(nconf)
-        weights = weights/np.sum(weights)
+        weights = weights / np.sum(weights)
 
         pgrad = wf.pgradient()
         den = self.enacc(configs, wf)
@@ -174,13 +160,11 @@ class PGradTransform:
         dp_regularized = dp * f[:, np.newaxis]
 
         d = {k: np.average(it, weights=weights, axis=0) for k, it in den.items()}
-        d["dpH"] = np.einsum(
-            "i,ij->j", energy, weights[:, np.newaxis] * dp_regularized
-        ) 
+        d["dpH"] = np.einsum("i,ij->j", energy, weights[:, np.newaxis] * dp_regularized)
         d["dppsi"] = np.average(dp_regularized, weights=weights, axis=0)
         d["dpidpj"] = np.einsum(
             "ij,ik->jk", dp, weights[:, np.newaxis] * dp_regularized
-        ) 
+        )
 
         return d
 

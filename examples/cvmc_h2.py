@@ -54,7 +54,7 @@ H ul
     )
     mf = scf.RHF(mol).run()
 
-    wf = pyqmc.default_sj(mol, mf)
+    wf, to_opt = pyqmc.default_sj(mol, mf)
     to_opt = {k: np.ones(parm.shape, dtype="bool") for k, parm in wf.parameters.items()}
     print(to_opt.keys())
     print(wf.parameters["wf1mo_coeff_alpha"])

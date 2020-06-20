@@ -241,22 +241,6 @@ def line_minimization(
         stepsdata['weight'] = stepsdata['weight']/np.mean(stepsdata['weight'], axis=1)[:,np.newaxis]
         en = np.mean(stepsdata['total']*stepsdata['weight'], axis=1)
         yfit.extend(en)
-        print(yfit)
-
-        #stepsdata = lm(wf, coords, params, pgrad_acc, **lmoptions)
-        #for data, p, step in zip(stepsdata, params, steps):
-        #    en = np.real(
-        #        np.mean(data["total"] * data["weight"]) / np.mean(data["weight"])
-         #   )
-          #  yfit.append(en)
-        #    if verbose:
-        #        print(
-        #            "descent step {:<15.10} {:<15.10} weight stddev {:<15.10}".format(
-        #                step, en, np.std(data["weight"])
-        #            ),
-        #            flush=True,
-        #        )
-
         xfit.extend(steps)
         est_min = stable_fit(xfit, yfit)
         x0 += update(pgrad, Sij, est_min, **update_kws)

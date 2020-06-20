@@ -155,7 +155,7 @@ def line_minimization(
         vmcoptions = {}
     vmcoptions.update({"verbose": verbose})
     if lm is None:
-        lm = lm_sampler
+        lm = correlated_compute
     if lmoptions is None:
         lmoptions = {}
     if update_kws is None:
@@ -233,19 +233,29 @@ def line_minimization(
         # doing correlated sampling.
         steps = np.linspace(-steprange / npts, steprange, npts)
         params = [x0 + update(pgrad, Sij, step, **update_kws) for step in steps]
-        stepsdata = lm(wf, coords, params, pgrad_acc, **lmoptions)
-        for data, p, step in zip(stepsdata, params, steps):
-            en = np.real(
-                np.mean(data["total"] * data["weight"]) / np.mean(data["weight"])
-            )
-            yfit.append(en)
-            if verbose:
-                print(
-                    "descent step {:<15.10} {:<15.10} weight stddev {:<15.10}".format(
-                        step, en, np.std(data["weight"])
-                    ),
-                    flush=True,
-                )
+        if client is None:
+            stepsdata = correlated_compute(wf, coords, params, pgrad_acc)
+        else:
+            stepsdata = correlated_compute_parallel(wf, coords, params, pgrad_acc, client, npartitions)
+        
+        stepsdata['weight'] = stepsdata['weight']/np.mean(stepsdata['weight'], axis=1)[:,np.newaxis]
+        en = np.mean(stepsdata['total']*stepsdata['weight'], axis=1)
+        yfit.extend(en)
+        print(yfit)
+
+        #stepsdata = lm(wf, coords, params, pgrad_acc, **lmoptions)
+        #for data, p, step in zip(stepsdata, params, steps):
+        #    en = np.real(
+        #        np.mean(data["total"] * data["weight"]) / np.mean(data["weight"])
+         #   )
+          #  yfit.append(en)
+        #    if verbose:
+        #        print(
+        #            "descent step {:<15.10} {:<15.10} weight stddev {:<15.10}".format(
+        #                step, en, np.std(data["weight"])
+        #            ),
+        #            flush=True,
+        #        )
 
         xfit.extend(steps)
         est_min = stable_fit(xfit, yfit)
@@ -263,7 +273,7 @@ def line_minimization(
     return wf, df
 
 
-def lm_sampler(wf, configs, params, pgrad_acc):
+def correlated_compute(wf, configs, params, pgrad_acc):
     """ 
     Evaluates accumulator on the same set of configs for correlated sampling of different wave function parameters
 
@@ -275,8 +285,7 @@ def lm_sampler(wf, configs, params, pgrad_acc):
         pgrad_acc: PGradAccumulator 
 
     Returns:
-        data: list of dicts, one dict for each sample
-            each dict contains arrays returned from pgrad_acc, weighted by psi**2/psi0**2
+        data: a single dict with indices [parameter, values]
     """
 
     import copy
@@ -292,6 +301,19 @@ def lm_sampler(wf, configs, params, pgrad_acc):
         rawweights = np.exp(2 * (psi - psi0))  # convert from log(|psi|) to |psi|**2
         df = pgrad_acc.enacc(configs, wf)
         df["weight"] = rawweights
-
         data.append(df)
-    return data
+    data_ret = {}
+    for k in data[0].keys():
+        data_ret[k] = np.asarray([d[k] for d in data])
+    return data_ret
+
+
+
+def correlated_compute_parallel(wf, configs, params, pgrad_acc, client, npartitions):
+    config = configs.split(npartitions)
+    runs=[ client.submit(correlated_compute, wf, conf , params, pgrad_acc) for conf in config]
+    allresults = [r.result() for r in runs]
+    block_avg = {}
+    for k in allresults[0].keys():
+        block_avg[k] = np.hstack([res[k] for res in allresults])
+    return block_avg

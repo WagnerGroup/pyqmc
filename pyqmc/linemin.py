@@ -107,6 +107,8 @@ def line_minimization(
     verbose=False,
     npts=5,
     hdf_file=None,
+    client=None,
+    npartitions = None
 ):
     """Optimizes energy by determining gradients with stochastic reconfiguration
         and minimizing the energy along gradient directions using correlated sampling.
@@ -178,14 +180,15 @@ def line_minimization(
         newparms = pgrad_acc.transform.deserialize(x)
         for k in newparms:
             wf.parameters[k] = newparms[k]
-        data, coords = vmc(wf, coords, accumulators={"pgrad": pgrad_acc}, **vmcoptions)
-        df = pd.DataFrame(data)[warmup:]
-        en = np.mean(df["pgradtotal"])
-        en_err = np.std(df["pgradtotal"]) / np.sqrt(len(df))
+        df, coords = vmc(wf, coords, accumulators={"pgrad": pgrad_acc}, client=client, npartitions=npartitions, **vmcoptions)
+        #df = pd.DataFrame(data)[warmup:]
+        en = np.mean(df["pgradtotal"], axis=0)
+        en_err = np.std(df["pgradtotal"], axis=0) / np.sqrt(df['pgradtotal'].shape[0])
         dpH = np.mean(df["pgraddpH"], axis=0)
         dp = np.mean(df["pgraddppsi"], axis=0)
         dpdp = np.mean(df["pgraddpidpj"], axis=0)
         grad = 2 * np.real(dpH - en * dp)
+        print(df["pgraddppsi"].shape)
         Sij = np.real(dpdp - np.einsum("i,j->ij", dp, dp))
 
         if np.any(np.isnan(grad)):
@@ -196,7 +199,7 @@ def line_minimization(
                 print(nm, quant)
             raise ValueError("NaN detected in derivatives")
         
-        return coords, df["pgradtotal"].values[-1], grad, Sij, en, en_err
+        return coords, grad, Sij, en, en_err
 
     x0 = pgrad_acc.transform.serialize_parameters(wf.parameters)
 
@@ -208,7 +211,7 @@ def line_minimization(
     # Gradient descent cycles
     for it in range(maxiters):
         # Calculate gradient accurately
-        coords, last_en, pgrad, Sij, en, en_err = gradient_energy_function(x0, coords)
+        coords, pgrad, Sij, en, en_err = gradient_energy_function(x0, coords)
         step_data = {}
         step_data["energy"] = en
         step_data["energy_error"] = en_err

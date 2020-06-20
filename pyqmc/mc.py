@@ -151,14 +151,14 @@ def vmc_parallel(wf, configs, tstep, nsteps_per_block, accumulators, client, npa
     confweight /= np.mean(confweight)*npartitions
     block_avg = {}
     for k in allresults[0][0].keys():
-        block_avg[k] = np.sum([res[k]*w for res,w in zip(allresults[0],confweight)])
+        block_avg[k] = np.sum([res[k]*w for res,w in zip(allresults[0],confweight)], axis=0)
     return block_avg, configs
     
 def vmc(
     wf,
     configs,
-    nblocks=100,
-    nsteps_per_block=1,
+    nblocks=10,
+    nsteps_per_block=10,
     nsteps=None,
     tstep=0.5,
     accumulators=None,

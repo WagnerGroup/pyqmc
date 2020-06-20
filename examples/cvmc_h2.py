@@ -1,6 +1,7 @@
 import pyqmc
 import numpy as np
 
+
 def setuph2(r):
     from pyscf import gto, scf, lo
     from pyqmc.accumulators import LinearTransform, EnergyAccumulator
@@ -52,18 +53,16 @@ H ul
         atom=f"H 0. 0. 0.; H 0. 0. {r}", unit="bohr", basis=basis, ecp=ecp, verbose=5
     )
     mf = scf.RHF(mol).run()
-    
-    wf = pyqmc.slater_jastrow(mol, mf)
-    freeze = {}
-    for k in wf.parameters:
-        freeze[k] = np.zeros(wf.parameters[k].shape,dtype='bool')
-    print(freeze.keys())
-    print(wf.parameters['wf1mo_coeff_alpha'])
-    #this freezing allows us to easily go between bonding and 
+
+    wf, to_opt = pyqmc.default_sj(mol, mf)
+    to_opt = {k: np.ones(parm.shape, dtype="bool") for k, parm in wf.parameters.items()}
+    print(to_opt.keys())
+    print(wf.parameters["wf1mo_coeff_alpha"])
+    # this freezing allows us to easily go between bonding and
     # AFM configurations.
-    freeze['wf1mo_coeff_alpha'][0,0]=True
-    freeze['wf1mo_coeff_beta'][1,0]=True
-    
+    to_opt["wf1mo_coeff_alpha"][0, 0] = False
+    to_opt["wf1mo_coeff_beta"][1, 0] = False
+
     mo_occ = mf.mo_coeff[:, mf.mo_occ > 0]
     a = lo.iao.iao(mol, mo_occ)
     a = lo.vec_lowdin(a, mf.get_ovlp())
@@ -77,33 +76,40 @@ H ul
     for i in [0, 1]:
         descriptors[f"nup{i}"] = [[(1.0, (i, i))], []]
         descriptors[f"ndown{i}"] = [[], [(1.0, (i, i))]]
-    
-    tbdm_up_down = TBDMAccumulator(mol=mol, orb_coeff=np.array([a,a]), spin=(0,1), ijkl=[[0,0,0,0]])
-    tbdm_down_up = TBDMAccumulator(mol=mol, orb_coeff=np.array([a,a]), spin=(1,0), ijkl=[[0,0,0,0]])
-    descriptors_tbdm = {
-        "U": [[(1.0,(0))],[(1.0,(0))]]
-    }
+
+    tbdm_up_down = TBDMAccumulator(
+        mol=mol, orb_coeff=np.array([a, a]), spin=(0, 1), ijkl=[[0, 0, 0, 0]]
+    )
+    tbdm_down_up = TBDMAccumulator(
+        mol=mol, orb_coeff=np.array([a, a]), spin=(1, 0), ijkl=[[0, 0, 0, 0]]
+    )
+    descriptors_tbdm = {"U": [[(1.0, (0))], [(1.0, (0))]]}
 
     acc = PGradDescriptor(
         EnergyAccumulator(mol),
-        LinearTransform(wf.parameters, freeze=freeze),
+        LinearTransform(wf.parameters, to_opt=to_opt),
+        {"obdm": [obdm_up, obdm_down], "tbdm": [tbdm_up_down, tbdm_down_up]},
         {
-          'obdm': [obdm_up, obdm_down], 
-          'tbdm': [tbdm_up_down, tbdm_down_up],
-        },
-        {
-          'obdm': DescriptorFromOBDM(descriptors, norm=2.0),
-          'tbdm': DescriptorFromTBDM(descriptors_tbdm, norm=2.0*(2.0-1.0)),
+            "obdm": DescriptorFromOBDM(descriptors, norm=2.0),
+            "tbdm": DescriptorFromTBDM(descriptors_tbdm, norm=2.0 * (2.0 - 1.0)),
         },
     )
 
-    return {"wf": wf, "acc": acc, "mol": mol, "mf": mf, "descriptors": descriptors, "descriptors_tbdm": descriptors_tbdm}
+    return {
+        "wf": wf,
+        "acc": acc,
+        "mol": mol,
+        "mf": mf,
+        "descriptors": descriptors,
+        "descriptors_tbdm": descriptors_tbdm,
+    }
+
 
 if __name__ == "__main__":
     import pyqmc
     import pyqmc.dasktools
     from pyqmc.dasktools import line_minimization, cvmc_optimize
-    from dask.distributed import Client, LocalCluster   
+    from dask.distributed import Client, LocalCluster
 
     r = 1.1
 
@@ -149,6 +155,6 @@ if __name__ == "__main__":
         forcing=forcing,
         iters=50,
         tstep=0.2,
-        hdf_file = hdf_file,
-        client = client,
+        hdf_file=hdf_file,
+        client=client,
     )

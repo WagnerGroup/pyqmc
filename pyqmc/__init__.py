@@ -27,10 +27,9 @@ def slater_jastrow(mol, mf, abasis=None, bbasis=None):
     )
 
 
-def gradient_generator(mol, wf, to_opt=None, freeze=None, **ewald_kwargs):
+def gradient_generator(mol, wf, to_opt=None, **ewald_kwargs):
     return PGradTransform(
-        EnergyAccumulator(mol, **ewald_kwargs),
-        LinearTransform(wf.parameters, to_opt, freeze),
+        EnergyAccumulator(mol, **ewald_kwargs), LinearTransform(wf.parameters, to_opt)
     )
 
 
@@ -38,17 +37,14 @@ def default_slater(mol, mf, optimize_orbitals=False):
     import numpy as np
 
     wf = PySCFSlater(mol, mf)
-    freeze = {}
+    to_opt = {}
     if optimize_orbitals:
-        to_opt = ["mo_coeff_alpha", "mo_coeff_beta"]
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
-            freeze[k] = np.zeros(wf.parameters[k].shape).astype(bool)
-            maxval = np.argmax(np.abs(wf.parameters[k]))
-            #print(maxval)
-            #freeze[k][maxval] = True
-    else:
-        to_opt = []
-    return wf, to_opt, freeze
+            to_opt[k] = np.ones(wf.parameters[k].shape).astype(bool)
+            # maxval = np.argmax(np.abs(wf.parameters[k]))
+            # print(maxval)
+            # to_opt[k][maxval] = False
+    return wf, to_opt
 
 
 def default_multislater(mol, mf, mc, tol=None, freeze_orb=None):
@@ -60,17 +56,16 @@ def default_multislater(mol, mf, mc, tol=None, freeze_orb=None):
 
     wf = MultiSlater(mol, mf, mc, tol, freeze_orb)
     to_opt = ["det_coeff"]
-    freeze = {"det_coeff": np.zeros(wf.parameters["det_coeff"].shape).astype(bool)}
-    freeze["det_coeff"][0] = True  # Determinant coefficient pivot
+    to_opt = {"det_coeff": np.ones(wf.parameters["det_coeff"].shape).astype(bool)}
+    to_opt["det_coeff"][0] = False  # Determinant coefficient pivot
 
     for s, k in enumerate(["mo_coeff_alpha", "mo_coeff_beta"]):
         to_freeze = np.zeros(wf.parameters[k].shape, dtype=bool)
         to_freeze[:, freeze_orb[s]] = True
         if to_freeze.sum() < np.prod(to_freeze.shape):
-            freeze[k] = to_freeze
-            to_opt.append(k)
+            to_opt[k] = ~to_freeze
 
-    return wf, to_opt, freeze
+    return wf, to_opt
 
 
 def default_jastrow(mol, ion_cusp=False):
@@ -79,7 +74,7 @@ def default_jastrow(mol, ion_cusp=False):
     Args:
       ion_cusp (bool): add an extra term to satisfy electron-ion cusp.
     Returns:
-      jastrow, to_opt and freeze
+      jastrow, to_opt
     """
     import numpy as np
 
@@ -109,39 +104,30 @@ def default_jastrow(mol, ion_cusp=False):
         jastrow.parameters["acoeff"][:, 0, :] = mol.atom_charges()[:, None]
     jastrow.parameters["bcoeff"][0, [0, 1, 2]] = np.array([-0.25, -0.50, -0.25])
 
-    freeze = {}
-    freeze["acoeff"] = np.zeros(jastrow.parameters["acoeff"].shape).astype(bool)
+    to_opt = {}
+    to_opt["acoeff"] = np.ones(jastrow.parameters["acoeff"].shape).astype(bool)
     if ion_cusp:
-        freeze["acoeff"][:, 0, :] = True  # Cusp conditions
-    freeze["bcoeff"] = np.zeros(jastrow.parameters["bcoeff"].shape).astype(bool)
-    freeze["bcoeff"][0, [0, 1, 2]] = True  # Cusp conditions
-    to_opt = ["acoeff", "bcoeff"]
-    return jastrow, to_opt, freeze
+        to_opt["acoeff"][:, 0, :] = False  # Cusp conditions
+    to_opt["bcoeff"] = np.ones(jastrow.parameters["bcoeff"].shape).astype(bool)
+    to_opt["bcoeff"][0, [0, 1, 2]] = False  # Cusp conditions
+    return jastrow, to_opt
 
 
 def default_msj(mol, mf, mc, tol=None, freeze_orb=None, ion_cusp=False):
-    wf1, to_opt1, freeze1 = default_multislater(mol, mf, mc, tol, freeze_orb)
-    wf2, to_opt2, freeze2 = default_jastrow(mol, ion_cusp)
+    wf1, to_opt1 = default_multislater(mol, mf, mc, tol, freeze_orb)
+    wf2, to_opt2 = default_jastrow(mol, ion_cusp)
     wf = MultiplyWF(wf1, wf2)
-    to_opt = ["wf1" + x for x in to_opt1] + ["wf2" + x for x in to_opt2]
-    freeze = {}
-    for k in to_opt1:
-        freeze["wf1" + k] = freeze1[k]
-    for k in to_opt2:
-        freeze["wf2" + k] = freeze2[k]
+    to_opt = {"wf1" + x: opt for x, opt in to_opt1.items()}
+    to_opt.update({"wf2" + x: opt for x, opt in to_opt2.items()})
 
-    return wf, to_opt, freeze
+    return wf, to_opt
 
 
 def default_sj(mol, mf, ion_cusp=False):
-    wf1, to_opt1, freeze1 = default_slater(mol, mf)
-    wf2, to_opt2, freeze2 = default_jastrow(mol, ion_cusp)
+    wf1, to_opt1 = default_slater(mol, mf)
+    wf2, to_opt2 = default_jastrow(mol, ion_cusp)
     wf = MultiplyWF(wf1, wf2)
-    to_opt = ["wf1" + x for x in to_opt1] + ["wf2" + x for x in to_opt2]
-    freeze = {}
-    for k in to_opt1:
-        freeze["wf1" + k] = freeze1[k]
-    for k in to_opt2:
-        freeze["wf2" + k] = freeze2[k]
+    to_opt = {"wf1" + x: opt for x, opt in to_opt1.items()}
+    to_opt.update({"wf2" + x: opt for x, opt in to_opt2.items()})
 
-    return wf, to_opt, freeze
+    return wf, to_opt

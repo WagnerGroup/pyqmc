@@ -46,12 +46,11 @@ def test():
         nsteps=nsteps,
         accumulators={"obdm": obdm, "obdm_up": obdm_up, "obdm_down": obdm_down},
     )
-    df = DataFrame(df)
 
     obdm_est = {}
     for k in ["obdm", "obdm_up", "obdm_down"]:
-        avg_norm = np.array(df.loc[warmup:, k + "norm"].values.tolist()).mean(axis=0)
-        avg_obdm = np.array(df.loc[warmup:, k + "value"].values.tolist()).mean(axis=0)
+        avg_norm = np.mean(df[k + "norm"][warmup:],axis=0)
+        avg_obdm = np.mean(df[k + "value"][warmup:],axis=0)
         obdm_est[k] = normalize_obdm(avg_obdm, avg_norm)
 
     print("Average OBDM(orb,orb)", obdm_est["obdm"].diagonal().round(3))
@@ -114,12 +113,11 @@ def test_pbc():
         accumulators={"obdm": obdm, "obdm_up": obdm_up, "obdm_down": obdm_down},
         verbose=True,
     )
-    df = DataFrame(df)
 
     obdm_est = {}
     for k in ["obdm", "obdm_up", "obdm_down"]:
-        avg_norm = np.array(df.loc[warmup:, k + "norm"].values.tolist()).mean(axis=0)
-        avg_obdm = np.array(df.loc[warmup:, k + "value"].values.tolist()).mean(axis=0)
+        avg_norm = np.mean(df[k + "norm"][warmup:],axis=0)
+        avg_obdm = np.mean(df[k + "value"][warmup:],axis=0)
         obdm_est[k] = normalize_obdm(avg_obdm, avg_norm)
 
     print("Average OBDM(orb,orb)", obdm_est["obdm"].round(3))

@@ -2,7 +2,6 @@ import os
 import numpy as np
 import pyqmc.mc as mc
 import sys
-import pandas as pd
 import h5py
 
 
@@ -89,8 +88,6 @@ def dmc_propagate(
     wf.recompute(configs)
 
     eloc = accumulators[ekey[0]](configs, wf)[ekey[1]].real
-    # eref_mean = np.mean(weights * eloc) / np.mean(weights)
-    # eref = eref_mean
     df = []
     for _ in range(nsteps):
         acc = np.zeros(nelec)
@@ -151,6 +148,26 @@ def dmc_propagate(
     df_ret['weight'] = np.mean(weight)
 
     return df_ret, configs, weights
+
+
+
+
+def dmc_propagate_parallel(wf,configs,weights,client, npartitions, *args, **kwargs):
+    config = configs.split(npartitions)
+    weight = np.split(weights,npartitions)
+    runs=[ client.submit(dmc_propagate, wf, conf , wt, *args, **kwargs) for conf,wt in zip(config, weight)]
+    allresults = list(zip(*[r.result() for r in runs]))
+    configs.join(allresults[1])
+    weights = np.concatenate(allresults[2])
+    confweight = np.array([len(c.configs) for c in config], dtype=float)
+    confweight_avg = confweight/(np.mean(confweight)*npartitions)
+    weight = np.array([w['weight'] for w in allresults[0]])
+    weight_avg = weight/np.mean(weight)
+    block_avg = {}
+    for k in allresults[0][0].keys():
+        block_avg[k] = np.sum([res[k]*ww*cw for res,cw,ww in zip(allresults[0],confweight_avg, weight_avg)], axis=0)
+    block_avg['weight'] = np.mean(weight)
+    return block_avg, configs, weights
 
 
 def limit_timestep(weights, elocnew, elocold, eref, start, stop):
@@ -312,27 +329,45 @@ def rundmc(
     npropagate = int(np.ceil(nsteps / branchtime))
     df = []
     for step in range(npropagate):
-        if verbose:
-            print("-", end='', flush=True)
-        df_, configs, weights = dmc_propagate(
-            wf,
-            configs,
-            weights,
-            tstep,
-            branchcut_start * esigma,
-            branchcut_stop * esigma,
-            eref=eref,
-            nsteps=branchtime,
-            accumulators=accumulators,
-            ekey=ekey,
-            drift_limiter=drift_limiter,
-            **kwargs,
-        )
-        print(df_)
+        if client is None:
+            df_, configs, weights = dmc_propagate(
+                wf,
+                configs,
+                weights,
+                tstep,
+                branchcut_start * esigma,
+                branchcut_stop * esigma,
+                eref=eref,
+                nsteps=branchtime,
+                accumulators=accumulators,
+                ekey=ekey,
+                drift_limiter=drift_limiter,
+                **kwargs,
+            )
+        else: 
+            df_, configs, weights = dmc_propagate_parallel(
+                wf,
+                configs,
+                weights,
+                client, 
+                npartitions,
+                tstep,
+                branchcut_start * esigma,
+                branchcut_stop * esigma,
+                eref=eref,
+                nsteps=branchtime,
+                accumulators=accumulators,
+                ekey=ekey,
+                drift_limiter=drift_limiter,
+                **kwargs,
+            )
+
         df_["eref"] = eref
         df_["step"] = step+stepoffset
         df_["esigma"] = esigma
         df_["tstep"] = tstep
+        df_['weight_std'] = np.std(weights)
+        df_['nsteps'] = branchtime
 
         dmc_file(hdf_file, df_, {}, configs, weights)
         # print(df_)
@@ -341,6 +376,10 @@ def rundmc(
             np.mean(weights)
         )
         configs, weights = branch(configs, weights)
-    if verbose: 
-        print("dmc done")
-    return pd.concat(df).reset_index(), configs, weights
+        if verbose:
+            print("energy", df_[ekey[0]+ekey[1]], "eref", df_["eref"], "sigma(w)", df_["weight_std"])
+
+    df_ret ={}
+    for k in df[0].keys():
+        df_ret[k] = np.asarray([d[k] for d in df])
+    return df_ret, configs, weights

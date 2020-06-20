@@ -13,6 +13,7 @@ if __name__ == "__main__":
 
     acc = pyqmc.gradient_generator(mol, wf, to_opt)
     pyqmc.line_minimization(wf, configs, acc, hdf_file="he_opt.hdf5", verbose=True)
+    #pyqmc.vmc(wf, configs)
 
     pyqmc.rundmc(
         wf,

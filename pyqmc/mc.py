@@ -215,7 +215,7 @@ def vmc(
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
             if "configs" in hdf.keys():
-                stepoffset = hdf["step"][-1] + 1
+                stepoffset = hdf["block"][-1] + 1
                 configs.load_hdf(hdf)
                 if verbose:
                     print("Restarting calculation from step ", stepoffset)
@@ -231,7 +231,7 @@ def vmc(
         else: 
             block_avg, configs = vmc_parallel(wf, configs, tstep, nsteps_per_block, accumulators, client, npartitions)
         # Append blocks
-        block_avg["step"] = stepoffset + block
+        block_avg["block"] = stepoffset + block
         block_avg["nconfig"] = nconf * nsteps_per_block
         vmc_file(hdf_file, block_avg, dict(tstep=tstep), configs)
         df.append(block_avg)

@@ -1,11 +1,4 @@
-# This must be done BEFORE importing numpy or anything else.
-# Therefore it must be in your main script.
 import os
-
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
-os.environ["OMP_NUM_THREADS"] = "1"
-
 import numpy as np
 import pyqmc.mc as mc
 import sys
@@ -61,7 +54,6 @@ def dmc_propagate(
     accumulators=None,
     ekey=("energy", "total"),
     drift_limiter=limdrift,
-    stepoffset=0,
 ):
     """
     Propagate DMC without branching
@@ -83,7 +75,6 @@ def dmc_propagate(
 
       drift_limiter: a function that takes a gradient and a cutoff and returns an adjusted gradient
 
-      stepoffset: what to start the step numbering at.
 
     Returns: (df,coords,weights)
       df: A list of dictionaries nstep long that contains all results from the accumulators.
@@ -101,7 +92,7 @@ def dmc_propagate(
     # eref_mean = np.mean(weights * eloc) / np.mean(weights)
     # eref = eref_mean
     df = []
-    for step in range(nsteps):
+    for _ in range(nsteps):
         acc = np.zeros(nelec)
         for e in range(nelec):
             # Propose move
@@ -150,14 +141,16 @@ def dmc_propagate(
                     nconfig * wavg
                 )
         avg["weight"] = wavg
-        avg["weightvar"] = np.std(weights)
-        avg["weightmin"] = np.amin(weights)
-        avg["weightmax"] = np.amax(weights)
         avg["acceptance"] = np.mean(acc)
-        avg["step"] = stepoffset + step
-
         df.append(avg)
-    return pd.DataFrame(df), configs, weights
+    df_ret = {}
+    weight = np.asarray([d['weight'] for d in df])
+    avg_weight=weight/np.mean(weight)
+    for k in df[0].keys():
+        df_ret[k] = np.mean([d[k]*w for d,w in zip(df,avg_weight)],axis=0)
+    df_ret['weight'] = np.mean(weight)
+
+    return df_ret, configs, weights
 
 
 def limit_timestep(weights, elocnew, elocold, eref, start, stop):
@@ -229,12 +222,11 @@ def dmc_file(hdf_file, data, attr, configs, weights):
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
             if "configs" not in hdf.keys():
-                hdftools.setup_hdf(hdf, data.loc[0], attr)
+                hdftools.setup_hdf(hdf, data, attr)
                 configs.initialize_hdf(hdf)
             if "weights" not in hdf.keys():
                 hdf.create_dataset("weights", weights.shape)
-            for i in range(len(data)):
-                hdftools.append_hdf(hdf, data.loc[i])
+            hdftools.append_hdf(hdf, data)
             configs.to_hdf(hdf)
             hdf["weights"][:] = weights
 
@@ -256,6 +248,8 @@ def rundmc(
     propagate=dmc_propagate,
     feedback=1.0,
     hdf_file=None,
+    client=None,
+    npartitions=None,
     **kwargs,
 ):
     """
@@ -264,7 +258,7 @@ def rundmc(
     Args:
       wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as anything (such as laplacian() ) used by accumulators
 
-      configs: (nconfig, nelec, 3) - initial coordinates to start calculation.
+      configs: (nconfig, nelec, 3) - initial coordinates to start calculation. Will default to 
 
       weights: (nconfig,) - initial weights to start calculation, defaults to uniform.
 
@@ -292,15 +286,24 @@ def rundmc(
       weights: The final weights from this calculation
       
     """
-    # Restart
-    if hdf_file is not None:
-        with h5py.File(hdf_file, "a") as hdf:
-            if "configs" in hdf.keys():
-                stepoffset = hdf["step"][-1] + 1
-                configs.load_hdf(hdf)
-                weights = np.array(hdf["weights"])
-                if verbose:
-                    print("Restarted calculation")
+    # Restart from HDF file
+    if hdf_file is not None and os.path.isfile(hdf_file):
+        with h5py.File(hdf_file, "r") as hdf:
+            stepoffset = hdf["step"][-1] + 1
+            configs.load_hdf(hdf)
+            weights = np.array(hdf["weights"])
+            eref = hdf['eref'][-1]
+            esigma=hdf['esigma'][-1]
+            if verbose:
+                print("Restarted calculation")
+    else:
+        warmup = 2
+        df, configs = mc.vmc(wf, configs, accumulators=accumulators, client=client, npartitions=npartitions)
+        en = df[ekey[0]+ekey[1]][2:]
+        eref = np.mean(en).real
+        esigma = np.sqrt(np.var(en)*np.mean(df['nconfig']))
+        if verbose:
+            print("eref start", eref, "esigma", esigma)
 
     nconfig = configs.configs.shape[0]
     if weights is None:
@@ -308,30 +311,10 @@ def rundmc(
 
     npropagate = int(np.ceil(nsteps / branchtime))
     df = []
-
-    df_, configs, weights = propagate(
-        wf,
-        configs,
-        weights,
-        tstep,
-        branchcut_start=1e8,
-        branchcut_stop=1e9,
-        eref=0.0,
-        nsteps=1,
-        stepoffset=0,
-        accumulators=accumulators,
-        ekey=ekey,
-        drift_limiter=drift_limiter,
-        **kwargs,
-    )
-
-    df_ = pd.DataFrame(df_)
-    eref = df_[ekey[0] + ekey[1]][0].real
-    esigma = np.abs(eref) / 100
     for step in range(npropagate):
         if verbose:
             print("-", end='', flush=True)
-        df_, configs, weights = propagate(
+        df_, configs, weights = dmc_propagate(
             wf,
             configs,
             weights,
@@ -340,17 +323,21 @@ def rundmc(
             branchcut_stop * esigma,
             eref=eref,
             nsteps=branchtime,
-            stepoffset=branchtime * step + stepoffset,
             accumulators=accumulators,
             ekey=ekey,
             drift_limiter=drift_limiter,
             **kwargs,
         )
-        dmc_file(hdf_file, df_, dict(tstep=tstep), configs, weights)
+        print(df_)
         df_["eref"] = eref
+        df_["step"] = step+stepoffset
+        df_["esigma"] = esigma
+        df_["tstep"] = tstep
+
+        dmc_file(hdf_file, df_, {}, configs, weights)
         # print(df_)
         df.append(df_)
-        eref = df_[ekey[0] + ekey[1]].values[-1].real - feedback * np.log(
+        eref = df_[ekey[0] + ekey[1]] - feedback * np.log(
             np.mean(weights)
         )
         configs, weights = branch(configs, weights)

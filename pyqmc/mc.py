@@ -96,7 +96,64 @@ def vmc_file(hdf_file, data, attr, configs):
             hdftools.append_hdf(hdf, data)
             configs.to_hdf(hdf)
 
+def vmc_worker(wf, configs, tstep, nsteps, accumulators):
+    """
+    Run VMC for nsteps.
 
+    Return a dictionary of averages from each accumulator.  
+    """
+    nconf, nelec, _ = configs.configs.shape
+    block_avg={}
+    wf.recompute(configs)
+
+    for _ in range(nsteps):
+        acc = 0.0
+        for e in range(nelec):
+            # Propose move
+            grad = limdrift(np.real(wf.gradient(e, configs.electron(e)).T))
+            gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconf, 3))
+            newcoorde = configs.configs[:, e, :] + gauss + grad * tstep
+            newcoorde = configs.make_irreducible(e, newcoorde)
+
+            # Compute reverse move
+            new_grad = limdrift(np.real(wf.gradient(e, newcoorde).T))
+            forward = np.sum(gauss ** 2, axis=1)
+            backward = np.sum((gauss + tstep * (grad + new_grad)) ** 2, axis=1)
+
+            # Acceptance
+            t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
+            ratio = np.multiply(wf.testvalue(e, newcoorde) ** 2, t_prob)
+            accept = ratio > np.random.rand(nconf)
+
+            # Update wave function
+            configs.move(e, newcoorde, accept)
+            wf.updateinternals(e, newcoorde, mask=accept)
+            acc += np.mean(accept)/nelec
+
+        # Rolling average on step
+        for k, accumulator in accumulators.items():
+            dat = accumulator.avg(configs, wf)
+            for m, res in dat.items():
+                if k + m not in block_avg:
+                    block_avg[k + m] = res / nsteps
+                else:
+                    block_avg[k + m] += res / nsteps
+    return block_avg, configs
+
+
+
+def vmc_parallel(wf, configs, tstep, nsteps_per_block, accumulators, client, npartitions):
+    config = configs.split(npartitions)
+    runs=[ client.submit(vmc_worker, wf, conf , tstep, nsteps_per_block, accumulators) for conf in config]
+    allresults = list(zip(*[r.result() for r in runs]))
+    configs.join(allresults[1])
+    confweight = np.array([len(c.configs) for c in config], dtype=float)
+    confweight /= np.mean(confweight)*npartitions
+    block_avg = {}
+    for k in allresults[0][0].keys():
+        block_avg[k] = np.sum([res[k]*w for res,w in zip(allresults[0],confweight)])
+    return block_avg, configs
+    
 def vmc(
     wf,
     configs,
@@ -108,6 +165,8 @@ def vmc(
     verbose=False,
     stepoffset=0,
     hdf_file=None,
+    client = None,
+    npartitions = None
 ):
     """Run a Monte Carlo sample of a given wave function.
 
@@ -132,6 +191,10 @@ def vmc(
       stepoffset: If continuing a run, what to start the step numbering at.
   
       hdf_file: Hdf_file to store vmc output.
+
+      client: an object with submit() functions that return futures
+
+      nworkers: the number of workers to submit at a time
 
     Returns: (df,configs)
        df: A list of dictionaries nstep long that contains all results from the accumulators. These are averaged across all walkers.
@@ -159,51 +222,23 @@ def vmc(
 
     nconf, nelec, ndim = configs.configs.shape
     df = []
-    wf.recompute(configs)
 
     for block in range(nblocks):
-        block_avg = {}
-        acc = []
-        for step in range(nsteps_per_block):
-            if verbose:
-                print(f"-",end='',flush=True)
-            for e in range(nelec):
-                # Propose move
-                grad = limdrift(np.real(wf.gradient(e, configs.electron(e)).T))
-                gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconf, 3))
-                newcoorde = configs.configs[:, e, :] + gauss + grad * tstep
-                newcoorde = configs.make_irreducible(e, newcoorde)
-
-                # Compute reverse move
-                new_grad = limdrift(np.real(wf.gradient(e, newcoorde).T))
-                forward = np.sum(gauss ** 2, axis=1)
-                backward = np.sum((gauss + tstep * (grad + new_grad)) ** 2, axis=1)
-
-                # Acceptance
-                t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
-                ratio = np.multiply(wf.testvalue(e, newcoorde) ** 2, t_prob)
-                accept = ratio > np.random.rand(nconf)
-
-                # Update wave function
-                configs.move(e, newcoorde, accept)
-                wf.updateinternals(e, newcoorde, mask=accept)
-                acc.append(np.mean(accept))
-
-            # Rolling average on step
-            for k, accumulator in accumulators.items():
-                dat = accumulator.avg(configs, wf)
-                for m, res in dat.items():
-                    if k + m not in block_avg:
-                        block_avg[k + m] = res / nsteps_per_block
-                    else:
-                        block_avg[k + m] += res / nsteps_per_block
-
+        if verbose:
+            print(f"-",end='',flush=True)
+        if client is None:
+            block_avg, configs = vmc_worker(wf, configs, tstep, nsteps_per_block, accumulators)
+        else: 
+            block_avg, configs = vmc_parallel(wf, configs, tstep, nsteps_per_block, accumulators, client, npartitions)
         # Append blocks
-        block_avg["acceptance"] = np.mean(acc)
         block_avg["step"] = stepoffset + block
         block_avg["nconfig"] = nconf * nsteps_per_block
         vmc_file(hdf_file, block_avg, dict(tstep=tstep), configs)
         df.append(block_avg)
     if verbose:
         print("vmc done")
-    return df, configs
+
+    df_return = {}
+    for k in df[0].keys():
+        df_return[k] = np.asarray([d[k] for d in df])
+    return df_return, configs

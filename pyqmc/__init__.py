@@ -6,6 +6,7 @@ from pyqmc.multislater import MultiSlater
 from pyqmc.multiplywf import MultiplyWF
 from pyqmc.jastrowspin import JastrowSpin
 from pyqmc.manybody_jastrow import J3
+from pyqmc.supercell import get_supercell
 
 from pyqmc.accumulators import EnergyAccumulator, PGradTransform, LinearTransform
 from pyqmc.func3d import (
@@ -17,8 +18,9 @@ from pyqmc.func3d import (
 from pyqmc.optvariance import optvariance
 from pyqmc.linemin import line_minimization
 from pyqmc.dmc import rundmc
-from pyqmc.cvmc import cvmc_optimize
 from pyqmc.reblock import reblock as avg_reblock
+import numpy as np
+import h5py
 
 
 def slater_jastrow(mol, mf, abasis=None, bbasis=None):
@@ -34,36 +36,29 @@ def gradient_generator(mol, wf, to_opt=None, **ewald_kwargs):
 
 
 def default_slater(mol, mf, optimize_orbitals=False):
-    import numpy as np
 
     wf = PySCFSlater(mol, mf)
     to_opt = {}
     if optimize_orbitals:
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             to_opt[k] = np.ones(wf.parameters[k].shape).astype(bool)
-            # maxval = np.argmax(np.abs(wf.parameters[k]))
-            # print(maxval)
-            # to_opt[k][maxval] = False
     return wf, to_opt
 
 
-def default_multislater(mol, mf, mc, tol=None, freeze_orb=None):
+def default_multislater(mol, mf, mc, tol=None, optimize_orbitals=False):
     import numpy as np
 
     # Nothing provided, nothing frozen
     if freeze_orb is None:
         freeze_orb = [[], []]
 
-    wf = MultiSlater(mol, mf, mc, tol, freeze_orb)
+    wf = MultiSlater(mol, mf, mc, tol)
     to_opt = ["det_coeff"]
     to_opt = {"det_coeff": np.ones(wf.parameters["det_coeff"].shape).astype(bool)}
     to_opt["det_coeff"][0] = False  # Determinant coefficient pivot
-
-    for s, k in enumerate(["mo_coeff_alpha", "mo_coeff_beta"]):
-        to_freeze = np.zeros(wf.parameters[k].shape, dtype=bool)
-        to_freeze[:, freeze_orb[s]] = True
-        if to_freeze.sum() < np.prod(to_freeze.shape):
-            to_opt[k] = ~to_freeze
+    if optimize_orbitals:
+        for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
+            to_opt[k] = np.ones(wf.parameters[k].shape).astype(bool)
 
     return wf, to_opt
 
@@ -131,3 +126,61 @@ def default_sj(mol, mf, ion_cusp=False):
     to_opt.update({"wf2" + x: opt for x, opt in to_opt2.items()})
 
     return wf, to_opt
+
+
+def generate_wf(mol, mf, jastrow=default_jastrow, jastrow_kws=None, slater_kws=None, mc=None):
+    """
+    mol and mf are pyscf objects
+
+    jastrow may be either a function that returns wf, to_opt, or 
+    a list of such functions.
+
+    jastrow_kws is a dictionary of keyword arguments for the jastrow function, or
+    a list of those functions.
+    """
+    if jastrow_kws is None:
+        jastrow_kws = {}
+
+    if slater_kws is None:
+        slater_kws = {}
+
+    if not isinstance(jastrow, list):
+        jastrow = [jastrow]
+        jastrow_kws = [jastrow_kws]
+
+    if mc is None:
+        wf1, to_opt1 = default_slater(mol, mf, **slater_kws)
+    elif hasattr(mol, "a"):
+        raise NotImplementedError("No defaults for multislater with PBCs")
+    else:
+        wf1, to_opt1 = default_multislater(mol, mf, mc, **slater_kws)
+
+    pack = [jast(mol, **kw) for jast, kw in zip(jastrow, jastrow_kws)]
+    wfs = [p[0] for p in pack]
+    to_opts = [p[1] for p in pack]
+    wf = MultiplyWF(wf1, *wfs)
+    to_opt = {"wf1" + k: v for k, v in to_opt1.items()}
+    for i, to_opt2 in enumerate(to_opts):
+        to_opt.update({f"wf{i+2}" + k: v for k, v in to_opt2.items()})
+    return wf, to_opt
+
+
+
+def recover_pyscf(chkfile):
+    import pyscf
+    mol = pyscf.lib.chkfile.load_mol(chkfile)
+    mol.output = None
+    mol.stdout = None
+    #It actually doesn't matter what type of object we make it for
+    #pyqmc. Now if you try to run this, it might cause issues. 
+    mf = pyscf.scf.RHF(mol)
+    mf.__dict__.update(pyscf.scf.chkfile.load(chkfile, "scf"))
+    return mol, mf
+
+
+def read_wf(wf, wf_file):
+    with h5py.File(wf_file, "r") as hdf:
+        if "wf" in hdf.keys():
+            grp = hdf["wf"]
+            for k in grp.keys():
+                wf.parameters[k] = np.array(grp[k])

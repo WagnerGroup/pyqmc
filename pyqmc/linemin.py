@@ -181,14 +181,12 @@ def line_minimization(
         for k in newparms:
             wf.parameters[k] = newparms[k]
         df, coords = vmc(wf, coords, accumulators={"pgrad": pgrad_acc}, client=client, npartitions=npartitions, **vmcoptions)
-        #df = pd.DataFrame(data)[warmup:]
         en = np.mean(df["pgradtotal"], axis=0)
         en_err = np.std(df["pgradtotal"], axis=0) / np.sqrt(df['pgradtotal'].shape[0])
         dpH = np.mean(df["pgraddpH"], axis=0)
         dp = np.mean(df["pgraddppsi"], axis=0)
         dpdp = np.mean(df["pgraddpidpj"], axis=0)
         grad = 2 * np.real(dpH - en * dp)
-        print(df["pgraddppsi"].shape)
         Sij = np.real(dpdp - np.einsum("i,j->ij", dp, dp))
 
         if np.any(np.isnan(grad)):

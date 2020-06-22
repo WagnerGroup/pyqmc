@@ -275,7 +275,7 @@ def rundmc(
     Args:
       wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as anything (such as laplacian() ) used by accumulators
 
-      configs: (nconfig, nelec, 3) - initial coordinates to start calculation. Will default to 
+      configs: (nconfig, nelec, 3) - initial coordinates to start calculation. 
 
       weights: (nconfig,) - initial weights to start calculation, defaults to uniform.
 
@@ -315,8 +315,8 @@ def rundmc(
                 print("Restarted calculation")
     else:
         warmup = 2
-        df, configs = mc.vmc(wf, configs, accumulators=accumulators, client=client, npartitions=npartitions)
-        en = df[ekey[0]+ekey[1]][2:]
+        df, configs = mc.vmc(wf, configs, accumulators=accumulators, client=client, npartitions=npartitions, verbose=verbose)
+        en = df[ekey[0]+ekey[1]][warmup:]
         eref = np.mean(en).real
         esigma = np.sqrt(np.var(en)*np.mean(df['nconfig']))
         if verbose:

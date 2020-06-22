@@ -23,14 +23,16 @@ def test():
     checks that VMC energy matches energy calculated in PySCF
     """
     mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="cc-pvtz", unit="bohr", spin=0)
+    epsilon = 1e-4
+    delta = 1e-5
+    nsteps = 200
+    warmup = 10
     for mf in [scf.RHF(mol).run(), scf.ROHF(mol).run(), scf.UHF(mol).run()]:
         # Test same number of elecs
         mc = mcscf.CASCI(mf, ncas=4, nelecas=(1, 1))
         mc.kernel()
         wf = MultiSlater(mol, mf, mc)
 
-        epsilon = 1e-4
-        delta = 1e-5
         nconf = 10
 
         nelec = np.sum(mol.nelec)
@@ -72,8 +74,6 @@ def test():
 
         # Quick VMC test
         nconf = 1000
-        nsteps = 200
-        warmup = 10
         coords = initial_guess(mol, nconf)
         df, coords = vmc(
             wf, coords, nsteps=nsteps, accumulators={"energy": EnergyAccumulator(mol)}

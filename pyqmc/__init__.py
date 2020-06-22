@@ -48,10 +48,6 @@ def default_slater(mol, mf, optimize_orbitals=False):
 def default_multislater(mol, mf, mc, tol=None, optimize_orbitals=False):
     import numpy as np
 
-    # Nothing provided, nothing frozen
-    if freeze_orb is None:
-        freeze_orb = [[], []]
-
     wf = MultiSlater(mol, mf, mc, tol)
     to_opt = ["det_coeff"]
     to_opt = {"det_coeff": np.ones(wf.parameters["det_coeff"].shape).astype(bool)}

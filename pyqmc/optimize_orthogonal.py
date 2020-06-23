@@ -26,7 +26,7 @@ from pyqmc.mc import limdrift
 
 
 def sample_overlap(
-    wfs, configs, pgrad, nblocks=100, nsteps_per_block=1, nsteps=None, tstep=0.5
+    wfs, configs, pgrad, nblocks=10, nsteps_per_block=10, nsteps=None, tstep=0.5
 ):
     r"""
     Sample 
@@ -47,7 +47,7 @@ def sample_overlap(
 
     In addition, any key returned by `pgrad` will be saved for the final wave function.
     """
-    nconf, nelec, ndim = configs.configs.shape
+    nconf, nelec, _ = configs.configs.shape
 
     if nsteps is not None:
         nblocks = nsteps
@@ -152,6 +152,73 @@ def sample_overlap(
     return return_data, configs
 
 
+def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs):
+    if npartitions is None:
+        npartitions = sum(client.nthreads().values())
+
+    coord = configs.split(npartitions)
+    allruns = []
+
+    for nodeconfigs in coord:
+        allruns.append(
+            client.submit(
+                pyqmc.optimize_orthogonal.sample_overlap,
+                wfs,
+                nodeconfigs,
+                *args,
+                **kwargs
+            )
+        )
+
+    # Here we reweight the averages since each step on each node
+    # was done with a different average weight.
+    confweight = np.array([len(c.configs) for c in coord], dtype=float)
+    confweight /= confweight.mean()
+
+    # Memory efficient implementation, bit more verbose
+    final_coords = []
+    df = {}
+    for i, r in enumerate(allruns):
+        result = r.result()
+        result[0]["weight"] *= confweight[i]
+        final_coords.append(result[1])
+        keys = result[0].keys()
+        for k in keys:
+            if k not in df:
+                df[k] = np.zeros(result[0][k].shape)
+            if k not in ["weight", "overlap", "overlap_gradient"]:
+                if len(df[k].shape) == 1:
+                    df[k] += result[0][k] * result[0]["weight"][:, -1]
+                elif len(df[k].shape) == 2:
+                    df[k] += result[0][k] * result[0]["weight"][:, -1, np.newaxis]
+                elif len(df[k].shape) == 3:
+                    df[k] += (
+                        result[0][k]
+                        * result[0]["weight"][:, -1, np.newaxis, np.newaxis]
+                    )
+                else:
+                    raise NotImplementedError(
+                        "too many/too few dimension in dist_sample_overlap"
+                    )
+            else:
+                df[k] += result[0][k] * confweight[i] / len(allruns)
+
+    for k in keys:
+        if k not in ["weight", "overlap", "overlap_gradient"]:
+            if len(df[k].shape) == 1:
+                df[k] /= len(allruns) * df["weight"][:, -1]
+            elif len(df[k].shape) == 2:
+                df[k] /= len(allruns) * df["weight"][:, -1, np.newaxis]
+            elif len(df[k].shape) == 3:
+                df[k] /= len(allruns) * df["weight"][:, -1, np.newaxis, np.newaxis]
+
+    configs.join(final_coords)
+    coordret = configs
+    return df, coordret
+
+
+
+
 def correlated_sample(wfs, configs, parameters, pgrad):
     r"""
     Given a configs sampled from the distribution
@@ -237,6 +304,41 @@ def correlated_sample(wfs, configs, parameters, pgrad):
     return data
 
 
+def dist_correlated_sample(wfs, configs, *args, client, npartitions=None, **kwargs):
+
+    if npartitions is None:
+        npartitions = sum(client.nthreads().values())
+
+    coord = configs.split(npartitions)
+    allruns = []
+    for nodeconfigs in coord:
+        allruns.append(
+            client.submit(
+                pyqmc.optimize_orthogonal.correlated_sample,
+                wfs,
+                nodeconfigs,
+                *args,
+                **kwargs
+            )
+        )
+
+    allresults = [r.result() for r in allruns]
+    df = {}
+    for k in allresults[0].keys():
+        df[k] = np.array([x[k] for x in allresults])
+    confweight = np.array([len(c.configs) for c in coord], dtype=float)
+    confweight /= confweight.mean()
+    rhowt = np.einsum("i...,i->i...", df["rhoprime"], confweight)
+    wt = df["weight"] * rhowt
+    df["total"] = np.average(df["total"], weights=wt, axis=0)
+    df["overlap"] = np.average(df["overlap"], weights=confweight, axis=0)
+    df["weight"] = np.average(df["weight"], weights=rhowt, axis=0)
+
+    # df["weight"] = np.mean(df["weight"], axis=0)
+    df["rhoprime"] = np.mean(rhowt, axis=0)
+    return df
+
+
 def renormalize(wfs, N):
     """
     Normalize the last wave function, given a current value of the normalization. Assumes that we want N to be 0.5
@@ -304,10 +406,10 @@ def optimize_orthogonal(
     step_offset=0,
     Ntol=0.05,
     weight_boundaries=0.3,
-    sampler=sample_overlap,
     sample_options=None,
-    correlated_sampler=correlated_sample,
     correlated_options=None,
+    client=None,
+    npartitions=None
 ):
     r"""
     Minimize 
@@ -390,10 +492,23 @@ def optimize_orthogonal(
         max_step=max_step,
     )
     conditioner = pyqmc.linemin.sd_update
+
     if sample_options is None:
         sample_options = {}
     if correlated_options is None:
         correlated_options = {}
+
+    if client is None:
+        sampler=sample_overlap
+        correlated_sampler = correlated_sample
+    else:
+        sampler=dist_sample_overlap
+        correlated_sampler = dist_correlated_sample
+        sample_options['client'] = client
+        sample_options['npartitions'] = npartitions
+        correlated_options['client'] = client
+        correlated_options['npartitions'] = npartitions
+
 
     # One set of configurations for every wave function
     allcoords = [coords.copy() for _ in wfs[:-1]]
@@ -550,3 +665,8 @@ def optimize_orthogonal(
         )
 
     return wfs
+
+
+
+
+

@@ -3,6 +3,7 @@ import pandas as pd
 import scipy
 import h5py
 import os
+import pyqmc.mc
 
 
 def sr_update(pgrad, Sij, step, eps=0.1):
@@ -97,10 +98,8 @@ def line_minimization(
     pgrad_acc,
     steprange=0.2,
     warmup=0,
-    maxiters=10,
-    vmc=None,
+    max_iterations=30,
     vmcoptions=None,
-    lm=None,
     lmoptions=None,
     update=sr_update,
     update_kws=None,
@@ -123,15 +122,11 @@ def line_minimization(
 
       steprange: How far to search in the line minimization
 
-      warmup: number of steps to use for vmc warmup; if None, same as in vmcoptions
+      warmup: number of steps to use for vmc warmup
 
-      maxiters: (maximum) number of steps in the gradient descent
-
-      vmc: A function that works like mc.vmc()
+      max_iterations: (maximum) number of steps in the gradient descent
 
       vmcoptions: a dictionary of options for the vmc method
-
-      lm: the correlated sampling line minimization function to use
 
       lmoptions: a dictionary of options for the lm method
 
@@ -147,15 +142,10 @@ def line_minimization(
 
 
     """
-    if vmc is None:
-        import pyqmc.mc
 
-        vmc = pyqmc.mc.vmc
     if vmcoptions is None:
         vmcoptions = {}
     vmcoptions.update({"verbose": verbose})
-    if lm is None:
-        lm = correlated_compute
     if lmoptions is None:
         lmoptions = {}
     if update_kws is None:
@@ -174,13 +164,13 @@ def line_minimization(
 
 
     # Attributes for linemin
-    attr = dict(maxiters=maxiters, npts=npts, steprange=steprange)
+    attr = dict(max_iterations=max_iterations, npts=npts, steprange=steprange)
 
     def gradient_energy_function(x, coords):
         newparms = pgrad_acc.transform.deserialize(x)
         for k in newparms:
             wf.parameters[k] = newparms[k]
-        df, coords = vmc(wf, coords, accumulators={"pgrad": pgrad_acc}, client=client, npartitions=npartitions, **vmcoptions)
+        df, coords = pyqmc.mc.vmc(wf, coords, accumulators={"pgrad": pgrad_acc}, client=client, npartitions=npartitions, **vmcoptions)
         en = np.mean(df["pgradtotal"], axis=0)
         en_err = np.std(df["pgradtotal"], axis=0) / np.sqrt(df['pgradtotal'].shape[0])
         dpH = np.mean(df["pgraddpH"], axis=0)
@@ -204,10 +194,10 @@ def line_minimization(
     # VMC warm up period
     if verbose:
         print("starting warmup")
-    data, coords = vmc(wf, coords, accumulators={}, **vmcoptions)
+    data, coords = pyqmc.mc.vmc(wf, coords, accumulators={}, **vmcoptions)
     df = []
     # Gradient descent cycles
-    for it in range(maxiters):
+    for it in range(max_iterations):
         # Calculate gradient accurately
         coords, pgrad, Sij, en, en_err = gradient_energy_function(x0, coords)
         step_data = {}

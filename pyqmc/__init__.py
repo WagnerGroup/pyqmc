@@ -17,6 +17,7 @@ from pyqmc.func3d import (
 )
 from pyqmc.optvariance import optvariance
 from pyqmc.linemin import line_minimization
+from pyqmc.optimize_ortho import optimize_orthogonal
 from pyqmc.dmc import rundmc
 from pyqmc.reblock import reblock as avg_reblock
 import numpy as np

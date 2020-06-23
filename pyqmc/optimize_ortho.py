@@ -60,7 +60,6 @@ def sample_overlap(
     for block in range(nblocks):
         block_avg = {}
         for step in range(nsteps_per_block):
-            print("-", end='',flush=True)
             for e in range(nelec):
                 # Propose move
                 grads = [np.real(wf.gradient(e, configs.electron(e)).T) for wf in wfs]
@@ -148,7 +147,6 @@ def sample_overlap(
             if k not in return_data:
                 return_data[k] = np.zeros((nblocks, *it.shape))
             return_data[k][block, ...] = it.copy()
-    print("vmc done", flush=True)
     return return_data, configs
 
 
@@ -162,7 +160,7 @@ def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs)
     for nodeconfigs in coord:
         allruns.append(
             client.submit(
-                pyqmc.optimize_orthogonal.sample_overlap,
+                sample_overlap,
                 wfs,
                 nodeconfigs,
                 *args,
@@ -314,7 +312,7 @@ def dist_correlated_sample(wfs, configs, *args, client, npartitions=None, **kwar
     for nodeconfigs in coord:
         allruns.append(
             client.submit(
-                pyqmc.optimize_orthogonal.correlated_sample,
+                correlated_sample,
                 wfs,
                 nodeconfigs,
                 *args,

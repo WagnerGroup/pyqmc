@@ -134,7 +134,7 @@ class PySCFSlater:
                 int(np.sum([mf.mo_occ[k] > t for k in self.kinds])) for t in (0.9, 1.1)
             ]
         else:
-            print("Warning: not expecting scf object of type", type(mf))
+            print("Warning: PySCFSlater not expecting scf object of type", type(mf))
             scale = self.supercell.scale
             self._nelec = [int(np.round(n * scale)) for n in self._cell.nelec]
         self._nelec = tuple(self._nelec)

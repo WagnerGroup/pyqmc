@@ -170,9 +170,15 @@ def recover_pyscf(chkfile):
     mol = pyscf.lib.chkfile.load_mol(chkfile)
     mol.output = None
     mol.stdout = None
+    if hasattr(mol, "a"):
+        from pyscf import pbc
+
+        mol = pbc.gto.cell.loads(pyscf.lib.chkfile.load(chkfile, "mol"))
+        mf = pbc.scf.KRHF(mol)
     # It actually doesn't matter what type of object we make it for
     # pyqmc. Now if you try to run this, it might cause issues.
-    mf = pyscf.scf.RHF(mol)
+    else:
+        mf = pyscf.scf.RHF(mol)
     mf.__dict__.update(pyscf.scf.chkfile.load(chkfile, "scf"))
     return mol, mf
 

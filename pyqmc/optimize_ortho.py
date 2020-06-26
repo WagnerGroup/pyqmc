@@ -26,7 +26,7 @@ from pyqmc.mc import limdrift
 
 
 def sample_overlap(
-    wfs, configs, pgrad, nblocks=100, nsteps_per_block=1, nsteps=None, tstep=0.5
+    wfs, configs, pgrad, nblocks=10, nsteps_per_block=10, nsteps=None, tstep=0.5
 ):
     r"""
     Sample 
@@ -47,7 +47,7 @@ def sample_overlap(
 
     In addition, any key returned by `pgrad` will be saved for the final wave function.
     """
-    nconf, nelec, ndim = configs.configs.shape
+    nconf, nelec, _ = configs.configs.shape
 
     if nsteps is not None:
         nblocks = nsteps
@@ -60,7 +60,6 @@ def sample_overlap(
     for block in range(nblocks):
         block_avg = {}
         for step in range(nsteps_per_block):
-            print("-", end='',flush=True)
             for e in range(nelec):
                 # Propose move
                 grads = [np.real(wf.gradient(e, configs.electron(e)).T) for wf in wfs]
@@ -148,8 +147,74 @@ def sample_overlap(
             if k not in return_data:
                 return_data[k] = np.zeros((nblocks, *it.shape))
             return_data[k][block, ...] = it.copy()
-    print("vmc done", flush=True)
     return return_data, configs
+
+
+def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs):
+    if npartitions is None:
+        npartitions = sum(client.nthreads().values())
+
+    coord = configs.split(npartitions)
+    allruns = []
+
+    for nodeconfigs in coord:
+        allruns.append(
+            client.submit(
+                sample_overlap,
+                wfs,
+                nodeconfigs,
+                *args,
+                **kwargs
+            )
+        )
+
+    # Here we reweight the averages since each step on each node
+    # was done with a different average weight.
+    confweight = np.array([len(c.configs) for c in coord], dtype=float)
+    confweight /= confweight.mean()
+
+    # Memory efficient implementation, bit more verbose
+    final_coords = []
+    df = {}
+    for i, r in enumerate(allruns):
+        result = r.result()
+        result[0]["weight"] *= confweight[i]
+        final_coords.append(result[1])
+        keys = result[0].keys()
+        for k in keys:
+            if k not in df:
+                df[k] = np.zeros(result[0][k].shape)
+            if k not in ["weight", "overlap", "overlap_gradient"]:
+                if len(df[k].shape) == 1:
+                    df[k] += result[0][k] * result[0]["weight"][:, -1]
+                elif len(df[k].shape) == 2:
+                    df[k] += result[0][k] * result[0]["weight"][:, -1, np.newaxis]
+                elif len(df[k].shape) == 3:
+                    df[k] += (
+                        result[0][k]
+                        * result[0]["weight"][:, -1, np.newaxis, np.newaxis]
+                    )
+                else:
+                    raise NotImplementedError(
+                        "too many/too few dimension in dist_sample_overlap"
+                    )
+            else:
+                df[k] += result[0][k] * confweight[i] / len(allruns)
+
+    for k in keys:
+        if k not in ["weight", "overlap", "overlap_gradient"]:
+            if len(df[k].shape) == 1:
+                df[k] /= len(allruns) * df["weight"][:, -1]
+            elif len(df[k].shape) == 2:
+                df[k] /= len(allruns) * df["weight"][:, -1, np.newaxis]
+            elif len(df[k].shape) == 3:
+                df[k] /= len(allruns) * df["weight"][:, -1, np.newaxis, np.newaxis]
+
+    configs.join(final_coords)
+    coordret = configs
+    return df, coordret
+
+
 
 
 def correlated_sample(wfs, configs, parameters, pgrad):
@@ -237,6 +302,41 @@ def correlated_sample(wfs, configs, parameters, pgrad):
     return data
 
 
+def dist_correlated_sample(wfs, configs, *args, client, npartitions=None, **kwargs):
+
+    if npartitions is None:
+        npartitions = sum(client.nthreads().values())
+
+    coord = configs.split(npartitions)
+    allruns = []
+    for nodeconfigs in coord:
+        allruns.append(
+            client.submit(
+                correlated_sample,
+                wfs,
+                nodeconfigs,
+                *args,
+                **kwargs
+            )
+        )
+
+    allresults = [r.result() for r in allruns]
+    df = {}
+    for k in allresults[0].keys():
+        df[k] = np.array([x[k] for x in allresults])
+    confweight = np.array([len(c.configs) for c in coord], dtype=float)
+    confweight /= confweight.mean()
+    rhowt = np.einsum("i...,i->i...", df["rhoprime"], confweight)
+    wt = df["weight"] * rhowt
+    df["total"] = np.average(df["total"], weights=wt, axis=0)
+    df["overlap"] = np.average(df["overlap"], weights=confweight, axis=0)
+    df["weight"] = np.average(df["weight"], weights=rhowt, axis=0)
+
+    # df["weight"] = np.mean(df["weight"], axis=0)
+    df["rhoprime"] = np.mean(rhowt, axis=0)
+    return df
+
+
 def renormalize(wfs, N):
     """
     Normalize the last wave function, given a current value of the normalization. Assumes that we want N to be 0.5
@@ -295,23 +395,19 @@ def optimize_orthogonal(
     Starget=0.0,
     forcing=10.0,
     tstep=0.1,
-    nsteps=30,
+    max_iterations=30,
     warmup=5,
     Ntarget=0.5,
     max_step=10.0,
     hdf_file=None,
-    update_method="linemin",
     linemin=True,
-    beta1=0.9,
-    beta2=0.999,
-    adam_epsilon=1e-8,
     step_offset=0,
     Ntol=0.05,
     weight_boundaries=0.3,
-    sampler=sample_overlap,
     sample_options=None,
-    correlated_sampler=correlated_sample,
     correlated_options=None,
+    client=None,
+    npartitions=None
 ):
     r"""
     Minimize 
@@ -337,7 +433,7 @@ def optimize_orthogonal(
 
         :tstep: Maximum timestep for line minimization, or timestep when line minimization is off
 
-        :nsteps: Number of optimization steps to take
+        :max_iterations: Number of optimization steps to take
 
         :Starget: An array-like of length len(wfs)-1, which indicates the target overlap for each reference wave function.
 
@@ -382,32 +478,39 @@ def optimize_orthogonal(
     """
 
     parameters = pgrad.transform.serialize_parameters(wfs[-1].parameters)
-    adam_m = np.zeros(parameters.shape)
-    adam_v = np.zeros(parameters.shape)
     Starget = np.asarray(Starget)
     forcing = np.asarray(forcing)
     attr = dict(
         tstep=tstep,
-        nsteps=nsteps,
+        max_iterations=max_iterations,
         forcing=forcing,
         warmup=warmup,
         Starget=Starget,
         Ntarget=Ntarget,
         max_step=max_step,
-        update_method=update_method,
-        beta1=beta1,
-        beta2=beta2,
-        adam_epsilon=adam_epsilon,
     )
     conditioner = pyqmc.linemin.sd_update
+
     if sample_options is None:
         sample_options = {}
     if correlated_options is None:
         correlated_options = {}
 
+    if client is None:
+        sampler=sample_overlap
+        correlated_sampler = correlated_sample
+    else:
+        sampler=dist_sample_overlap
+        correlated_sampler = dist_correlated_sample
+        sample_options['client'] = client
+        sample_options['npartitions'] = npartitions
+        correlated_options['client'] = client
+        correlated_options['npartitions'] = npartitions
+
+
     # One set of configurations for every wave function
     allcoords = [coords.copy() for _ in wfs[:-1]]
-    for step in range(nsteps):
+    for step in range(max_iterations):
         # we iterate until the normalization is reasonable
         # One could potentially save a little time here by not computing the gradients
         # every time, but typically we don't have to renormalize if the moves are good
@@ -462,7 +565,7 @@ def optimize_orthogonal(
 
         total_derivative = energy_derivative + overlap_derivative
 
-        print("############################# step ", step)
+        print("############################# iteration ", step)
         format_str = "{:<15}" * 2 + "{:<15.10}" * 2
         print(format_str.format("Quantity", "wf", "value", "|grad|"))
         print(
@@ -498,99 +601,70 @@ def optimize_orthogonal(
         if deriv_norm > max_step:
             total_derivative = total_derivative * max_step / deriv_norm
 
-        # ADAM uses a momentum term, which can sometimes accelerate the
-        # optimization and allow for a much smaller sample size
-        if update_method == "adam":
-            adam_m = beta1 * adam_m + (1 - beta1) * total_derivative
-            adam_v = beta2 * adam_v + (1 - beta2) * total_derivative ** 2
-            adam_mhat = adam_m / (1 - beta1 ** (step + 1))
-            adam_vhat = adam_v / (1 - beta2 ** (step + 1))
-            total_derivative = adam_mhat / (np.sqrt(adam_vhat) + adam_epsilon)
-
-        # print("derivative after modifications", total_derivative.round(2))
-        if linemin:
-            test_tsteps = np.linspace(-tstep, tstep, 21)
-            test_parameters = [
-                parameters + conditioner(total_derivative, condition, x)
-                for x in test_tsteps
-            ]
-            data = []
-            for icoord, wf in zip(allcoords, wfs):
-                data.append(
-                    correlated_sampler(
-                        [wf, wfs[-1]],
-                        icoord,
-                        test_parameters,
-                        pgrad,
-                        **correlated_options
-                    )
-                )
-            line_data = {}
-            for k in data[0].keys():
-                line_data[k] = np.asarray([x[k] for x in data])
-
-            yfit = []
-            xfit = []
-            overlap_cost = (
-                forcing[:, np.newaxis]
-                * (line_data["overlap"][:, :, 0] - Starget[:, np.newaxis]) ** 2
-            )
-            cost = np.mean(line_data["total"], axis=0) + np.sum(overlap_cost, axis=0)
-            mask = (np.abs(line_data["weight"] - 1.0) > weight_boundaries) & (
-                np.abs(line_data["weight"]) > weight_boundaries
-            )
-            mask = np.all(mask, axis=0)
-            xfit = test_tsteps[mask]
-            yfit = cost[mask]
-
-            row_format = "{:<5}" + "{:<12.6} " * 5 + "{:<10}"
-            print(
-                row_format.format(
-                    "wf", "tstep", "energy", "S", "weight", "cost", "used"
+        test_tsteps = np.linspace(-tstep, tstep, 21)
+        test_parameters = [
+            parameters + conditioner(total_derivative, condition, x)
+            for x in test_tsteps
+        ]
+        data = []
+        for icoord, wf in zip(allcoords, wfs):
+            data.append(
+                correlated_sampler(
+                    [wf, wfs[-1]],
+                    icoord,
+                    test_parameters,
+                    pgrad,
+                    **correlated_options
                 )
             )
-            for pt in range(len(mask)):
-                for wf in range(len(data)):
-                    print(
-                        row_format.format(
-                            wf,
-                            test_tsteps[pt],
-                            line_data["total"][wf, pt],
-                            line_data["overlap"][wf, pt, 0],
-                            line_data["weight"][wf, pt],
-                            cost[pt],
-                            mask[pt],
-                        )
-                    )
+        line_data = {}
+        for k in data[0].keys():
+            line_data[k] = np.asarray([x[k] for x in data])
 
-            if len(xfit) > 0:
-                min_tstep = pyqmc.linemin.stable_fit2(xfit, yfit)
-                print("chose to move", min_tstep)
-                parameters += conditioner(total_derivative, condition, min_tstep)
-        else:
-            parameters += conditioner(total_derivative, condition, tstep)
+        yfit = []
+        xfit = []
+        overlap_cost = (
+            forcing[:, np.newaxis]
+            * (line_data["overlap"][:, :, 0] - Starget[:, np.newaxis]) ** 2
+        )
+        cost = np.mean(line_data["total"], axis=0) + np.sum(overlap_cost, axis=0)
+        mask = (np.abs(line_data["weight"] - 1.0) > weight_boundaries) & (
+            np.abs(line_data["weight"]) > weight_boundaries
+        )
+        mask = np.all(mask, axis=0)
+        xfit = test_tsteps[mask]
+        yfit = cost[mask]
+
+        if len(xfit) > 0:
+            min_tstep = pyqmc.linemin.stable_fit2(xfit, yfit)
+            print("chose to move", min_tstep)
+            parameters += conditioner(total_derivative, condition, min_tstep)
 
         for k, it in pgrad.transform.deserialize(parameters).items():
             wfs[-1].parameters[k] = it
 
         save_data = {
-            "energies": total_energy,
+            "energy": total_energy,
             "overlap": overlaps,
             "gradient": total_derivative,
             "N": N,
             "parameters": parameters,
-            "step": step + step_offset,
+            "iteration": step + step_offset,
             "normalization": normalization,
             "overlap_derivatives": overlap_derivatives,
             "energy_derivative": energy_derivative,
+            "line_tsteps": test_tsteps,
+            "line_cost": cost,
+            "line_norm": line_data["weight"],
         }
-        if linemin:
-            save_data["line_tsteps"] = test_tsteps
-            save_data["line_cost"] = cost
-            save_data["line_norm"] = line_data["weight"]
 
         ortho_hdf(
             hdf_file, save_data, attr, coords, pgrad.transform.deserialize(parameters)
         )
 
     return wfs
+
+
+
+
+

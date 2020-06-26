@@ -3,39 +3,40 @@ from dask.distributed import Client, LocalCluster
 import pyqmc
 
 ncore = 2
-nconfig = ncore*400
+nconfig = ncore * 400
 
-def generate_wfs():
+
+def run_scf():
     from pyscf import gto, scf
-    import pyqmc
+
     mol = gto.M(
         atom="O 0 0 0; H 0 -2.757 2.587; H 0 2.757 2.587", basis="bfd_vtz", ecp="bfd"
-        )
+    )
     mf = scf.RHF(mol).run()
-    wf=pyqmc.slater_jastrow(mol,mf)
-
-    return mol,mf,wf
+    return mol, mf
 
 
-
-if __name__=="__main__":
+if __name__ == "__main__":
     cluster = LocalCluster(n_workers=ncore, threads_per_worker=1)
     client = Client(cluster)
-    mol,mf,wf=generate_wfs()
-    from pyqmc.mc import vmc
-    from pyqmc.dasktools import distvmc,line_minimization
+    mol, mf = run_scf()
+    from pyqmc.dasktools import distvmc, line_minimization
     from pyqmc.dmc import rundmc
-    from pyqmc import EnergyAccumulator
     import pandas as pd
 
-    df,coords=distvmc(wf,pyqmc.initial_guess(mol,nconfig),client=client,nsteps_per=10,nsteps=10)
-    line_minimization(wf,coords,pyqmc.gradient_generator(mol,wf,["wf2acoeff", "wf2bcoeff"]),client=client)
+    wf, to_opt = pyqmc.default_sj(mol, mf)
+    df, coords = distvmc(
+        wf, pyqmc.initial_guess(mol, nconfig), client=client, nsteps_per=10, nsteps=10
+    )
+    line_minimization(
+        wf, coords, pyqmc.gradient_generator(mol, wf, to_opt), client=client
+    )
     dfdmc, configs, weights = rundmc(
         wf,
         coords,
         nsteps=5000,
         branchtime=5,
-        accumulators={"energy": EnergyAccumulator(mol)},
+        accumulators={"energy": pyqmc.EnergyAccumulator(mol)},
         ekey=("energy", "total"),
         tstep=0.02,
         verbose=True,

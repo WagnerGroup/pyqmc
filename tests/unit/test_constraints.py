@@ -15,9 +15,9 @@ def test():
     mc = mcscf.CASCI(mf, ncas=2, nelecas=(1, 1))
     mc.kernel()
 
-    wf, to_opt, freeze = default_msj(mol, mf, mc)
+    wf, to_opt = default_msj(mol, mf, mc)
     old_parms = wf.parameters
-    lt = LinearTransform(wf.parameters, to_opt, freeze)
+    lt = LinearTransform(wf.parameters, to_opt)
 
     # Test serialize parameters
     x0 = lt.serialize_parameters(wf.parameters)

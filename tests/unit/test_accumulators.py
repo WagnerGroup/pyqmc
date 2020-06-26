@@ -19,7 +19,7 @@ def test_transform():
         verbose=1,
     )
     mf = scf.RHF(mol).run()
-    wf, to_opt, freeze = pyqmc.default_sj(mol, mf)
+    wf, to_opt = pyqmc.default_sj(mol, mf)
     enacc = pyqmc.EnergyAccumulator(mol)
     print(list(wf.parameters.keys()))
     transform = LinearTransform(wf.parameters)

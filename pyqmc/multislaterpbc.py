@@ -41,7 +41,7 @@ class MultiSlaterPBC:
             twist = np.zeros(3)
         else:
             twist = np.dot(np.linalg.inv(supercell.a), np.mod(twist, 1.0)) * 2 * np.pi
-        self.kinds = get_kinds(self._cell, mf, get_supercell_kpts(cell) + twist)
+        self.kinds = get_kinds(self._mol, mf, get_supercell_kpts(supercell) + twist)
         self._kpts = mf.kpts[self.kinds]
         assert len(self.kinds) == len(self._kpts), (self._kpts, mf.kpts)
         self.nk = len(self._kpts)

@@ -26,6 +26,18 @@ def _aostack_pbc(ao, gl):
     return [_aostack_mol(ak, gl) for ak in ao]
 
 
+def get_wrapphase_real(x):
+    return (-1) ** np.round(x / np.pi)
+
+
+def get_wrapphase_complex(x):
+    return np.exp(1j * x)
+
+
+def get_complex_phase(x):
+    return x / np.abs(x)
+
+
 class PySCFSlater:
     """A wave function object has a state defined by a reference configuration of electrons.
     The functions recompute() and updateinternals() change the state of the object, and 
@@ -51,11 +63,11 @@ class PySCFSlater:
 
         self.dtype = complex if self.iscomplex else float
         if self.iscomplex:
-            self.get_phase = lambda x: x / np.abs(x)
-            self.get_wrapphase = lambda x: np.exp(1j * x)
+            self.get_phase = get_complex_phase
+            self.get_wrapphase = get_wrapphase_complex
         else:
             self.get_phase = np.sign
-            self.get_wrapphase = lambda x: (-1) ** np.round(x / np.pi)
+            self.get_wrapphase = get_wrapphase_real
 
     def _init_mol(self, mol, mf):
         from pyscf import scf

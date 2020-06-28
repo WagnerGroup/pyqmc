@@ -1,7 +1,7 @@
 import numpy as np
 from pyqmc.multislater import sherman_morrison_ms
 from pyqmc.supercell import get_supercell_kpts
-from pyqmc import pbc
+from pyqmc import pbc, slater
 
 
 class MultiSlaterPBC:
@@ -87,11 +87,11 @@ class MultiSlaterPBC:
         self.iscomplex = self.iscomplex or np.linalg.norm(self._kpts) > 1e-12
         self.dtype = complex if self.iscomplex else float
         if self.iscomplex:
-            self.get_phase = lambda x: x / np.abs(x)
-            self.get_wrapphase = lambda x: np.exp(1j * x)
+            self.get_phase = slater.get_complex_phase
+            self.get_wrapphase = slater.get_wrapphase_complex
         else:
             self.get_phase = np.sign
-            self.get_wrapphase = lambda x: (-1) ** np.round(x / np.pi)
+            self.get_wrapphase = slater.get_wrapphase_real
 
     def evaluate_orbitals(self, configs, mask=None, eval_str="PBCGTOval_sph"):
         mycoords = configs.configs

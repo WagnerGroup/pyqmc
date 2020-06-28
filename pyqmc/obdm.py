@@ -60,9 +60,9 @@ class OBDMAccumulator:
             self._kpts = kpts
             self.evaluate_orbitals = self._evaluate_orbitals_pbc
             if self.iscomplex:
-                self.get_wrapphase = lambda x: np.exp(1j * x)
+                self.get_wrapphase = pyqmc.slater.get_wrapphase_complex
             else:
-                self.get_wrapphase = lambda x: (-1) ** np.round(x / np.pi)
+                self.get_wrapphase = pyqmc.slater.get_wrapphase_real
             for attribute in ["original_cell", "S"]:
                 if not hasattr(mol, attribute):
                     from pyqmc.slaterpbc import get_supercell

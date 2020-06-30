@@ -78,7 +78,7 @@ class PySCFSlater:
                 self.parameters[lookup] = mf.mo_coeff[:, np.asarray(mf.mo_occ > minocc)]
         self._nelec = tuple(mol.nelec)
         self._mol = mol
-        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters)))
+        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
         self.evaluate_orbitals = self._evaluate_orbitals_mol
         self.evaluate_mos = self._evaluate_mos_mol
 
@@ -106,7 +106,7 @@ class PySCFSlater:
         self._kpts = mf.kpts[self.kinds]
         assert len(self.kinds) == len(self._kpts), (self._kpts, mf.kpts)
         self.nk = len(self._kpts)
-        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters)))
+        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
         self.iscomplex = self.iscomplex or np.linalg.norm(self._kpts) > 1e-12
 
         # Define parameters

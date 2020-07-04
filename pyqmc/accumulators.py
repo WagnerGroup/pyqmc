@@ -51,7 +51,7 @@ class LinearTransform:
     def __init__(self, parameters, to_opt=None):
         if to_opt is None:
             to_opt = {k: np.ones(p.shape, dtype=bool) for k, p in parameters.items()}
-        self.to_opt = to_opt
+        self.to_opt = {k: o for k, o in to_opt.items() if np.any(o)}
 
         self.frozen_parms = {k: parameters[k][~opt] for k, opt in self.to_opt.items()}
 

@@ -26,6 +26,14 @@ def _aostack_pbc(ao, gl):
     return [_aostack_mol(ak, gl) for ak in ao]
 
 
+def get_kinds(cell, mf, kpts, tol=1e-6):
+    """Given a list of kpts, return inds such that mf.kpts[inds] is a list of kpts equivalent to the input list"""
+    kdiffs = mf.kpts[np.newaxis] - kpts[:, np.newaxis]
+    frac_kdiffs = np.dot(kdiffs, cell.lattice_vectors().T) / (2 * np.pi)
+    kdiffs = np.mod(frac_kdiffs + 0.5, 1) - 0.5
+    return np.nonzero(np.linalg.norm(kdiffs, axis=-1) < tol)[1]
+
+
 class PySCFSlater:
     """A wave function object has a state defined by a reference configuration of electrons.
     The functions recompute() and updateinternals() change the state of the object, and 
@@ -70,7 +78,7 @@ class PySCFSlater:
                 self.parameters[lookup] = mf.mo_coeff[:, np.asarray(mf.mo_occ > minocc)]
         self._nelec = tuple(mol.nelec)
         self._mol = mol
-        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters)))
+        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
         self.evaluate_orbitals = self._evaluate_orbitals_mol
         self.evaluate_mos = self._evaluate_mos_mol
 
@@ -94,11 +102,11 @@ class PySCFSlater:
             twist = np.zeros(3)
         else:
             twist = np.dot(np.linalg.inv(cell.a), np.mod(twist, 1.0)) * 2 * np.pi
-        self._kpts = get_supercell_kpts(cell) + twist
-        kdiffs = mf.kpts[np.newaxis] - self._kpts[:, np.newaxis]
-        self.kinds = np.nonzero(np.linalg.norm(kdiffs, axis=-1) < 1e-12)[1]
+        self.kinds = get_kinds(self._cell, mf, get_supercell_kpts(cell) + twist)
+        self._kpts = mf.kpts[self.kinds]
+        assert len(self.kinds) == len(self._kpts), (self._kpts, mf.kpts)
         self.nk = len(self._kpts)
-        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters)))
+        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
         self.iscomplex = self.iscomplex or np.linalg.norm(self._kpts) > 1e-12
 
         # Define parameters
@@ -126,7 +134,7 @@ class PySCFSlater:
                 int(np.sum([mf.mo_occ[k] > t for k in self.kinds])) for t in (0.9, 1.1)
             ]
         else:
-            print("Warning: not expecting scf object of type", type(mf))
+            print("Warning: PySCFSlater not expecting scf object of type", type(mf))
             scale = self.supercell.scale
             self._nelec = [int(np.round(n * scale)) for n in self._cell.nelec]
         self._nelec = tuple(self._nelec)

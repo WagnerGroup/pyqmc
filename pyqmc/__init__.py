@@ -125,7 +125,9 @@ def default_sj(mol, mf, ion_cusp=False):
     return wf, to_opt
 
 
-def generate_wf(mol, mf, jastrow=default_jastrow, jastrow_kws=None, slater_kws=None, mc=None):
+def generate_wf(
+    mol, mf, jastrow=default_jastrow, jastrow_kws=None, slater_kws=None, mc=None
+):
     """
     mol and mf are pyscf objects
 
@@ -162,15 +164,21 @@ def generate_wf(mol, mf, jastrow=default_jastrow, jastrow_kws=None, slater_kws=N
     return wf, to_opt
 
 
-
 def recover_pyscf(chkfile):
     import pyscf
+
     mol = pyscf.lib.chkfile.load_mol(chkfile)
     mol.output = None
     mol.stdout = None
-    #It actually doesn't matter what type of object we make it for
-    #pyqmc. Now if you try to run this, it might cause issues. 
-    mf = pyscf.scf.RHF(mol)
+    if hasattr(mol, "a"):
+        from pyscf import pbc
+
+        mol = pbc.gto.cell.loads(pyscf.lib.chkfile.load(chkfile, "mol"))
+        mf = pbc.scf.KRHF(mol)
+    # It actually doesn't matter what type of object we make it for
+    # pyqmc. Now if you try to run this, it might cause issues.
+    else:
+        mf = pyscf.scf.RHF(mol)
     mf.__dict__.update(pyscf.scf.chkfile.load(chkfile, "scf"))
     return mol, mf
 

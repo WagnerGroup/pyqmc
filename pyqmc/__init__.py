@@ -60,7 +60,7 @@ def default_multislater(mol, mf, mc, tol=None, optimize_orbitals=False):
     return wf, to_opt
 
 
-def default_jastrow(mol, ion_cusp=False):
+def default_jastrow(mol, ion_cusp=False, na=4, nb=3, rcut=7.5):
     """         
     Default 2-body jastrow from qwalk,
     Args:
@@ -81,15 +81,15 @@ def default_jastrow(mol, ion_cusp=False):
             beta[i] = np.exp(beta1 + 1.6 * i) - 1
         return beta
 
-    beta_abasis = expand_beta_qwalk(0.2, 4)
-    beta_bbasis = expand_beta_qwalk(0.5, 3)
+    beta_abasis = expand_beta_qwalk(0.2, na)
+    beta_bbasis = expand_beta_qwalk(0.5, nb)
     if ion_cusp:
-        abasis = [CutoffCuspFunction(gamma=24, rcut=7.5)]
+        abasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
     else:
         abasis = []
-    abasis += [PolyPadeFunction(beta=beta_abasis[i], rcut=7.5) for i in range(4)]
-    bbasis = [CutoffCuspFunction(gamma=24, rcut=7.5)]
-    bbasis += [PolyPadeFunction(beta=beta_bbasis[i], rcut=7.5) for i in range(3)]
+    abasis += [PolyPadeFunction(beta=beta_abasis[i], rcut=rcut) for i in range(4)]
+    bbasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
+    bbasis += [PolyPadeFunction(beta=beta_bbasis[i], rcut=rcut) for i in range(3)]
 
     jastrow = JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
     if ion_cusp:

@@ -65,7 +65,7 @@ class OBDMAccumulator:
                 self.get_wrapphase = lambda x: (-1) ** np.round(x / np.pi)
             for attribute in ["original_cell", "S"]:
                 if not hasattr(mol, attribute):
-                    from pyqmc.slaterpbc import get_supercell
+                    from pyqmc.supercell import get_supercell
 
                     mol = get_supercell(mol, np.eye(3))
             self.supercell = mol

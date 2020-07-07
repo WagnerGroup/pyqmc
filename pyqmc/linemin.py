@@ -171,7 +171,7 @@ def line_minimization(
         for k in newparms:
             wf.parameters[k] = newparms[k]
         df, coords = pyqmc.mc.vmc(wf, coords, accumulators={"pgrad": pgrad_acc}, client=client, npartitions=npartitions, **vmcoptions)
-        en = np.mean(df["pgradtotal"], axis=0)
+        en = np.real(np.mean(df["pgradtotal"], axis=0))
         en_err = np.std(df["pgradtotal"], axis=0) / np.sqrt(df['pgradtotal'].shape[0])
         dpH = np.mean(df["pgraddpH"], axis=0)
         dp = np.mean(df["pgraddppsi"], axis=0)
@@ -194,7 +194,7 @@ def line_minimization(
     # VMC warm up period
     if verbose:
         print("starting warmup")
-    data, coords = pyqmc.mc.vmc(wf, coords, accumulators={}, **vmcoptions)
+    data, coords = pyqmc.mc.vmc(wf, coords, accumulators={}, client=client, npartitions=npartitions,**vmcoptions)
     df = []
     # Gradient descent cycles
     for it in range(max_iterations):
@@ -227,13 +227,14 @@ def line_minimization(
             stepsdata = correlated_compute_parallel(wf, coords, params, pgrad_acc, client, npartitions)
         
         stepsdata['weight'] = stepsdata['weight']/np.mean(stepsdata['weight'], axis=1)[:,np.newaxis]
-        en = np.mean(stepsdata['total']*stepsdata['weight'], axis=1)
+        en = np.real(np.mean(stepsdata['total']*stepsdata['weight'], axis=1))
         yfit.extend(en)
         xfit.extend(steps)
         est_min = stable_fit(xfit, yfit)
         x0 += update(pgrad, Sij, est_min, **update_kws)
         step_data["tau"] = xfit
         step_data["yfit"] = yfit
+        step_data["est_min"] = est_min
 
         opt_hdf(hdf_file, step_data, attr, coords, pgrad_acc.transform.deserialize(x0))
         df.append(step_data)

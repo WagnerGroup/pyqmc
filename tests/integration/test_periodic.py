@@ -143,7 +143,7 @@ def runtest(mol, mf, kind=0, do_mc=False):
         tstep=1,
         accumulators={"energy": pyqmc.accumulators.EnergyAccumulator(mol)},
         verbose=False,
-        hdf_file=str(uuid.uuid4())
+        hdf_file=str(uuid.uuid4()),
     )
     print("VMC time", time.time() - start)
     df = pd.DataFrame(df)

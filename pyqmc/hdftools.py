@@ -23,7 +23,9 @@ def setup_hdf(f, data, attr):
 def append_hdf(f, data):
     for k, it in data.items():
         if k not in data.keys():
-            f.create_dataset(k,(0, *it.shape), maxshape=(None, *it.shape), dtype=it.dtype)
+            f.create_dataset(
+                k, (0, *it.shape), maxshape=(None, *it.shape), dtype=it.dtype
+            )
         currshape = f[k].shape
         f[k].resize((currshape[0] + 1, *currshape[1:]))
         f[k][-1,] = it

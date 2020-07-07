@@ -49,8 +49,8 @@ def test():
 
     obdm_est = {}
     for k in ["obdm", "obdm_up", "obdm_down"]:
-        avg_norm = np.mean(df[k + "norm"][warmup:],axis=0)
-        avg_obdm = np.mean(df[k + "value"][warmup:],axis=0)
+        avg_norm = np.mean(df[k + "norm"][warmup:], axis=0)
+        avg_obdm = np.mean(df[k + "value"][warmup:], axis=0)
         obdm_est[k] = normalize_obdm(avg_obdm, avg_norm)
 
     print("Average OBDM(orb,orb)", obdm_est["obdm"].diagonal().round(3))
@@ -116,8 +116,8 @@ def test_pbc():
 
     obdm_est = {}
     for k in ["obdm", "obdm_up", "obdm_down"]:
-        avg_norm = np.mean(df[k + "norm"][warmup:],axis=0)
-        avg_obdm = np.mean(df[k + "value"][warmup:],axis=0)
+        avg_norm = np.mean(df[k + "norm"][warmup:], axis=0)
+        avg_obdm = np.mean(df[k + "value"][warmup:], axis=0)
         obdm_est[k] = normalize_obdm(avg_obdm, avg_norm)
 
     print("Average OBDM(orb,orb)", obdm_est["obdm"].round(3))

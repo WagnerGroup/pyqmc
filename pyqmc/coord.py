@@ -76,7 +76,12 @@ class OpenConfigs:
         self.configs = self.configs.reshape(shape)
 
     def initialize_hdf(self, hdf):
-        hdf.create_dataset("configs", self.configs.shape, chunks=True, maxshape=(None,*self.configs.shape[1:]))
+        hdf.create_dataset(
+            "configs",
+            self.configs.shape,
+            chunks=True,
+            maxshape=(None, *self.configs.shape[1:]),
+        )
 
     def to_hdf(self, hdf):
         hdf["configs"].resize(self.configs.shape)
@@ -173,8 +178,15 @@ class PeriodicConfigs:
         self.wrap = self.wrap.reshape(shape)
 
     def initialize_hdf(self, hdf):
-        hdf.create_dataset("configs", self.configs.shape, chunks=True, maxshape=(None,*self.configs.shape[1:]))
-        hdf.create_dataset("wrap", self.wrap.shape, chunks=True, maxshape=(None, *self.wrap.shape[1:]))
+        hdf.create_dataset(
+            "configs",
+            self.configs.shape,
+            chunks=True,
+            maxshape=(None, *self.configs.shape[1:]),
+        )
+        hdf.create_dataset(
+            "wrap", self.wrap.shape, chunks=True, maxshape=(None, *self.wrap.shape[1:])
+        )
 
     def to_hdf(self, hdf):
         hdf["configs"].resize(self.configs.shape)

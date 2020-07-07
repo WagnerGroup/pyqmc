@@ -158,15 +158,7 @@ def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs)
     allruns = []
 
     for nodeconfigs in coord:
-        allruns.append(
-            client.submit(
-                sample_overlap,
-                wfs,
-                nodeconfigs,
-                *args,
-                **kwargs
-            )
-        )
+        allruns.append(client.submit(sample_overlap, wfs, nodeconfigs, *args, **kwargs))
 
     # Here we reweight the averages since each step on each node
     # was done with a different average weight.
@@ -213,8 +205,6 @@ def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs)
     configs.join(final_coords)
     coordret = configs
     return df, coordret
-
-
 
 
 def correlated_sample(wfs, configs, parameters, pgrad):
@@ -311,13 +301,7 @@ def dist_correlated_sample(wfs, configs, *args, client, npartitions=None, **kwar
     allruns = []
     for nodeconfigs in coord:
         allruns.append(
-            client.submit(
-                correlated_sample,
-                wfs,
-                nodeconfigs,
-                *args,
-                **kwargs
-            )
+            client.submit(correlated_sample, wfs, nodeconfigs, *args, **kwargs)
         )
 
     allresults = [r.result() for r in allruns]
@@ -407,7 +391,7 @@ def optimize_orthogonal(
     sample_options=None,
     correlated_options=None,
     client=None,
-    npartitions=None
+    npartitions=None,
 ):
     r"""
     Minimize 
@@ -497,16 +481,15 @@ def optimize_orthogonal(
         correlated_options = {}
 
     if client is None:
-        sampler=sample_overlap
+        sampler = sample_overlap
         correlated_sampler = correlated_sample
     else:
-        sampler=dist_sample_overlap
+        sampler = dist_sample_overlap
         correlated_sampler = dist_correlated_sample
-        sample_options['client'] = client
-        sample_options['npartitions'] = npartitions
-        correlated_options['client'] = client
-        correlated_options['npartitions'] = npartitions
-
+        sample_options["client"] = client
+        sample_options["npartitions"] = npartitions
+        correlated_options["client"] = client
+        correlated_options["npartitions"] = npartitions
 
     # One set of configurations for every wave function
     allcoords = [coords.copy() for _ in wfs[:-1]]
@@ -610,11 +593,7 @@ def optimize_orthogonal(
         for icoord, wf in zip(allcoords, wfs):
             data.append(
                 correlated_sampler(
-                    [wf, wfs[-1]],
-                    icoord,
-                    test_parameters,
-                    pgrad,
-                    **correlated_options
+                    [wf, wfs[-1]], icoord, test_parameters, pgrad, **correlated_options
                 )
             )
         line_data = {}
@@ -663,8 +642,3 @@ def optimize_orthogonal(
         )
 
     return wfs
-
-
-
-
-

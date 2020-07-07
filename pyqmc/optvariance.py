@@ -52,4 +52,3 @@ def optvariance(energy, wf, coords, params=None, **kwargs):
         wf.parameters[k] = opt_pars[i].reshape(shapes[i])
 
     return res.fun, wf
-

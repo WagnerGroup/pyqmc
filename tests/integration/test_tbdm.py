@@ -203,7 +203,7 @@ def test(atom="He", total_spin=0, total_charge=0, scf_basis="sto-3g"):
     # Compares obdm from QMC and MF
     obdm_est = {}
     for k in ["obdm_up", "obdm_down"]:
-        avg_norm = np.mean(df[k+"norm"][vmc_warmup:],axis=0)
+        avg_norm = np.mean(df[k + "norm"][vmc_warmup:], axis=0)
         avg_obdm = np.mean(df[k + "value"][vmc_warmup:], axis=0)
         obdm_est[k] = normalize_obdm(avg_obdm, avg_norm)
     qmcobdm = np.array([obdm_est["obdm_up"], obdm_est["obdm_down"]])
@@ -220,9 +220,9 @@ def test(atom="He", total_spin=0, total_charge=0, scf_basis="sto-3g"):
     for t in ["tbdm_upup", "tbdm_updown", "tbdm_downup", "tbdm_downdown"]:
         for k in df.keys():
             if k.startswith(t + "norm_"):
-                avg_norm[k.split("_")[-1]] = np.mean(df[k][vmc_warmup:],axis=0)
+                avg_norm[k.split("_")[-1]] = np.mean(df[k][vmc_warmup:], axis=0)
             if k.startswith(t + "value"):
-                avg_tbdm[k.split("_")[-1]] = np.mean(df[k][vmc_warmup:],axis=0)
+                avg_tbdm[k.split("_")[-1]] = np.mean(df[k][vmc_warmup:], axis=0)
     for k in avg_tbdm:
         tbdm_est[k] = normalize_tbdm(
             avg_tbdm[k].reshape(2, 2, 2, 2), avg_norm["a"], avg_norm["b"]

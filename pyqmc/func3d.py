@@ -26,7 +26,7 @@ class GaussianFunction:
     """
 
     def __init__(self, exponent):
-        self.parameters = {'exponent': exponent}
+        self.parameters = {"exponent": exponent}
 
     def value(self, x, r):
         """Returns function exp(-exponent*r^2).
@@ -93,7 +93,7 @@ class PadeFunction:
     """
 
     def __init__(self, alphak):
-        self.parameters = {'alphak': alphak}
+        self.parameters = {"alphak": alphak}
 
     def value(self, rvec, r):
         """
@@ -171,7 +171,7 @@ class PolyPadeFunction:
     """
 
     def __init__(self, beta, rcut):
-        self.parameters = {'beta': beta, 'rcut': rcut}
+        self.parameters = {"beta": beta, "rcut": rcut}
 
     def value(self, rvec, r):
         """Returns 
@@ -295,7 +295,7 @@ class CutoffCuspFunction:
     """
 
     def __init__(self, gamma, rcut):
-        self.parameters = {'gamma': gamma, 'rcut': rcut}
+        self.parameters = {"gamma": gamma, "rcut": rcut}
 
     def value(self, rvec, r):
         """Returns 

@@ -166,13 +166,15 @@ def generate_wf(
 
 def recover_pyscf(chkfile):
     import pyscf
+
     mol = pyscf.lib.chkfile.load_mol(chkfile)
     mol.output = None
     mol.stdout = None
 
     if True or hasattr(mol, "a"):
         from pyscf import pbc
-        mol = pbc.lib.chkfile.load_cell(chkfile)        
+
+        mol = pbc.lib.chkfile.load_cell(chkfile)
         mol.output = None
         mol.stdout = None
         mf = pbc.scf.KRHF(mol)

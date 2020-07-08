@@ -11,6 +11,8 @@ Welcome to pyQMC's documentation!
    :caption: Contents:
 
    install
+   
+   highlevel
 
    methods
 

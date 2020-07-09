@@ -18,7 +18,6 @@ def reblock(df, nblocks):
         vals = np.array_split(array, nblocks, axis=0)
         return [v.mean(axis=0) for v in vals]
 
-    size, nbig = np.divmod(len(df), nblocks)
     if isinstance(df, pd.Series):
         return pd.Series(_reblock(df.values, nblocks))
     elif isinstance(df, pd.DataFrame):

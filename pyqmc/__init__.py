@@ -60,7 +60,7 @@ def default_multislater(mol, mf, mc, tol=None, optimize_orbitals=False):
     return wf, to_opt
 
 
-def default_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=7.5):
+def default_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
     """         
     Default 2-body jastrow from qwalk,
     Args:
@@ -80,6 +80,12 @@ def default_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=7.5):
         for i in range(1, n):
             beta[i] = np.exp(beta1 + 1.6 * i) - 1
         return beta
+
+    if rcut is None:
+        if hasattr(mol, "a"):
+            rcut = np.amin(np.pi / np.linalg.norm(mol.reciprocal_vectors(), axis=1))
+        else:
+            rcut = 7.5
 
     beta_abasis = expand_beta_qwalk(0.2, na)
     beta_bbasis = expand_beta_qwalk(0.5, nb)

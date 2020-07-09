@@ -8,9 +8,16 @@ def reblock(df, nblocks):
 
     :param df: data to reblock
     :type df: pandas DataFrame, Series, or numpy array
+    :param nblocks: number of resulting blocks
+    :type nblocks: int
     :return: reblocked data
     :rtype: same as input df
     """
+
+    def _reblock(array, nblocks):
+        vals = np.array_split(array, nblocks, axis=0)
+        return [v.mean(axis=0) for v in vals]
+
     size, nbig = np.divmod(len(df), nblocks)
     if isinstance(df, pd.Series):
         return pd.Series(_reblock(df.values, nblocks))
@@ -34,18 +41,6 @@ def reblock_summary(df, nblocks):
         "n_blocks": nblocks,
     }
     return pd.DataFrame(d)
-
-
-def _reblock(array, nblocks):
-    """
-    This is a helper method to reblock(). 
-    :param array: data to reblock along axis 0
-    :type array: numpy array
-    :return: reblocked data
-    :rtype: list
-    """
-    vals = np.array_split(array, nblocks, axis=0)
-    return [v.mean(axis=0) for v in vals]
 
 
 def optimally_reblocked(data):

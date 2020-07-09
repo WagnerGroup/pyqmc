@@ -60,7 +60,7 @@ def default_multislater(mol, mf, mc, tol=None, optimize_orbitals=False):
     return wf, to_opt
 
 
-def default_jastrow(mol, ion_cusp=False):
+def default_jastrow(mol, ion_cusp=False, na=4, nb=3, rcut=7.5):
     """         
     Default 2-body jastrow from qwalk,
     Args:
@@ -81,15 +81,15 @@ def default_jastrow(mol, ion_cusp=False):
             beta[i] = np.exp(beta1 + 1.6 * i) - 1
         return beta
 
-    beta_abasis = expand_beta_qwalk(0.2, 4)
-    beta_bbasis = expand_beta_qwalk(0.5, 3)
+    beta_abasis = expand_beta_qwalk(0.2, na)
+    beta_bbasis = expand_beta_qwalk(0.5, nb)
     if ion_cusp:
-        abasis = [CutoffCuspFunction(gamma=24, rcut=7.5)]
+        abasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
     else:
         abasis = []
-    abasis += [PolyPadeFunction(beta=beta_abasis[i], rcut=7.5) for i in range(4)]
-    bbasis = [CutoffCuspFunction(gamma=24, rcut=7.5)]
-    bbasis += [PolyPadeFunction(beta=beta_bbasis[i], rcut=7.5) for i in range(3)]
+    abasis += [PolyPadeFunction(beta=beta_abasis[i], rcut=rcut) for i in range(4)]
+    bbasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
+    bbasis += [PolyPadeFunction(beta=beta_bbasis[i], rcut=rcut) for i in range(3)]
 
     jastrow = JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
     if ion_cusp:
@@ -129,13 +129,21 @@ def generate_wf(
     mol, mf, jastrow=default_jastrow, jastrow_kws=None, slater_kws=None, mc=None
 ):
     """
-    mol and mf are pyscf objects
+    Generate a wave function from pyscf objects. 
 
-    jastrow may be either a function that returns wf, to_opt, or 
-    a list of such functions.
+    :param mol: The molecule or cell
+    :type mol: pyscf Mole or Cell
+    :param mf: a pyscf mean-field object
+    :type mf: Any mean-field object that PySCFSlater can read
+    :param jastrow: a function that returns wf, to_opt, or a list of such functions.
+    :param jastrow_kws: a dictionary of keyword arguments for the jastrow function, or a list of those functions.
+    :param slater_kws: a dictionary of keyword arguments for the default_slater function
+    :param mc: A CAS object (optional) for multideterminant wave functions.
 
-    jastrow_kws is a dictionary of keyword arguments for the jastrow function, or
-    a list of those functions.
+    :return: wf
+    :rtype: A (multi) Slater-Jastrow wave function object
+    :return: to_opt
+    :rtype: A dictionary of parameters to optimize, given the settings. 
     """
     if jastrow_kws is None:
         jastrow_kws = {}
@@ -165,25 +173,60 @@ def generate_wf(
 
 
 def recover_pyscf(chkfile):
+    """Generate pyscf objects from a pyscf checkfile, in a way that is easy to use for pyqmc. The chkfile should be saved by setting mf.chkfile in a pyscf SCF object. 
+    
+It is recommended to write and recover the objects, rather than trying to use pyscf objects directly when dask parallelization is being used, since by default the pyscf objects 
+
+Typical usage:
+
+mol, mf = recover_pyscf("dft.hdf5")
+
+:param chkfile: The filename to read from. 
+:type chkfile: string
+:return: mol, mf
+:rtype: pyscf Mole, SCF objects
+"""
+
     import pyscf
 
     mol = pyscf.lib.chkfile.load_mol(chkfile)
     mol.output = None
     mol.stdout = None
+
     if hasattr(mol, "a"):
         from pyscf import pbc
 
-        mol = pbc.gto.cell.loads(pyscf.lib.chkfile.load(chkfile, "mol"))
+        mol = pbc.lib.chkfile.load_cell(chkfile)
+        mol.output = None
+        mol.stdout = None
         mf = pbc.scf.KRHF(mol)
-    # It actually doesn't matter what type of object we make it for
-    # pyqmc. Now if you try to run this, it might cause issues.
     else:
+        # It actually doesn't matter what type of object we make it for
+        # pyqmc. Now if you try to run this, it might cause issues.
         mf = pyscf.scf.RHF(mol)
+
     mf.__dict__.update(pyscf.scf.chkfile.load(chkfile, "scf"))
     return mol, mf
 
 
 def read_wf(wf, wf_file):
+    """Read the wave function parameters from wf_file into wf. 
+
+Typical usage:
+
+.. code-block::python
+
+linemin(wf, coords, ..., hdf_file="linemin.hdf5")
+read_wf(wf, "linemin.hdf5")
+
+:param wf: A pyqmc wave function object. This will 
+:type wf: wave function object with parameters dictionary
+:param wf_file: A HDF5 file with "wf" key. The parameters in this file will be read into the wave function in-place
+:type wf_file: string
+
+:return: nothing
+"""
+
     with h5py.File(wf_file, "r") as hdf:
         if "wf" in hdf.keys():
             grp = hdf["wf"]

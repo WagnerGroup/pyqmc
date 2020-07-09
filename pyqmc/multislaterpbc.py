@@ -1,5 +1,6 @@
 import numpy as np
 from pyqmc.multislater import sherman_morrison_ms
+from pyqmc.slater import get_kinds
 from pyqmc.supercell import get_supercell_kpts
 from pyqmc import pbc, slater
 
@@ -40,9 +41,9 @@ class MultiSlaterPBC:
             twist = np.zeros(3)
         else:
             twist = np.dot(np.linalg.inv(supercell.a), np.mod(twist, 1.0)) * 2 * np.pi
-        self._kpts = get_supercell_kpts(supercell) + twist
-        kdiffs = mf.kpts[np.newaxis] - self._kpts[:, np.newaxis]
-        self.kinds = np.nonzero(np.linalg.norm(kdiffs, axis=-1) < 1e-12)[1]
+        self.kinds = get_kinds(self._mol, mf, get_supercell_kpts(supercell) + twist)
+        self._kpts = mf.kpts[self.kinds]
+        assert len(self.kinds) == len(self._kpts), (self._kpts, mf.kpts)
         self.nk = len(self._kpts)
         print("nk", self.nk, self.kinds)
 

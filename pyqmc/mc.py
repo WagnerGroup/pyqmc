@@ -96,6 +96,7 @@ def vmc_file(hdf_file, data, attr, configs):
             hdftools.append_hdf(hdf, data)
             configs.to_hdf(hdf)
 
+
 def vmc_worker(wf, configs, tstep, nsteps, accumulators):
     """
     Run VMC for nsteps.
@@ -103,7 +104,7 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
     Return a dictionary of averages from each accumulator.  
     """
     nconf, nelec, _ = configs.configs.shape
-    block_avg={}
+    block_avg = {}
     wf.recompute(configs)
 
     for _ in range(nsteps):
@@ -128,7 +129,7 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
             # Update wave function
             configs.move(e, newcoorde, accept)
             wf.updateinternals(e, newcoorde, mask=accept)
-            acc += np.mean(accept)/nelec
+            acc += np.mean(accept) / nelec
 
         # Rolling average on step
         for k, accumulator in accumulators.items():
@@ -141,19 +142,26 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
     return block_avg, configs
 
 
-
-def vmc_parallel(wf, configs, tstep, nsteps_per_block, accumulators, client, npartitions):
+def vmc_parallel(
+    wf, configs, tstep, nsteps_per_block, accumulators, client, npartitions
+):
     config = configs.split(npartitions)
-    runs=[ client.submit(vmc_worker, wf, conf , tstep, nsteps_per_block, accumulators) for conf in config]
+    runs = [
+        client.submit(vmc_worker, wf, conf, tstep, nsteps_per_block, accumulators)
+        for conf in config
+    ]
     allresults = list(zip(*[r.result() for r in runs]))
     configs.join(allresults[1])
     confweight = np.array([len(c.configs) for c in config], dtype=float)
-    confweight /= np.mean(confweight)*npartitions
+    confweight /= np.mean(confweight) * npartitions
     block_avg = {}
     for k in allresults[0][0].keys():
-        block_avg[k] = np.sum([res[k]*w for res,w in zip(allresults[0],confweight)], axis=0)
+        block_avg[k] = np.sum(
+            [res[k] * w for res, w in zip(allresults[0], confweight)], axis=0
+        )
     return block_avg, configs
-    
+
+
 def vmc(
     wf,
     configs,
@@ -165,8 +173,8 @@ def vmc(
     verbose=False,
     stepoffset=0,
     hdf_file=None,
-    client = None,
-    npartitions = None
+    client=None,
+    npartitions=None,
 ):
     """Run a Monte Carlo sample of a given wave function.
 
@@ -218,18 +226,22 @@ def vmc(
                 stepoffset = hdf["block"][-1] + 1
                 configs.load_hdf(hdf)
                 if verbose:
-                    print("Restarting calculation from step ", stepoffset)
+                    print("Restarting calculation from step", stepoffset)
 
     nconf, nelec, ndim = configs.configs.shape
     df = []
 
     for block in range(nblocks):
         if verbose:
-            print(f"-",end='',flush=True)
+            print(f"-", end="", flush=True)
         if client is None:
-            block_avg, configs = vmc_worker(wf, configs, tstep, nsteps_per_block, accumulators)
-        else: 
-            block_avg, configs = vmc_parallel(wf, configs, tstep, nsteps_per_block, accumulators, client, npartitions)
+            block_avg, configs = vmc_worker(
+                wf, configs, tstep, nsteps_per_block, accumulators
+            )
+        else:
+            block_avg, configs = vmc_parallel(
+                wf, configs, tstep, nsteps_per_block, accumulators, client, npartitions
+            )
         # Append blocks
         block_avg["block"] = stepoffset + block
         block_avg["nconfig"] = nconf * nsteps_per_block

@@ -107,7 +107,7 @@ def line_minimization(
     npts=5,
     hdf_file=None,
     client=None,
-    npartitions = None
+    npartitions=None,
 ):
     """Optimizes energy by determining gradients with stochastic reconfiguration
         and minimizing the energy along gradient directions using correlated sampling.
@@ -152,16 +152,15 @@ def line_minimization(
         update_kws = {}
 
     # Restart
-    iteration_offset=0
+    iteration_offset = 0
     if hdf_file is not None and os.path.isfile(hdf_file):
         with h5py.File(hdf_file, "r") as hdf:
             if "wf" in hdf.keys():
                 grp = hdf["wf"]
                 for k in grp.keys():
                     wf.parameters[k] = np.array(grp[k])
-            if 'iteration' in hdf.keys():
-                iteration_offset = np.max(hdf['iteration'][...])+1
-
+            if "iteration" in hdf.keys():
+                iteration_offset = np.max(hdf["iteration"][...]) + 1
 
     # Attributes for linemin
     attr = dict(max_iterations=max_iterations, npts=npts, steprange=steprange)
@@ -170,9 +169,17 @@ def line_minimization(
         newparms = pgrad_acc.transform.deserialize(x)
         for k in newparms:
             wf.parameters[k] = newparms[k]
-        df, coords = pyqmc.mc.vmc(wf, coords, accumulators={"pgrad": pgrad_acc}, client=client, npartitions=npartitions, **vmcoptions)
-        en = np.mean(df["pgradtotal"], axis=0)
-        en_err = np.std(df["pgradtotal"], axis=0) / np.sqrt(df['pgradtotal'].shape[0])
+        df, coords = pyqmc.mc.vmc(
+            wf,
+            coords,
+            accumulators={"pgrad": pgrad_acc},
+            client=client,
+            npartitions=npartitions,
+            **vmcoptions
+        )
+        en = np.real(np.mean(df["pgradtotal"], axis=0))
+        en_err = np.std(df["pgradtotal"], axis=0) / np.sqrt(df["pgradtotal"].shape[0])
+        sigma = np.std(df["pgradtotal"], axis=0) * np.sqrt(np.mean(df['nconfig']))
         dpH = np.mean(df["pgraddpH"], axis=0)
         dp = np.mean(df["pgraddppsi"], axis=0)
         dpdp = np.mean(df["pgraddpidpj"], axis=0)
@@ -180,36 +187,40 @@ def line_minimization(
         Sij = np.real(dpdp - np.einsum("i,j->ij", dp, dp))
 
         if np.any(np.isnan(grad)):
-            for nm, quant in {'dpH':dpH,
-                              'dp':dp,
-                              'en':en
-                            }.items():
+            for nm, quant in {"dpH": dpH, "dp": dp, "en": en}.items():
                 print(nm, quant)
             raise ValueError("NaN detected in derivatives")
-        
-        return coords, grad, Sij, en, en_err
+
+        return coords, grad, Sij, en, en_err, sigma
 
     x0 = pgrad_acc.transform.serialize_parameters(wf.parameters)
 
     # VMC warm up period
     if verbose:
         print("starting warmup")
-    data, coords = pyqmc.mc.vmc(wf, coords, accumulators={}, **vmcoptions)
+    data, coords = pyqmc.mc.vmc(
+        wf,
+        coords,
+        accumulators={},
+        client=client,
+        npartitions=npartitions,
+        **vmcoptions
+    )
     df = []
     # Gradient descent cycles
     for it in range(max_iterations):
         # Calculate gradient accurately
-        coords, pgrad, Sij, en, en_err = gradient_energy_function(x0, coords)
+        coords, pgrad, Sij, en, en_err, sigma = gradient_energy_function(x0, coords)
         step_data = {}
         step_data["energy"] = en
         step_data["energy_error"] = en_err
         step_data["x"] = x0
         step_data["pgradient"] = pgrad
-        step_data["iteration"] = it+iteration_offset
-        step_data['nconfig'] = coords.configs.shape[0]
+        step_data["iteration"] = it + iteration_offset
+        step_data["nconfig"] = coords.configs.shape[0]
 
         if verbose:
-            print("descent en", en, en_err)
+            print("descent en", en, en_err, ' estimated sigma ', sigma)
             print("descent |grad|", np.linalg.norm(pgrad), flush=True)
 
         xfit = []
@@ -224,16 +235,21 @@ def line_minimization(
         if client is None:
             stepsdata = correlated_compute(wf, coords, params, pgrad_acc)
         else:
-            stepsdata = correlated_compute_parallel(wf, coords, params, pgrad_acc, client, npartitions)
-        
-        stepsdata['weight'] = stepsdata['weight']/np.mean(stepsdata['weight'], axis=1)[:,np.newaxis]
-        en = np.mean(stepsdata['total']*stepsdata['weight'], axis=1)
+            stepsdata = correlated_compute_parallel(
+                wf, coords, params, pgrad_acc, client, npartitions
+            )
+
+        stepsdata["weight"] = (
+            stepsdata["weight"] / np.mean(stepsdata["weight"], axis=1)[:, np.newaxis]
+        )
+        en = np.real(np.mean(stepsdata["total"] * stepsdata["weight"], axis=1))
         yfit.extend(en)
         xfit.extend(steps)
         est_min = stable_fit(xfit, yfit)
         x0 += update(pgrad, Sij, est_min, **update_kws)
         step_data["tau"] = xfit
         step_data["yfit"] = yfit
+        step_data["est_min"] = est_min
 
         opt_hdf(hdf_file, step_data, attr, coords, pgrad_acc.transform.deserialize(x0))
         df.append(step_data)
@@ -280,10 +296,12 @@ def correlated_compute(wf, configs, params, pgrad_acc):
     return data_ret
 
 
-
 def correlated_compute_parallel(wf, configs, params, pgrad_acc, client, npartitions):
     config = configs.split(npartitions)
-    runs=[ client.submit(correlated_compute, wf, conf , params, pgrad_acc) for conf in config]
+    runs = [
+        client.submit(correlated_compute, wf, conf, params, pgrad_acc)
+        for conf in config
+    ]
     allresults = [r.result() for r in runs]
     block_avg = {}
     for k in allresults[0].keys():

@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 import scipy
 import h5py
 import os
@@ -179,7 +178,7 @@ def line_minimization(
         )
         en = np.real(np.mean(df["pgradtotal"], axis=0))
         en_err = np.std(df["pgradtotal"], axis=0) / np.sqrt(df["pgradtotal"].shape[0])
-        sigma = np.std(df["pgradtotal"], axis=0) * np.sqrt(np.mean(df['nconfig']))
+        sigma = np.std(df["pgradtotal"], axis=0) * np.sqrt(np.mean(df["nconfig"]))
         dpH = np.mean(df["pgraddpH"], axis=0)
         dp = np.mean(df["pgraddppsi"], axis=0)
         dpdp = np.mean(df["pgraddpidpj"], axis=0)
@@ -220,7 +219,7 @@ def line_minimization(
         step_data["nconfig"] = coords.configs.shape[0]
 
         if verbose:
-            print("descent en", en, en_err, ' estimated sigma ', sigma)
+            print("descent en", en, en_err, " estimated sigma ", sigma)
             print("descent |grad|", np.linalg.norm(pgrad), flush=True)
 
         xfit = []

@@ -193,7 +193,7 @@ mol, mf = recover_pyscf("dft.hdf5")
     mol.output = None
     mol.stdout = None
 
-    if True or hasattr(mol, "a"):
+    if hasattr(mol, "a"):
         from pyscf import pbc
 
         mol = pbc.lib.chkfile.load_cell(chkfile)

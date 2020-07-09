@@ -129,13 +129,21 @@ def generate_wf(
     mol, mf, jastrow=default_jastrow, jastrow_kws=None, slater_kws=None, mc=None
 ):
     """
-    mol and mf are pyscf objects
+    Generate a wave function from pyscf objects. 
 
-    jastrow may be either a function that returns wf, to_opt, or 
-    a list of such functions.
+    :param mol: The molecule or cell
+    :type mol: pyscf Mole or Cell
+    :param mf: a pyscf mean-field object
+    :type mf: Any mean-field object that PySCFSlater can read
+    :param jastrow: a function that returns wf, to_opt, or a list of such functions.
+    :param jastrow_kws: a dictionary of keyword arguments for the jastrow function, or a list of those functions.
+    :param slater_kws: a dictionary of keyword arguments for the default_slater function
+    :param mc: A CAS object (optional) for multideterminant wave functions.
 
-    jastrow_kws is a dictionary of keyword arguments for the jastrow function, or
-    a list of those functions.
+    :return: wf
+    :rtype: A (multi) Slater-Jastrow wave function object
+    :return: to_opt
+    :rtype: A dictionary of parameters to optimize, given the settings. 
     """
     if jastrow_kws is None:
         jastrow_kws = {}
@@ -165,13 +173,27 @@ def generate_wf(
 
 
 def recover_pyscf(chkfile):
+    """Generate pyscf objects from a pyscf checkfile, in a way that is easy to use for pyqmc. The chkfile should be saved by setting mf.chkfile in a pyscf SCF object. 
+    
+It is recommended to write and recover the objects, rather than trying to use pyscf objects directly when dask parallelization is being used, since by default the pyscf objects 
+
+Typical usage:
+
+mol, mf = recover_pyscf("dft.hdf5")
+
+:param chkfile: The filename to read from. 
+:type chkfile: string
+:return: mol, mf
+:rtype: pyscf Mole, SCF objects
+"""
+
     import pyscf
 
     mol = pyscf.lib.chkfile.load_mol(chkfile)
     mol.output = None
     mol.stdout = None
 
-    if True or hasattr(mol, "a"):
+    if hasattr(mol, "a"):
         from pyscf import pbc
 
         mol = pbc.lib.chkfile.load_cell(chkfile)
@@ -188,6 +210,23 @@ def recover_pyscf(chkfile):
 
 
 def read_wf(wf, wf_file):
+    """Read the wave function parameters from wf_file into wf. 
+
+Typical usage:
+
+.. code-block::python
+
+linemin(wf, coords, ..., hdf_file="linemin.hdf5")
+read_wf(wf, "linemin.hdf5")
+
+:param wf: A pyqmc wave function object. This will 
+:type wf: wave function object with parameters dictionary
+:param wf_file: A HDF5 file with "wf" key. The parameters in this file will be read into the wave function in-place
+:type wf_file: string
+
+:return: nothing
+"""
+
     with h5py.File(wf_file, "r") as hdf:
         if "wf" in hdf.keys():
             grp = hdf["wf"]

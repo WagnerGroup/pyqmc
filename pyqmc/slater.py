@@ -106,8 +106,6 @@ class PySCFSlater:
         self._kpts = mf.kpts[self.kinds]
         assert len(self.kinds) == len(self._kpts), (self._kpts, mf.kpts)
         self.nk = len(self._kpts)
-        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
-        self.iscomplex = self.iscomplex or np.linalg.norm(self._kpts) > 1e-12
 
         # Define parameters
         self.param_split = {}
@@ -123,6 +121,9 @@ class PySCFSlater:
                 mclist.append(mca / np.sqrt(self.nk))
             self.param_split[lookup] = np.cumsum([m.shape[1] for m in mclist])
             self.parameters[lookup] = np.concatenate(mclist, axis=-1)
+
+        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
+        self.iscomplex = self.iscomplex or np.linalg.norm(self._kpts) > 1e-12
 
         # Define nelec
         if isinstance(mf, scf.kuhf.KUHF):

@@ -2,6 +2,52 @@ import pandas as pd
 import numpy as np
 
 
+def reblock(df, nblocks):
+    """
+    Reblock df into nblocks new blocks (nblocks is th length of the returned data)
+
+    :param df: data to reblock
+    :type df: pandas DataFrame, Series, or numpy array
+    :return: reblocked data
+    :rtype: same as input df
+    """
+    size, nbig = np.divmod(len(df), nblocks)
+    if isinstance(df, pd.Series):
+        return pd.Series(_reblock(df.values, nblocks))
+    elif isinstance(df, pd.DataFrame):
+        rbdf = {col: _reblock(df[col].values, nblocks) for col in df.columns}
+        return pd.DataFrame(rbdf)
+    elif isinstance(df, np.ndarray):
+        return np.stack(_reblock(df, nblocks), axis=0)
+    else:
+        print("WARNING: can't reblock data of type", type(df), "-- not reblocking.")
+        return df
+
+
+def reblock_summary(df, nblocks):
+    df = reblock(df, nblocks)
+    serr = df.sem()
+    d = {
+        "mean": df.mean(axis=0),
+        "standard error": serr,
+        "standard error error": serr / np.sqrt(2 * (len(df) - 1)),
+        "n_blocks": nblocks,
+    }
+    return pd.DataFrame(d)
+
+
+def _reblock(array, nblocks):
+    """
+    This is a helper method to reblock(). 
+    :param array: data to reblock along axis 0
+    :type array: numpy array
+    :return: reblocked data
+    :rtype: list
+    """
+    vals = np.array_split(array, nblocks, axis=0)
+    return [v.mean(axis=0) for v in vals]
+
+
 def optimally_reblocked(data):
     """
         Find optimal reblocking of input data. Takes in pandas
@@ -21,25 +67,6 @@ def optimally_reblocked(data):
     return pd.DataFrame(d)
 
 
-def _reblock(array, nblocks):
-    vals = np.array_split(array, nblocks, axis=0)
-    return [v.mean(axis=0) for v in vals]
-
-
-def reblock(df, nblocks):
-    size, nbig = np.divmod(len(df), nblocks)
-    if isinstance(df, pd.Series):
-        return pd.Series(_reblock(df.values, nblocks))
-    elif isinstance(df, pd.DataFrame):
-        rbdf = {col: _reblock(df[col].values, nblocks) for col in df.columns}
-        return pd.DataFrame(rbdf)
-    elif isinstance(df, np.ndarray):
-        return np.stack(_reblock(df, nblocks), axis=0)
-    else:
-        print("WARNING: can't reblock data of type", type(df), "-- not reblocking.")
-        return df
-
-
 def reblock_by2(df, ntimes, c=None):
     """
         Reblocks data according to “Error estimates on averages of correlated data”,
@@ -53,18 +80,6 @@ def reblock_by2(df, ntimes, c=None):
         lasteven = m - int(m % 2 == 1)
         newdf = (newdf[:lasteven:2] + newdf[1::2].values) / 2
     return newdf
-
-
-def reblock_summary(df, nblocks):
-    df = reblock(df, nblocks)
-    serr = df.sem()
-    d = {
-        "mean": df.mean(axis=0),
-        "standard error": serr,
-        "standard error error": serr / np.sqrt(2 * (len(df) - 1)),
-        "n_blocks": nblocks,
-    }
-    return pd.DataFrame(d)
 
 
 def opt_block(df):

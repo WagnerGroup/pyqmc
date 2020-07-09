@@ -36,9 +36,9 @@ def gradient_generator(mol, wf, to_opt=None, **ewald_kwargs):
     )
 
 
-def default_slater(mol, mf, optimize_orbitals=False):
+def default_slater(mol, mf, optimize_orbitals=False, twist=None):
 
-    wf = PySCFSlater(mol, mf)
+    wf = PySCFSlater(mol, mf, twist=twist)
     to_opt = {}
     if optimize_orbitals:
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
@@ -137,9 +137,9 @@ def default_msj(mol, mf, mc, tol=None, freeze_orb=None, ion_cusp=False):
     return wf, to_opt
 
 
-def default_sj(mol, mf, ion_cusp=False):
-    wf1, to_opt1 = default_slater(mol, mf)
-    wf2, to_opt2 = default_jastrow(mol, ion_cusp)
+def default_sj(mol, mf, optimize_orbitals=False, twist=None, **jastrow_kws):
+    wf1, to_opt1 = default_slater(mol, mf, optimize_orbitals, twist)
+    wf2, to_opt2 = default_jastrow(mol, **jastrow_kws)
     wf = MultiplyWF(wf1, wf2)
     to_opt = {"wf1" + x: opt for x, opt in to_opt1.items()}
     to_opt.update({"wf2" + x: opt for x, opt in to_opt2.items()})

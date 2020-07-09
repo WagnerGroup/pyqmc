@@ -107,9 +107,9 @@ def default_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
         abasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
     else:
         abasis = []
-    abasis += [PolyPadeFunction(beta=beta_abasis[i], rcut=rcut) for i in range(4)]
+    abasis += [PolyPadeFunction(beta=ba, rcut=rcut) for ba in beta_abasis]
     bbasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
-    bbasis += [PolyPadeFunction(beta=beta_bbasis[i], rcut=rcut) for i in range(3)]
+    bbasis += [PolyPadeFunction(beta=bb, rcut=rcut) for bb in beta_bbasis]
 
     jastrow = JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
     if len(ion_cusp) > 0:

@@ -60,7 +60,7 @@ def default_multislater(mol, mf, mc, tol=None, optimize_orbitals=False):
     return wf, to_opt
 
 
-def default_jastrow(mol, ion_cusp=False, na=4, nb=3, rcut=7.5):
+def default_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=7.5):
     """         
     Default 2-body jastrow from qwalk,
     Args:
@@ -83,7 +83,21 @@ def default_jastrow(mol, ion_cusp=False, na=4, nb=3, rcut=7.5):
 
     beta_abasis = expand_beta_qwalk(0.2, na)
     beta_bbasis = expand_beta_qwalk(0.5, nb)
-    if ion_cusp:
+    if ion_cusp == False:
+        ion_cusp = []
+        if not mol.has_ecp():
+            print("Warning: using neither ECP nor ion_cusp")
+    elif ion_cusp == True:
+        ion_cusp = list(mol.basis.keys())
+        if mol.has_ecp():
+            print("Warning: using both ECP and ion_cusp")
+    elif ion_cusp is None:
+        ion_cusp = [l for l in mol.basis.keys() if l not in mol._ecp.keys()]
+        print("default ion_cusp:", ion_cusp)
+    else:
+        assert isinstance(ion_cusp, list)
+
+    if len(ion_cusp) > 0:
         abasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
     else:
         abasis = []
@@ -92,13 +106,15 @@ def default_jastrow(mol, ion_cusp=False, na=4, nb=3, rcut=7.5):
     bbasis += [PolyPadeFunction(beta=beta_bbasis[i], rcut=rcut) for i in range(3)]
 
     jastrow = JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
-    if ion_cusp:
-        jastrow.parameters["acoeff"][:, 0, :] = mol.atom_charges()[:, None]
+    if len(ion_cusp) > 0:
+        coefs = mol.atom_charges()
+        coefs[[l[0] not in ion_cusp for l in mol._atom]] = 0.0
+        jastrow.parameters["acoeff"][:, 0, :] = coefs[:, None]
     jastrow.parameters["bcoeff"][0, [0, 1, 2]] = np.array([-0.25, -0.50, -0.25])
 
     to_opt = {}
     to_opt["acoeff"] = np.ones(jastrow.parameters["acoeff"].shape).astype(bool)
-    if ion_cusp:
+    if len(ion_cusp) > 0:
         to_opt["acoeff"][:, 0, :] = False  # Cusp conditions
     to_opt["bcoeff"] = np.ones(jastrow.parameters["bcoeff"].shape).astype(bool)
     to_opt["bcoeff"][0, [0, 1, 2]] = False  # Cusp conditions

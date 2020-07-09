@@ -226,7 +226,7 @@ def vmc(
                 stepoffset = hdf["block"][-1] + 1
                 configs.load_hdf(hdf)
                 if verbose:
-                    print("Restarting calculation from step ", stepoffset)
+                    print("Restarting calculation from step", stepoffset)
 
     nconf, nelec, ndim = configs.configs.shape
     df = []

@@ -179,6 +179,7 @@ def line_minimization(
         )
         en = np.real(np.mean(df["pgradtotal"], axis=0))
         en_err = np.std(df["pgradtotal"], axis=0) / np.sqrt(df["pgradtotal"].shape[0])
+        sigma = np.std(df["pgradtotal"], axis=0) * np.sqrt(np.mean(df['nconfig']))
         dpH = np.mean(df["pgraddpH"], axis=0)
         dp = np.mean(df["pgraddppsi"], axis=0)
         dpdp = np.mean(df["pgraddpidpj"], axis=0)
@@ -190,7 +191,7 @@ def line_minimization(
                 print(nm, quant)
             raise ValueError("NaN detected in derivatives")
 
-        return coords, grad, Sij, en, en_err
+        return coords, grad, Sij, en, en_err, sigma
 
     x0 = pgrad_acc.transform.serialize_parameters(wf.parameters)
 
@@ -209,7 +210,7 @@ def line_minimization(
     # Gradient descent cycles
     for it in range(max_iterations):
         # Calculate gradient accurately
-        coords, pgrad, Sij, en, en_err = gradient_energy_function(x0, coords)
+        coords, pgrad, Sij, en, en_err, sigma = gradient_energy_function(x0, coords)
         step_data = {}
         step_data["energy"] = en
         step_data["energy_error"] = en_err
@@ -219,7 +220,7 @@ def line_minimization(
         step_data["nconfig"] = coords.configs.shape[0]
 
         if verbose:
-            print("descent en", en, en_err)
+            print("descent en", en, en_err, ' estimated sigma ', sigma)
             print("descent |grad|", np.linalg.norm(pgrad), flush=True)
 
         xfit = []

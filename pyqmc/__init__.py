@@ -94,11 +94,11 @@ def default_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
         if not mol.has_ecp():
             print("Warning: using neither ECP nor ion_cusp")
     elif ion_cusp == True:
-        ion_cusp = list(mol.basis.keys())
+        ion_cusp = list(mol._basis.keys())
         if mol.has_ecp():
             print("Warning: using both ECP and ion_cusp")
     elif ion_cusp is None:
-        ion_cusp = [l for l in mol.basis.keys() if l not in mol._ecp.keys()]
+        ion_cusp = [l for l in mol._basis.keys() if l not in mol._ecp.keys()]
         print("default ion_cusp:", ion_cusp)
     else:
         assert isinstance(ion_cusp, list)

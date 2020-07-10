@@ -2,7 +2,7 @@
 import numpy as np
 from copy import deepcopy
 from pyqmc.mc import initial_guess
-from pyqmc import pbc
+from pyqmc import pbc, slater
 
 
 class OBDMAccumulator:
@@ -60,9 +60,9 @@ class OBDMAccumulator:
             self._kpts = kpts
             self.evaluate_orbitals = self._evaluate_orbitals_pbc
             if self.iscomplex:
-                self.get_wrapphase = pyqmc.slater.get_wrapphase_complex
+                self.get_wrapphase = slater.get_wrapphase_complex
             else:
-                self.get_wrapphase = pyqmc.slater.get_wrapphase_real
+                self.get_wrapphase = slater.get_wrapphase_real
             for attribute in ["original_cell", "S"]:
                 if not hasattr(mol, attribute):
                     from pyqmc.slaterpbc import get_supercell

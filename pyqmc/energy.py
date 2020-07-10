@@ -1,6 +1,4 @@
 import numpy as np
-import scipy
-import scipy.spatial
 import pyqmc.eval_ecp as eval_ecp
 from pyqmc.distance import RawDistance
 

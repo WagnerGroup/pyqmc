@@ -1,6 +1,4 @@
 import numpy as np
-import pandas as pd
-import scipy
 import h5py
 import pyqmc
 import pyqmc.hdftools as hdftools

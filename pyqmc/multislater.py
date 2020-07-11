@@ -1,5 +1,5 @@
 import numpy as np
-from pyqmc.slater import sherman_morrison_row
+from pyqmc.slater import sherman_morrison_row, get_complex_phase
 
 
 def sherman_morrison_ms(e, inv, vec):
@@ -49,7 +49,7 @@ class MultiSlater:
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
         self.pbc_str = "PBC" if hasattr(mol, "a") else ""
         self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
-        self.get_phase = (lambda x: x / np.abs(x)) if self.iscomplex else np.sign
+        self.get_phase = get_complex_phase if self.iscomplex else np.sign
         self.freeze_orb = [[], []] if freeze_orb is None else freeze_orb
 
     def _copy_ci(self, mc):

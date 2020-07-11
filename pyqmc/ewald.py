@@ -168,26 +168,30 @@ class Ewald:
         .. math:: E_{\rm self+charged}^{\text{single-test}} = C_{\rm square} - \sum_{I=1}^{N_{ion}} Z_I C_{ij}
 
         """
-        i_sum = np.sum(self.atom_charges)
+        self.i_sum = np.sum(self.atom_charges)
         ii_sum2 = np.sum(self.atom_charges ** 2)
-        ii_sum = (i_sum ** 2 - ii_sum2) / 2
+        ii_sum = (self.i_sum ** 2 - ii_sum2) / 2
 
-        ijconst = -np.pi / (cellvolume * self.alpha ** 2)
-        self.ijconst = ijconst
-        squareconst = -self.alpha / np.sqrt(np.pi) + ijconst / 2
+        self.ijconst = -np.pi / (cellvolume * self.alpha ** 2)
+        self.squareconst = -self.alpha / np.sqrt(np.pi) + self.ijconst / 2
 
-        self.ii_const = ii_sum * ijconst + ii_sum2 * squareconst
-        self.ee_const = lambda ne: ne * (ne - 1) / 2 * ijconst + ne * squareconst
-        self.ei_const = lambda ne: -ne * i_sum * ijconst
-
-        self.e_single = lambda ne: (ne - 1) * ijconst - i_sum * ijconst + squareconst
-        self.e_single_test = -i_sum * ijconst + squareconst
+        self.ii_const = ii_sum * self.ijconst + ii_sum2 * self.squareconst
+        self.e_single_test = -self.i_sum * self.ijconst + self.squareconst
         self.ion_ion = self.ewald_ion()
 
         # XC correction not used, so we can compare to other codes
-        rs = lambda ne: (3 / (4 * np.pi) / (ne * cellvolume)) ** (1 / 3)
-        cexc = 0.36
-        xc_correction = lambda ne: cexc / rs(ne)
+        # rs = lambda ne: (3 / (4 * np.pi) / (ne * cellvolume)) ** (1 / 3)
+        # cexc = 0.36
+        # xc_correction = lambda ne: cexc / rs(ne)
+
+    def ee_const(self, ne):
+        return ne * (ne - 1) / 2 * self.ijconst + ne * self.squareconst
+
+    def ei_const(self, ne):
+        return -ne * self.i_sum * self.ijconst
+
+    def e_single(self, ne):
+        return (ne - 1) * self.ijconst - self.i_sum * self.ijconst + self.squareconst
 
     def ewald_ion(self):
         r"""

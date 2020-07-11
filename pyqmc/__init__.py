@@ -36,9 +36,9 @@ def gradient_generator(mol, wf, to_opt=None, **ewald_kwargs):
     )
 
 
-def default_slater(mol, mf, optimize_orbitals=False):
+def default_slater(mol, mf, optimize_orbitals=False, twist=None):
 
-    wf = PySCFSlater(mol, mf)
+    wf = PySCFSlater(mol, mf, twist=twist)
     to_opt = {}
     if optimize_orbitals:
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
@@ -60,7 +60,7 @@ def default_multislater(mol, mf, mc, tol=None, optimize_orbitals=False):
     return wf, to_opt
 
 
-def default_jastrow(mol, ion_cusp=False, na=4, nb=3, rcut=7.5):
+def default_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
     """         
     Default 2-body jastrow from qwalk,
     Args:
@@ -81,24 +81,46 @@ def default_jastrow(mol, ion_cusp=False, na=4, nb=3, rcut=7.5):
             beta[i] = np.exp(beta1 + 1.6 * i) - 1
         return beta
 
+    if rcut is None:
+        if hasattr(mol, "a"):
+            rcut = np.amin(np.pi / np.linalg.norm(mol.reciprocal_vectors(), axis=1))
+        else:
+            rcut = 7.5
+
     beta_abasis = expand_beta_qwalk(0.2, na)
     beta_bbasis = expand_beta_qwalk(0.5, nb)
-    if ion_cusp:
+    if ion_cusp == False:
+        ion_cusp = []
+        if not mol.has_ecp():
+            print("Warning: using neither ECP nor ion_cusp")
+    elif ion_cusp == True:
+        ion_cusp = list(mol._basis.keys())
+        if mol.has_ecp():
+            print("Warning: using both ECP and ion_cusp")
+    elif ion_cusp is None:
+        ion_cusp = [l for l in mol._basis.keys() if l not in mol._ecp.keys()]
+        print("default ion_cusp:", ion_cusp)
+    else:
+        assert isinstance(ion_cusp, list)
+
+    if len(ion_cusp) > 0:
         abasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
     else:
         abasis = []
-    abasis += [PolyPadeFunction(beta=beta_abasis[i], rcut=rcut) for i in range(4)]
+    abasis += [PolyPadeFunction(beta=ba, rcut=rcut) for ba in beta_abasis]
     bbasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
-    bbasis += [PolyPadeFunction(beta=beta_bbasis[i], rcut=rcut) for i in range(3)]
+    bbasis += [PolyPadeFunction(beta=bb, rcut=rcut) for bb in beta_bbasis]
 
     jastrow = JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
-    if ion_cusp:
-        jastrow.parameters["acoeff"][:, 0, :] = mol.atom_charges()[:, None]
+    if len(ion_cusp) > 0:
+        coefs = mol.atom_charges()
+        coefs[[l[0] not in ion_cusp for l in mol._atom]] = 0.0
+        jastrow.parameters["acoeff"][:, 0, :] = coefs[:, None]
     jastrow.parameters["bcoeff"][0, [0, 1, 2]] = np.array([-0.25, -0.50, -0.25])
 
     to_opt = {}
     to_opt["acoeff"] = np.ones(jastrow.parameters["acoeff"].shape).astype(bool)
-    if ion_cusp:
+    if len(ion_cusp) > 0:
         to_opt["acoeff"][:, 0, :] = False  # Cusp conditions
     to_opt["bcoeff"] = np.ones(jastrow.parameters["bcoeff"].shape).astype(bool)
     to_opt["bcoeff"][0, [0, 1, 2]] = False  # Cusp conditions
@@ -115,9 +137,9 @@ def default_msj(mol, mf, mc, tol=None, freeze_orb=None, ion_cusp=False):
     return wf, to_opt
 
 
-def default_sj(mol, mf, ion_cusp=False):
-    wf1, to_opt1 = default_slater(mol, mf)
-    wf2, to_opt2 = default_jastrow(mol, ion_cusp)
+def default_sj(mol, mf, optimize_orbitals=False, twist=None, **jastrow_kws):
+    wf1, to_opt1 = default_slater(mol, mf, optimize_orbitals, twist)
+    wf2, to_opt2 = default_jastrow(mol, **jastrow_kws)
     wf = MultiplyWF(wf1, wf2)
     to_opt = {"wf1" + x: opt for x, opt in to_opt1.items()}
     to_opt.update({"wf2" + x: opt for x, opt in to_opt2.items()})

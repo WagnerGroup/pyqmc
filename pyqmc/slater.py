@@ -26,6 +26,18 @@ def _aostack_pbc(ao, gl):
     return [_aostack_mol(ak, gl) for ak in ao]
 
 
+def get_wrapphase_real(x):
+    return (-1) ** np.round(x / np.pi)
+
+
+def get_wrapphase_complex(x):
+    return np.exp(1j * x)
+
+
+def get_complex_phase(x):
+    return x / np.abs(x)
+
+
 def get_kinds(cell, mf, kpts, tol=1e-6):
     """Given a list of kpts, return inds such that mf.kpts[inds] is a list of kpts equivalent to the input list"""
     kdiffs = mf.kpts[np.newaxis] - kpts[:, np.newaxis]
@@ -59,11 +71,11 @@ class PySCFSlater:
 
         self.dtype = complex if self.iscomplex else float
         if self.iscomplex:
-            self.get_phase = lambda x: x / np.abs(x)
-            self.get_wrapphase = lambda x: np.exp(1j * x)
+            self.get_phase = get_complex_phase
+            self.get_wrapphase = get_wrapphase_complex
         else:
             self.get_phase = np.sign
-            self.get_wrapphase = lambda x: (-1) ** np.round(x / np.pi)
+            self.get_wrapphase = get_wrapphase_real
 
     def _init_mol(self, mol, mf):
         from pyscf import scf

@@ -14,10 +14,6 @@ def reblock(df, nblocks):
     :rtype: same as input df
     """
 
-    def _reblock(array, nblocks):
-        vals = np.array_split(array, nblocks, axis=0)
-        return [v.mean(axis=0) for v in vals]
-
     if isinstance(df, pd.Series):
         return pd.Series(_reblock(df.values, nblocks))
     elif isinstance(df, pd.DataFrame):
@@ -28,6 +24,14 @@ def reblock(df, nblocks):
     else:
         print("WARNING: can't reblock data of type", type(df), "-- not reblocking.")
         return df
+
+
+def _reblock(array, nblocks):
+    """
+    Helper function to reblock(); this function actually does the reblocking.
+    """
+    vals = np.array_split(array, nblocks, axis=0)
+    return [v.mean(axis=0) for v in vals]
 
 
 def reblock_summary(df, nblocks):

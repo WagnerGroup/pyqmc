@@ -235,11 +235,10 @@ class TBDMAccumulator:
             d["acceptance_%s" % e] = ()
         return d
 
-    def information(self):
-        return {"ijkl": self._ijkl.T}
-
     def avg(self, configs, wf):
-        return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
+        d = {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
+        d["ijkl"] = self._ijkl.T
+        return d
 
     def get_extra_configs(self, configs):
         """ Returns an nstep length array of configurations

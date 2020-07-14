@@ -226,10 +226,12 @@ class TBDMAccumulator:
         return results
 
     def keys(self):
-        return set(["value", "norm_a", "norm_b", "acceptance_a", "acceptance_b"])
+        return set(
+            ["value", "norm_a", "norm_b", "acceptance_a", "acceptance_b", "ijkl"]
+        )
 
     def shapes(self):
-        d = {"value": (self._ijkl.shape[1],)}
+        d = {"value": (self._ijkl.shape[1],), "ijkl": self._ijkl.T.shape}
         for e, s in zip(["a", "b"], self._spin_sector):
             d["norm_%s" % e] = (self._orb_coeff[s].shape[1],)
             d["acceptance_%s" % e] = ()

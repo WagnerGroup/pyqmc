@@ -1,7 +1,6 @@
 if __name__ == "__main__":
     import pyscf
     import pyqmc
-    import pandas as pd
 
     mol = pyscf.gto.M(atom="He 0. 0. 0.", basis="bfd_vdz", ecp="bfd", unit="bohr")
 

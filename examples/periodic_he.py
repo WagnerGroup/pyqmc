@@ -3,10 +3,7 @@
 import numpy as np
 from pyscf.pbc import gto, scf
 import pyqmc
-from pyqmc import JastrowSpin, MultiplyWF
-from pyqmc.slaterpbc import PySCFSlaterPBC, get_supercell
-from pyqmc.func3d import PolyPadeFunction, CutoffCuspFunction
-from pyqmc.linemin import line_minimization
+from pyqmc.supercell import get_supercell
 
 
 def run_scf(nk):
@@ -14,8 +11,7 @@ def run_scf(nk):
     cell.atom = """
     He 0.000000000000   0.000000000000   0.000000000000
     """
-    cell.basis = "gth-dzvp"
-    cell.pseudo = "gth-pade"
+    cell.basis = "ccecp-ccpvdz"
     cell.a = """
     5.61, 0.00, 0.00
     0.00, 5.61, 0.00
@@ -24,48 +20,48 @@ def run_scf(nk):
     cell.verbose = 5
     cell.build()
 
-    kpts = cell.make_kpts([nk, nk, nk])
     kmf = scf.KRHF(cell, exxdiv=None).density_fit()
-    kmf.kpts = kpts
+    kmf.kpts = cell.make_kpts([nk, nk, nk])
     ehf = kmf.kernel()
-
-    print("EHF")
-    print(ehf)
+    print("EHF", ehf)
     return cell, kmf
 
 
 if __name__ == "__main__":
-    import pandas as pd
+    # Run SCF
+    cell, kmf = run_scf(nk=2)
 
+    # Set up wf and configs
     nconfig = 100
-    for nk in [2]:
-        # Run SCF
-        cell, kmf = run_scf(nk)
+    S = np.eye(3) * 2  # 2x2x2 supercell
+    supercell = get_supercell(cell, S)
+    wf, to_opt = pyqmc.default_sj(supercell, kmf)
+    configs = pyqmc.initial_guess(supercell, nconfig)
 
-        # Set up wf and configs
-        S = np.eye(3) * nk
-        supercell = get_supercell(cell, S)
-        wf, to_opt = pyqmc.default_sj(supercell, kmf)
-        configs = pyqmc.initial_guess(supercell, nconfig)
+    # Initialize energy accumulator (and Ewald)
+    pgrad = pyqmc.gradient_generator(supercell, wf, to_opt=to_opt)
 
-        # Warm up VMC
-        df, configs = pyqmc.vmc(wf, configs, nsteps=5, verbose=True)
+    # Optimize jastrow
+    wf, lm_df = pyqmc.line_minimization(
+        wf, configs, pgrad, hdf_file="pbc_he_linemin.hdf", verbose=True
+    )
 
-        # Initialize energy accumulator (and Ewald)
-        pgrad = pyqmc.gradient_generator(supercell, wf, to_opt=to_opt)
+    # Run VMC
+    df, configs = pyqmc.vmc(
+        wf,
+        configs,
+        nblocks=100,
+        accumulators={"energy": pgrad.enacc},
+        hdf_file="pbc_he_vmc.hdf",
+        verbose=True,
+    )
 
-        # Optimize jastrow
-        hdf_file = "linemin_nk{0}.hdf".format(nk)
-        wf, lm_df = line_minimization(
-            wf, configs, pgrad, hdf_file=hdf_file, verbose=True
-        )
-        jastrow = wf.wf2
-
-        # Run VMC
-        df, configs = pyqmc.vmc(
-            wf, configs, nsteps=20, accumulators={"energy": pgrad.enacc}, verbose=True
-        )
-
-        df = pd.DataFrame(df)
-        print(df)
-        df.to_csv("pbc_he_nk{0}.csv".format(nk))
+    # Run DMC
+    pyqmc.rundmc(
+        wf,
+        configs,
+        nsteps=1000,
+        accumulators={"energy": pgrad.enacc},
+        hdf_file="pbc_he_dmc.hdf",
+        verbose=True,
+    )

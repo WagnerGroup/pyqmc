@@ -225,14 +225,22 @@ class TBDMAccumulator:
 
         return results
 
+    def keys(self):
+        return set(
+            ["value", "norm_a", "norm_b", "acceptance_a", "acceptance_b", "ijkl"]
+        )
+
+    def shapes(self):
+        d = {"value": (self._ijkl.shape[1],), "ijkl": self._ijkl.T.shape}
+        for e, s in zip(["a", "b"], self._spin_sector):
+            d["norm_%s" % e] = (self._orb_coeff[s].shape[1],)
+            d["acceptance_%s" % e] = ()
+        return d
+
     def avg(self, configs, wf):
-        d = self(configs, wf)
-        davg = {}
-        for k, v in d.items():
-            # print(k, v.shape)
-            davg[k] = np.mean(v, axis=0)
-        davg["ijkl"] = self._ijkl.T
-        return davg
+        d = {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
+        d["ijkl"] = self._ijkl.T
+        return d
 
     def get_extra_configs(self, configs):
         """ Returns an nstep length array of configurations

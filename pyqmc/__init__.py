@@ -113,7 +113,7 @@ def default_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
 
     jastrow = JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
     if len(ion_cusp) > 0:
-        coefs = mol.atom_charges()
+        coefs = mol.atom_charges().copy()
         coefs[[l[0] not in ion_cusp for l in mol._atom]] = 0.0
         jastrow.parameters["acoeff"][:, 0, :] = coefs[:, None]
     jastrow.parameters["bcoeff"][0, [0, 1, 2]] = np.array([-0.25, -0.50, -0.25])

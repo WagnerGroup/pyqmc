@@ -39,6 +39,12 @@ class EnergyAccumulator:
             d[k] = np.mean(it, axis=0)
         return d
 
+    def keys(self):
+        return set(["ke", "ee", "ei", "ecp", "total"])
+
+    def shapes(self):
+        return {"ke": (), "ee": (), "ei": (), "ecp": (), "total": ()}
+
 
 class LinearTransform:
     """
@@ -168,6 +174,15 @@ class PGradTransform:
 
         return d
 
+    def keys(self):
+        return self.enacc.keys().union(["dpH", "dppsi", "dpidpj"])
+
+    def shapes(self):
+        nparms = np.sum([np.sum(opt) for opt in self.transform.to_opt.values()])
+        d = {"dpH": (nparms,), "dppsi": (nparms,), "dpidpj": (nparms, nparms)}
+        d.update(self.enacc.shapes())
+        return d
+
 
 class SqAccumulator:
     r"""
@@ -204,3 +219,9 @@ class SqAccumulator:
 
     def avg(self, configs, wf):
         return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
+
+    def keys(self):
+        return set(["Sq"])
+
+    def shapes(self):
+        return {"Sq": (len(self.qlist),)}

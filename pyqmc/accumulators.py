@@ -118,7 +118,7 @@ class PGradTransform:
         ne = configs.configs.shape[1]
         d2 = 0.0
         for e in range(ne):
-            d2 += np.sum(wf.gradient(e, configs.electron(e)) ** 2, axis=0)
+            d2 += np.sum(np.abs(wf.gradient(e, configs.electron(e))) ** 2, axis=0)
         r = 1.0 / d2
         mask = r < self.nodal_cutoff ** 2
 

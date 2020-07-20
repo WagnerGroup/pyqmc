@@ -53,17 +53,22 @@ class MultiSlater:
         self.tol = -1 if tol is None else tol
         self.parameters = {}
         self._mol = mol
-        self._nelec = mol.nelec
+        if hasattr(mc, "nelecas"):
+            #In case nelecas overrode the information from the molecule object.
+            self._nelec = (mc.nelecas[0] + mc.ncore, mc.nelecas[1] + mc.ncore)
+        else:
+            self._nelec = mol.nelec
         self._copy_ci(mc)
         mo_coeff = mc.mo_coeff if hasattr(mc, 'mo_coeff') else mf.mo_coeff
-        mo_cutoff = np.max(self._det_occup)+1
+        mo_cutoff_alpha = np.max(self._det_occup[0])+1
+        mo_cutoff_beta = np.max(self._det_occup[1])+1
 
         if len(mo_coeff.shape) == 3:
-            self.parameters["mo_coeff_alpha"] = mo_coeff[0][:, : mo_cutoff]
-            self.parameters["mo_coeff_beta"] = mo_coeff[1][:, : mo_cutoff]
+            self.parameters["mo_coeff_alpha"] = mo_coeff[0][:, : mo_cutoff_alpha]
+            self.parameters["mo_coeff_beta"] = mo_coeff[1][:, : mo_cutoff_beta]
         else:
-            self.parameters["mo_coeff_alpha"] = mo_coeff[:, : mo_cutoff]
-            self.parameters["mo_coeff_beta"] = mo_coeff[:, : mo_cutoff]
+            self.parameters["mo_coeff_alpha"] = mo_coeff[:, : mo_cutoff_alpha]
+            self.parameters["mo_coeff_beta"] = mo_coeff[:, : mo_cutoff_beta]
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
         self.pbc_str = "PBC" if hasattr(mol, "a") else ""
         self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
@@ -82,11 +87,11 @@ class MultiSlater:
         # find multi slater determinant occupation
         if hasattr(mc, '_strs'):
             #if this is a HCI object, it will have _strs
+            print("hci object")
             bigcis = np.abs(mc.ci > self.tol)
             deters = [(c,bin(s[0]), bin(s[1])) for c, s in zip(mc.ci[bigcis],mc._strs[bigcis,:])]
         else:
-            norb = mc.ncas
-            deters = fci.addons.large_ci(mc.ci, norb, self._nelec, tol=-1)
+            deters = fci.addons.large_ci(mc.ci, mc.ncas, mc.nelecas, tol=-1)
 
         # Create map and occupation objects
         detwt = []
@@ -97,7 +102,6 @@ class MultiSlater:
                 detwt.append(x[0])
                 alpha_occ, __ = binary_to_occ(x[1], ncore)
                 beta_occ, __ = binary_to_occ(x[2], ncore)
-
                 if alpha_occ not in occup[0]:
                     map_dets[0].append(len(occup[0]))
                     occup[0].append(alpha_occ)
@@ -135,6 +139,7 @@ class MultiSlater:
                 self.parameters[self._coefflookup[s]]
             )
             mo_vals = np.swapaxes(mo[:, :, self._det_occup[s]], 1, 2)
+            print("s ", s, mo_vals.shape)
             self._dets.append(
                 np.array(np.linalg.slogdet(mo_vals))
             )  # Spin, (sign, val), nconf, [ndet_up, ndet_dn]
@@ -313,8 +318,8 @@ class MultiSlater:
         return ratios
 
     def pgradient(self):
-        """Compute the parameter gradient of Psi. 
-        Returns d_p \Psi/\Psi as a dictionary of numpy arrays,
+        r"""Compute the parameter gradient of Psi. 
+        Returns $$d_p \Psi/\Psi$$ as a dictionary of numpy arrays,
         which correspond to the parameter dictionary."""
         d = {}
 

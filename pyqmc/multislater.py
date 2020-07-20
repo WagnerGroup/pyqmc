@@ -87,7 +87,6 @@ class MultiSlater:
         # find multi slater determinant occupation
         if hasattr(mc, '_strs'):
             #if this is a HCI object, it will have _strs
-            print("hci object")
             bigcis = np.abs(mc.ci > self.tol)
             deters = [(c,bin(s[0]), bin(s[1])) for c, s in zip(mc.ci[bigcis],mc._strs[bigcis,:])]
         else:
@@ -139,7 +138,6 @@ class MultiSlater:
                 self.parameters[self._coefflookup[s]]
             )
             mo_vals = np.swapaxes(mo[:, :, self._det_occup[s]], 1, 2)
-            print("s ", s, mo_vals.shape)
             self._dets.append(
                 np.array(np.linalg.slogdet(mo_vals))
             )  # Spin, (sign, val), nconf, [ndet_up, ndet_dn]

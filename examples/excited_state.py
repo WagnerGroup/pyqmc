@@ -152,7 +152,7 @@ nconfig = ncore * 400
 if __name__ == "__main__":
     cluster = LocalCluster(n_workers=ncore, threads_per_worker=1)
     client = Client(cluster)
-    from pyqmc.dasktools import distvmc, line_minimization, optimize_orthogonal
+    from pyqmc import vmc, line_minimization, optimize_orthogonal
 
     # from pyqmc.optimize_orthogonal import optimize_orthogonal
     from copy import deepcopy
@@ -179,8 +179,8 @@ if __name__ == "__main__":
     setuph2(savefiles["mf"], "test")
     sys = pyqmc_from_hdf(savefiles["mf"])
 
-    df, coords = distvmc(
-        sys["wf"], pyqmc.initial_guess(sys["mol"], nconfig), client=client, nsteps=10
+    df, coords = vmc(
+        sys["wf"], pyqmc.initial_guess(sys["mol"], nconfig), client=client, nsteps=10, npartitions=ncore,
     )
 
     line_minimization(
@@ -189,6 +189,7 @@ if __name__ == "__main__":
         sys["pgrad"],
         hdf_file=savefiles["linemin"],
         client=client,
+        npartitions=ncore,
         verbose=True,
     )
 

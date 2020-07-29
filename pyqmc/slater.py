@@ -80,14 +80,21 @@ class PySCFSlater:
     def _init_mol(self, mol, mf):
         from pyscf import scf
 
+        # Define up and down occupations from restricted SCF
+        if len(mf.mo_occ.shape) == 1:  # RHF/RKS
+            double = mf.mo_occ >= 1.1
+            single_inds = np.where((mf.mo_occ > 0.9) & (mf.mo_occ < 1.1))[0]
+            occs = [double, double.copy()]
+            for s in (0, 1):
+                occs[s][single_inds[s::2]] = True
+
         for s, lookup in enumerate(self._coefflookup):
             if len(mf.mo_occ.shape) == 2:
                 self.parameters[lookup] = mf.mo_coeff[s][
                     :, np.asarray(mf.mo_occ[s] > 0.9)
                 ]
             else:
-                minocc = (0.9, 1.1)[s]
-                self.parameters[lookup] = mf.mo_coeff[:, np.asarray(mf.mo_occ > minocc)]
+                self.parameters[lookup] = mf.mo_coeff[:, occs[s]]
         self._nelec = tuple(mol.nelec)
         self._mol = mol
         self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
@@ -119,6 +126,17 @@ class PySCFSlater:
         assert len(self.kinds) == len(self._kpts), (self._kpts, mf.kpts)
         self.nk = len(self._kpts)
 
+        # Define up and down occupations from restricted SCF
+        if len(mf.mo_coeff[0][0].shape) == 1:  # KRHF/KRKS
+            mo_occ = np.asarray([mf.mo_occ[kind] for kind in self.kinds])
+            print("mo_occ", mo_occ.shape)
+            double = mo_occ >= 1.1
+            single_inds = np.where((mo_occ > 0.9) & (mo_occ < 1.1))
+            occs = [double, double.copy()]
+            for s in (0, 1):
+                occs[s][(single_inds[0][s::2], single_inds[1][s::2])] = True
+            print("occs\n", occs)
+
         # Define parameters
         self.param_split = {}
         for s, lookup in enumerate(self._coefflookup):
@@ -127,8 +145,7 @@ class PySCFSlater:
                 if len(mf.mo_coeff[0][0].shape) == 2:
                     mca = mf.mo_coeff[s][kind][:, np.asarray(mf.mo_occ[s][kind] > 0.9)]
                 else:
-                    minocc = (0.9, 1.1)[s]
-                    mca = mf.mo_coeff[kind][:, np.asarray(mf.mo_occ[kind] > minocc)]
+                    mca = mf.mo_coeff[kind][:, occs[s][kind]]
                 mca = np.real_if_close(mca, tol=self.real_tol)
                 mclist.append(mca / np.sqrt(self.nk))
             self.param_split[lookup] = np.cumsum([m.shape[1] for m in mclist])
@@ -138,14 +155,12 @@ class PySCFSlater:
         self.iscomplex = self.iscomplex or np.linalg.norm(self._kpts) > 1e-12
 
         # Define nelec
-        if isinstance(mf, scf.kuhf.KUHF):
+        if len(mf.mo_coeff[0][0].shape) == 2:  # KUHF/KUKS
             # Then indices are (spin, kpt, basis, mo)
             self._nelec = [int(np.sum([o[k] for k in self.kinds])) for o in mf.mo_occ]
-        elif isinstance(mf, scf.khf.KRHF):
+        elif len(mf.mo_coeff[0][0].shape) == 1:  # KRHF/KRKS
             # Then indices are (kpt, basis, mo)
-            self._nelec = [
-                int(np.sum([mf.mo_occ[k] > t for k in self.kinds])) for t in (0.9, 1.1)
-            ]
+            self._nelec = [np.sum(o) for o in occs]
         else:
             print("Warning: PySCFSlater not expecting scf object of type", type(mf))
             scale = self.supercell.scale
@@ -202,11 +217,13 @@ class PySCFSlater:
         else:
             aos_shape = (1, nconf, nelec, -1)
         aos = np.reshape(aos, aos_shape)
+        print("aos_shape", aos.shape)
         self._aovals = aos
         self._dets = []
         self._inverse = []
         for s in [0, 1]:
             i0, i1 = s * self._nelec[0], self._nelec[0] + s * self._nelec[1]
+            print(s, i0, i1)
             ne = self._nelec[s]
             mo = self.evaluate_mos(aos[:, :, i0:i1], s).reshape(nconf, ne, ne)
             phase, mag = np.linalg.slogdet(mo)

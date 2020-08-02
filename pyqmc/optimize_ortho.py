@@ -180,7 +180,7 @@ def sample_overlap(
     return return_data, configs
 
 
-def dist_sample_overlap(wfs, configs, nblocks=10, nsteps_per_block=10, *args, client, npartitions=None, **kwargs):
+def dist_sample_overlap(wfs,  *args, configs, nblocks=10, nsteps_per_block=10, client, npartitions=None, **kwargs):
     if npartitions is None:
         npartitions = sum(client.nthreads().values())
 
@@ -353,12 +353,12 @@ def renormalize(wfs, N):
 
 
 def evaluate(wfs, coords, pgrad, sampler, sample_options, warmup):
-    return_data, coords = sampler(wfs, coords, pgrad, **sample_options)
     """ 
     For wave functions wfs and coordinate set coords, evaluate the overlap and energy of the last wave function. 
 
     Returns a dictionary with relevant information.
     """
+    return_data, coords = sampler(wfs, coords, pgrad, **sample_options)
     avg_data = {}
     for k, it in return_data.items():
         avg_data[k] = np.average(it[warmup:, ...], axis=0)

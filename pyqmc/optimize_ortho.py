@@ -208,7 +208,7 @@ def dist_sample_overlap(wfs, configs, nblocks=10, nsteps_per_block=10, *args, cl
                 )
             else:
                 block_avg[k] = np.mean([res[k] * w for res, w in zip(allresults[0], avgweights)], axis=0)
-                
+
         # Blocks stored
         for k, it in block_avg.items():
             if k not in return_data:
@@ -622,7 +622,7 @@ def optimize_orthogonal(
         xfit = []
         overlap_cost = (
             forcing[:, np.newaxis]
-            * (line_data["overlap"][:, :, 0] - Starget[:, np.newaxis]) ** 2
+            * np.abs(line_data["overlap"][:, :, 0] - Starget[:, np.newaxis]) ** 2
         )
         cost = np.mean(line_data["total"], axis=0) + np.sum(overlap_cost, axis=0)
         mask = (np.abs(line_data["weight"] - 1.0) > weight_boundaries) & (

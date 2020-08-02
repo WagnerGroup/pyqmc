@@ -100,17 +100,19 @@ def sample_overlap(
             denominator = np.sum(np.exp(2 * (log_values[:, 1, :] - ref)), axis=0)
             normalized_values = log_values[:, 0, :] * np.exp(log_values[:, 1, :] - ref)
             save_dat["overlap"] = np.mean(
-                np.einsum("ik,jk->ijk", normalized_values, normalized_values)
+                np.einsum("ik,jk->ijk", np.conjugate(normalized_values), normalized_values)
                 / denominator,
                 axis=-1,
             )
             weight = np.array(
                 [
-                    np.exp(-2 * (log_values[i, 1, :] - log_values[:, 1, :]))
+                    np.exp(-2 * np.real(log_values[i, 1, :] - log_values[:, 1, :]))
                     for i in range(len(wfs))
                 ]
             )
             weight = 1.0 / np.sum(weight, axis=1)
+            #print("weight", weight)
+            #print("log values", log_values)
 
             # Fast evaluation of dppsi_reg
             dppsi = pgrad.transform.serialize_gradients(wfs[-1].pgradient())
@@ -137,13 +139,13 @@ def sample_overlap(
             # Rolling average within block
             for k, it in save_dat.items():
                 if k not in block_avg:
-                    block_avg[k] = np.zeros((*it.shape,))
+                    block_avg[k] = np.zeros((*it.shape,), dtype=it.dtype)
                 block_avg[k] += save_dat[k] / nsteps_per_block
 
         # Blocks stored
         for k, it in block_avg.items():
             if k not in return_data:
-                return_data[k] = np.zeros((nblocks, *it.shape))
+                return_data[k] = np.zeros((nblocks, *it.shape), dtype=it.dtype)
             return_data[k][block, ...] = it.copy()
     return return_data, configs
 
@@ -333,7 +335,11 @@ def renormalize(wfs, N):
 
         f^2 = a^2/b^2 = (1-N)/N
     """
-    wfs[-1].parameters["wf1det_coeff"] *= np.sqrt((1 - N) / N)
+    renorm = np.sqrt((1 - N) / N)
+    if 'wf1det_coeff' in wfs[-1].parameters.keys():
+        wfs[-1].parameters["wf1det_coeff"] *= renorm
+    elif 'wf1mo_coeff_alpha' in wfs[-1].parameters.keys():
+        wfs[-1].parameters['wf1mo_coeff_alpha'][:,0] *= renorm
 
 
 def evaluate(wfs, coords, pgrad, sampler, sample_options, warmup):
@@ -346,7 +352,7 @@ def evaluate(wfs, coords, pgrad, sampler, sample_options, warmup):
     avg_data = {}
     for k, it in return_data.items():
         avg_data[k] = np.average(it[warmup:, ...], axis=0)
-    N = avg_data["overlap"].diagonal()
+    N = np.real(avg_data["overlap"].diagonal())
     # Derivatives are only for the optimized wave function, so they miss
     # an index
     N_derivative = 2 * np.real(avg_data["overlap_gradient"][-1])
@@ -374,8 +380,8 @@ def optimize_orthogonal(
     wfs,
     coords,
     pgrad,
-    Starget=0.0,
-    forcing=10.0,
+    Starget=None,
+    forcing=None,
     tstep=0.1,
     max_iterations=30,
     warmup=5,
@@ -460,6 +466,10 @@ def optimize_orthogonal(
     """
 
     parameters = pgrad.transform.serialize_parameters(wfs[-1].parameters)
+    if Starget is None:
+        Starget = np.zeros(len(wfs)-1)
+    if forcing is None:
+        forcing = np.ones(len(wfs)-1)
     Starget = np.asarray(Starget)
     forcing = np.asarray(forcing)
     attr = dict(

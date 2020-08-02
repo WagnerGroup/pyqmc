@@ -180,61 +180,41 @@ def sample_overlap(
     return return_data, configs
 
 
-def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs):
+def dist_sample_overlap(wfs, configs, nblocks=10, nsteps_per_block=10, *args, client, npartitions=None, **kwargs):
     if npartitions is None:
         npartitions = sum(client.nthreads().values())
 
-    coord = configs.split(npartitions)
-    allruns = []
+    
+    return_data = {}
+    for block in range(nblocks):
+        #block_avg, configs=sample_overlap_worker(wfs, configs, pgrad, nsteps_per_block, tstep)
+        coord = configs.split(npartitions)
+        runs = []
+        for nodeconfigs in coord:
+            runs.append(client.submit(sample_overlap_worker, wfs, nodeconfigs, *args,nsteps = nsteps_per_block, **kwargs))
 
-    for nodeconfigs in coord:
-        allruns.append(client.submit(sample_overlap, wfs, nodeconfigs, *args, **kwargs))
-
-    # Here we reweight the averages since each step on each node
-    # was done with a different average weight.
-    confweight = np.array([len(c.configs) for c in coord], dtype=float)
-    confweight /= confweight.mean()
-
-    # Memory efficient implementation, bit more verbose
-    final_coords = []
-    df = {}
-    for i, r in enumerate(allruns):
-        result = r.result()
-        result[0]["weight"] *= confweight[i]
-        final_coords.append(result[1])
-        keys = result[0].keys()
-        for k in keys:
-            if k not in df:
-                df[k] = np.zeros(result[0][k].shape)
+        allresults = list(zip(*[r.result() for r in runs]))
+        configs.join(allresults[1])
+        confweight = np.array([len(c.configs) for c in coord], dtype=float)
+        #confweight /= np.mean(confweight) * npartitions
+        avgweights = np.array([res['weight_final'] for res in allresults[0]])
+        avgweights *= confweight
+        avgweights /= np.mean(avgweights) * npartitions
+        block_avg = {}
+        for k in allresults[0][0].keys():
             if k not in ["weight", "overlap", "overlap_gradient"]:
-                if len(df[k].shape) == 1:
-                    df[k] += result[0][k] * result[0]["weight"][:, -1]
-                elif len(df[k].shape) == 2:
-                    df[k] += result[0][k] * result[0]["weight"][:, -1, np.newaxis]
-                elif len(df[k].shape) == 3:
-                    df[k] += (
-                        result[0][k]
-                        * result[0]["weight"][:, -1, np.newaxis, np.newaxis]
-                    )
-                else:
-                    raise NotImplementedError(
-                        "too many/too few dimension in dist_sample_overlap"
-                    )
+                block_avg[k] = np.sum(
+                    [res[k] * w for res, w in zip(allresults[0], avgweights)], axis=0
+                )
             else:
-                df[k] += result[0][k] * confweight[i] / len(allruns)
-
-    for k in keys:
-        if k not in ["weight", "overlap", "overlap_gradient"]:
-            if len(df[k].shape) == 1:
-                df[k] /= len(allruns) * df["weight"][:, -1]
-            elif len(df[k].shape) == 2:
-                df[k] /= len(allruns) * df["weight"][:, -1, np.newaxis]
-            elif len(df[k].shape) == 3:
-                df[k] /= len(allruns) * df["weight"][:, -1, np.newaxis, np.newaxis]
-
-    configs.join(final_coords)
-    coordret = configs
-    return df, coordret
+                block_avg[k] = np.mean([res[k] * w for res, w in zip(allresults[0], avgweights)], axis=0)
+                
+        # Blocks stored
+        for k, it in block_avg.items():
+            if k not in return_data:
+                return_data[k] = np.zeros((nblocks, *it.shape), dtype=it.dtype)
+            return_data[k][block, ...] = it.copy()
+    return return_data, configs
 
 
 def correlated_sample(wfs, configs, parameters, pgrad):

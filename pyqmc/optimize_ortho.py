@@ -180,7 +180,7 @@ def sample_overlap(
     return return_data, configs
 
 
-def dist_sample_overlap(wfs,  *args, configs, nblocks=10, nsteps_per_block=10, client, npartitions=None, **kwargs):
+def dist_sample_overlap(wfs, configs, pgrad, nblocks=10, nsteps_per_block=10, client=None, npartitions=None, **kwargs):
     if npartitions is None:
         npartitions = sum(client.nthreads().values())
 
@@ -191,7 +191,7 @@ def dist_sample_overlap(wfs,  *args, configs, nblocks=10, nsteps_per_block=10, c
         coord = configs.split(npartitions)
         runs = []
         for nodeconfigs in coord:
-            runs.append(client.submit(sample_overlap_worker, wfs, nodeconfigs, *args,nsteps = nsteps_per_block, **kwargs))
+            runs.append(client.submit(sample_overlap_worker, wfs, nodeconfigs, pgrad, nsteps = nsteps_per_block, **kwargs))
 
         allresults = list(zip(*[r.result() for r in runs]))
         configs.join(allresults[1])
@@ -346,10 +346,9 @@ def renormalize(wfs, N):
         f^2 = a^2/b^2 = (1-N)/N
     """
     renorm = np.sqrt((1 - N) / N)
+    print("renormalization",renorm)
     if 'wf1det_coeff' in wfs[-1].parameters.keys():
         wfs[-1].parameters["wf1det_coeff"] *= renorm
-    elif 'wf1mo_coeff_alpha' in wfs[-1].parameters.keys():
-        wfs[-1].parameters['wf1mo_coeff_alpha'][:,0] *= renorm
 
 
 def evaluate(wfs, coords, pgrad, sampler, sample_options, warmup):
@@ -532,7 +531,7 @@ def optimize_orthogonal(
             )
             N = tmp_deriv["N"][-1]
 
-            print("Normalization", N)
+            print("Normalization", N, flush=True)
             if abs(N - Ntarget) < Ntol:
                 normalization[0] = tmp_deriv["N"][-1]
                 total_energy += tmp_deriv["total"] / (nwf - 1)
@@ -578,7 +577,7 @@ def optimize_orthogonal(
         for i in range(len(wfs) - 1):
             print(
                 format_str.format(
-                    "overlap", i, overlaps[i], np.linalg.norm(overlap_derivatives[i])
+                    "overlap", i, overlaps[i], np.linalg.norm(overlap_derivatives[i], flush=True)
                 )
             )
 
@@ -634,7 +633,7 @@ def optimize_orthogonal(
 
         if len(xfit) > 0:
             min_tstep = pyqmc.linemin.stable_fit2(xfit, yfit)
-            print("chose to move", min_tstep)
+            print("chose to move", min_tstep, flush=True)
             parameters += conditioner(total_derivative, condition, min_tstep)
 
         for k, it in pgrad.transform.deserialize(parameters).items():

@@ -253,7 +253,7 @@ def correlated_sample(wfs, configs, parameters, pgrad):
     nparms = len(parameters)
     ref = np.max(log_values0[:, 1, :])
     normalized_values = log_values0[:, 0, :] * np.exp(log_values0[:, 1, :] - ref)
-    denominator = np.sum(np.exp(2 * (log_values0[:, 1, :] - ref)), axis=0)
+    denominator = np.real(np.sum(np.exp(2 * (log_values0[:, 1, :] - ref)), axis=0))
 
     weight = np.array(
         [
@@ -262,11 +262,14 @@ def correlated_sample(wfs, configs, parameters, pgrad):
         ]
     )
     weight = np.mean(1.0 / np.sum(weight, axis=1), axis=1)
+    dtype = np.float
+    if wf.iscomplex:
+        dtype = np.complex
 
     data = {
         "total": np.zeros(nparms),
         "weight": np.zeros(nparms),
-        "overlap": np.zeros((nparms, len(wfs))),
+        "overlap": np.zeros((nparms, len(wfs)), dtype=dtype),
         "rhoprime": np.zeros(nparms),
     }
     data["base_weight"] = weight
@@ -278,19 +281,19 @@ def correlated_sample(wfs, configs, parameters, pgrad):
         val = wf.value()
         dat = pgrad.enacc(configs, wf)
 
-        wt = 1.0 / np.sum(
+        wt = 1.0 / np.real(np.sum(
             np.exp(2 * log_values0[:, 1, :] - 2 * val[1][np.newaxis, :]), axis=0
-        )
+        ))
         normalized_val = val[0] * np.exp(val[1] - ref)
         # This is the new rho with the test wave function
-        rhoprime = (
+        rhoprime = np.real(
             np.sum(np.exp(2 * log_values0[0:-1, 1, :] - 2 * ref), axis=0)
             + np.exp(2 * val[1] - 2 * ref)
         ) / denominator
 
         overlap = np.einsum("k,jk->jk", normalized_val, normalized_values) / denominator
 
-        data["total"][p] = np.average(dat["total"], weights=wt)
+        data["total"][p] = np.real(np.average(dat["total"], weights=wt))
         data["rhoprime"][p] = np.mean(rhoprime)
         data["weight"][p] = np.mean(wt) / np.mean(rhoprime)
         data["overlap"][p] = np.mean(overlap, axis=1) / np.sqrt(np.mean(wt) * weight)
@@ -381,7 +384,7 @@ def evaluate(wfs, coords, pgrad, sampler, sample_options, warmup):
         "energy_derivative": energy_derivative,
         "N_derivative": N_derivative,
         "condition": condition,
-        "total": avg_data["total"],
+        "total": np.real(avg_data["total"]),
     }
 
 
@@ -510,6 +513,9 @@ def optimize_orthogonal(
 
     # One set of configurations for every wave function
     allcoords = [coords.copy() for _ in wfs[:-1]]
+    dtype = np.float
+    if wfs[-1].iscomplex:
+        dtype=np.complex
     for step in range(max_iterations):
         # we iterate until the normalization is reasonable
         # One could potentially save a little time here by not computing the gradients
@@ -519,11 +525,11 @@ def optimize_orthogonal(
         nwf = len(wfs)
         normalization = np.zeros(nwf - 1)
         total_energy = 0
-        energy_derivative = np.zeros(len(parameters))
-        N_derivative = np.zeros(len(parameters))
+        #energy_derivative = np.zeros(len(parameters))
+        N_derivative = np.zeros(len(parameters), dtype=dtype)
         condition = np.zeros((len(parameters), len(parameters)))
-        overlaps = np.zeros(nwf - 1)
-        overlap_derivatives = np.zeros((nwf - 1, len(parameters)))
+        overlaps = np.zeros(nwf - 1, dtype=dtype)
+        overlap_derivatives = np.zeros((nwf - 1, len(parameters)), dtype=dtype)
 
         while True:
             tmp_deriv = evaluate(
@@ -535,7 +541,7 @@ def optimize_orthogonal(
             if abs(N - Ntarget) < Ntol:
                 normalization[0] = tmp_deriv["N"][-1]
                 total_energy += tmp_deriv["total"] / (nwf - 1)
-                energy_derivative += tmp_deriv["energy_derivative"] / (nwf - 1)
+                energy_derivative = tmp_deriv["energy_derivative"] / (nwf - 1)
                 N_derivative += tmp_deriv["N_derivative"] / (nwf - 1)
                 condition += tmp_deriv["condition"] / (nwf - 1)
                 overlaps[0] = tmp_deriv["S"][-1, 0]
@@ -577,8 +583,8 @@ def optimize_orthogonal(
         for i in range(len(wfs) - 1):
             print(
                 format_str.format(
-                    "overlap", i, overlaps[i], np.linalg.norm(overlap_derivatives[i], flush=True)
-                )
+                    "overlap", i, overlaps[i], np.linalg.norm(overlap_derivatives[i])
+                ), flush=True
             )
 
         # Use SR to condition the derivatives
@@ -589,7 +595,7 @@ def optimize_orthogonal(
         )
 
         # Try to move in the projection that doesn't change the norm
-        # Here we project out the
+        # Here we project out the norm derivative
         if np.linalg.norm(N_derivative) > 1e-8:
             total_derivative -= (
                 np.dot(total_derivative, N_derivative)
@@ -601,7 +607,7 @@ def optimize_orthogonal(
         if deriv_norm > max_step:
             total_derivative = total_derivative * max_step / deriv_norm
 
-        test_tsteps = np.linspace(-tstep, tstep, 21)
+        test_tsteps = np.linspace(-0.1*tstep, tstep, 11)
         test_parameters = [
             parameters + conditioner(total_derivative, condition, x)
             for x in test_tsteps
@@ -628,6 +634,9 @@ def optimize_orthogonal(
             np.abs(line_data["weight"]) > weight_boundaries
         )
         mask = np.all(mask, axis=0)
+        print("tsteps", test_tsteps)
+        print("cost", cost)
+        print("mask", mask)
         xfit = test_tsteps[mask]
         yfit = cost[mask]
 

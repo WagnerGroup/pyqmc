@@ -138,10 +138,10 @@ class PySCFSlater:
         self.iscomplex = self.iscomplex or np.linalg.norm(self._kpts) > 1e-12
 
         # Define nelec
-        if isinstance(mf, scf.kuhf.KUHF):
+        if len(mf.mo_coeff[0][0].shape) == 2:
             # Then indices are (spin, kpt, basis, mo)
             self._nelec = [int(np.sum([o[k] for k in self.kinds])) for o in mf.mo_occ]
-        elif isinstance(mf, scf.khf.KRHF):
+        elif len(mf.mo_coeff[0][0].shape) == 1:
             # Then indices are (kpt, basis, mo)
             self._nelec = [
                 int(np.sum([mf.mo_occ[k] > t for k in self.kinds])) for t in (0.9, 1.1)

@@ -88,7 +88,16 @@ class MultiSlater:
         if hasattr(mc, '_strs'):
             #if this is a HCI object, it will have _strs
             bigcis = np.abs(mc.ci > self.tol)
-            deters = [(c,bin(s[0]), bin(s[1])) for c, s in zip(mc.ci[bigcis],mc._strs[bigcis,:])]
+            nstrs = int(mc._strs.shape[1]/2)
+            #old code for single strings. 
+            #deters = [(c,bin(s[0]), bin(s[1])) for c, s in zip(mc.ci[bigcis],mc._strs[bigcis,:])]
+            deters = []
+            # In pyscf, the first n/2 strings represent the up determinant and the second 
+            # represent the down determinant.
+            for c, s in zip(mc.ci[bigcis],mc._strs[bigcis,:]):
+                s1 = "".join([str(bin(p)).replace("0b","") for p in s[0:nstrs]])
+                s2 = "".join([str(bin(p)).replace("0b","") for p in s[nstrs:]])
+                deters.append((c,s1,s2))
         else:
             deters = fci.addons.large_ci(mc.ci, mc.ncas, mc.nelecas, tol=-1)
 

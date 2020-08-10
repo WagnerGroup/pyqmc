@@ -20,7 +20,6 @@ def ortho_hdf(hdf_file, data, attr, configs, parameters):
                 hdf["wf/" + k][...] = it.copy()
 
 
-from pyqmc.mc import limdrift
 
 def collect_overlap_data(wfs, configs, pgrad):
     r""" Collect the averages assuming that 
@@ -41,7 +40,7 @@ def collect_overlap_data(wfs, configs, pgrad):
     """
     log_values = np.array([wf.value() for wf in wfs])
     # print(log_values.shape)
-    ref = np.max(log_values[:, 1, :], axis=0)
+    ref = np.max(np.real(log_values[:, 1, :]), axis=0)
     save_dat = {}
     denominator = np.sum(np.exp(2 * np.real(log_values[:, 1, :] - ref)), axis=0)
     normalized_values = log_values[:, 0, :] * np.exp(log_values[:, 1, :] - ref)
@@ -50,6 +49,10 @@ def collect_overlap_data(wfs, configs, pgrad):
         / denominator,
         axis=-1,
     )
+    #print("det_coeff", wfs[-1].parameters['wf1det_coeff'])
+    print("overlap", save_dat['overlap'].diagonal())
+    #print("denominator", np.mean(denominator))
+    #print("normalized_values", np.mean(normalized_values, axis=-1))
 
     dppsi = pgrad.transform.serialize_gradients(wfs[-1].pgradient())
     node_cut, f = pgrad._node_regr(configs, wfs[-1])
@@ -84,6 +87,18 @@ def collect_overlap_data(wfs, configs, pgrad):
     return save_dat
 
 
+from pyqmc.mc import limdrift
+
+
+def construct_rho_gradient(grads, log_values):
+    total_grad = np.zeros_like(grads[0])
+    for g, v in zip(grads, values):
+        denominator = np.sum(np.exp(2*np.real(log_values-v)))
+        total_grad+=g/denominator
+    return total_grad
+
+
+
 def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
     """ Run nstep Metropolis steps to sample a distribution proportional to 
     sum_i |psi_i|^2, where psi_i = wfs[i]
@@ -110,10 +125,10 @@ def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
 
             # Acceptance
             t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
-            wf_ratios = np.array([wf.testvalue(e, newcoorde) ** 2 for wf in wfs])
-            log_values = np.array([wf.value()[1] for wf in wfs])
+            wf_ratios = np.array([np.abs(wf.testvalue(e, newcoorde)) ** 2 for wf in wfs])
+            log_values = np.real(np.array([wf.value()[1] for wf in wfs]))
             ref = log_values[0]
-            weights = np.exp(2 * (log_values - ref))
+            weights = np.exp(2 * np.real(log_values - ref))
 
             ratio = (
                 t_prob
@@ -126,7 +141,7 @@ def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
             configs.move(e, newcoorde, accept)
             for wf in wfs:
                 wf.updateinternals(e, newcoorde, mask=accept)
-            # print("accept", np.mean(accept))
+            #print("accept", np.mean(accept))
 
         #Collect rolling average
         save_dat = collect_overlap_data(wfs, configs, pgrad)
@@ -144,7 +159,7 @@ def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
     return block_avg, configs
 
 def sample_overlap(
-    wfs, configs, pgrad, nblocks=10, nsteps_per_block=10, nsteps=None, tstep=0.5
+    wfs, configs, pgrad, nblocks=10, nsteps=10, tstep=0.5
 ):
     r"""
     Sample 
@@ -165,13 +180,10 @@ def sample_overlap(
 
     In addition, any key returned by `pgrad` will be saved for the final wave function.
     """
-    if nsteps is not None:
-        nblocks = nsteps
-        nsteps_per_block = 1
 
     return_data = {}
     for block in range(nblocks):
-        block_avg, configs=sample_overlap_worker(wfs, configs, pgrad, nsteps_per_block, tstep)
+        block_avg, configs=sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep)
         # Blocks stored
         for k, it in block_avg.items():
             if k not in return_data:
@@ -180,18 +192,17 @@ def sample_overlap(
     return return_data, configs
 
 
-def dist_sample_overlap(wfs, configs, pgrad, nblocks=10, nsteps_per_block=10, client=None, npartitions=None, **kwargs):
+def dist_sample_overlap(wfs, configs, pgrad, nblocks=10, nsteps=10, client=None, npartitions=None, **kwargs):
     if npartitions is None:
         npartitions = sum(client.nthreads().values())
 
     
     return_data = {}
     for block in range(nblocks):
-        #block_avg, configs=sample_overlap_worker(wfs, configs, pgrad, nsteps_per_block, tstep)
         coord = configs.split(npartitions)
         runs = []
         for nodeconfigs in coord:
-            runs.append(client.submit(sample_overlap_worker, wfs, nodeconfigs, pgrad, nsteps = nsteps_per_block, **kwargs))
+            runs.append(client.submit(sample_overlap_worker, wfs, nodeconfigs, pgrad, nsteps = nsteps, **kwargs))
 
         allresults = list(zip(*[r.result() for r in runs]))
         configs.join(allresults[1])
@@ -350,8 +361,13 @@ def renormalize(wfs, N):
     """
     renorm = np.sqrt((1 - N) / N)
     print("renormalization",renorm)
+    
     if 'wf1det_coeff' in wfs[-1].parameters.keys():
         wfs[-1].parameters["wf1det_coeff"] *= renorm
+    else:
+        raise NotImplementedError("need wf1det_coeff in parameters")
+    print(wfs[-1].parameters['wf1det_coeff'])
+    print(wfs[0].parameters['wf1det_coeff'])
 
 
 def evaluate(wfs, coords, pgrad, sampler, sample_options, warmup):
@@ -364,7 +380,8 @@ def evaluate(wfs, coords, pgrad, sampler, sample_options, warmup):
     avg_data = {}
     for k, it in return_data.items():
         avg_data[k] = np.average(it[warmup:, ...], axis=0)
-    N = np.real(avg_data["overlap"].diagonal())
+    N = np.abs(avg_data["overlap"].diagonal())
+    print("overlap", avg_data["overlap"])
     # Derivatives are only for the optimized wave function, so they miss
     # an index
     N_derivative = 2 * np.real(avg_data["overlap_gradient"][-1])
@@ -478,6 +495,10 @@ def optimize_orthogonal(
     """
 
     parameters = pgrad.transform.serialize_parameters(wfs[-1].parameters)
+    print("complex", wfs[-1].iscomplex)
+    for k in wfs[-1].parameters:
+        print(k, wfs[-1].parameters[k].dtype)
+
     if Starget is None:
         Starget = np.zeros(len(wfs)-1)
     if forcing is None:
@@ -516,6 +537,7 @@ def optimize_orthogonal(
     dtype = np.float
     if wfs[-1].iscomplex:
         dtype=np.complex
+
     for step in range(max_iterations):
         # we iterate until the normalization is reasonable
         # One could potentially save a little time here by not computing the gradients
@@ -643,7 +665,7 @@ def optimize_orthogonal(
         if len(xfit) > 0:
             min_tstep = pyqmc.linemin.stable_fit2(xfit, yfit)
             print("chose to move", min_tstep, flush=True)
-            parameters += conditioner(total_derivative, condition, min_tstep)
+            parameters = parameters+conditioner(total_derivative, condition, min_tstep)
 
         for k, it in pgrad.transform.deserialize(parameters).items():
             wfs[-1].parameters[k] = it

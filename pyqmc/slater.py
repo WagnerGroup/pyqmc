@@ -305,7 +305,7 @@ class PySCFSlater:
         return ratios[1:-1] / ratios[:1], ratios[-1] / ratios[0]
 
     def pgradient(self):
-        d = {}
+        d = {'det_coeff':np.zeros(self._aovals.shape[-3])}
         for parm in ['mo_coeff_alpha','mo_coeff_beta']:
             s = int("beta" in parm)
             # Get AOs for our spin channel only

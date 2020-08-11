@@ -49,10 +49,6 @@ def collect_overlap_data(wfs, configs, pgrad):
         / denominator,
         axis=-1,
     )
-    #print("det_coeff", wfs[-1].parameters['wf1det_coeff'])
-    print("overlap", save_dat['overlap'].diagonal())
-    #print("denominator", np.mean(denominator))
-    #print("normalized_values", np.mean(normalized_values, axis=-1))
 
     dppsi = pgrad.transform.serialize_gradients(wfs[-1].pgradient())
     node_cut, f = pgrad._node_regr(configs, wfs[-1])
@@ -360,14 +356,14 @@ def renormalize(wfs, N):
         f^2 = a^2/b^2 = (1-N)/N
     """
     renorm = np.sqrt((1 - N) / N)
-    print("renormalization",renorm)
+    #print("renormalization",renorm)
     
     if 'wf1det_coeff' in wfs[-1].parameters.keys():
         wfs[-1].parameters["wf1det_coeff"] *= renorm
     else:
         raise NotImplementedError("need wf1det_coeff in parameters")
-    print(wfs[-1].parameters['wf1det_coeff'])
-    print(wfs[0].parameters['wf1det_coeff'])
+    #print(wfs[-1].parameters['wf1det_coeff'])
+    #print(wfs[0].parameters['wf1det_coeff'])
 
 
 def evaluate(wfs, coords, pgrad, sampler, sample_options, warmup):
@@ -381,7 +377,7 @@ def evaluate(wfs, coords, pgrad, sampler, sample_options, warmup):
     for k, it in return_data.items():
         avg_data[k] = np.average(it[warmup:, ...], axis=0)
     N = np.abs(avg_data["overlap"].diagonal())
-    print("overlap", avg_data["overlap"])
+    #print("overlap", avg_data["overlap"])
     # Derivatives are only for the optimized wave function, so they miss
     # an index
     N_derivative = 2 * np.real(avg_data["overlap_gradient"][-1])
@@ -495,9 +491,6 @@ def optimize_orthogonal(
     """
 
     parameters = pgrad.transform.serialize_parameters(wfs[-1].parameters)
-    print("complex", wfs[-1].iscomplex)
-    for k in wfs[-1].parameters:
-        print(k, wfs[-1].parameters[k].dtype)
 
     if Starget is None:
         Starget = np.zeros(len(wfs)-1)

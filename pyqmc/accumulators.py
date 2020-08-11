@@ -11,7 +11,7 @@ class EnergyAccumulator:
         self.mol = mol
         self.threshold = threshold
         if hasattr(mol, "a"):
-            print("EnergyAccumulator using Ewald\n", kwargs)
+            #print("EnergyAccumulator using Ewald\n", kwargs)
             self.ewald = Ewald(mol, **kwargs)
 
             def compute_energy(mol, configs, wf, threshold):
@@ -75,8 +75,6 @@ class LinearTransform:
         """Convert the dictionary to a linear list
         of gradients
         """
-        for k, opt in self.to_opt.items():
-            print(k, opt.shape, parameters[k].shape)
         params = np.concatenate([parameters[k][opt] for k, opt in self.to_opt.items()])
         return np.concatenate((params.real, params[self.complex_inds].imag))
 

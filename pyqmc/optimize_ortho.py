@@ -587,8 +587,8 @@ def optimize_orthogonal(
         total_derivative = energy_derivative + overlap_derivative
 
         print("############################# iteration ", step)
-        format_str = "{:<15}" * 2 + "{:<15.10}" * 2
-        print(format_str.format("Quantity", "wf", "value", "|grad|"))
+        format_str = "{:<15}" * 2 + "{:<20.3}" * 2
+        print(format_str.format("Quantity", "wf", "val", "|g|"))
         print(
             format_str.format(
                 "energy", len(wfs) - 1, total_energy, np.linalg.norm(energy_derivative)
@@ -655,10 +655,14 @@ def optimize_orthogonal(
         xfit = test_tsteps[mask]
         yfit = cost[mask]
 
-        if len(xfit) > 0:
+        if len(xfit) > 2:
             min_tstep = pyqmc.linemin.stable_fit2(xfit, yfit)
             print("chose to move", min_tstep, flush=True)
             parameters = parameters+conditioner(total_derivative, condition, min_tstep)
+        else:
+            print("WARNING: did not find valid moves. Reducing the timestep")
+            tstep*=0.5
+
 
         for k, it in pgrad.transform.deserialize(parameters).items():
             wfs[-1].parameters[k] = it
@@ -679,7 +683,7 @@ def optimize_orthogonal(
         }
 
         ortho_hdf(
-            hdf_file, save_data, attr, coords, pgrad.transform.deserialize(parameters)
+            hdf_file, save_data, attr, coords, wfs[-1].parameters
         )
 
     return wfs

@@ -541,7 +541,7 @@ def optimize_orthogonal(
         normalization = np.zeros(nwf - 1)
         total_energy = 0
         #energy_derivative = np.zeros(len(parameters))
-        N_derivative = np.zeros(len(parameters), dtype=dtype)
+        N_derivative = np.zeros(len(parameters))
         condition = np.zeros((len(parameters), len(parameters)))
         overlaps = np.zeros(nwf - 1, dtype=dtype)
         overlap_derivatives = np.zeros((nwf - 1, len(parameters)), dtype=dtype)

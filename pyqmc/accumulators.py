@@ -89,9 +89,7 @@ class LinearTransform:
             grads.append(np.ma.compress_cols(mask_grads))
 
         grads = np.concatenate(grads, axis=1)
-        return np.concatenate(
-            (grads.real, grads[:, self.complex_inds].imag * 1j), axis=1
-        )
+        return np.concatenate((grads, grads[:, self.complex_inds] * 1j), axis=1)
 
     def deserialize(self, parameters):
         """Convert serialized parameters to dictionary

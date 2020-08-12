@@ -203,10 +203,10 @@ def dist_sample_overlap(wfs, configs, pgrad, nblocks=10, nsteps=10, client=None,
         allresults = list(zip(*[r.result() for r in runs]))
         configs.join(allresults[1])
         confweight = np.array([len(c.configs) for c in coord], dtype=float)
-        #confweight /= np.mean(confweight) * npartitions
         avgweights = np.array([res['weight_final'] for res in allresults[0]])
         avgweights *= confweight
         avgweights /= np.mean(avgweights) * npartitions
+        confweight /= np.mean(confweight) * npartitions
         block_avg = {}
         for k in allresults[0][0].keys():
             if k not in ["weight", "overlap", "overlap_gradient"]:
@@ -214,7 +214,7 @@ def dist_sample_overlap(wfs, configs, pgrad, nblocks=10, nsteps=10, client=None,
                     [res[k] * w for res, w in zip(allresults[0], avgweights)], axis=0
                 )
             else:
-                block_avg[k] = np.mean([res[k] * w for res, w in zip(allresults[0], avgweights)], axis=0)
+                block_avg[k] = np.sum([res[k] * w for res, w in zip(allresults[0], confweight)], axis=0)
 
         # Blocks stored
         for k, it in block_avg.items():

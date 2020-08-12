@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import pyqmc
 
 
 def run_scf(chkfile):
@@ -29,7 +30,7 @@ def test():
     configs = pyqmc.initial_guess(mol, 100)
     acc = pyqmc.gradient_generator(mol, wf, to_opt)
     pyqmc.line_minimization(
-        wf, configs, acc, verbose=True, hdf_file=optfile, max_iterations=10
+        wf, configs, acc, verbose=True, hdf_file=optfile, max_iterations=5
     )
 
     assert os.path.isfile(optfile)

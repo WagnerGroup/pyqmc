@@ -194,10 +194,12 @@ def generate_wf(
     return wf, to_opt
 
 
-def recover_pyscf(chkfile):
+def recover_pyscf(chkfile, cancel_outputs=True):
     """Generate pyscf objects from a pyscf checkfile, in a way that is easy to use for pyqmc. The chkfile should be saved by setting mf.chkfile in a pyscf SCF object. 
     
 It is recommended to write and recover the objects, rather than trying to use pyscf objects directly when dask parallelization is being used, since by default the pyscf objects 
+
+cancel_outputs will set the outputs of the objects to None. You may need to make cancel_outputs False if you are using this to input to other pyscf functions.
 
 Typical usage:
 
@@ -212,15 +214,17 @@ mol, mf = recover_pyscf("dft.hdf5")
     import pyscf
 
     mol = pyscf.lib.chkfile.load_mol(chkfile)
-    mol.output = None
-    mol.stdout = None
+    if cancel_outputs:
+        mol.output = None
+        mol.stdout = None
 
     if hasattr(mol, "a"):
         from pyscf import pbc
 
         mol = pbc.lib.chkfile.load_cell(chkfile)
-        mol.output = None
-        mol.stdout = None
+        if cancel_outputs:
+            mol.output = None
+            mol.stdout = None
         mf = pbc.scf.KRHF(mol)
     else:
         # It actually doesn't matter what type of object we make it for

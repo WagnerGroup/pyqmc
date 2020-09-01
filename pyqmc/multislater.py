@@ -54,21 +54,21 @@ class MultiSlater:
         self.parameters = {}
         self._mol = mol
         if hasattr(mc, "nelecas"):
-            #In case nelecas overrode the information from the molecule object.
+            # In case nelecas overrode the information from the molecule object.
             self._nelec = (mc.nelecas[0] + mc.ncore, mc.nelecas[1] + mc.ncore)
         else:
             self._nelec = mol.nelec
         self._copy_ci(mc)
-        mo_coeff = mc.mo_coeff if hasattr(mc, 'mo_coeff') else mf.mo_coeff
-        mo_cutoff_alpha = np.max(self._det_occup[0])+1
-        mo_cutoff_beta = np.max(self._det_occup[1])+1
+        mo_coeff = mc.mo_coeff if hasattr(mc, "mo_coeff") else mf.mo_coeff
+        mo_cutoff_alpha = np.max(self._det_occup[0]) + 1
+        mo_cutoff_beta = np.max(self._det_occup[1]) + 1
 
         if len(mo_coeff.shape) == 3:
-            self.parameters["mo_coeff_alpha"] = mo_coeff[0][:, : mo_cutoff_alpha]
-            self.parameters["mo_coeff_beta"] = mo_coeff[1][:, : mo_cutoff_beta]
+            self.parameters["mo_coeff_alpha"] = mo_coeff[0][:, :mo_cutoff_alpha]
+            self.parameters["mo_coeff_beta"] = mo_coeff[1][:, :mo_cutoff_beta]
         else:
-            self.parameters["mo_coeff_alpha"] = mo_coeff[:, : mo_cutoff_alpha]
-            self.parameters["mo_coeff_beta"] = mo_coeff[:, : mo_cutoff_beta]
+            self.parameters["mo_coeff_alpha"] = mo_coeff[:, :mo_cutoff_alpha]
+            self.parameters["mo_coeff_beta"] = mo_coeff[:, :mo_cutoff_beta]
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
         self.pbc_str = "PBC" if hasattr(mol, "a") else ""
         self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
@@ -82,22 +82,22 @@ class MultiSlater:
         """
         from pyscf import fci
 
-        ncore = mc.ncore if hasattr(mc, 'ncore') else 0
+        ncore = mc.ncore if hasattr(mc, "ncore") else 0
 
         # find multi slater determinant occupation
-        if hasattr(mc, '_strs'):
-            #if this is a HCI object, it will have _strs
+        if hasattr(mc, "_strs"):
+            # if this is a HCI object, it will have _strs
             bigcis = np.abs(mc.ci > self.tol)
-            nstrs = int(mc._strs.shape[1]/2)
-            #old code for single strings. 
-            #deters = [(c,bin(s[0]), bin(s[1])) for c, s in zip(mc.ci[bigcis],mc._strs[bigcis,:])]
+            nstrs = int(mc._strs.shape[1] / 2)
+            # old code for single strings.
+            # deters = [(c,bin(s[0]), bin(s[1])) for c, s in zip(mc.ci[bigcis],mc._strs[bigcis,:])]
             deters = []
-            # In pyscf, the first n/2 strings represent the up determinant and the second 
+            # In pyscf, the first n/2 strings represent the up determinant and the second
             # represent the down determinant.
-            for c, s in zip(mc.ci[bigcis],mc._strs[bigcis,:]):
-                s1 = "".join([str(bin(p)).replace("0b","") for p in s[0:nstrs]])
-                s2 = "".join([str(bin(p)).replace("0b","") for p in s[nstrs:]])
-                deters.append((c,s1,s2))
+            for c, s in zip(mc.ci[bigcis], mc._strs[bigcis, :]):
+                s1 = "".join([str(bin(p)).replace("0b", "") for p in s[0:nstrs]])
+                s2 = "".join([str(bin(p)).replace("0b", "") for p in s[nstrs:]])
+                deters.append((c, s1, s2))
         else:
             deters = fci.addons.large_ci(mc.ci, mc.ncas, mc.nelecas, tol=-1)
 

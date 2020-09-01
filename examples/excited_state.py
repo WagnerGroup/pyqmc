@@ -180,7 +180,11 @@ if __name__ == "__main__":
     sys = pyqmc_from_hdf(savefiles["mf"])
 
     df, coords = vmc(
-        sys["wf"], pyqmc.initial_guess(sys["mol"], nconfig), client=client, nsteps=10, npartitions=ncore,
+        sys["wf"],
+        pyqmc.initial_guess(sys["mol"], nconfig),
+        client=client,
+        nsteps=10,
+        npartitions=ncore,
     )
 
     line_minimization(

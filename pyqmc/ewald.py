@@ -109,7 +109,6 @@ class Ewald:
         .. math:: W_G = \frac{4\pi}{V |\vec{G}|^2} e^{- \frac{|\vec{G}|^2}{ 4\alpha^2}}
 
         Inputs:
-            latvec: (3, 3) array of lattice vectors; latvec[0] is the first
             ewald_gmax: int, max number of reciprocal lattice vectors to check away from 0
         """
         cellvolume = np.linalg.det(self.latvec)
@@ -157,7 +156,7 @@ class Ewald:
         
         .. math:: E_{\rm self+charged}^{ee} = N_e C_{\rm square} + \frac{N_e(N_e-1)}{2} C_{ij}
 
-        .. math:: E_{\rm self+charged}^{e\text{-ion}} = N_e \sum_{I=1}^{N_{ion}} Z_I C_{ij}
+        .. math:: E_{\rm self+charged}^{e\text{-ion}} = - N_e \sum_{I=1}^{N_{ion}} Z_I C_{ij}
 
         .. math:: E_{\rm self+charged}^{\text{ion-ion}} = \sum_{I=1}^{N_{ion}} Z_I^2 C_{\rm square} + \sum_{I<J}^{N_{ion}} Z_I Z_J C_{ij}
 

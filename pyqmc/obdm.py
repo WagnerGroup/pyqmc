@@ -94,7 +94,11 @@ class OBDMAccumulator:
         self._extra_config = extra_configs[-1]
 
     def __call__(self, configs, wf, extra_configs=None, auxassignments=None):
-        """ Quantities from equation (9) of DOI:10.1063/1.4793531"""
+        """ 
+        Quantities from equation (9) of DOI:10.1063/1.4793531
+        .. math:: \int dR dr' \Psi^*(R') \phi_i^*(
+
+        """
 
         nconf = configs.configs.shape[0]
         dtype = complex if self.iscomplex else float
@@ -128,7 +132,7 @@ class OBDMAccumulator:
         bauxsquared = np.abs(borb_aux) ** 2
         fsum = np.sum(bauxsquared, axis=-1, keepdims=True)
         norm = bauxsquared / fsum
-        ba_f = borb_aux / fsum
+        baux_f = borb_aux / fsum
 
         for sweep, aux in enumerate(auxassignments):
             epos = extra_configs[sweep].configs[aux]
@@ -136,7 +140,11 @@ class OBDMAccumulator:
             wfratio = wf.testvalue_many(self._electrons, newconfigs)
 
             ratio = np.einsum(
-                "ie,ij,iek->ijk", wfratio, ba_f[sweep, aux], borb_configs, optimize=True
+                "ie,ij,iek->ijk",
+                wfratio,
+                baux_f[sweep, aux],
+                borb_configs.conj(),
+                optimize=True,
             )
 
             results["value"] += ratio

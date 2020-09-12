@@ -11,7 +11,7 @@ class EnergyAccumulator:
         self.mol = mol
         self.threshold = threshold
         if hasattr(mol, "a"):
-            print("EnergyAccumulator using Ewald\n", kwargs)
+            #print("EnergyAccumulator using Ewald\n", kwargs)
             self.ewald = Ewald(mol, **kwargs)
 
             def compute_energy(mol, configs, wf, threshold):
@@ -75,8 +75,6 @@ class LinearTransform:
         """Convert the dictionary to a linear list
         of gradients
         """
-        for k, opt in self.to_opt.items():
-            print(k, opt.shape, parameters[k].shape)
         params = np.concatenate([parameters[k][opt] for k, opt in self.to_opt.items()])
         return np.concatenate((params.real, params[self.complex_inds].imag))
 
@@ -91,9 +89,7 @@ class LinearTransform:
             grads.append(np.ma.compress_cols(mask_grads))
 
         grads = np.concatenate(grads, axis=1)
-        return np.concatenate(
-            (grads.real, grads[:, self.complex_inds].imag * 1j), axis=1
-        )
+        return np.concatenate((grads, grads[:, self.complex_inds] * 1j), axis=1)
 
     def deserialize(self, parameters):
         """Convert serialized parameters to dictionary

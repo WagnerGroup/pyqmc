@@ -102,6 +102,12 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
     Run VMC for nsteps.
 
     Return a dictionary of averages from each accumulator.  
+
+    For the gradient, we want :math:`\nabla |\Psi|^2` and we have :math:`\nabla \Psi / \Psi`
+
+    .. math:: \nabla \Psi^* \Psi = (\nabla \Psi^*) \Psi + \Psi^* (\nabla \Psi)
+    .. math::                    = \Psi^* \Psi \left(\frac{\nabla \Psi^*}{\Psi^*} + \frac{\nabla \Psi}{\Psi} \right)
+    .. math::                    = |\Psi|^2 2 {\rm Re}\left(\frac{\nabla \Psi}{\Psi}\right)
     """
     nconf, nelec, _ = configs.configs.shape
     block_avg = {}

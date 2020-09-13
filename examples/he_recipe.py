@@ -3,7 +3,9 @@ if __name__ == "__main__":
     import pyqmc
     import pyqmc.recipes
 
-    mol = pyscf.gto.M(atom="He 0. 0. 0.", basis="ccECP_cc-pVDZ", ecp="ccecp", unit="bohr")
+    mol = pyscf.gto.M(
+        atom="He 0. 0. 0.", basis="ccECP_cc-pVDZ", ecp="ccecp", unit="bohr"
+    )
 
     mf = pyscf.scf.RHF(mol)
     mf.chkfile = "he_dft.hdf5"
@@ -25,7 +27,6 @@ if __name__ == "__main__":
         vmc_kws={"nblocks": 40},
     )
 
-
     pyqmc.recipes.DMC(
         "he_dft.hdf5",
         "he_sj_dmc.hdf5",
@@ -33,5 +34,5 @@ if __name__ == "__main__":
         accumulators={"rdm1": True},
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
-        dmc_kws={"nsteps": 4000, 'tstep':0.02},
+        dmc_kws={"nsteps": 4000, "tstep": 0.02},
     )

@@ -502,6 +502,16 @@ def optimize_orthogonal(
      * The wave function is renormalized if its normalization deviates too far from 0.5 relative to the first wave function.
     """
 
+    # Restart
+    if hdf_file is not None and os.path.isfile(hdf_file):
+        with h5py.File(hdf_file, "r") as hdf:
+            if "wf" in hdf.keys():
+                grp = hdf["wf"]
+                for k in grp.keys():
+                    wfs[-1].parameters[k] = np.array(grp[k])
+            if "iteration" in hdf.keys():
+                step_offset = np.max(hdf["iteration"][...]) + 1
+
     parameters = pgrad.transform.serialize_parameters(wfs[-1].parameters)
 
     if Starget is None:

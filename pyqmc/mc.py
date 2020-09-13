@@ -139,6 +139,7 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
                     block_avg[k + m] = res / nsteps
                 else:
                     block_avg[k + m] += res / nsteps
+        block_avg["acceptance"] = acc
     return block_avg, configs
 
 

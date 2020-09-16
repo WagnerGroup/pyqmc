@@ -33,16 +33,16 @@ def numerical_gradient(wfs, configs, pgrad, deltas=(1e-5,)):
 
 def compute_normalization(wfs, parameters, transform, configs):
     p0 = transform.serialize_parameters(wfs[-1].parameters)
-    log_values = np.array([wf.recompute(configs) for wf in wfs])
-    ref = np.real(log_values[0, 1, :])
-    denominator = np.sum(np.exp(2 * np.real(log_values[:, 1, :] - ref)), axis=0)
+    log_values = np.real([wf.recompute(configs)[1] for wf in wfs])
+    ref = log_values[0]
+    denominator = np.sum(np.exp(2 * (log_values - ref)), axis=0)
 
     normalization = np.zeros(len(parameters))
     for p, param in enumerate(parameters):
         for k, it in transform.deserialize(param).items():
             wfs[-1].parameters[k][:] = it
-        val = wfs[-1].recompute(configs)
-        normalized_value = np.exp(2 * (val[1] - ref)) / denominator
+        val = wfs[-1].recompute(configs)[1]
+        normalized_value = np.exp(2 * (val - ref)) / denominator
         normalization[p] = np.mean(normalized_value)
 
     for k, it in transform.deserialize(p0).items():
@@ -81,7 +81,7 @@ def test():
     print("warming up", flush=True)
     block_avg, configs = oo.sample_overlap_worker(wfs, configs, pgrad, 20, tstep=1.5)
 
-    print("computing gradients", flush=True)
+    print("computing gradients and normalization", flush=True)
     data = get_data(wfs, configs, pgrad)
     parameters = pgrad.transform.serialize_parameters(wfs[-1].parameters)
     N = compute_normalization(wfs, [parameters], pgrad.transform, configs)

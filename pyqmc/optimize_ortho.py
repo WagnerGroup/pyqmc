@@ -55,7 +55,7 @@ def collect_overlap_data(wfs, configs, pgrad):
 
     save_dat["overlap_gradient"] = np.mean(
         np.einsum(
-            "km,k,jk->jmk",
+            "km,k,jk->jmk",  # shape (wf, param, configs)
             np.conjugate(dppsi_regularized),
             np.conjugate(normalized_values[-1]),
             normalized_values,
@@ -101,7 +101,8 @@ def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
     for wf in wfs:
         wf.recompute(configs)
     block_avg = {}
-    for _ in range(nsteps):
+    block_avg["acceptance"] = np.zeros(nsteps)
+    for n in range(nsteps):
         for e in range(nelec):  # a sweep
             # Propose move
             grads = [np.real(wf.gradient(e, configs.electron(e)).T) for wf in wfs]
@@ -130,6 +131,7 @@ def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
                 t_prob * np.sum(wf_ratios * weights, axis=0) / np.sum(weights, axis=0)
             )
             accept = ratio > np.random.rand(nconf)
+            block_avg["acceptance"][n] += accept.mean() / nelec
 
             # Update wave function
             configs.move(e, newcoorde, accept)
@@ -148,7 +150,7 @@ def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
                 block_avg[k] += save_dat[k] * save_dat["weight_final"] / nsteps
 
     for k, it in block_avg.items():
-        if k not in ["overlap", "overlap_gradient", "weight_final"]:
+        if k not in ["overlap", "overlap_gradient", "weight_final", "acceptance"]:
             it /= block_avg["weight_final"]
     return block_avg, configs
 
@@ -309,7 +311,7 @@ def correlated_sample(wfs, configs, parameters, pgrad):
             )
             / denominator
         )
-
+        # TODO  shouldn't there be a conjugate here?
         overlap = np.einsum("k,jk->jk", normalized_val, normalized_values) / denominator
 
         data["total"][p] = np.real(np.average(dat["total"], weights=wt))
@@ -378,25 +380,24 @@ def renormalize(wfs, N):
     # print(wfs[0].parameters['wf1det_coeff'])
 
 
-def evaluate(wfs, coords, pgrad, sampler, sample_options, warmup):
+def evaluate(return_data, warmup):
     """ 
     For wave functions wfs and coordinate set coords, evaluate the overlap and energy of the last wave function. 
 
     Returns a dictionary with relevant information.
     """
-    return_data, coords = sampler(wfs, coords, pgrad, **sample_options)
     avg_data = {}
     for k, it in return_data.items():
-        avg_data[k] = np.average(it[warmup:, ...], axis=0)
+        avg_data[k] = np.average(it[warmup:], axis=0)
     N = np.abs(avg_data["overlap"].diagonal())
     # print("overlap", avg_data["overlap"])
     # Derivatives are only for the optimized wave function, so they miss
     # an index
     N_derivative = 2 * np.real(avg_data["overlap_gradient"][-1])
-    Nij = np.outer(N, N)
-    S = avg_data["overlap"] / np.sqrt(Nij)
+    Nij = np.sqrt(np.outer(N, N))
+    S = avg_data["overlap"] / Nij
     S_derivative = avg_data["overlap_gradient"] / Nij[-1, :, np.newaxis] - np.einsum(
-        "j,m->jm", avg_data["overlap"][-1, :] / Nij[-1, :], N_derivative / N[-1]
+        "j,m->jm", 0.5 * avg_data["overlap"][-1, :] / Nij[-1, :], N_derivative / N[-1]
     )
     energy_derivative = 2.0 * (avg_data["dpH"] - avg_data["total"] * avg_data["dppsi"])
     dp = avg_data["dppsi"]
@@ -569,9 +570,10 @@ def optimize_orthogonal(
         overlap_derivatives = np.zeros((nwf - 1, len(parameters)), dtype=dtype)
 
         while True:
-            tmp_deriv = evaluate(
-                [wfs[0], wfs[-1]], allcoords[0], pgrad, sampler, sample_options, warmup
+            return_data, _ = sampler(
+                [wfs[0], wfs[-1]], allcoords[0], pgrad, **sample_options
             )
+            tmp_deriv = evaluate(return_data, warmup)
             N = tmp_deriv["N"][-1]
 
             print("Normalization", N, flush=True)

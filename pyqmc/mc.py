@@ -139,6 +139,7 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
                     block_avg[k + m] = res / nsteps
                 else:
                     block_avg[k + m] += res / nsteps
+        block_avg["acceptance"] = acc
     return block_avg, configs
 
 
@@ -228,7 +229,6 @@ def vmc(
                 if verbose:
                     print("Restarting calculation from step", stepoffset)
 
-    nconf, nelec, ndim = configs.configs.shape
     df = []
 
     for block in range(nblocks):
@@ -244,7 +244,7 @@ def vmc(
             )
         # Append blocks
         block_avg["block"] = stepoffset + block
-        block_avg["nconfig"] = nconf * nsteps_per_block
+        block_avg["nconfig"] = nsteps_per_block * configs.configs.shape[0]
         vmc_file(hdf_file, block_avg, dict(tstep=tstep), configs)
         df.append(block_avg)
     if verbose:

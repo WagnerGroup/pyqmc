@@ -2,6 +2,7 @@ import numpy as np
 import h5py
 import pyqmc
 import pyqmc.hdftools as hdftools
+import os
 
 
 def ortho_hdf(hdf_file, data, attr, configs, parameters):
@@ -591,9 +592,10 @@ def optimize_orthogonal(
                 parameters = pgrad.transform.serialize_parameters(wfs[-1].parameters)
 
         for i, wf in enumerate(wfs[1:-1]):
-            deriv_data = evaluate(
-                [wf, wfs[-1]], allcoords[i + 1], pgrad, sampler, sample_options, warmup
+            return_data, _ = sampler(
+                [wf, wfs[-1]], allcoords[i + 1], pgrad, **sample_options
             )
+            deriv_data = evaluate(return_data, warmup)
             normalization[i + 1] = deriv_data["N"][-1]
             total_energy += deriv_data["total"] / (nwf - 1)
             energy_derivative += deriv_data["energy_derivative"] / (nwf - 1)

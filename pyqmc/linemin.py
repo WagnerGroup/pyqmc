@@ -113,31 +113,31 @@ def line_minimization(
 
     Args:
 
-      wf: initial wave function
+      :wf: initial wave function
 
-      coords: initial configurations
+      :coords: initial configurations
 
-      pgrad_acc: A PGradAccumulator-like object
+      :pgrad_acc: A PGradAccumulator-like object
 
-      steprange: How far to search in the line minimization
+      :steprange: How far to search in the line minimization
 
-      warmup: number of steps to use for vmc warmup
+      :warmup: number of steps to use for vmc warmup
 
-      max_iterations: (maximum) number of steps in the gradient descent
+      :max_iterations: (maximum) number of steps in the gradient descent
 
-      vmcoptions: a dictionary of options for the vmc method
+      :vmcoptions: a dictionary of options for the vmc method
 
-      lmoptions: a dictionary of options for the lm method
+      :lmoptions: a dictionary of options for the lm method
 
-      update: A function that generates a parameter change 
+      :update: A function that generates a parameter change 
 
-      update_kws: Any keywords 
+      :update_kws: Any keywords 
 
-      npts: number of points to fit to in each line minimization
+      :npts: number of points to fit to in each line minimization
 
     Returns:
 
-      wf: optimized wave function
+      :wf: optimized wave function
 
 
     """
@@ -265,14 +265,16 @@ def correlated_compute(wf, configs, params, pgrad_acc):
     Evaluates accumulator on the same set of configs for correlated sampling of different wave function parameters
 
     Args:
-        wf: wave function object
-        configs: (nconf, nelec, 3) array
-        params: (nsteps, nparams) array 
+        :wf: wave function object
+        :configs: (nconf, nelec, 3) array
+        :params: (nsteps, nparams) array 
             list of arrays of parameters (serialized) at each step
-        pgrad_acc: PGradAccumulator 
+
+        :pgrad_acc: PGradAccumulator 
 
     Returns:
-        data: a single dict with indices [parameter, values]
+        :data: a single dict with indices [parameter, values]
+
     """
 
     import copy

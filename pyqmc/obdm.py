@@ -155,7 +155,7 @@ class OBDMAccumulator:
 
             ratio = np.einsum(
                 "ie,ij,iek->ijk",
-                wfratio,
+                wfratio.conj(),
                 baux_f[sweep, aux],
                 borb_configs.conj(),
                 optimize=True,

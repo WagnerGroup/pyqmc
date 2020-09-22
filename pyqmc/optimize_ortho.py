@@ -25,17 +25,17 @@ def collect_overlap_data(wfs, configs, pgrad):
     r""" Collect the averages assuming that 
     configs are distributed according to 
     
-    .. math:: \rho \propto sum_i |\Psi_i|^2
+    .. math:: \rho \propto \sum_i |\Psi_i|^2
 
     The keys 'overlap' and 'overlap_gradient' are
 
-        `overlap` : 
+    `overlap` : 
 
-    .. math:: \left\langle \frac{\Psi_i^* \Psi_j}{\rho} \right\rangle
+    .. math:: \langle \Psi_f | \Psi_i \rangle = \left\langle \frac{\Psi_i^* \Psi_j}{\rho} \right\rangle_{\rho}
 
     `overlap_gradient`:
 
-    .. math:: \left\langle \frac{\partial_{im} \Psi_i^* \Psi_j}{\rho} \right\rangle
+    .. math:: \partial_m \langle \Psi_f | \Psi_i \rangle = \left\langle \frac{\partial_{fm} \Psi_i^* \Psi_j}{\rho} \right\rangle_{\rho}
 
     """
     phase, log_vals = [np.array(x) for x in zip(*[wf.value() for wf in wfs])]
@@ -84,8 +84,8 @@ def construct_rho_gradient(grads, log_values):
 
 
 def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
-    """ Run nstep Metropolis steps to sample a distribution proportional to 
-    sum_i |psi_i|^2, where psi_i = wfs[i]
+    r""" Run nstep Metropolis steps to sample a distribution proportional to 
+    :math:`\sum_i |\Psi_i|^2`, where :math:`\Psi_i` = wfs[i]
     """
     nconf, nelec, _ = configs.configs.shape
     for wf in wfs:
@@ -234,7 +234,7 @@ def correlated_sample(wfs, configs, parameters, pgrad):
 
     The ratio can be computed as 
 
-    .. math:: \frac{|\Psi|^2}{\rho} = \frac{1}{\sum_i e^{\alpha_i - \alpha} 
+    .. math:: \frac{|\Psi|^2}{\rho} = \frac{1}{\sum_i e^{2(\alpha_i - \alpha}) }
 
     Where we write 
 
@@ -325,7 +325,7 @@ def dist_correlated_sample(wfs, configs, *args, client, npartitions=None, **kwar
 
 def renormalize(wfs, N):
     """
-    Normalize the last wave function, given a current value of the normalization. Assumes that we want N to be 0.5
+    Normalizes the last wave function, given a current value of the normalization. Assumes that we want N to be 0.5
 
     .. math:: 
     
@@ -363,7 +363,9 @@ def evaluate(return_data, warmup):
     S_derivative = avg_data["overlap_gradient"] / Nij[-1, :, np.newaxis] - np.einsum(
         "j,m->jm", 0.5 * avg_data["overlap"][-1, :] / Nij[-1, :], N_derivative / N[-1]
     )
-    energy_derivative = 2.0 * (avg_data["dpH"] - avg_data["total"] * avg_data["dppsi"])
+    energy_derivative = 2.0 * np.real(
+        avg_data["dpH"] - avg_data["total"] * avg_data["dppsi"]
+    )
     dp = avg_data["dppsi"]
     condition = np.real(avg_data["dpidpj"] - np.einsum("i,j->ij", dp, dp))
 
@@ -402,15 +404,15 @@ def optimize_orthogonal(
     r"""
     Minimize 
 
-    .. math:: f(p_f) = E_f + \sum_i \lambda_{i=0}^{f-1} (S_{fi} - S_{fi}^*)^2 
+    .. math:: f(p_f) = E_f + \sum_i \lambda_{i=0}^{f-1} |S_{fi} - S_{fi}^*|^2 
 
     Where 
 
-    .. math:: N_i = \langle \Psi_i | \Psi_j \rangle
+    .. math:: N_i = \langle \Psi_i | \Psi_i \rangle
 
-    .. math:: S_{fi} = \frac{\langle \Psi_f | \Psi_j \rangle}{\sqrt{N_f N_i}}
+    .. math:: S_{fi} = \frac{\langle \Psi_f | \Psi_i \rangle}{\sqrt{N_f N_i}}
 
-    The *'d and lambda values are respectively targets and forcings. f is the final wave function in the wave function array.
+    The \*'d and lambda values are respectively targets and forcings. f is the final wave function in the wave function array.
     We only optimize the parameters of the final wave function, so all 'p' values here represent a parameter in the final wave function. 
 
     **Important arguments**
@@ -441,9 +443,9 @@ def optimize_orthogonal(
 
     .. math:: \partial_p N_f = 2 Re \langle \partial_p \Psi_f | \Psi_f \rangle
 
-    .. math::  \langle \partial_p \Psi_f | \Psi_f \rangle = \int{ \frac{ \Psi_f\partial_p \Psi_f^*}{\rho} \frac{\rho}{\int \rho} } 
+    .. math::  \langle \partial_p \Psi_f | \Psi_i \rangle = \int{ \frac{ \Psi_i\partial_p \Psi_f^*}{\rho} \frac{\rho}{\int \rho} } 
 
-    .. math:: \partial_p S_{fi} = \frac{\langle \partial_p \Psi_f | \Psi_j \rangle}{\sqrt{N_f N_i}} - \frac{\langle \Psi_f | \Psi_j \rangle}{\sqrt{N_f N_i}} \frac{\partial_p N_f}{N_f} 
+    .. math:: \partial_p S_{fi} = \frac{\langle \partial_p \Psi_f | \Psi_i \rangle}{\sqrt{N_f N_i}} - \frac{\langle \Psi_f | \Psi_i \rangle}{2\sqrt{N_f N_i}} \frac{\partial_p N_f}{N_f} 
 
     In this implementation, we set 
 

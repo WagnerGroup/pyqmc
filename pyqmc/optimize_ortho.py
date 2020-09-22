@@ -363,7 +363,9 @@ def evaluate(return_data, warmup):
     S_derivative = avg_data["overlap_gradient"] / Nij[-1, :, np.newaxis] - np.einsum(
         "j,m->jm", 0.5 * avg_data["overlap"][-1, :] / Nij[-1, :], N_derivative / N[-1]
     )
-    energy_derivative = 2.0 * (avg_data["dpH"] - avg_data["total"] * avg_data["dppsi"])
+    energy_derivative = 2.0 * np.real(
+        avg_data["dpH"] - avg_data["total"] * avg_data["dppsi"]
+    )
     dp = avg_data["dppsi"]
     condition = np.real(avg_data["dpidpj"] - np.einsum("i,j->ij", dp, dp))
 

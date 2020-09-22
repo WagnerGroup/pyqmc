@@ -42,7 +42,7 @@ Returns d_p \Psi/\Psi as a dictionary of numpy arrays, which correspond to the p
 Slater determinant
 ----------------------
 
-.. automodule:: pyqmc.slateruhf
+.. automodule:: pyqmc.slater
    :members:
    
 

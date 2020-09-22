@@ -573,12 +573,13 @@ def optimize_orthogonal(
             overlap_derivatives[i + 1] = deriv_data["S_derivative"][0, :]
         print("normalization", normalization)
 
-        ovlp_phase = overlaps / np.abs(overlaps)
+        delta = overlaps - Starget
+        delta_phase = delta / np.abs(delta)
         overlap_derivative = np.sum(
             2.0
             * forcing
-            * (np.abs(overlaps) - Starget)[:, np.newaxis]
-            * np.real(overlap_derivatives / ovlp_phase),
+            * np.abs(delta)[:, np.newaxis]
+            * np.real(overlap_derivatives / delta_phase),
             axis=0,
         )
 

@@ -485,8 +485,11 @@ def optimize_orthogonal(
         forcing = np.ones(len(wfs) - 1)
     Starget = np.asarray(Starget)
     forcing = np.asarray(forcing)
-    if len(forcing) != len(wfs)-1:
-        raise AttributeError("forcing should be an array of length equal to the wfs minus 1: "+str(len(forcing)))
+    if len(forcing) != len(wfs) - 1:
+        raise AttributeError(
+            "forcing should be an array of length equal to the wfs minus 1: "
+            + str(len(forcing))
+        )
     attr = dict(
         tstep=tstep,
         max_iterations=max_iterations,

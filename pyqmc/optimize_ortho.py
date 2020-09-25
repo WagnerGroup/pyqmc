@@ -575,12 +575,10 @@ def optimize_orthogonal(
 
         delta = overlaps - Starget
         delta_phase = delta / np.abs(delta)
-        overlap_derivative = np.sum(
-            2.0
-            * forcing
-            * np.abs(delta)[:, np.newaxis]
-            * np.real(overlap_derivatives / delta_phase),
-            axis=0,
+        overlap_derivative = np.einsum(
+            "j,jk->k",
+            2.0 * forcing * np.abs(delta),
+            np.real(overlap_derivatives / delta_phase[:, np.newaxis]),
         )
 
         total_derivative = energy_derivative + overlap_derivative

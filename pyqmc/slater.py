@@ -58,7 +58,7 @@ class PySCFSlater:
           mf: scf object of primitive cell calculation. scf calculation must include k points that fold onto the gamma point of the supercell
           twist: (3,) array, twisted boundary condition in fractional coordinates, i.e. as coefficients of the reciprocal lattice vectors of the supercell. Integer values are equivalent to zero.
         """
-        self.parameters = {}
+        self.parameters = {"det_coeff": np.array([1.0])}
         self.real_tol = 1e4
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
 
@@ -138,10 +138,10 @@ class PySCFSlater:
         self.iscomplex = self.iscomplex or np.linalg.norm(self._kpts) > 1e-12
 
         # Define nelec
-        if isinstance(mf, scf.kuhf.KUHF):
+        if len(mf.mo_coeff[0][0].shape) == 2:
             # Then indices are (spin, kpt, basis, mo)
             self._nelec = [int(np.sum([o[k] for k in self.kinds])) for o in mf.mo_occ]
-        elif isinstance(mf, scf.khf.KRHF):
+        elif len(mf.mo_coeff[0][0].shape) == 1:
             # Then indices are (kpt, basis, mo)
             self._nelec = [
                 int(np.sum([mf.mo_occ[k] > t for k in self.kinds])) for t in (0.9, 1.1)
@@ -236,7 +236,12 @@ class PySCFSlater:
 
     def value(self):
         """Return logarithm of the wave function as noted in recompute()"""
-        return self._dets[0][0] * self._dets[1][0], self._dets[0][1] + self._dets[1][1]
+        return (
+            self._dets[0][0] * self._dets[1][0],
+            self._dets[0][1]
+            + self._dets[1][1]
+            + np.log(np.abs(self.parameters["det_coeff"][0])),
+        )
 
     def _testrow(self, e, vec, mask=None, spin=None):
         """vec is a nconfig,nmo vector which replaces row e"""
@@ -305,8 +310,8 @@ class PySCFSlater:
         return ratios[1:-1] / ratios[:1], ratios[-1] / ratios[0]
 
     def pgradient(self):
-        d = {}
-        for parm in self.parameters:
+        d = {"det_coeff": np.zeros(self._aovals.shape[-3])}
+        for parm in ["mo_coeff_alpha", "mo_coeff_beta"]:
             s = int("beta" in parm)
             # Get AOs for our spin channel only
             i0, i1 = s * self._nelec[0], self._nelec[0] + s * self._nelec[1]

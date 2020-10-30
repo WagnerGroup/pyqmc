@@ -11,7 +11,6 @@ class EnergyAccumulator:
         self.mol = mol
         self.threshold = threshold
         if hasattr(mol, "a"):
-            print("EnergyAccumulator using Ewald\n", kwargs)
             self.ewald = Ewald(mol, **kwargs)
 
             def compute_energy(mol, configs, wf, threshold):
@@ -39,6 +38,12 @@ class EnergyAccumulator:
             d[k] = np.mean(it, axis=0)
         return d
 
+    def keys(self):
+        return set(["ke", "ee", "ei", "ecp", "total"])
+
+    def shapes(self):
+        return {"ke": (), "ee": (), "ei": (), "ecp": (), "total": ()}
+
 
 class LinearTransform:
     """
@@ -58,13 +63,19 @@ class LinearTransform:
         self.shapes = {k: parameters[k].shape for k in self.to_opt}
         self.slices = {k: np.prod(s) for k, s in self.shapes.items()}
         self.dtypes = {k: parameters[k].dtype for k in self.to_opt}
+        self.complex = {k: d == complex for k, d in self.dtypes.items()}
+        self.nimag = {k: to_opt[k].sum() if c else 0 for k, c in self.complex.items()}
+        self.complex_inds = np.concatenate(
+            [np.ones(to_opt[k].sum(), dtype=bool) * c for k, c in self.complex.items()]
+        )
+        self.nparams = np.sum([v.sum() for v in self.to_opt.values()])
 
     def serialize_parameters(self, parameters):
         """Convert the dictionary to a linear list
         of gradients
         """
-        params = [parameters[k][opt] for k, opt in self.to_opt.items()]
-        return np.concatenate(params)
+        params = np.concatenate([parameters[k][opt] for k, opt in self.to_opt.items()])
+        return np.concatenate((params.real, params[self.complex_inds].imag))
 
     def serialize_gradients(self, pgrad):
         """Convert the dictionary to a linear list
@@ -75,12 +86,15 @@ class LinearTransform:
             mask = ~np.repeat(opt[np.newaxis, :], pgrad[k].shape[0], axis=0)
             mask_grads = np.ma.array(pgrad[k], mask=mask).reshape(pgrad[k].shape[0], -1)
             grads.append(np.ma.compress_cols(mask_grads))
-        return np.concatenate(grads, axis=1)
+
+        grads = np.concatenate(grads, axis=1)
+        return np.concatenate((grads, grads[:, self.complex_inds] * 1j), axis=1)
 
     def deserialize(self, parameters):
         """Convert serialized parameters to dictionary
         """
         n = 0
+        m = self.nparams
         d = {}
         for k, opt in self.to_opt.items():
             opt_ = opt.flatten()
@@ -89,6 +103,10 @@ class LinearTransform:
             flat_parms = np.zeros(self.slices[k], dtype=self.dtypes[k])
             flat_parms[~opt_] = self.frozen_parms[k]
             flat_parms[opt_] = parameters[n : n + n_p]
+            if self.complex[k]:
+                m_p = self.nimag[k]
+                flat_parms[opt_] += parameters[m : m + m_p] * 1j
+                m += m_p
             d[k] = flat_parms.reshape(self.shapes[k])
             n += n_p
         return d
@@ -112,7 +130,7 @@ class PGradTransform:
         ne = configs.configs.shape[1]
         d2 = 0.0
         for e in range(ne):
-            d2 += np.sum(wf.gradient(e, configs.electron(e)) ** 2, axis=0)
+            d2 += np.sum(np.abs(wf.gradient(e, configs.electron(e))) ** 2, axis=0)
         r = 1.0 / d2
         mask = r < self.nodal_cutoff ** 2
 
@@ -168,6 +186,15 @@ class PGradTransform:
 
         return d
 
+    def keys(self):
+        return self.enacc.keys().union(["dpH", "dppsi", "dpidpj"])
+
+    def shapes(self):
+        nparms = np.sum([np.sum(opt) for opt in self.transform.to_opt.values()])
+        d = {"dpH": (nparms,), "dppsi": (nparms,), "dpidpj": (nparms, nparms)}
+        d.update(self.enacc.shapes())
+        return d
+
 
 class SqAccumulator:
     r"""
@@ -204,3 +231,9 @@ class SqAccumulator:
 
     def avg(self, configs, wf):
         return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
+
+    def keys(self):
+        return set(["Sq"])
+
+    def shapes(self):
+        return {"Sq": (len(self.qlist),)}

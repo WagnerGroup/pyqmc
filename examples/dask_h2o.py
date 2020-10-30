@@ -1,4 +1,3 @@
-from pyqmc import dasktools
 from dask.distributed import Client, LocalCluster
 import pyqmc
 
@@ -20,28 +19,38 @@ if __name__ == "__main__":
     cluster = LocalCluster(n_workers=ncore, threads_per_worker=1)
     client = Client(cluster)
     mol, mf = run_scf()
-    from pyqmc.dasktools import distvmc, line_minimization
-    from pyqmc.dmc import rundmc
-    import pandas as pd
+    from pyqmc import vmc, line_minimization, rundmc
 
     wf, to_opt = pyqmc.default_sj(mol, mf)
-    df, coords = distvmc(
-        wf, pyqmc.initial_guess(mol, nconfig), client=client, nsteps_per=10, nsteps=10
-    )
+    pgrad_acc = pyqmc.gradient_generator(mol, wf, to_opt)
+    configs = pyqmc.initial_guess(mol, nconfig)
     line_minimization(
-        wf, coords, pyqmc.gradient_generator(mol, wf, to_opt), client=client
+        wf,
+        configs,
+        pgrad_acc,
+        hdf_file="h2o_opt.hdf",
+        client=client,
+        npartitions=ncore,
+        verbose=True,
+    )
+    df, configs = vmc(
+        wf,
+        configs,
+        hdf_file="h2o_vmc.hdf",
+        accumulators={"energy": pgrad_acc.enacc},
+        client=client,
+        npartitions=ncore,
+        verbose=True,
     )
     dfdmc, configs, weights = rundmc(
         wf,
-        coords,
-        nsteps=5000,
-        branchtime=5,
-        accumulators={"energy": pyqmc.EnergyAccumulator(mol)},
+        configs,
+        hdf_file="h2o_dmc.hdf",
+        nsteps=1000,
+        accumulators={"energy": pgrad_acc.enacc},
         ekey=("energy", "total"),
         tstep=0.02,
         verbose=True,
-        propagate=pyqmc.dasktools.distdmc_propagate,
         client=client,
+        npartitions=ncore,
     )
-
-    dfdmc = pd.DataFrame(dfdmc).to_json("dmc.json")

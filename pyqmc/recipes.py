@@ -2,6 +2,7 @@ import pyqmc
 import pyqmc.obdm
 import numpy as np
 
+
 def OPTIMIZE(
     dft_checkfile,
     output,
@@ -15,7 +16,7 @@ def OPTIMIZE(
     linemin_kws=None,
 ):
     if linemin_kws is None:
-        linemin_kws={}
+        linemin_kws = {}
     mol, mf = pyqmc.recover_pyscf(dft_checkfile)
     if S is not None:
         mol = pyqmc.get_supercell(mol, np.asarray(S))
@@ -25,7 +26,6 @@ def OPTIMIZE(
     )
     if start_from is not None:
         pyqmc.read_wf(wf, start_from)
-        
 
     configs = pyqmc.initial_guess(mol, nconfig)
     acc = pyqmc.gradient_generator(mol, wf, to_opt)
@@ -44,11 +44,11 @@ def OPTIMIZE(
 def generate_accumulators(mol, mf, energy=True, rdm1=False, rdm1_options=None):
     acc = {}
     if energy:
-        acc['energy'] = pyqmc.EnergyAccumulator(mol)
+        acc["energy"] = pyqmc.EnergyAccumulator(mol)
     if rdm1:
         if rdm1_options is None:
-            rdm1_options=dict(orb_coeff=mf.mo_coeff)
-        acc['rdm1'] = pyqmc.obdm.OBDMAccumulator(mol, **rdm1_options)
+            rdm1_options = dict(orb_coeff=mf.mo_coeff)
+        acc["rdm1"] = pyqmc.obdm.OBDMAccumulator(mol, **rdm1_options)
     return acc
 
 
@@ -63,17 +63,15 @@ def VMC(
     jastrow_kws=None,
     slater_kws=None,
     vmc_kws=None,
-    accumulators=None
+    accumulators=None,
 ):
     if vmc_kws is None:
-        vmc_kws={} 
+        vmc_kws = {}
     mol, mf = pyqmc.recover_pyscf(dft_checkfile)
     if S is not None:
         mol = pyqmc.get_supercell(mol, np.asarray(S))
 
-    wf, _ = pyqmc.generate_wf(
-        mol, mf, jastrow_kws=jastrow_kws, slater_kws=slater_kws
-    )
+    wf, _ = pyqmc.generate_wf(mol, mf, jastrow_kws=jastrow_kws, slater_kws=slater_kws)
 
     if start_from is not None:
         pyqmc.read_wf(wf, start_from)
@@ -92,7 +90,6 @@ def VMC(
     )
 
 
-
 def DMC(
     dft_checkfile,
     output,
@@ -104,17 +101,15 @@ def DMC(
     jastrow_kws=None,
     slater_kws=None,
     dmc_kws=None,
-    accumulators=None
+    accumulators=None,
 ):
     if dmc_kws is None:
-        dmc_kws={} 
+        dmc_kws = {}
     mol, mf = pyqmc.recover_pyscf(dft_checkfile)
     if S is not None:
         mol = pyqmc.get_supercell(mol, np.asarray(S))
 
-    wf, _ = pyqmc.generate_wf(
-        mol, mf, jastrow_kws=jastrow_kws, slater_kws=slater_kws
-    )
+    wf, _ = pyqmc.generate_wf(mol, mf, jastrow_kws=jastrow_kws, slater_kws=slater_kws)
 
     if start_from is not None:
         pyqmc.read_wf(wf, start_from)

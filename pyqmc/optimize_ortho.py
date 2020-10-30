@@ -2,6 +2,7 @@ import numpy as np
 import h5py
 import pyqmc
 import pyqmc.hdftools as hdftools
+import os
 
 
 def ortho_hdf(hdf_file, data, attr, configs, parameters):
@@ -20,12 +21,126 @@ def ortho_hdf(hdf_file, data, attr, configs, parameters):
                 hdf["wf/" + k][...] = it.copy()
 
 
+def collect_overlap_data(wfs, configs, pgrad):
+    r""" Collect the averages assuming that 
+    configs are distributed according to 
+    
+    .. math:: \rho \propto \sum_i |\Psi_i|^2
+
+    The keys 'overlap' and 'overlap_gradient' are
+
+    `overlap` : 
+
+    .. math:: \langle \Psi_f | \Psi_i \rangle = \left\langle \frac{\Psi_i^* \Psi_j}{\rho} \right\rangle_{\rho}
+
+    `overlap_gradient`:
+
+    .. math:: \partial_m \langle \Psi_f | \Psi_i \rangle = \left\langle \frac{\partial_{fm} \Psi_i^* \Psi_j}{\rho} \right\rangle_{\rho}
+
+    """
+    phase, log_vals = [np.array(x) for x in zip(*[wf.value() for wf in wfs])]
+    log_vals = np.real(log_vals)  # should already be real
+    ref = np.max(log_vals, axis=0)
+    save_dat = {}
+    denominator = np.sum(np.exp(2 * (log_vals - ref)), axis=0)
+    normalized_values = phase * np.exp(log_vals - ref)
+    save_dat["overlap"] = np.einsum(  # shape (wf, wf)
+        "ik,jk->ij", normalized_values.conj(), normalized_values / denominator
+    ) / len(ref)
+
+    dppsi = pgrad.transform.serialize_gradients(wfs[-1].pgradient())
+    node_cut, f = pgrad._node_regr(configs, wfs[-1])
+    dppsi_regularized = dppsi * f[:, np.newaxis]
+
+    save_dat["overlap_gradient"] = np.einsum(
+        "km,k,jk->jm",  # shape (wf, param)
+        dppsi_regularized.conj(),
+        normalized_values[-1].conj(),
+        normalized_values / denominator,
+    ) / len(ref)
+
+    # Weight for quantities that are evaluated as
+    # int( f(X) psi_f^2 dX )
+    # since we sampled sum psi_i^2
+    weight = np.exp(-2 * (log_vals[:, np.newaxis] - log_vals))
+    weight = 1.0 / np.sum(weight, axis=1)
+
+    dat = pgrad.avg(configs, wfs[-1], weight[-1])
+    for k in dat.keys():
+        save_dat[k] = dat[k]
+    save_dat["weight_final"] = np.mean(weight[-1])
+    return save_dat
+
+
 from pyqmc.mc import limdrift
 
 
-def sample_overlap(
-    wfs, configs, pgrad, nblocks=10, nsteps_per_block=10, nsteps=None, tstep=0.5
-):
+def construct_rho_gradient(grads, log_values):
+    total_grad = np.zeros_like(grads[0])
+    for g, v in zip(grads, values):
+        denominator = np.sum(np.exp(2 * np.real(log_values - v)))
+        total_grad += g / denominator
+    return total_grad
+
+
+def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
+    r""" Run nstep Metropolis steps to sample a distribution proportional to 
+    :math:`\sum_i |\Psi_i|^2`, where :math:`\Psi_i` = wfs[i]
+    """
+    nconf, nelec, _ = configs.configs.shape
+    for wf in wfs:
+        wf.recompute(configs)
+    block_avg = {}
+    block_avg["acceptance"] = np.zeros(nsteps)
+    for n in range(nsteps):
+        for e in range(nelec):  # a sweep
+            # Propose move
+            grads = [np.real(wf.gradient(e, configs.electron(e)).T) for wf in wfs]
+            grad = limdrift(np.mean(grads, axis=0))
+            gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconf, 3))
+            newcoorde = configs.configs[:, e, :] + gauss + grad * tstep
+            newcoorde = configs.make_irreducible(e, newcoorde)
+
+            # Compute reverse move
+            grads = [np.real(wf.gradient(e, newcoorde).T) for wf in wfs]
+            new_grad = limdrift(np.mean(grads, axis=0))
+            forward = np.sum(gauss ** 2, axis=1)
+            backward = np.sum((gauss + tstep * (grad + new_grad)) ** 2, axis=1)
+
+            # Acceptance
+            t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
+            wf_ratios = np.array(
+                [np.abs(wf.testvalue(e, newcoorde)) ** 2 for wf in wfs]
+            )
+            log_values = np.real(np.array([wf.value()[1] for wf in wfs]))
+            weights = np.exp(2 * (log_values - log_values[0]))
+
+            ratio = t_prob * np.sum(wf_ratios * weights, axis=0) / weights.sum(axis=0)
+            accept = ratio > np.random.rand(nconf)
+            block_avg["acceptance"][n] += accept.mean() / nelec
+
+            # Update wave function
+            configs.move(e, newcoorde, accept)
+            for wf in wfs:
+                wf.updateinternals(e, newcoorde, mask=accept)
+
+        # Collect rolling average
+        save_dat = collect_overlap_data(wfs, configs, pgrad)
+        for k, it in save_dat.items():
+            if k not in block_avg:
+                block_avg[k] = np.zeros((*it.shape,), dtype=it.dtype)
+            if k in ["overlap", "overlap_gradient", "weight_final"]:
+                block_avg[k] += save_dat[k] / nsteps
+            else:
+                block_avg[k] += save_dat[k] * save_dat["weight_final"] / nsteps
+
+    for k, it in block_avg.items():
+        if k not in ["overlap", "overlap_gradient", "weight_final", "acceptance"]:
+            it /= block_avg["weight_final"]
+    return block_avg, configs
+
+
+def sample_overlap(wfs, configs, pgrad, nblocks=10, nsteps=10, tstep=0.5):
     r"""
     Sample 
 
@@ -45,164 +160,64 @@ def sample_overlap(
 
     In addition, any key returned by `pgrad` will be saved for the final wave function.
     """
-    nconf, nelec, _ = configs.configs.shape
-
-    if nsteps is not None:
-        nblocks = nsteps
-        nsteps_per_block = 1
-
-    for wf in wfs:
-        wf.recompute(configs)
 
     return_data = {}
     for block in range(nblocks):
-        block_avg = {}
-        for step in range(nsteps_per_block):
-            for e in range(nelec):
-                # Propose move
-                grads = [np.real(wf.gradient(e, configs.electron(e)).T) for wf in wfs]
-
-                grad = limdrift(np.mean(grads, axis=0))
-                gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconf, 3))
-                newcoorde = configs.configs[:, e, :] + gauss + grad * tstep
-                newcoorde = configs.make_irreducible(e, newcoorde)
-
-                # Compute reverse move
-                grads = [np.real(wf.gradient(e, newcoorde).T) for wf in wfs]
-                new_grad = limdrift(np.mean(grads, axis=0))
-                forward = np.sum(gauss ** 2, axis=1)
-                backward = np.sum((gauss + tstep * (grad + new_grad)) ** 2, axis=1)
-
-                # Acceptance
-                t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
-                wf_ratios = np.array([wf.testvalue(e, newcoorde) ** 2 for wf in wfs])
-                log_values = np.array([wf.value()[1] for wf in wfs])
-                ref = log_values[0]
-                weights = np.exp(2 * (log_values - ref))
-
-                ratio = (
-                    t_prob
-                    * np.sum(wf_ratios * weights, axis=0)
-                    / np.sum(weights, axis=0)
-                )
-                accept = ratio > np.random.rand(nconf)
-
-                # Update wave function
-                configs.move(e, newcoorde, accept)
-                for wf in wfs:
-                    wf.updateinternals(e, newcoorde, mask=accept)
-                # print("accept", np.mean(accept))
-
-            log_values = np.array([wf.value() for wf in wfs])
-            # print(log_values.shape)
-            ref = np.max(log_values[:, 1, :], axis=0)
-            save_dat = {}
-            denominator = np.sum(np.exp(2 * (log_values[:, 1, :] - ref)), axis=0)
-            normalized_values = log_values[:, 0, :] * np.exp(log_values[:, 1, :] - ref)
-            save_dat["overlap"] = np.mean(
-                np.einsum("ik,jk->ijk", normalized_values, normalized_values)
-                / denominator,
-                axis=-1,
-            )
-            weight = np.array(
-                [
-                    np.exp(-2 * (log_values[i, 1, :] - log_values[:, 1, :]))
-                    for i in range(len(wfs))
-                ]
-            )
-            weight = 1.0 / np.sum(weight, axis=1)
-
-            # Fast evaluation of dppsi_reg
-            dppsi = pgrad.transform.serialize_gradients(wfs[-1].pgradient())
-            node_cut, f = pgrad._node_regr(configs, wfs[-1])
-            dppsi_regularized = dppsi * f[:, np.newaxis]
-
-            save_dat["overlap_gradient"] = np.mean(
-                np.einsum(
-                    "km,k,jk->jmk",
-                    dppsi_regularized,
-                    normalized_values[-1],
-                    normalized_values,
-                )
-                / denominator,
-                axis=-1,
-            )
-
-            # Weighted average on rest
-            dat = pgrad.avg(configs, wf, weight[-1])
-            for k in dat.keys():
-                save_dat[k] = dat[k]
-            save_dat["weight"] = np.mean(weight, axis=1)
-
-            # Rolling average within block
-            for k, it in save_dat.items():
-                if k not in block_avg:
-                    block_avg[k] = np.zeros((*it.shape,))
-                block_avg[k] += save_dat[k] / nsteps_per_block
-
+        block_avg, configs = sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep)
         # Blocks stored
         for k, it in block_avg.items():
             if k not in return_data:
-                return_data[k] = np.zeros((nblocks, *it.shape))
+                return_data[k] = np.zeros((nblocks, *it.shape), dtype=it.dtype)
             return_data[k][block, ...] = it.copy()
     return return_data, configs
 
 
-def dist_sample_overlap(wfs, configs, *args, client, npartitions=None, **kwargs):
+def dist_sample_overlap(
+    wfs, configs, pgrad, nblocks=10, nsteps=10, client=None, npartitions=None, **kwargs
+):
     if npartitions is None:
         npartitions = sum(client.nthreads().values())
 
-    coord = configs.split(npartitions)
-    allruns = []
+    return_data = {}
+    for block in range(nblocks):
+        coord = configs.split(npartitions)
+        runs = []
+        for nodeconfigs in coord:
+            runs.append(
+                client.submit(
+                    sample_overlap_worker,
+                    wfs,
+                    nodeconfigs,
+                    pgrad,
+                    nsteps=nsteps,
+                    **kwargs
+                )
+            )
 
-    for nodeconfigs in coord:
-        allruns.append(client.submit(sample_overlap, wfs, nodeconfigs, *args, **kwargs))
-
-    # Here we reweight the averages since each step on each node
-    # was done with a different average weight.
-    confweight = np.array([len(c.configs) for c in coord], dtype=float)
-    confweight /= confweight.mean()
-
-    # Memory efficient implementation, bit more verbose
-    final_coords = []
-    df = {}
-    for i, r in enumerate(allruns):
-        result = r.result()
-        result[0]["weight"] *= confweight[i]
-        final_coords.append(result[1])
-        keys = result[0].keys()
-        for k in keys:
-            if k not in df:
-                df[k] = np.zeros(result[0][k].shape)
+        allresults = list(zip(*[r.result() for r in runs]))
+        configs.join(allresults[1])
+        confweight = np.array([len(c.configs) for c in coord], dtype=float)
+        avgweights = np.array([res["weight_final"] for res in allresults[0]])
+        avgweights *= confweight
+        avgweights /= np.sum(avgweights)
+        confweight /= np.sum(confweight)
+        block_avg = {}
+        for k in allresults[0][0].keys():
             if k not in ["weight", "overlap", "overlap_gradient"]:
-                if len(df[k].shape) == 1:
-                    df[k] += result[0][k] * result[0]["weight"][:, -1]
-                elif len(df[k].shape) == 2:
-                    df[k] += result[0][k] * result[0]["weight"][:, -1, np.newaxis]
-                elif len(df[k].shape) == 3:
-                    df[k] += (
-                        result[0][k]
-                        * result[0]["weight"][:, -1, np.newaxis, np.newaxis]
-                    )
-                else:
-                    raise NotImplementedError(
-                        "too many/too few dimension in dist_sample_overlap"
-                    )
+                block_avg[k] = np.sum(
+                    [res[k] * w for res, w in zip(allresults[0], avgweights)], axis=0
+                )
             else:
-                df[k] += result[0][k] * confweight[i] / len(allruns)
+                block_avg[k] = np.sum(
+                    [res[k] * w for res, w in zip(allresults[0], confweight)], axis=0
+                )
 
-    for k in keys:
-        if k not in ["weight", "overlap", "overlap_gradient"]:
-            if len(df[k].shape) == 1:
-                df[k] /= len(allruns) * df["weight"][:, -1]
-            elif len(df[k].shape) == 2:
-                df[k] /= len(allruns) * df["weight"][:, -1, np.newaxis]
-            elif len(df[k].shape) == 3:
-                df[k] /= len(allruns) * df["weight"][:, -1, np.newaxis, np.newaxis]
-
-    configs.join(final_coords)
-    coordret = configs
-    return df, coordret
+        # Blocks stored
+        for k, it in block_avg.items():
+            if k not in return_data:
+                return_data[k] = np.zeros((nblocks, *it.shape), dtype=it.dtype)
+            return_data[k][block, ...] = it.copy()
+    return return_data, configs
 
 
 def correlated_sample(wfs, configs, parameters, pgrad):
@@ -219,7 +234,7 @@ def correlated_sample(wfs, configs, parameters, pgrad):
 
     The ratio can be computed as 
 
-    .. math:: \frac{|\Psi|^2}{\rho} = \frac{1}{\sum_i e^{\alpha_i - \alpha} 
+    .. math:: \frac{|\Psi|^2}{\rho} = \frac{1}{\sum_i e^{2(\alpha_i - \alpha}) }
 
     Where we write 
 
@@ -234,27 +249,24 @@ def correlated_sample(wfs, configs, parameters, pgrad):
     .. math:: \langle N_i \rangle = \left\langle \frac{|\Psi_i|^2}{\rho} \right\rangle
 
     """
-    p0 = pgrad.transform.serialize_parameters(wfs[-1].parameters)
-    for wf in wfs:
-        wf.recompute(configs)
-    log_values0 = np.array([wf.value() for wf in wfs])
     nparms = len(parameters)
-    ref = np.max(log_values0[:, 1, :])
-    normalized_values = log_values0[:, 0, :] * np.exp(log_values0[:, 1, :] - ref)
-    denominator = np.sum(np.exp(2 * (log_values0[:, 1, :] - ref)), axis=0)
+    p0 = pgrad.transform.serialize_parameters(wfs[-1].parameters)
+    wfvalues = [wf.recompute(configs) for wf in wfs]
+    phase0, log_values0 = [np.array(x) for x in zip(*wfvalues)]
+    log_values0 = np.real(log_values0)
+    ref = np.max(log_values0)
+    normalized_values = phase0 * np.exp(log_values0 - ref)
+    denominator = np.sum(np.exp(2 * (log_values0 - ref)), axis=0)
+    rhoprime_ = np.sum(np.exp(2 * (log_values0[:-1] - ref)), axis=0)
 
-    weight = np.array(
-        [
-            np.exp(-2 * (log_values0[i, 1, :] - log_values0[:, 1, :]))
-            for i in range(len(wfs))
-        ]
-    )
-    weight = np.mean(1.0 / np.sum(weight, axis=1), axis=1)
+    wt0 = 1.0 / np.sum(np.exp(-2 * (log_values0[:, np.newaxis] - log_values0)), axis=1)
+    weight = np.mean(wt0, axis=1)
+    dtype = np.complex if wfs[-1].iscomplex else np.float
 
     data = {
         "total": np.zeros(nparms),
         "weight": np.zeros(nparms),
-        "overlap": np.zeros((nparms, len(wfs))),
+        "overlap": np.zeros((nparms, len(wfs)), dtype=dtype),
         "rhoprime": np.zeros(nparms),
     }
     data["base_weight"] = weight
@@ -266,25 +278,17 @@ def correlated_sample(wfs, configs, parameters, pgrad):
         val = wf.value()
         dat = pgrad.enacc(configs, wf)
 
-        wt = 1.0 / np.sum(
-            np.exp(2 * log_values0[:, 1, :] - 2 * val[1][np.newaxis, :]), axis=0
-        )
+        wt = wt0[-1] * np.exp(2 * (val[1] - log_values0[-1]))
         normalized_val = val[0] * np.exp(val[1] - ref)
+        overlap = normalized_val * normalized_values.conj() / denominator
         # This is the new rho with the test wave function
-        rhoprime = (
-            np.sum(np.exp(2 * log_values0[0:-1, 1, :] - 2 * ref), axis=0)
-            + np.exp(2 * val[1] - 2 * ref)
-        ) / denominator
+        rhoprime = np.mean((rhoprime_ + np.exp(2 * (val[1] - ref))) / denominator)
 
-        overlap = np.einsum("k,jk->jk", normalized_val, normalized_values) / denominator
-
-        data["total"][p] = np.average(dat["total"], weights=wt)
-        data["rhoprime"][p] = np.mean(rhoprime)
-        data["weight"][p] = np.mean(wt) / np.mean(rhoprime)
+        data["total"][p] = np.real(np.average(dat["total"], weights=wt))
+        data["rhoprime"][p] = rhoprime
+        data["weight"][p] = np.mean(wt) / rhoprime
         data["overlap"][p] = np.mean(overlap, axis=1) / np.sqrt(np.mean(wt) * weight)
 
-        # print('wt', wt)
-    # print('average energy',data['total'])
     for k, it in pgrad.transform.deserialize(p0).items():
         wfs[-1].parameters[k] = it
     return data
@@ -321,7 +325,7 @@ def dist_correlated_sample(wfs, configs, *args, client, npartitions=None, **kwar
 
 def renormalize(wfs, N):
     """
-    Normalize the last wave function, given a current value of the normalization. Assumes that we want N to be 0.5
+    Normalizes the last wave function, given a current value of the normalization. Assumes that we want N to be 0.5
 
     .. math:: 
     
@@ -333,11 +337,15 @@ def renormalize(wfs, N):
 
         f^2 = a^2/b^2 = (1-N)/N
     """
-    wfs[-1].parameters["wf1det_coeff"] *= np.sqrt((1 - N) / N)
+    renorm = np.sqrt((1 - N) / N)
+
+    if "wf1det_coeff" in wfs[-1].parameters.keys():
+        wfs[-1].parameters["wf1det_coeff"] *= renorm
+    else:
+        raise NotImplementedError("need wf1det_coeff in parameters")
 
 
-def evaluate(wfs, coords, pgrad, sampler, sample_options, warmup):
-    return_data, coords = sampler(wfs, coords, pgrad, **sample_options)
+def evaluate(return_data, warmup):
     """ 
     For wave functions wfs and coordinate set coords, evaluate the overlap and energy of the last wave function. 
 
@@ -345,17 +353,19 @@ def evaluate(wfs, coords, pgrad, sampler, sample_options, warmup):
     """
     avg_data = {}
     for k, it in return_data.items():
-        avg_data[k] = np.average(it[warmup:, ...], axis=0)
-    N = avg_data["overlap"].diagonal()
+        avg_data[k] = np.average(it[warmup:], axis=0)
+    N = np.abs(avg_data["overlap"].diagonal())
     # Derivatives are only for the optimized wave function, so they miss
     # an index
     N_derivative = 2 * np.real(avg_data["overlap_gradient"][-1])
-    Nij = np.outer(N, N)
-    S = avg_data["overlap"] / np.sqrt(Nij)
+    Nij = np.sqrt(np.outer(N, N))
+    S = avg_data["overlap"] / Nij
     S_derivative = avg_data["overlap_gradient"] / Nij[-1, :, np.newaxis] - np.einsum(
-        "j,m->jm", avg_data["overlap"][-1, :] / Nij[-1, :], N_derivative / N[-1]
+        "j,m->jm", 0.5 * avg_data["overlap"][-1, :] / Nij[-1, :], N_derivative / N[-1]
     )
-    energy_derivative = 2.0 * (avg_data["dpH"] - avg_data["total"] * avg_data["dppsi"])
+    energy_derivative = 2.0 * np.real(
+        avg_data["dpH"] - avg_data["total"] * avg_data["dppsi"]
+    )
     dp = avg_data["dppsi"]
     condition = np.real(avg_data["dpidpj"] - np.einsum("i,j->ij", dp, dp))
 
@@ -366,7 +376,7 @@ def evaluate(wfs, coords, pgrad, sampler, sample_options, warmup):
         "energy_derivative": energy_derivative,
         "N_derivative": N_derivative,
         "condition": condition,
-        "total": avg_data["total"],
+        "total": np.real(avg_data["total"]),
     }
 
 
@@ -374,8 +384,8 @@ def optimize_orthogonal(
     wfs,
     coords,
     pgrad,
-    Starget=0.0,
-    forcing=10.0,
+    Starget=None,
+    forcing=None,
     tstep=0.1,
     max_iterations=30,
     warmup=5,
@@ -394,15 +404,15 @@ def optimize_orthogonal(
     r"""
     Minimize 
 
-    .. math:: f(p_f) = E_f + \sum_i \lambda_{i=0}^{f-1} (S_{fi} - S_{fi}^*)^2 
+    .. math:: f(p_f) = E_f + \sum_i \lambda_{i=0}^{f-1} |S_{fi} - S_{fi}^*|^2 
 
     Where 
 
-    .. math:: N_i = \langle \Psi_i | \Psi_j \rangle
+    .. math:: N_i = \langle \Psi_i | \Psi_i \rangle
 
-    .. math:: S_{fi} = \frac{\langle \Psi_f | \Psi_j \rangle}{\sqrt{N_f N_i}}
+    .. math:: S_{fi} = \frac{\langle \Psi_f | \Psi_i \rangle}{\sqrt{N_f N_i}}
 
-    The *'d and lambda values are respectively targets and forcings. f is the final wave function in the wave function array.
+    The \*'d and lambda values are respectively targets and forcings. f is the final wave function in the wave function array.
     We only optimize the parameters of the final wave function, so all 'p' values here represent a parameter in the final wave function. 
 
     **Important arguments**
@@ -433,9 +443,9 @@ def optimize_orthogonal(
 
     .. math:: \partial_p N_f = 2 Re \langle \partial_p \Psi_f | \Psi_f \rangle
 
-    .. math::  \langle \partial_p \Psi_f | \Psi_f \rangle = \int{ \frac{ \Psi_f\partial_p \Psi_f^*}{\rho} \frac{\rho}{\int \rho} } 
+    .. math::  \langle \partial_p \Psi_f | \Psi_i \rangle = \int{ \frac{ \Psi_i\partial_p \Psi_f^*}{\rho} \frac{\rho}{\int \rho} } 
 
-    .. math:: \partial_p S_{fi} = \frac{\langle \partial_p \Psi_f | \Psi_j \rangle}{\sqrt{N_f N_i}} - \frac{\langle \Psi_f | \Psi_j \rangle}{\sqrt{N_f N_i}} \frac{\partial_p N_f}{N_f} 
+    .. math:: \partial_p S_{fi} = \frac{\langle \partial_p \Psi_f | \Psi_i \rangle}{\sqrt{N_f N_i}} - \frac{\langle \Psi_f | \Psi_i \rangle}{2\sqrt{N_f N_i}} \frac{\partial_p N_f}{N_f} 
 
     In this implementation, we set 
 
@@ -459,9 +469,29 @@ def optimize_orthogonal(
      * The wave function is renormalized if its normalization deviates too far from 0.5 relative to the first wave function.
     """
 
+    # Restart
+    if hdf_file is not None and os.path.isfile(hdf_file):
+        with h5py.File(hdf_file, "r") as hdf:
+            if "wf" in hdf.keys():
+                grp = hdf["wf"]
+                for k in grp.keys():
+                    wfs[-1].parameters[k] = np.array(grp[k])
+            if "iteration" in hdf.keys():
+                step_offset = np.max(hdf["iteration"][...]) + 1
+
     parameters = pgrad.transform.serialize_parameters(wfs[-1].parameters)
+
+    if Starget is None:
+        Starget = np.zeros(len(wfs) - 1)
+    if forcing is None:
+        forcing = np.ones(len(wfs) - 1)
     Starget = np.asarray(Starget)
     forcing = np.asarray(forcing)
+    if len(forcing) != len(wfs) - 1:
+        raise AttributeError(
+            "forcing should be an array of length equal to the wfs minus 1: "
+            + str(len(forcing))
+        )
     attr = dict(
         tstep=tstep,
         max_iterations=max_iterations,
@@ -491,6 +521,8 @@ def optimize_orthogonal(
 
     # One set of configurations for every wave function
     allcoords = [coords.copy() for _ in wfs[:-1]]
+    dtype = np.complex if wfs[-1].iscomplex else np.float
+
     for step in range(max_iterations):
         # we iterate until the normalization is reasonable
         # One could potentially save a little time here by not computing the gradients
@@ -500,23 +532,24 @@ def optimize_orthogonal(
         nwf = len(wfs)
         normalization = np.zeros(nwf - 1)
         total_energy = 0
-        energy_derivative = np.zeros(len(parameters))
+        # energy_derivative = np.zeros(len(parameters))
         N_derivative = np.zeros(len(parameters))
         condition = np.zeros((len(parameters), len(parameters)))
-        overlaps = np.zeros(nwf - 1)
-        overlap_derivatives = np.zeros((nwf - 1, len(parameters)))
+        overlaps = np.zeros(nwf - 1, dtype=dtype)
+        overlap_derivatives = np.zeros((nwf - 1, len(parameters)), dtype=dtype)
 
         while True:
-            tmp_deriv = evaluate(
-                [wfs[0], wfs[-1]], allcoords[0], pgrad, sampler, sample_options, warmup
+            return_data, _ = sampler(
+                [wfs[0], wfs[-1]], allcoords[0], pgrad, **sample_options
             )
+            tmp_deriv = evaluate(return_data, warmup)
             N = tmp_deriv["N"][-1]
 
-            print("Normalization", N)
+            print("Normalization", N, flush=True)
             if abs(N - Ntarget) < Ntol:
                 normalization[0] = tmp_deriv["N"][-1]
                 total_energy += tmp_deriv["total"] / (nwf - 1)
-                energy_derivative += tmp_deriv["energy_derivative"] / (nwf - 1)
+                energy_derivative = tmp_deriv["energy_derivative"] / (nwf - 1)
                 N_derivative += tmp_deriv["N_derivative"] / (nwf - 1)
                 condition += tmp_deriv["condition"] / (nwf - 1)
                 overlaps[0] = tmp_deriv["S"][-1, 0]
@@ -527,9 +560,10 @@ def optimize_orthogonal(
                 parameters = pgrad.transform.serialize_parameters(wfs[-1].parameters)
 
         for i, wf in enumerate(wfs[1:-1]):
-            deriv_data = evaluate(
-                [wf, wfs[-1]], allcoords[i + 1], pgrad, sampler, sample_options, warmup
+            return_data, _ = sampler(
+                [wf, wfs[-1]], allcoords[i + 1], pgrad, **sample_options
             )
+            deriv_data = evaluate(return_data, warmup)
             normalization[i + 1] = deriv_data["N"][-1]
             total_energy += deriv_data["total"] / (nwf - 1)
             energy_derivative += deriv_data["energy_derivative"] / (nwf - 1)
@@ -547,8 +581,8 @@ def optimize_orthogonal(
         total_derivative = energy_derivative + overlap_derivative
 
         print("############################# iteration ", step)
-        format_str = "{:<15}" * 2 + "{:<15.10}" * 2
-        print(format_str.format("Quantity", "wf", "value", "|grad|"))
+        format_str = "{:<15}" * 2 + "{:<20.3}" * 2
+        print(format_str.format("Quantity", "wf", "val", "|g|"))
         print(
             format_str.format(
                 "energy", len(wfs) - 1, total_energy, np.linalg.norm(energy_derivative)
@@ -559,7 +593,8 @@ def optimize_orthogonal(
             print(
                 format_str.format(
                     "overlap", i, overlaps[i], np.linalg.norm(overlap_derivatives[i])
-                )
+                ),
+                flush=True,
             )
 
         # Use SR to condition the derivatives
@@ -570,7 +605,7 @@ def optimize_orthogonal(
         )
 
         # Try to move in the projection that doesn't change the norm
-        # Here we project out the
+        # Here we project out the norm derivative
         if np.linalg.norm(N_derivative) > 1e-8:
             total_derivative -= (
                 np.dot(total_derivative, N_derivative)
@@ -582,7 +617,7 @@ def optimize_orthogonal(
         if deriv_norm > max_step:
             total_derivative = total_derivative * max_step / deriv_norm
 
-        test_tsteps = np.linspace(-tstep, tstep, 21)
+        test_tsteps = np.linspace(-0.1 * tstep, tstep, 11)
         test_parameters = [
             parameters + conditioner(total_derivative, condition, x)
             for x in test_tsteps
@@ -602,20 +637,30 @@ def optimize_orthogonal(
         xfit = []
         overlap_cost = (
             forcing[:, np.newaxis]
-            * (line_data["overlap"][:, :, 0] - Starget[:, np.newaxis]) ** 2
+            * np.abs(line_data["overlap"][:, :, 0] - Starget[:, np.newaxis]) ** 2
         )
         cost = np.mean(line_data["total"], axis=0) + np.sum(overlap_cost, axis=0)
         mask = (np.abs(line_data["weight"] - 1.0) > weight_boundaries) & (
             np.abs(line_data["weight"]) > weight_boundaries
         )
         mask = np.all(mask, axis=0)
+        print("tsteps", test_tsteps)
+        print("cost", cost)
+        print("overlap cost", overlap_cost)
+        print("mask", mask)
         xfit = test_tsteps[mask]
         yfit = cost[mask]
 
-        if len(xfit) > 0:
+        print("|total_derivative|", np.linalg.norm(total_derivative))
+        if len(xfit) > 2:
             min_tstep = pyqmc.linemin.stable_fit2(xfit, yfit)
-            print("chose to move", min_tstep)
-            parameters += conditioner(total_derivative, condition, min_tstep)
+            print("chose to move", min_tstep, flush=True)
+            parameters = parameters + conditioner(
+                total_derivative, condition, min_tstep
+            )
+        else:
+            print("WARNING: did not find valid moves. Reducing the timestep")
+            tstep *= 0.5
 
         for k, it in pgrad.transform.deserialize(parameters).items():
             wfs[-1].parameters[k] = it
@@ -635,8 +680,6 @@ def optimize_orthogonal(
             "line_norm": line_data["weight"],
         }
 
-        ortho_hdf(
-            hdf_file, save_data, attr, coords, pgrad.transform.deserialize(parameters)
-        )
+        ortho_hdf(hdf_file, save_data, attr, coords, wfs[-1].parameters)
 
     return wfs

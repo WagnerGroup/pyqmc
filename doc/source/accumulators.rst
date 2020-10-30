@@ -13,3 +13,9 @@ Accumulators
 
 .. automodule:: pyqmc.ewald
    :members:
+
+.. automodule:: pyqmc.obdm
+   :members:
+
+.. automodule:: pyqmc.tbdm
+   :members:

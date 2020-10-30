@@ -34,7 +34,7 @@ def _reblock(array, nblocks):
     return [v.mean(axis=0) for v in vals]
 
 
-def reblock_summary(df, nblocks_list):
+def reblock_summary(df, nblocks_list=(10, 20, 40, 60, 80)):
     if not isinstance(nblocks_list, list):
         assert isinstance(nblocks_list, int)
         nblocks_list = [nblocks_list]

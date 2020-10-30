@@ -34,16 +34,25 @@ def _reblock(array, nblocks):
     return [v.mean(axis=0) for v in vals]
 
 
-def reblock_summary(df, nblocks):
-    df = reblock(df, nblocks)
-    serr = df.sem()
-    d = {
-        "mean": df.mean(axis=0),
-        "standard error": serr,
-        "standard error error": serr / np.sqrt(2 * (len(df) - 1)),
-        "n_blocks": nblocks,
-    }
-    return pd.DataFrame(d)
+def reblock_summary(df, nblocks_list):
+    if not isinstance(nblocks_list, list):
+        assert isinstance(nblocks_list, int)
+        nblocks_list = [nblocks_list]
+
+    summary_data = []
+    for nblocks in nblocks_list:
+        rbdf = reblock(df, nblocks)
+        serr = rbdf.std() / np.sqrt(len(rbdf) - 1)
+        summary_data.append(
+            {
+                "mean": rbdf.mean(axis=0),
+                "standard error": serr,
+                "standard error error": serr / np.sqrt(2 * (len(rbdf) - 1)),
+                "nblocks": nblocks,
+                "nsteps_per_block": len(df) // nblocks,
+            }
+        )
+    return pd.DataFrame(summary_data)
 
 
 def optimally_reblocked(data):

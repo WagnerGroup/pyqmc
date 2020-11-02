@@ -34,9 +34,11 @@ def _reblock(array, nblocks):
     return [v.mean(axis=0) for v in vals]
 
 
-def reblock_summary(df, nblocks=20):
+def reblock_summary(df, nblocks=(16, 32, 48, 64)):
     if hasattr(nblocks, "__iter__"):
-        summary_data = [_reblock_summary_single(df, nb) for nb in nblocks]
+        summary_data = [
+            _reblock_summary_single(df, nb) for nb in nblocks if nb < len(df)
+        ]
     else:
         summary_data = _reblock_summary_single(df, nblocks)
     return pd.DataFrame(summary_data)

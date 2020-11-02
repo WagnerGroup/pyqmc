@@ -34,25 +34,24 @@ def _reblock(array, nblocks):
     return [v.mean(axis=0) for v in vals]
 
 
-def reblock_summary(df, nblocks_list=(10, 20, 40, 60, 80)):
-    if not isinstance(nblocks_list, list):
-        assert isinstance(nblocks_list, int)
-        nblocks_list = [nblocks_list]
-
-    summary_data = []
-    for nblocks in nblocks_list:
-        rbdf = reblock(df, nblocks)
-        serr = rbdf.std() / np.sqrt(len(rbdf) - 1)
-        summary_data.append(
-            {
-                "mean": rbdf.mean(axis=0),
-                "standard error": serr,
-                "standard error error": serr / np.sqrt(2 * (len(rbdf) - 1)),
-                "nblocks": nblocks,
-                "nsteps_per_block": len(df) // nblocks,
-            }
-        )
+def reblock_summary(df, nblocks=20):
+    if hasattr(nblocks, "__iter__"):
+        summary_data = [_reblock_summary_single(df, nb) for nb in nblocks]
+    else:
+        summary_data = _reblock_summary_single(df, nblocks)
     return pd.DataFrame(summary_data)
+
+
+def _reblock_summary_single(df, nblocks):
+    rbdf = reblock(df, nblocks)
+    serr = rbdf.std() / np.sqrt(len(rbdf) - 1)
+    return {
+        "mean": rbdf.mean(axis=0),
+        "standard error": serr,
+        "standard error error": serr / np.sqrt(2 * (len(rbdf) - 1)),
+        "nblocks": nblocks,
+        "nsteps_per_block": len(df) // nblocks,
+    }
 
 
 def optimally_reblocked(data):

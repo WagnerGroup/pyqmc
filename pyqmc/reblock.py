@@ -46,7 +46,9 @@ def reblock_summary(df, nblocks=(16, 32, 48, 64)):
 
 def _reblock_summary_single(df, nblocks):
     rbdf = reblock(df, nblocks)
-    serr = rbdf.std() / np.sqrt(len(rbdf) - 1)
+    if hasattr(rbdf, "values") and not hasattr(rbdf, "columns"):
+        rbdf = rbdf.values
+    serr = rbdf.std(axis=0) / np.sqrt(len(rbdf) - 1)
     return {
         "mean": rbdf.mean(axis=0),
         "standard error": serr,

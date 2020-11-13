@@ -3,7 +3,23 @@ import pyqmc.energy as energy
 from pyqmc.ewald import Ewald
 
 
-class EnergyAccumulator:
+class Accumulator:
+    """
+    Abstract class to define shared methods. 
+    
+    Required functions:
+    __call__: returns dictionary whose values are the quantities to average
+    shapes: returns dictionary with same keys as __call__, whose values are the shapes of the values self.avg(configs, wf) would return (without having to evaluate anything)
+    """
+
+    def avg(self, configs, wf):
+        return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
+
+    def keys(self):
+        return set(self.shapes().keys())
+
+
+class EnergyAccumulator(Accumulator):
     """returns energy of each configuration in a dictionary. 
   Keys and their meanings can be found in energy.energy """
 
@@ -31,15 +47,6 @@ class EnergyAccumulator:
 
     def __call__(self, configs, wf):
         return self.compute_energy(self.mol, configs, wf, self.threshold)
-
-    def avg(self, configs, wf):
-        d = {}
-        for k, it in self(configs, wf).items():
-            d[k] = np.mean(it, axis=0)
-        return d
-
-    def keys(self):
-        return set(["ke", "ee", "ei", "ecp", "total"])
 
     def shapes(self):
         return {"ke": (), "ee": (), "ei": (), "ecp": (), "total": ()}
@@ -112,7 +119,7 @@ class LinearTransform:
         return d
 
 
-class PGradTransform:
+class PGradTransform(Accumulator):
     """   """
 
     def __init__(self, enacc, transform, nodal_cutoff=1e-3):
@@ -186,9 +193,6 @@ class PGradTransform:
 
         return d
 
-    def keys(self):
-        return self.enacc.keys().union(["dpH", "dppsi", "dpidpj"])
-
     def shapes(self):
         nparms = np.sum([np.sum(opt) for opt in self.transform.to_opt.values()])
         d = {"dpH": (nparms,), "dppsi": (nparms,), "dpidpj": (nparms, nparms)}
@@ -196,7 +200,7 @@ class PGradTransform:
         return d
 
 
-class SqAccumulator:
+class SqAccumulator(Accumulator):
     r"""
     Accumulates structure factor 
 
@@ -228,12 +232,6 @@ class SqAccumulator:
         exp_iqr = np.exp(1j * np.inner(configs.configs, self.qlist))
         sum_exp_iqr = exp_iqr.sum(axis=1)
         return {"Sq": (sum_exp_iqr.real ** 2 + sum_exp_iqr.imag ** 2) / nelec}
-
-    def avg(self, configs, wf):
-        return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
-
-    def keys(self):
-        return set(["Sq"])
 
     def shapes(self):
         return {"Sq": (len(self.qlist),)}

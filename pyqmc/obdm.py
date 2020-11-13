@@ -3,9 +3,10 @@ import numpy as np
 from copy import deepcopy
 from pyqmc.mc import initial_guess
 from pyqmc import pbc, slater
+from pyqmc.accumulators import Accumulator
 
 
-class OBDMAccumulator:
+class OBDMAccumulator(Accumulator):
     r""" Return the obdm as an array with indices rho[spin][i][j] = <c_{spin,i}c^+_{spin,j}>
 
   .. math:: \rho^\sigma_{ij} = \langle c_{\sigma, i} c^\dagger_{\sigma, j} \rangle
@@ -170,9 +171,6 @@ class OBDMAccumulator:
 
         return results
 
-    def avg(self, configs, wf):
-        return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
-
     def get_extra_configs(self, configs):
         """ Returns an nstep length array of configurations
             starting from self._extra_config """
@@ -228,9 +226,6 @@ class OBDMAccumulator:
         ao = [aok * wrap_phase[k][:, np.newaxis] for k, aok in enumerate(ao)]
         borb = [aok.dot(ock) for aok, ock in zip(ao, self._orb_coeff)]
         return np.concatenate(borb, axis=1)
-
-    def keys(self):
-        return set(["value", "norm", "acceptance"])
 
     def shapes(self):
         norb = self.norb

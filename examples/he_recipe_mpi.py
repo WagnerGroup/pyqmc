@@ -1,7 +1,9 @@
+#You must run using if __name__ == "__main__" when using mpi4py
 if __name__ == "__main__":
     import pyscf
     import pyqmc
     import pyqmc.recipes
+    import mpi4py.futures
 
     mol = pyscf.gto.M(
         atom="He 0. 0. 0.", basis="ccECP_cc-pVDZ", ecp="ccecp", unit="bohr"
@@ -13,11 +15,14 @@ if __name__ == "__main__":
     jastrow_kws = {}
     slater_kws = {"optimize_orbitals": True}
 
-    pyqmc.recipes.OPTIMIZE(
-        "he_dft.hdf5", "he_sj.hdf5", jastrow_kws=jastrow_kws, slater_kws=slater_kws
-    )
+    npartitions=2
+    with mpi4py.futures.MPIPoolExecutor(max_workers=npartitions) as client:
+        pyqmc.recipes.OPTIMIZE(
+            "he_dft.hdf5", "he_sj.hdf5", jastrow_kws=jastrow_kws, slater_kws=slater_kws,
+            client=client, npartitions=npartitions
+        )   
 
-    pyqmc.recipes.VMC(
+        pyqmc.recipes.VMC(
         "he_dft.hdf5",
         "he_sj_vmc.hdf5",
         start_from="he_sj.hdf5",
@@ -25,9 +30,10 @@ if __name__ == "__main__":
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
         vmc_kws={"nblocks": 40},
+        client=client, npartitions=npartitions
     )
 
-    pyqmc.recipes.DMC(
+        pyqmc.recipes.DMC(
         "he_dft.hdf5",
         "he_sj_dmc.hdf5",
         start_from="he_sj.hdf5",
@@ -35,4 +41,5 @@ if __name__ == "__main__":
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
         dmc_kws={"nsteps": 4000, "tstep": 0.02},
+        client=client, npartitions=npartitions
     )

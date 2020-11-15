@@ -10,6 +10,23 @@ class OBDMAccumulator:
 
   .. math:: \rho^\sigma_{ij} = \langle c_{\sigma, i} c^\dagger_{\sigma, j} \rangle
 
+  We are measuring the amplitude of moving one electron (e.g. the first one) from orbital :math:`\phi_i` to orbital :math:`\phi_j` (Eq (7) of DOI:10.1063/1.4793531)
+
+  .. math:: \rho_{i,k} = \int dR dr' \Psi^*(R') \phi_k(r') \phi_i^*(r) \Psi(R)
+
+  (The complex conjugate is on the wrong orbital in Eq (7) in the paper.) Sampling :math:`R` from :math:`|\Psi(R)^2|` and :math:`r'` from :math:`f(r) = \sum_i |\phi(r)|^2`
+
+  .. math:: \rho_{i,k} = \int dR dr' \frac{\Psi^*(R')}{\Psi^*(R)} \left[\Psi^*(R) \Psi(R)\right] \frac{\phi_k(r') \phi_i^*(r)}{f(r)} \left[f(r)\right]
+
+  The distributions (in square brackets) are accounted for by the Monte Carlo integration
+
+  .. math:: \rho_{i,k} = \left\langle \frac{\Psi^*(R')}{\Psi^*(R)} \frac{\phi_k(r') \phi_i^*(r)}{f(r)} \right\rangle
+
+  Eq (9) in the paper is the complex conjugate of this
+
+  .. math:: \rho_{i,k}^* = \left\langle \frac{\Psi(R')}{\Psi(R)} \frac{\phi_k^*(r') \phi_i(r)}{f(r)} \right\rangle
+
+
   Args:
 
     mol (Mole): PySCF Mole object.
@@ -94,7 +111,8 @@ class OBDMAccumulator:
         self._extra_config = extra_configs[-1]
 
     def __call__(self, configs, wf, extra_configs=None, auxassignments=None):
-        """ Quantities from equation (9) of DOI:10.1063/1.4793531"""
+        """ 
+        """
 
         nconf = configs.configs.shape[0]
         dtype = complex if self.iscomplex else float
@@ -128,7 +146,7 @@ class OBDMAccumulator:
         bauxsquared = np.abs(borb_aux) ** 2
         fsum = np.sum(bauxsquared, axis=-1, keepdims=True)
         norm = bauxsquared / fsum
-        ba_f = borb_aux / fsum
+        baux_f = borb_aux / fsum
 
         for sweep, aux in enumerate(auxassignments):
             epos = extra_configs[sweep].configs[aux]
@@ -136,7 +154,11 @@ class OBDMAccumulator:
             wfratio = wf.testvalue_many(self._electrons, newconfigs)
 
             ratio = np.einsum(
-                "ie,ij,iek->ijk", wfratio, ba_f[sweep, aux], borb_configs, optimize=True
+                "ie,ij,iek->ijk",
+                wfratio.conj(),
+                baux_f[sweep, aux],
+                borb_configs.conj(),
+                optimize=True,
             )
 
             results["value"] += ratio
@@ -162,7 +184,7 @@ class OBDMAccumulator:
         return extra_configs, auxassignments
 
     def sample_onebody(self, configs, nsamples=1):
-        r""" For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i phi_i(r)^2`. """
+        r""" For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i \phi_i(r)^2`. """
         n = configs.configs.shape[0]
         borb = self.evaluate_orbitals(configs)
         fsum = (np.abs(borb) ** 2).sum(axis=1)
@@ -216,7 +238,7 @@ class OBDMAccumulator:
 
 
 def sample_onebody(mol, orb_coeff, configs, tstep=2.0):
-    r""" For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i phi_i(r)^2`. """
+    r""" For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i \phi_i(r)^2`. """
     n = configs.shape[0]
     config_pack = np.concatenate([configs, configs], axis=0)
     config_pack[n:] += np.sqrt(tstep) * np.random.randn(*configs.shape)

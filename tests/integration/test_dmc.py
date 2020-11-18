@@ -46,11 +46,12 @@ def test():
     )
 
     warmup = 200
+    branchtime = 5
     dfdmc, configs_, weights_ = rundmc(
         wf,
         configs,
-        nsteps=4000 + warmup,
-        branchtime=5,
+        nsteps=4000 + warmup * branchtime,
+        branchtime=branchtime,
         accumulators={"energy": EnergyAccumulator(mol)},
         ekey=("energy", "total"),
         tstep=0.01,

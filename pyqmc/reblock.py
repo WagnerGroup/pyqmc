@@ -34,16 +34,26 @@ def _reblock(array, nblocks):
     return [v.mean(axis=0) for v in vals]
 
 
-def reblock_summary(df, nblocks):
-    df = reblock(df, nblocks)
-    serr = df.sem()
-    d = {
-        "mean": df.mean(axis=0),
+def reblock_summary(df, nblocks=(16, 32, 48, 64)):
+    if hasattr(nblocks, "__iter__"):
+        summary_data = [
+            _reblock_summary_single(df, nb) for nb in nblocks if nb < len(df)
+        ]
+    else:
+        summary_data = _reblock_summary_single(df, nblocks)
+    return pd.DataFrame(summary_data)
+
+
+def _reblock_summary_single(df, nblocks):
+    rbdf = reblock(df, nblocks)
+    serr = rbdf.std() / np.sqrt(len(rbdf) - 1)
+    return {
+        "mean": rbdf.mean(axis=0),
         "standard error": serr,
-        "standard error error": serr / np.sqrt(2 * (len(df) - 1)),
-        "n_blocks": nblocks,
+        "standard error error": serr / np.sqrt(2 * (len(rbdf) - 1)),
+        "nblocks": nblocks,
+        "nsteps_per_block": len(df) // nblocks,
     }
-    return pd.DataFrame(d)
 
 
 def optimally_reblocked(data):

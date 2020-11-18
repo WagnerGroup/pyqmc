@@ -26,7 +26,7 @@ def test_wfs():
     mf = scf.RHF(mol).run()
     mf_rohf = scf.ROHF(mol).run()
     mf_uhf = scf.UHF(mol).run()
-    epsilon = 1e-4
+    epsilon = 1e-5
     nconf = 10
     epos = pyqmc.initial_guess(mol, nconf)
     for wf in [
@@ -47,6 +47,8 @@ def test_wfs():
 
         testwf.test_mask(wf, 0, epos)
 
+        _, epos = pyqmc.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node
+
         for fname, func in zip(
             ["gradient", "laplacian", "pgradient"],
             [
@@ -58,7 +60,7 @@ def test_wfs():
             err = []
             for delta in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8]:
                 err.append(func(wf, epos, delta)[0])
-            print(fname, min(err))
+            print(type(wf), fname, min(err))
             assert min(err) < epsilon, "epsilon {0}".format(epsilon)
 
 
@@ -106,6 +108,9 @@ def test_pbc_wfs():
         for k in wf.parameters:
             if "mo_coeff" not in k and k != "det_coeff":
                 wf.parameters[k] = np.random.rand(*wf.parameters[k].shape)
+
+        _, epos = pyqmc.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node
+
         for fname, func in zip(
             ["gradient", "laplacian", "pgradient"],
             [
@@ -117,7 +122,7 @@ def test_pbc_wfs():
             err = []
             for delta in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8]:
                 err.append(func(wf, epos, delta)[0])
-            print(fname, min(err))
+            print(type(wf), fname, min(err))
             assert min(err) < epsilon
 
         for k, item in testwf.test_updateinternals(wf, epos).items():

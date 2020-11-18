@@ -573,9 +573,12 @@ def optimize_orthogonal(
             overlap_derivatives[i + 1] = deriv_data["S_derivative"][0, :]
         print("normalization", normalization)
 
-        overlap_derivative = np.sum(
-            2.0 * (forcing * (overlaps - Starget))[:, np.newaxis] * overlap_derivatives,
-            axis=0,
+        delta = overlaps - Starget
+        delta_phase = delta / np.abs(delta)
+        overlap_derivative = np.einsum(
+            "j,jk->k",
+            2.0 * forcing * np.abs(delta),
+            np.real(overlap_derivatives / delta_phase[:, np.newaxis]),
         )
 
         total_derivative = energy_derivative + overlap_derivative

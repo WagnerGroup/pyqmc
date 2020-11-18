@@ -67,6 +67,8 @@ def default_jastrow_basis(mol, ion_cusp=False, na=4, nb=3, rcut=None):
         """polypade expansion coefficients 
         for n basis functions with first 
         coeff beta0"""
+        if n == 0:
+            return np.zeros(0)
         beta = np.zeros(n)
         beta[0] = beta0
         beta1 = np.log(beta0 + 1.00001)

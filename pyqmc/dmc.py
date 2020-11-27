@@ -140,11 +140,13 @@ def dmc_propagate(
         avg["weight"] = wavg
         avg["acceptance"] = np.mean(acc)
         df.append(avg)
-    df_ret = {}
     weight = np.asarray([d["weight"] for d in df])
     avg_weight = weight / np.mean(weight)
-    for k in df[0].keys():
-        df_ret[k] = np.mean([d[k] * w for d, w in zip(df, avg_weight)], axis=0)
+    df_ret = {
+        k: np.mean([d[k] * w for d, w in zip(df, avg_weight)], axis=0)
+        for k in df[0].keys()
+    }
+
     df_ret["weight"] = np.mean(weight)
 
     return df_ret, configs, weights
@@ -214,9 +216,17 @@ def limit_timestep(weights, elocnew, elocold, eref, start, stop):
     return np.clip((1 - (fbet - start)) / (stop - start), 0, 1)
 
 
+def find_branch_indices(weights):
+    nconfig = weights.shape[0]
+    wtot = np.sum(weights)
+    probability = np.cumsum(weights / wtot)
+    print(probability[-1]-1.0)
+    base = np.random.rand()
+    return np.searchsorted(probability, (base + np.arange(nconfig) / nconfig) % 1.0)
+
 def branch(configs, weights):
     """
-    Perform branching on a set of walkers  by stochastic reconfiguration
+    Perform branching on a set of walkers using the 'stochastic comb'
 
     Walkers are resampled with probability proportional to the weights, and the new weights are all set to be equal to the average weight.
     
@@ -231,10 +241,8 @@ def branch(configs, weights):
       weights: (nconfig,) all weights are equal to average weight
     """
     nconfig = configs.configs.shape[0]
-    wtot = np.sum(weights)
-    probability = np.cumsum(weights / wtot)
-    base = np.random.rand()
-    newinds = np.searchsorted(probability, (base + np.arange(nconfig) / nconfig) % 1.0)
+    wtot=np.sum(weights)
+    newinds = find_branch_indices(weights)
     configs.resample(newinds)
     weights.fill(wtot / nconfig)
     return configs, weights

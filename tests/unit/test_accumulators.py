@@ -64,7 +64,7 @@ def test_info_functions_pbc():
     mol.a = 5.61 * np.eye(3)
     mol.build()
 
-    mf = scf.KRHF(mol, kpts=mol.make_kpts([2, 2, 2])).density_fit()
+    mf = scf.KRKS(mol, kpts=mol.make_kpts([2, 2, 2])).density_fit()
     ehf = mf.kernel()
 
     supercell = get_supercell(mol, 2 * np.eye(3))

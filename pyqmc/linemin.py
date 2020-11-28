@@ -277,9 +277,6 @@ def correlated_compute(wf, configs, params, pgrad_acc):
 
     """
 
-    import copy
-    import numpy as np
-
     data = []
     psi0 = wf.recompute(configs)[1]  # recompute gives logdet
     for p in params:

@@ -166,15 +166,13 @@ def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **k
     confweight_avg = confweight / (np.mean(confweight) * npartitions)
     weight = np.array([w["weight"] for w in allresults[0]])
     weight_avg = weight / np.mean(weight)
-    block_avg = {}
-    for k in allresults[0][0].keys():
-        block_avg[k] = np.sum(
+    block_avg = {k: np.sum(
             [
                 res[k] * ww * cw
                 for res, cw, ww in zip(allresults[0], confweight_avg, weight_avg)
             ],
             axis=0,
-        )
+        ) for k in allresults[0][0].keys()}
     block_avg["weight"] = np.mean(weight)
     return block_avg, configs, weights
 
@@ -216,14 +214,6 @@ def limit_timestep(weights, elocnew, elocold, eref, start, stop):
     return np.clip((1 - (fbet - start)) / (stop - start), 0, 1)
 
 
-def find_branch_indices(weights):
-    nconfig = weights.shape[0]
-    wtot = np.sum(weights)
-    probability = np.cumsum(weights / wtot)
-    print(probability[-1]-1.0)
-    base = np.random.rand()
-    return np.searchsorted(probability, (base + np.arange(nconfig) / nconfig) % 1.0)
-
 def branch(configs, weights):
     """
     Perform branching on a set of walkers using the 'stochastic comb'
@@ -240,9 +230,12 @@ def branch(configs, weights):
 
       weights: (nconfig,) all weights are equal to average weight
     """
+
     nconfig = configs.configs.shape[0]
-    wtot=np.sum(weights)
-    newinds = find_branch_indices(weights)
+    probability = np.cumsum(weights)
+    wtot = probability[-1]
+    base = np.random.rand()
+    newinds = np.searchsorted(probability, (base + np.linspace(0,wtot,nconfig)) % wtot)
     configs.resample(newinds)
     weights.fill(wtot / nconfig)
     return configs, weights

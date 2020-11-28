@@ -140,11 +140,13 @@ def dmc_propagate(
         avg["weight"] = wavg
         avg["acceptance"] = np.mean(acc)
         df.append(avg)
-    df_ret = {}
     weight = np.asarray([d["weight"] for d in df])
     avg_weight = weight / np.mean(weight)
-    for k in df[0].keys():
-        df_ret[k] = np.mean([d[k] * w for d, w in zip(df, avg_weight)], axis=0)
+    df_ret = {
+        k: np.mean([d[k] * w for d, w in zip(df, avg_weight)], axis=0)
+        for k in df[0].keys()
+    }
+
     df_ret["weight"] = np.mean(weight)
 
     return df_ret, configs, weights
@@ -164,15 +166,13 @@ def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **k
     confweight_avg = confweight / (np.mean(confweight) * npartitions)
     weight = np.array([w["weight"] for w in allresults[0]])
     weight_avg = weight / np.mean(weight)
-    block_avg = {}
-    for k in allresults[0][0].keys():
-        block_avg[k] = np.sum(
+    block_avg = {k: np.sum(
             [
                 res[k] * ww * cw
                 for res, cw, ww in zip(allresults[0], confweight_avg, weight_avg)
             ],
             axis=0,
-        )
+        ) for k in allresults[0][0].keys()}
     block_avg["weight"] = np.mean(weight)
     return block_avg, configs, weights
 
@@ -216,7 +216,7 @@ def limit_timestep(weights, elocnew, elocold, eref, start, stop):
 
 def branch(configs, weights):
     """
-    Perform branching on a set of walkers  by stochastic reconfiguration
+    Perform branching on a set of walkers using the 'stochastic comb'
 
     Walkers are resampled with probability proportional to the weights, and the new weights are all set to be equal to the average weight.
     
@@ -230,11 +230,12 @@ def branch(configs, weights):
 
       weights: (nconfig,) all weights are equal to average weight
     """
+
     nconfig = configs.configs.shape[0]
-    wtot = np.sum(weights)
-    probability = np.cumsum(weights / wtot)
+    probability = np.cumsum(weights)
+    wtot = probability[-1]
     base = np.random.rand()
-    newinds = np.searchsorted(probability, (base + np.arange(nconfig) / nconfig) % 1.0)
+    newinds = np.searchsorted(probability, (base + np.linspace(0,wtot,nconfig)) % wtot)
     configs.resample(newinds)
     weights.fill(wtot / nconfig)
     return configs, weights

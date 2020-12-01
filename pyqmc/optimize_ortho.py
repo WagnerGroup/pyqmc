@@ -519,6 +519,19 @@ def optimize_orthogonal(
         correlated_options["client"] = client
         correlated_options["npartitions"] = npartitions
 
+    # warm up to equilibrate the configurations before running optimization
+    vmcoptions = {}
+ 
+    data, coords = pyqmc.mc.vmc(
+        wfs[-1],
+        coords,
+        accumulators={},
+        client=client,
+        npartitions=npartitions,
+        **vmcoptions
+    )
+
+
     # One set of configurations for every wave function
     allcoords = [coords.copy() for _ in wfs[:-1]]
     dtype = np.complex if wfs[-1].iscomplex else np.float

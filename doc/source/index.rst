@@ -14,6 +14,8 @@ Welcome to pyQMC's documentation!
    
    highlevel
 
+   developer
+
    methods
 
    wavefunction

@@ -217,7 +217,7 @@ mol, mf = recover_pyscf("dft.hdf5")
     import json
 
     with h5py.File(chkfile,'r') as f:
-        periodic = 'a' in json.loads(str(f['mol'][...])).keys()
+        periodic = 'a' in json.loads(f['mol'][()]).keys()
 
     if not periodic:
         mol = pyscf.lib.chkfile.load_mol(chkfile)

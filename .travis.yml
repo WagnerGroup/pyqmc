@@ -1,7 +1,9 @@
 language: python
 matrix:
-  - python: 3.7
+  - python: 
+    - 3.7
+    - 3.8
 before_install: 
   - sudo apt-get install -y git cmake make build-essential g++ liblapack-dev liblapack-pic liblapack3  gfortran 
-  - pip install numpy scipy matplotlib pandas h5py pytest pyscf
-script: PYTHONPATH=$TRAVIS_BUILD_DIR:$PYTHONPATH pytest --durations=100
+  - pip install numpy scipy matplotlib pandas h5py pytest pyscf pytest-rerunfailures
+script: PYTHONPATH=$TRAVIS_BUILD_DIR:$PYTHONPATH pytest --durations=100 --reruns 3

@@ -3,13 +3,11 @@ from pyqmc import pbc
 
 
 def sherman_morrison_row(e, inv, vec):
-    ratio = np.einsum("ij,ij->i", vec, inv[:, :, e])
     tmp = np.einsum("ek,ekj->ej", vec, inv)
-    invnew = (
-        inv
-        - np.einsum("ki,kj->kij", inv[:, :, e], tmp) / ratio[:, np.newaxis, np.newaxis]
-    )
-    invnew[:, :, e] = inv[:, :, e] / ratio[:, np.newaxis]
+    ratio = tmp[:, e]
+    inv_ratio = inv[:, :, e] / ratio[:, np.newaxis]
+    invnew = inv - np.einsum("ki,kj->kij", inv_ratio, tmp)
+    invnew[:, :, e] = inv_ratio
     return ratio, invnew
 
 

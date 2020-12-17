@@ -165,14 +165,14 @@ class MultiSlater:
             mask = [True] * epos.configs.shape[0]
         eeff = e - s * self._nelec[0]
         ao = np.real_if_close(
-            self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs), tol=1e4
+            self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs[mask]), tol=1e4
         )
-        self._aovals[:, e, :] = ao
+        self._aovals[mask, e, :] = ao
         mo = ao.dot(self.parameters[self._coefflookup[s]])
 
         mo_vals = mo[:, self._det_occup[s]]
         det_ratio, self._inverse[s][mask, :, :, :] = sherman_morrison_ms(
-            eeff, self._inverse[s][mask, :, :, :], mo_vals[mask, :]
+            eeff, self._inverse[s][mask, :, :, :], mo_vals
         )
 
         self._updateval(det_ratio, s, mask)

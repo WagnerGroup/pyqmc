@@ -218,11 +218,11 @@ class PySCFSlater:
         if mask is None:
             mask = [True] * epos.configs.shape[0]
         eeff = e - s * self._nelec[0]
-        aos = self.evaluate_orbitals(epos)
-        self._aovals[:, :, e, :] = np.asarray(aos)  # (kpt, config, ao)
-        mo = self.evaluate_mos(aos, s).reshape(len(mask), -1)
+        aos = self.evaluate_orbitals(epos, mask=mask)
+        self._aovals[:, mask, e, :] = np.asarray(aos)  # (kpt, config, ao)
+        mo = self.evaluate_mos(aos, s)
         ratio, self._inverse[s][mask, :, :] = sherman_morrison_row(
-            eeff, self._inverse[s][mask, :, :], mo[mask, :]
+            eeff, self._inverse[s][mask, :, :], mo
         )
         self._updateval(ratio, s, mask)
 

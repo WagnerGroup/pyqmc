@@ -269,4 +269,9 @@ read_wf(wf, "linemin.hdf5")
         if "wf" in hdf.keys():
             grp = hdf["wf"]
             for k in grp.keys():
-                wf.parameters[k] = np.array(grp[k])
+                new_parms = np.array(grp[k])
+                if wf.parameters[k].shape!=new_parms.shape:
+                    raise Exception(f"For wave function parameter {k}, shape in {wf_file} is {new_parms.shape}, while current shape is {wf.parameters[k].shape}")
+                wf.parameters[k] = new_parms
+        else:
+            raise Exception("Did not find wf in hdf file")

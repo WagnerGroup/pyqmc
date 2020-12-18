@@ -87,7 +87,7 @@ class MultiSlater:
         # find multi slater determinant occupation
         if hasattr(mc, "_strs"):
             # if this is a HCI object, it will have _strs
-            bigcis = np.abs(mc.ci > self.tol)
+            bigcis = np.abs(mc.ci) > self.tol
             nstrs = int(mc._strs.shape[1] / 2)
             # old code for single strings.
             # deters = [(c,bin(s[0]), bin(s[1])) for c, s in zip(mc.ci[bigcis],mc._strs[bigcis,:])]
@@ -95,8 +95,8 @@ class MultiSlater:
             # In pyscf, the first n/2 strings represent the up determinant and the second
             # represent the down determinant.
             for c, s in zip(mc.ci[bigcis], mc._strs[bigcis, :]):
-                s1 = "".join([str(bin(p)).replace("0b", "") for p in s[0:nstrs]])
-                s2 = "".join([str(bin(p)).replace("0b", "") for p in s[nstrs:]])
+                s1 = "".join(str(bin(p)).replace("0b", "") for p in s[0:nstrs])
+                s2 = "".join(str(bin(p)).replace("0b", "") for p in s[nstrs:])
                 deters.append((c, s1, s2))
         else:
             deters = fci.addons.large_ci(mc.ci, mc.ncas, mc.nelecas, tol=-1)
@@ -181,10 +181,9 @@ class MultiSlater:
         """Return logarithm of the wave function as noted in recompute()"""
         wf_val = 0
         wf_sign = 0
-
         wf_val = np.einsum(
-            "id,di->i",
-            self.parameters["det_coeff"][np.newaxis, :],
+            "d,di->i",
+            self.parameters["det_coeff"],
             self._dets[0][0, :, self._det_map[0]]
             * self._dets[1][0, :, self._det_map[1]]
             * np.exp(

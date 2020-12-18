@@ -3,13 +3,11 @@ from pyqmc import pbc
 
 
 def sherman_morrison_row(e, inv, vec):
-    ratio = np.einsum("ij,ij->i", vec, inv[:, :, e])
     tmp = np.einsum("ek,ekj->ej", vec, inv)
-    invnew = (
-        inv
-        - np.einsum("ki,kj->kij", inv[:, :, e], tmp) / ratio[:, np.newaxis, np.newaxis]
-    )
-    invnew[:, :, e] = inv[:, :, e] / ratio[:, np.newaxis]
+    ratio = tmp[:, e]
+    inv_ratio = inv[:, :, e] / ratio[:, np.newaxis]
+    invnew = inv - np.einsum("ki,kj->kij", inv_ratio, tmp)
+    invnew[:, :, e] = inv_ratio
     return ratio, invnew
 
 
@@ -220,11 +218,11 @@ class PySCFSlater:
         if mask is None:
             mask = [True] * epos.configs.shape[0]
         eeff = e - s * self._nelec[0]
-        aos = self.evaluate_orbitals(epos)
-        self._aovals[:, :, e, :] = np.asarray(aos)  # (kpt, config, ao)
-        mo = self.evaluate_mos(aos, s).reshape(len(mask), -1)
+        aos = self.evaluate_orbitals(epos, mask=mask)
+        self._aovals[:, mask, e, :] = np.asarray(aos)  # (kpt, config, ao)
+        mo = self.evaluate_mos(aos, s)
         ratio, self._inverse[s][mask, :, :] = sherman_morrison_row(
-            eeff, self._inverse[s][mask, :, :], mo[mask, :]
+            eeff, self._inverse[s][mask, :, :], mo
         )
         self._updateval(ratio, s, mask)
 

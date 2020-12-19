@@ -37,7 +37,7 @@ def run_test():
     cisolver.ci = civec[0]
     ci_energy = mf.energy_nuc() + e
 
-    tol = 0.1
+    tol = 0.0
     configs = pyqmc.initial_guess(mol, 1000)
     wf = pyqmc.multislater.MultiSlater(mol, mf, cisolver, tol=tol)
     data, configs = pyqmc.vmc(
@@ -49,6 +49,7 @@ def run_test():
     )
     en, err = avg(data["energytotal"][1:])
     nsigma = 4
+    assert len(wf.parameters['det_coeff']) == len(cisolver.ci)
     assert en - nsigma * err < e_hf
     assert en + nsigma * err > ci_energy
 

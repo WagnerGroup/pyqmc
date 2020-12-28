@@ -36,7 +36,7 @@ def get_complex_phase(x):
     return x / np.abs(x)
 
 
-def get_kinds(cell, mf, kpts, tol=1e-6):
+def get_k_indices(cell, mf, kpts, tol=1e-6):
     """Given a list of kpts, return inds such that mf.kpts[inds] is a list of kpts equivalent to the input list"""
     kdiffs = mf.kpts[np.newaxis] - kpts[:, np.newaxis]
     frac_kdiffs = np.dot(kdiffs, cell.lattice_vectors().T) / (2 * np.pi)
@@ -112,7 +112,7 @@ class PySCFSlater:
             twist = np.zeros(3)
         else:
             twist = np.dot(np.linalg.inv(cell.a), np.mod(twist, 1.0)) * 2 * np.pi
-        self.kinds = get_kinds(self._cell, mf, get_supercell_kpts(cell) + twist)
+        self.kinds = get_k_indices(self._cell, mf, get_supercell_kpts(cell) + twist)
         self._kpts = mf.kpts[self.kinds]
         assert len(self.kinds) == len(self._kpts), (self._kpts, mf.kpts)
         self.nk = len(self._kpts)

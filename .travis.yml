@@ -5,5 +5,6 @@ matrix:
     - 3.8
 before_install: 
   - sudo apt-get install -y git cmake make build-essential g++ liblapack-dev liblapack-pic liblapack3  gfortran libblas-dev
-  - pip install pytest pytest-rerunfailures  pyscf==1.7.6a1 numpy --upgrade
+  - pip install pytest pytest-rerunfailures 
+  - pip install -r requirements.txt --upgrade
 script: PYTHONPATH=$TRAVIS_BUILD_DIR:$PYTHONPATH pytest --durations=100 --reruns 3

@@ -3,13 +3,11 @@ from pyqmc import pbc
 
 
 def sherman_morrison_row(e, inv, vec):
-    ratio = np.einsum("ij,ij->i", vec, inv[:, :, e])
     tmp = np.einsum("ek,ekj->ej", vec, inv)
-    invnew = (
-        inv
-        - np.einsum("ki,kj->kij", inv[:, :, e], tmp) / ratio[:, np.newaxis, np.newaxis]
-    )
-    invnew[:, :, e] = inv[:, :, e] / ratio[:, np.newaxis]
+    ratio = tmp[:, e]
+    inv_ratio = inv[:, :, e] / ratio[:, np.newaxis]
+    invnew = inv - np.einsum("ki,kj->kij", inv_ratio, tmp)
+    invnew[:, :, e] = inv_ratio
     return ratio, invnew
 
 
@@ -38,7 +36,7 @@ def get_complex_phase(x):
     return x / np.abs(x)
 
 
-def get_kinds(cell, mf, kpts, tol=1e-6):
+def get_k_indices(cell, mf, kpts, tol=1e-6):
     """Given a list of kpts, return inds such that mf.kpts[inds] is a list of kpts equivalent to the input list"""
     kdiffs = mf.kpts[np.newaxis] - kpts[:, np.newaxis]
     frac_kdiffs = np.dot(kdiffs, cell.lattice_vectors().T) / (2 * np.pi)
@@ -121,7 +119,7 @@ class PySCFSlater:
             twist = np.zeros(3)
         else:
             twist = np.dot(np.linalg.inv(cell.a), np.mod(twist, 1.0)) * 2 * np.pi
-        self.kinds = get_kinds(self._cell, mf, get_supercell_kpts(cell) + twist)
+        self.kinds = get_k_indices(self._cell, mf, get_supercell_kpts(cell) + twist)
         self._kpts = mf.kpts[self.kinds]
         assert len(self.kinds) == len(self._kpts), (self._kpts, mf.kpts)
         self.nk = len(self._kpts)
@@ -237,11 +235,11 @@ class PySCFSlater:
         if mask is None:
             mask = [True] * epos.configs.shape[0]
         eeff = e - s * self._nelec[0]
-        aos = self.evaluate_orbitals(epos)
-        self._aovals[:, :, e, :] = np.asarray(aos)  # (kpt, config, ao)
-        mo = self.evaluate_mos(aos, s).reshape(len(mask), -1)
+        aos = self.evaluate_orbitals(epos, mask=mask)
+        self._aovals[:, mask, e, :] = np.asarray(aos)  # (kpt, config, ao)
+        mo = self.evaluate_mos(aos, s)
         ratio, self._inverse[s][mask, :, :] = sherman_morrison_row(
-            eeff, self._inverse[s][mask, :, :], mo[mask, :]
+            eeff, self._inverse[s][mask, :, :], mo
         )
         self._updateval(ratio, s, mask)
 

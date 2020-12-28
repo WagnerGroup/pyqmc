@@ -233,16 +233,25 @@ mol, mf = recover_pyscf("dft.hdf5")
         else:
             raise Exception("Couldn't determine type from chkfile")
     else: 
+        import pyscf.pbc
         mol = pyscf.pbc.lib.chkfile.load_cell(chkfile)
         with h5py.File(chkfile,'r') as f:
-            rhf = '000000' in f['/scf/mo_occ__from_list__/'].keys()
+            has_kpts = 'mo_occ__from_list__' in f['/scf'].keys()
+            if has_kpts:
+                rhf = '000000' in f['/scf/mo_occ__from_list__/'].keys()
+            else:
+                rhf = len(f['/scf/mo_occ'].shape)==1
         if cancel_outputs:
             mol.output = None
             mol.stdout = None
-        if not rhf:
+        if not rhf and has_kpts:
             mf = pyscf.pbc.scf.KUHF(mol)
-        else:
+        elif has_kpts:
             mf = pyscf.pbc.scf.KROHF(mol) if mol.spin !=0 else pyscf.pbc.scf.KRHF(mol)
+        elif rhf:
+            mf = pyscf.pbc.scf.ROHF(mol) if mol.spin !=0 else pyscf.pbc.scf.RHF(mol)
+        else:
+            mf = pyscf.pbc.scf.UHF(mol)
     mf.__dict__.update(pyscf.scf.chkfile.load(chkfile, "scf"))
     return mol, mf
 
@@ -269,4 +278,9 @@ read_wf(wf, "linemin.hdf5")
         if "wf" in hdf.keys():
             grp = hdf["wf"]
             for k in grp.keys():
-                wf.parameters[k] = np.array(grp[k])
+                new_parms = np.array(grp[k])
+                if wf.parameters[k].shape!=new_parms.shape:
+                    raise Exception(f"For wave function parameter {k}, shape in {wf_file} is {new_parms.shape}, while current shape is {wf.parameters[k].shape}")
+                wf.parameters[k] = new_parms
+        else:
+            raise Exception("Did not find wf in hdf file")

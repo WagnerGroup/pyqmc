@@ -142,11 +142,11 @@ class MultiSlaterPBC:
         if mask is None:
             mask = [True] * epos.configs.shape[0]
         eeff = e - s * self._nelec[0]
-        aos = self.evaluate_orbitals(epos)
-        self._aovals[:, :, e, :] = np.asarray(aos)
+        aos = self.evaluate_orbitals(epos, mask=mask)
+        self._aovals[:, mask, e, :] = np.asarray(aos)
         mo = self.evaluate_mos(aos, s)
         ratio, self._inverse[s][mask] = sherman_morrison_ms(
-            eeff, self._inverse[s][mask], mo[mask, :]
+            eeff, self._inverse[s][mask], mo
         )
         self._updateval(ratio, s, mask)
 

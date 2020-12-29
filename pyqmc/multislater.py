@@ -187,7 +187,7 @@ class MultiSlater:
         logvals = updets[1] - upref + dndets[1] - dnref
 
         wf_val = np.einsum(
-            "d,di->i", self.parameters["det_coeff"], phases * np.exp(logvals)
+            "d,id->i", self.parameters["det_coeff"], phases * np.exp(logvals)
         )
 
         wf_sign = self.get_phase(wf_val)

@@ -57,7 +57,7 @@ def default_slater(mol, mf, optimize_orbitals=False, twist=None, optimize_zeros=
     return wf, to_opt
 
 
-def default_multislater(mol, mf, mc, tol=None, optimize_orbitals=False):
+def default_multislater(mol, mf, mc, tol=None, optimize_orbitals=False,optimize_zeros=True, epsilon=1e-8):
     import numpy as np
 
     wf = MultiSlater(mol, mf, mc, tol)
@@ -67,6 +67,8 @@ def default_multislater(mol, mf, mc, tol=None, optimize_orbitals=False):
     if optimize_orbitals:
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             to_opt[k] = np.ones(wf.parameters[k].shape).astype(bool)
+            if not optimize_zeros:
+                to_opt[k][np.abs(wf.parameters[k]) < epsilon] = False
 
     return wf, to_opt
 

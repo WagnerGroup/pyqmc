@@ -36,13 +36,24 @@ def gradient_generator(mol, wf, to_opt=None, **ewald_kwargs):
     )
 
 
-def default_slater(mol, mf, optimize_orbitals=False, twist=None):
-
+def default_slater(mol, mf, optimize_orbitals=False, twist=None, optimize_zeros=True, epsilon=1e-8):
+    """
+    Construct a Slater determinant
+    Args:
+      optimize_orbitals (bool): make to_opt true for orbital parameters
+      twist (vector): The twist to extract from the mean-field object 
+      optimize_zeros (bool): optimize coefficients that are zero in the mean-field object
+    Returns:
+      slater, to_opt
+    """
     wf = PySCFSlater(mol, mf, twist=twist)
     to_opt = {}
     if optimize_orbitals:
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             to_opt[k] = np.ones(wf.parameters[k].shape).astype(bool)
+            if not optimize_zeros:
+                to_opt[k][np.abs(wf.parameters[k]) < epsilon] = False
+        
     return wf, to_opt
 
 

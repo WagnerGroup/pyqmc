@@ -27,10 +27,7 @@ mf.run()
 ```
 import pyqmc.recipes
 
-pyqmc.recipes.OPTIMIZE("mf.chk", "opt.chk", nconfig=1000,
-    linemin_kws={"max_iterations": 30 },
-    slater_kws={"optimize_orbitals": False},
-)
+pyqmc.recipes.OPTIMIZE("mf.chk", "opt.chk", nconfig=1000)
 ```
 
 ### VMC evaluation
@@ -41,7 +38,6 @@ import pyqmc.recipes
 pyqmc.recipes.VMC("scf.chk", "vmc.chk", 
     start_from="opt.chk", 
     accumulators={"energy": True, "rdm1": True},
-    vmc_kws={"nblocks": 100},
 )
 ```
 
@@ -53,6 +49,5 @@ import pyqmc.recipes
 pyqmc.recipes.DMC("scf.chk", "dmc.chk", 
     start_from="opt.chk", 
     accumulators={"energy": True, "rdm1": True},
-    vmc_kws={"nblocks": 100},
 )
 ```

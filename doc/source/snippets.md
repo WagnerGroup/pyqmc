@@ -33,3 +33,69 @@ def run_si_qmc(chkfile="si_scf.chk"):
     pyqmc.recipes.OPTIMIZE(chkfile, "si_opt.chk", S=S)
     pyqmc.recipes.DMC(chkfile, "si_dmc.chk", start_from="si_opt.chk", S=S)
 ```
+
+
+### MPI parallelization
+
+You must put the execution in an `if __name__=="__main__"` block; otherwise `mpi4py` will not work.
+
+```
+from mpi4py.futures import MPIPoolExecutor
+import mpi4py.MPI
+import pyqmc.recipes
+
+if __name__=="__main__":
+    comm = mpi4py.MPI.COMM_WORLD
+    npartitions= comm.Get_size()-1
+    with MPIPoolExecutor(max_workers=npartitions) as client:
+        pyqmc.recipes.OPTIMIZE("h2o.hdf5", "h2o_opt_mpi.hdf5", client=client, npartitions=npartitions)
+```
+
+One of the MPI ranks gets used as the main thread. So if you want to run it on 2 processors, you can do:
+```
+mpiexec -n 3 python -m mpi4py.futures test_mpi.py
+```
+
+
+### Single node parallelization (without MPI)
+
+```
+from concurrent.futures import ProcessPoolExecutor
+if __name__=="__main__":
+    npartitions = 2
+    with ProcessPoolExecutor(max_workers=npartitions) as client:
+        pyqmc.recipes.OPTIMIZE("h2o.hdf5", "h2o_opt_mpi.hdf5", client=client, npartitions=npartitions)
+```
+
+### Define a new accumulator
+
+This simple accumulator computes the average x,y, and z position of electrons. 
+This is done in the `__call__` function; `configs.configs` is a numpy array of [walker, electron, xyz].
+Note that if you run in parallel, you must define the class at the global scope. 
+
+```
+import numpy as np
+class DipoleAccumulator:
+    def __init__(self):
+        pass
+
+    def __call__(self, configs, wf):
+        return {'electric_dipole':np.sum(configs.configs,axis=1) } 
+
+    def shapes(self):
+        return {"electric_dipole": (3,)}
+
+    def avg(self, configs, wf):
+        d = {}
+        for k, it in self(configs, wf).items():
+            d[k] = np.mean(it, axis=0)
+        return d
+
+    def keys(self):
+        return set(k in self.shapes().keys())
+
+import pyqmc.recipes
+pyqmc.recipes.VMC("h2o.hdf5", "dipole.hdf5", 
+                  start_from="h2o_sj_800.hdf5", 
+                  accumulators={'extra_accumulators':{'dipole':DipoleAccumulator()}})
+```

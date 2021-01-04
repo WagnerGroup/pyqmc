@@ -99,7 +99,7 @@ pyqmc.recipes.DMC("h2o.hdf5",f"h2o_sj_dmc_800.hdf5", start_from=f"h2o_sj_800.hdf
 
 ### Check DMC warmup
 
-To analyze the DMC resutls we can use `read_mc_output` as well. 
+To analyze the DMC results we can use `read_mc_output` as well. 
 
 ```
 import pyqmc.recipes

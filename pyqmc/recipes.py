@@ -10,6 +10,7 @@ def OPTIMIZE(
     dft_checkfile,
     output,
     nconfig=1000,
+    ci_checkfile = None,
     start_from=None,
     S=None,
     client=None,
@@ -20,12 +21,20 @@ def OPTIMIZE(
 ):
     if linemin_kws is None:
         linemin_kws = {}
-    mol, mf = pyqmc.recover_pyscf(dft_checkfile)
+
+    target_root=0
+    if ci_checkfile is None:
+        mol, mf = pyqmc.recover_pyscf(dft_checkfile)
+        mc = None
+    else:
+        mol, mf, mc = pyqmc.recover_pyscf(dft_checkfile, ci_checkfile=ci_checkfile)
+        mc.ci=mc.ci[target_root]
+
     if S is not None:
         mol = pyqmc.get_supercell(mol, np.asarray(S))
 
     wf, to_opt = pyqmc.generate_wf(
-        mol, mf, jastrow_kws=jastrow_kws, slater_kws=slater_kws
+        mol, mf, mc = mc, jastrow_kws=jastrow_kws, slater_kws=slater_kws
     )
     if start_from is not None:
         pyqmc.read_wf(wf, start_from)
@@ -69,6 +78,7 @@ def VMC(
     dft_checkfile,
     output,
     nconfig=1000,
+    ci_checkfile=None,
     start_from=None,
     S=None,
     client=None,
@@ -80,14 +90,22 @@ def VMC(
 ):
     if vmc_kws is None:
         vmc_kws = {}
-    mol, mf = pyqmc.recover_pyscf(dft_checkfile)
+
+    target_root=0
+    if ci_checkfile is None:
+        mol, mf = pyqmc.recover_pyscf(dft_checkfile)
+        mc = None
+    else:
+        mol, mf, mc = pyqmc.recover_pyscf(dft_checkfile, ci_checkfile=ci_checkfile)
+        mc.ci=mc.ci[target_root]
+
     if S is not None:
         mol = pyqmc.get_supercell(mol, np.asarray(S))
 
     if accumulators is None:
         accumulators = {}
 
-    wf, _ = pyqmc.generate_wf(mol, mf, jastrow_kws=jastrow_kws, slater_kws=slater_kws)
+    wf, _ = pyqmc.generate_wf(mol, mf, mc = mc, jastrow_kws=jastrow_kws, slater_kws=slater_kws)
 
     if start_from is not None:
         pyqmc.read_wf(wf, start_from)
@@ -121,7 +139,15 @@ def DMC(
 ):
     if dmc_kws is None:
         dmc_kws = {}
-    mol, mf = pyqmc.recover_pyscf(dft_checkfile)
+
+    target_root=0
+    if ci_checkfile is None:
+        mol, mf = pyqmc.recover_pyscf(dft_checkfile)
+        mc = None
+    else:
+        mol, mf, mc = pyqmc.recover_pyscf(dft_checkfile, ci_checkfile=ci_checkfile)
+        mc.ci=mc.ci[target_root]
+
     if S is not None:
         mol = pyqmc.get_supercell(mol, np.asarray(S))
     if accumulators is None:

@@ -208,7 +208,7 @@ def generate_wf(
     return wf, to_opt
 
 
-def recover_pyscf(chkfile, cancel_outputs=True):
+def recover_pyscf(chkfile, ci_checkfile=None, cancel_outputs=True):
     """Generate pyscf objects from a pyscf checkfile, in a way that is easy to use for pyqmc. The chkfile should be saved by setting mf.chkfile in a pyscf SCF object. 
     
 It is recommended to write and recover the objects, rather than trying to use pyscf objects directly when dask parallelization is being used, since by default the pyscf objects contain unserializable objects. (this may be changed in the future)
@@ -266,6 +266,18 @@ mol, mf = recover_pyscf("dft.hdf5")
         else:
             mf = pyscf.pbc.scf.UHF(mol)
     mf.__dict__.update(pyscf.scf.chkfile.load(chkfile, "scf"))
+
+    if ci_checkfile is not None:
+        with h5py.File(ci_checkfile,'r') as f:
+            hci='ci/_strs' in f.keys()
+        if hci:            
+            mc = pyscf.hci.SCI(mol)
+        else:
+            import pyscf.casci
+            mc = pyscf.casci.CASCI(mol)
+        mc.__dict__.update(pyscf.lib.chkfile.load(ci_checkfile,'ci'))
+
+        return mol, mf, mc
     return mol, mf
 
 

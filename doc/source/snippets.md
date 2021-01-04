@@ -34,6 +34,65 @@ def run_si_qmc(chkfile="si_scf.chk"):
     pyqmc.recipes.DMC(chkfile, "si_dmc.chk", start_from="si_opt.chk", S=S)
 ```
 
+### Orbital optimization
+
+```
+pyqmc.recipes.OPTIMIZE(chkfile, "opt.chk",slater_kws={'optimize_orbitals':True,'optimize_zeros':False})
+```
+
+### Selected CI wave function
+
+Most of the effort is in setting up and saving the CI coefficients correctly, which is done in `run_hci()` here. 
+You can copy `run_hci()` and use it on any system.
+
+```
+import pyqmc
+import pyscf
+import pyscf.hci
+import pyqmc.recipes
+import numpy as np
+from pyscf import gto, scf
+
+def run_mf(chkfile):
+    mol = gto.M(
+        atom="""
+        O 0.0000000, 0.000000, 0.00000000
+        H 0.761561 , 0.478993, 0.00000000
+        H -0.761561, 0.478993, 0.00000000""",
+        basis="ccecp-ccpvdz",
+        ecp={"O": "ccecp"},
+    )
+    mf = scf.RHF(mol)
+    mf.chkfile = chkfile
+    mf.run()
+
+
+def run_hci(hf_chkfile, chkfile, select_cutoff=0.1, nroots=4):
+    mol, mf = pyqmc.recover_pyscf(hf_chkfile, cancel_outputs=False)
+    cisolver = pyscf.hci.SCI(mol)
+    cisolver.select_cutoff=select_cutoff
+    cisolver.nroots=nroots
+    nmo = mf.mo_coeff.shape[1]
+    nelec = mol.nelec
+    h1 = mf.mo_coeff.T.dot(mf.get_hcore()).dot(mf.mo_coeff)
+    h2 = pyscf.ao2mo.full(mol, mf.mo_coeff)
+    e, civec = cisolver.kernel(h1, h2, nmo, nelec)
+    pyscf.lib.chkfile.save(chkfile,'ci',
+    {'ci':np.array(civec),
+        'nmo':nmo,
+        'nelec':nelec,
+        '_strs':cisolver._strs,
+        'select_cutoff':select_cutoff,
+        'energy':e+mol.energy_nuc(),
+    })
+
+
+if __name__=="__main__":
+    run_mf("mf.chk")
+    run_hci("mf.chk","hci.chk")
+    pyqmc.recipes.OPTIMIZE("mf.chk", "opt.chk", ci_checkfile="hci.chk", nconfig=1000)
+```
+
 
 ### MPI parallelization
 

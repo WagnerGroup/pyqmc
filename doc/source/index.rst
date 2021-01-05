@@ -12,7 +12,7 @@ Welcome to pyQMC's documentation!
 
    install
    tutorial
-   howto
+   snippets
    specific_instructions
    developer
 

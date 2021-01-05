@@ -1,4 +1,4 @@
-Snippets
+HOWTOs
 --------------------
 
 ### Periodic systems

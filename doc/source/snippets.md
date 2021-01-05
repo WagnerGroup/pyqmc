@@ -151,7 +151,7 @@ class DipoleAccumulator:
         return d
 
     def keys(self):
-        return set(k in self.shapes().keys())
+        return self.shapes().keys()
 
 import pyqmc.recipes
 pyqmc.recipes.VMC("h2o.hdf5", "dipole.hdf5", 

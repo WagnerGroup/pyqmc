@@ -317,3 +317,4 @@ read_wf(wf, "linemin.hdf5")
                 wf.parameters[k] = new_parms
         else:
             raise Exception("Did not find wf in hdf file")
+    return wf

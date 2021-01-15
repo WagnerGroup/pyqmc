@@ -60,11 +60,11 @@ def test_info_functions_pbc():
     from pyscf.pbc import gto, scf
     from pyqmc.supercell import get_supercell
 
-    mol = gto.Cell(atom="He 0.00 0.00 0.00", basis="ccpvdz", unit="B")
+    mol = gto.Cell(atom="He 0.00 0.00 0.00", basis="gth-szv", pseudo='gth-pade', unit="B")
     mol.a = 5.61 * np.eye(3)
     mol.build()
 
-    mf = scf.KRHF(mol, kpts=mol.make_kpts([2, 2, 2])).density_fit()
+    mf = scf.KRKS(mol, kpts=mol.make_kpts([2, 2, 2])) #.density_fit()
     ehf = mf.kernel()
 
     supercell = get_supercell(mol, 2 * np.eye(3))

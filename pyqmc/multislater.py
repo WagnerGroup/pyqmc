@@ -54,21 +54,21 @@ class MultiSlater:
         self.parameters = {}
         self._mol = mol
         if hasattr(mc, "nelecas"):
-            #In case nelecas overrode the information from the molecule object.
+            # In case nelecas overrode the information from the molecule object.
             self._nelec = (mc.nelecas[0] + mc.ncore, mc.nelecas[1] + mc.ncore)
         else:
             self._nelec = mol.nelec
         self._copy_ci(mc)
-        mo_coeff = mc.mo_coeff if hasattr(mc, 'mo_coeff') else mf.mo_coeff
-        mo_cutoff_alpha = np.max(self._det_occup[0])+1
-        mo_cutoff_beta = np.max(self._det_occup[1])+1
+        mo_coeff = mc.mo_coeff if hasattr(mc, "mo_coeff") else mf.mo_coeff
+        mo_cutoff_alpha = np.max(self._det_occup[0]) + 1
+        mo_cutoff_beta = np.max(self._det_occup[1]) + 1
 
         if len(mo_coeff.shape) == 3:
-            self.parameters["mo_coeff_alpha"] = mo_coeff[0][:, : mo_cutoff_alpha]
-            self.parameters["mo_coeff_beta"] = mo_coeff[1][:, : mo_cutoff_beta]
+            self.parameters["mo_coeff_alpha"] = mo_coeff[0][:, :mo_cutoff_alpha]
+            self.parameters["mo_coeff_beta"] = mo_coeff[1][:, :mo_cutoff_beta]
         else:
-            self.parameters["mo_coeff_alpha"] = mo_coeff[:, : mo_cutoff_alpha]
-            self.parameters["mo_coeff_beta"] = mo_coeff[:, : mo_cutoff_beta]
+            self.parameters["mo_coeff_alpha"] = mo_coeff[:, :mo_cutoff_alpha]
+            self.parameters["mo_coeff_beta"] = mo_coeff[:, :mo_cutoff_beta]
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
         self.pbc_str = "PBC" if hasattr(mol, "a") else ""
         self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
@@ -82,22 +82,22 @@ class MultiSlater:
         """
         from pyscf import fci
 
-        ncore = mc.ncore if hasattr(mc, 'ncore') else 0
+        ncore = mc.ncore if hasattr(mc, "ncore") else 0
 
         # find multi slater determinant occupation
-        if hasattr(mc, '_strs'):
-            #if this is a HCI object, it will have _strs
-            bigcis = np.abs(mc.ci > self.tol)
-            nstrs = int(mc._strs.shape[1]/2)
-            #old code for single strings. 
-            #deters = [(c,bin(s[0]), bin(s[1])) for c, s in zip(mc.ci[bigcis],mc._strs[bigcis,:])]
+        if hasattr(mc, "_strs"):
+            # if this is a HCI object, it will have _strs
+            bigcis = np.abs(mc.ci) > self.tol
+            nstrs = int(mc._strs.shape[1] / 2)
+            # old code for single strings.
+            # deters = [(c,bin(s[0]), bin(s[1])) for c, s in zip(mc.ci[bigcis],mc._strs[bigcis,:])]
             deters = []
-            # In pyscf, the first n/2 strings represent the up determinant and the second 
+            # In pyscf, the first n/2 strings represent the up determinant and the second
             # represent the down determinant.
-            for c, s in zip(mc.ci[bigcis],mc._strs[bigcis,:]):
-                s1 = "".join([str(bin(p)).replace("0b","") for p in s[0:nstrs]])
-                s2 = "".join([str(bin(p)).replace("0b","") for p in s[nstrs:]])
-                deters.append((c,s1,s2))
+            for c, s in zip(mc.ci[bigcis], mc._strs[bigcis, :]):
+                s1 = "".join(str(bin(p)).replace("0b", "") for p in s[0:nstrs])
+                s2 = "".join(str(bin(p)).replace("0b", "") for p in s[nstrs:])
+                deters.append((c, s1, s2))
         else:
             deters = fci.addons.large_ci(mc.ci, mc.ncas, mc.nelecas, tol=-1)
 
@@ -165,37 +165,34 @@ class MultiSlater:
             mask = [True] * epos.configs.shape[0]
         eeff = e - s * self._nelec[0]
         ao = np.real_if_close(
-            self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs), tol=1e4
+            self._mol.eval_gto(self.pbc_str + "GTOval_sph", epos.configs[mask]), tol=1e4
         )
-        self._aovals[:, e, :] = ao
+        self._aovals[mask, e, :] = ao
         mo = ao.dot(self.parameters[self._coefflookup[s]])
 
         mo_vals = mo[:, self._det_occup[s]]
         det_ratio, self._inverse[s][mask, :, :, :] = sherman_morrison_ms(
-            eeff, self._inverse[s][mask, :, :, :], mo_vals[mask, :]
+            eeff, self._inverse[s][mask, :, :, :], mo_vals
         )
 
         self._updateval(det_ratio, s, mask)
 
     def value(self):
         """Return logarithm of the wave function as noted in recompute()"""
-        wf_val = 0
-        wf_sign = 0
+        updets = self._dets[0][:, :, self._det_map[0]]
+        dndets = self._dets[1][:, :, self._det_map[1]]
+        upref = np.amax(self._dets[0][1])
+        dnref = np.amax(self._dets[1][1])
+        phases = updets[0] * dndets[0]
+        logvals = updets[1] - upref + dndets[1] - dnref
 
         wf_val = np.einsum(
-            "id,di->i",
-            self.parameters["det_coeff"][np.newaxis, :],
-            self._dets[0][0, :, self._det_map[0]]
-            * self._dets[1][0, :, self._det_map[1]]
-            * np.exp(
-                self._dets[0][1, :, self._det_map[0]]
-                + self._dets[1][1, :, self._det_map[1]]
-            ),
+            "d,id->i", self.parameters["det_coeff"], phases * np.exp(logvals)
         )
 
         wf_sign = self.get_phase(wf_val)
-        wf_val = np.log(np.abs(wf_val))
-        return wf_sign, wf_val
+        wf_logval = np.log(np.abs(wf_val)) + upref + dnref
+        return wf_sign, wf_logval
 
     def _updateval(self, ratio, s, mask):
         self._dets[s][0, mask, :] *= self.get_phase(ratio)

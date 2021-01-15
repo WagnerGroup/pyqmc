@@ -1,6 +1,6 @@
 import numpy as np
 from pyqmc.multislater import sherman_morrison_ms
-from pyqmc.slater import get_kinds
+from pyqmc.slater import get_k_indices
 from pyqmc.supercell import get_supercell_kpts
 from pyqmc import pbc, slater
 
@@ -41,7 +41,7 @@ class MultiSlaterPBC:
             twist = np.zeros(3)
         else:
             twist = np.dot(np.linalg.inv(supercell.a), np.mod(twist, 1.0)) * 2 * np.pi
-        self.kinds = get_kinds(self._mol, mf, get_supercell_kpts(supercell) + twist)
+        self.kinds = get_k_indices(self._mol, mf, get_supercell_kpts(supercell) + twist)
         self._kpts = mf.kpts[self.kinds]
         assert len(self.kinds) == len(self._kpts), (self._kpts, mf.kpts)
         self.nk = len(self._kpts)
@@ -142,11 +142,11 @@ class MultiSlaterPBC:
         if mask is None:
             mask = [True] * epos.configs.shape[0]
         eeff = e - s * self._nelec[0]
-        aos = self.evaluate_orbitals(epos)
-        self._aovals[:, :, e, :] = np.asarray(aos)
+        aos = self.evaluate_orbitals(epos, mask=mask)
+        self._aovals[:, mask, e, :] = np.asarray(aos)
         mo = self.evaluate_mos(aos, s)
         ratio, self._inverse[s][mask] = sherman_morrison_ms(
-            eeff, self._inverse[s][mask], mo[mask, :]
+            eeff, self._inverse[s][mask], mo
         )
         self._updateval(ratio, s, mask)
 

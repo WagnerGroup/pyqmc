@@ -11,7 +11,6 @@ class EnergyAccumulator:
         self.mol = mol
         self.threshold = threshold
         if hasattr(mol, "a"):
-            #print("EnergyAccumulator using Ewald\n", kwargs)
             self.ewald = Ewald(mol, **kwargs)
 
             def compute_energy(mol, configs, wf, threshold):
@@ -182,7 +181,7 @@ class PGradTransform:
         d["dpH"] = np.einsum("i,ij->j", energy, weights[:, np.newaxis] * dp_regularized)
         d["dppsi"] = np.average(dp_regularized, weights=weights, axis=0)
         d["dpidpj"] = np.einsum(
-            "ij,ik->jk", dp, weights[:, np.newaxis] * dp_regularized
+            "ij,ik->jk", dp, weights[:, np.newaxis] * dp_regularized, optimize=True
         )
 
         return d

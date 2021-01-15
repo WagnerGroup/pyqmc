@@ -3,13 +3,11 @@ from pyqmc import pbc
 
 
 def sherman_morrison_row(e, inv, vec):
-    ratio = np.einsum("ij,ij->i", vec, inv[:, :, e])
     tmp = np.einsum("ek,ekj->ej", vec, inv)
-    invnew = (
-        inv
-        - np.einsum("ki,kj->kij", inv[:, :, e], tmp) / ratio[:, np.newaxis, np.newaxis]
-    )
-    invnew[:, :, e] = inv[:, :, e] / ratio[:, np.newaxis]
+    ratio = tmp[:, e]
+    inv_ratio = inv[:, :, e] / ratio[:, np.newaxis]
+    invnew = inv - np.einsum("ki,kj->kij", inv_ratio, tmp)
+    invnew[:, :, e] = inv_ratio
     return ratio, invnew
 
 
@@ -38,7 +36,7 @@ def get_complex_phase(x):
     return x / np.abs(x)
 
 
-def get_kinds(cell, mf, kpts, tol=1e-6):
+def get_k_indices(cell, mf, kpts, tol=1e-6):
     """Given a list of kpts, return inds such that mf.kpts[inds] is a list of kpts equivalent to the input list"""
     kdiffs = mf.kpts[np.newaxis] - kpts[:, np.newaxis]
     frac_kdiffs = np.dot(kdiffs, cell.lattice_vectors().T) / (2 * np.pi)
@@ -58,7 +56,7 @@ class PySCFSlater:
           mf: scf object of primitive cell calculation. scf calculation must include k points that fold onto the gamma point of the supercell
           twist: (3,) array, twisted boundary condition in fractional coordinates, i.e. as coefficients of the reciprocal lattice vectors of the supercell. Integer values are equivalent to zero.
         """
-        self.parameters = {'det_coeff':np.array([1.0])}
+        self.parameters = {"det_coeff": np.array([1.0])}
         self.real_tol = 1e4
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
 
@@ -114,7 +112,7 @@ class PySCFSlater:
             twist = np.zeros(3)
         else:
             twist = np.dot(np.linalg.inv(cell.a), np.mod(twist, 1.0)) * 2 * np.pi
-        self.kinds = get_kinds(self._cell, mf, get_supercell_kpts(cell) + twist)
+        self.kinds = get_k_indices(self._cell, mf, get_supercell_kpts(cell) + twist)
         self._kpts = mf.kpts[self.kinds]
         assert len(self.kinds) == len(self._kpts), (self._kpts, mf.kpts)
         self.nk = len(self._kpts)
@@ -220,11 +218,11 @@ class PySCFSlater:
         if mask is None:
             mask = [True] * epos.configs.shape[0]
         eeff = e - s * self._nelec[0]
-        aos = self.evaluate_orbitals(epos)
-        self._aovals[:, :, e, :] = np.asarray(aos)  # (kpt, config, ao)
-        mo = self.evaluate_mos(aos, s).reshape(len(mask), -1)
+        aos = self.evaluate_orbitals(epos, mask=mask)
+        self._aovals[:, mask, e, :] = np.asarray(aos)  # (kpt, config, ao)
+        mo = self.evaluate_mos(aos, s)
         ratio, self._inverse[s][mask, :, :] = sherman_morrison_row(
-            eeff, self._inverse[s][mask, :, :], mo[mask, :]
+            eeff, self._inverse[s][mask, :, :], mo
         )
         self._updateval(ratio, s, mask)
 
@@ -236,7 +234,12 @@ class PySCFSlater:
 
     def value(self):
         """Return logarithm of the wave function as noted in recompute()"""
-        return self._dets[0][0] * self._dets[1][0], self._dets[0][1] + self._dets[1][1] + np.log(np.abs(self.parameters['det_coeff'][0]))
+        return (
+            self._dets[0][0] * self._dets[1][0],
+            self._dets[0][1]
+            + self._dets[1][1]
+            + np.log(np.abs(self.parameters["det_coeff"][0])),
+        )
 
     def _testrow(self, e, vec, mask=None, spin=None):
         """vec is a nconfig,nmo vector which replaces row e"""
@@ -305,8 +308,8 @@ class PySCFSlater:
         return ratios[1:-1] / ratios[:1], ratios[-1] / ratios[0]
 
     def pgradient(self):
-        d = {'det_coeff':np.zeros(self._aovals.shape[-3])}
-        for parm in ['mo_coeff_alpha','mo_coeff_beta']:
+        d = {"det_coeff": np.zeros(self._aovals.shape[-3])}
+        for parm in ["mo_coeff_alpha", "mo_coeff_beta"]:
             s = int("beta" in parm)
             # Get AOs for our spin channel only
             i0, i1 = s * self._nelec[0], self._nelec[0] + s * self._nelec[1]

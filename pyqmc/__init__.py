@@ -260,8 +260,3 @@ read_wf(wf, "linemin.hdf5")
             grp = hdf["wf"]
             for k in grp.keys():
                 wf.parameters[k] = np.array(grp[k])
-
-    wf.iscomplex = bool(sum(map(np.iscomplexobj, wf.parameters.values())))
-    if hasattr(wf, "_kpts"):
-        wf.iscomplex = wf.iscomplex or np.linalg.norm(wf._kpts) > 1e-12
-    wf.dtype = complex if wf.iscomplex else float

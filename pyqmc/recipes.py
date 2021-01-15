@@ -5,11 +5,13 @@ import h5py
 import pyqmc.reblock
 import scipy.stats
 import pandas as pd
+import copy
 
 
 def OPTIMIZE(
     dft_checkfile,
     output,
+    anchors=None,
     nconfig=1000,
     ci_checkfile=None,
     start_from=None,
@@ -42,16 +44,30 @@ def OPTIMIZE(
 
     configs = pyqmc.initial_guess(mol, nconfig)
     acc = pyqmc.gradient_generator(mol, wf, to_opt)
-    pyqmc.line_minimization(
-        wf,
-        configs,
-        acc,
-        verbose=True,
-        hdf_file=output,
-        client=client,
-        npartitions=npartitions,
-        **linemin_kws
-    )
+    if anchors is None:
+        pyqmc.line_minimization(
+            wf,
+            configs,
+            acc,
+            verbose=True,
+            hdf_file=output,
+            client=client,
+            npartitions=npartitions,
+            **linemin_kws
+        )
+    else:
+        wfs = [pyqmc.read_wf(copy.deepcopy(wf), a) for a in anchors]
+        wfs.append(wf)
+        pyqmc.optimize_orthogonal(
+            wfs,
+            configs,
+            acc,
+            # verbose=True,
+            hdf_file=output,
+            client=client,
+            npartitions=npartitions,
+            **linemin_kws
+        )
 
 
 def generate_accumulators(mol, mf, energy=True, rdm1=False, extra_accumulators=None):

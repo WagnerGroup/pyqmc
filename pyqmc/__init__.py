@@ -1,4 +1,5 @@
 name = "pyqmc"
+from pyqmc.recipes import OPTIMIZE, VMC, DMC
 from pyqmc.mc import vmc, initial_guess
 from pyqmc.slater import PySCFSlater
 from pyqmc.multislater import MultiSlater

@@ -7,22 +7,14 @@ Welcome to pyQMC's documentation!
 =================================
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Contents:
 
    install
-   
-   highlevel
-
-   methods
-
-   wavefunction
-
-   
-   accumulators
-
-   func3d
-   testwf
+   tutorial
+   snippets
+   specific_instructions
+   developer
 
 Indices and tables
 ==================

@@ -389,6 +389,7 @@ def optimize_orthogonal(
     tstep=0.1,
     max_iterations=30,
     warmup=5,
+    warmup_options=None,
     Ntarget=0.5,
     max_step=10.0,
     hdf_file=None,
@@ -426,6 +427,8 @@ def optimize_orthogonal(
         :tstep: Maximum timestep for line minimization, or timestep when line minimization is off
 
         :max_iterations: Number of optimization steps to take
+
+        :warmup_options: a dictionary of options for warm up vmc
 
         :Starget: An array-like of length len(wfs)-1, which indicates the target overlap for each reference wave function.
 
@@ -518,6 +521,20 @@ def optimize_orthogonal(
         sample_options["npartitions"] = npartitions
         correlated_options["client"] = client
         correlated_options["npartitions"] = npartitions
+
+    # warm up to equilibrate the configurations before running optimization
+    if warmup_options is None:
+        warmup_options = {}
+ 
+    data, coords = pyqmc.mc.vmc(
+        wfs[-1],
+        coords,
+        accumulators={},
+        client=client,
+        npartitions=npartitions,
+        **warmup_options
+    )
+
 
     # One set of configurations for every wave function
     allcoords = [coords.copy() for _ in wfs[:-1]]

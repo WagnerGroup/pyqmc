@@ -36,17 +36,28 @@ def gradient_generator(mol, wf, to_opt=None, **ewald_kwargs):
     )
 
 
-def default_slater(mol, mf, optimize_orbitals=False, twist=None):
-
+def default_slater(mol, mf, optimize_orbitals=False, twist=None, optimize_zeros=True, epsilon=1e-8):
+    """
+    Construct a Slater determinant
+    Args:
+      optimize_orbitals (bool): make to_opt true for orbital parameters
+      twist (vector): The twist to extract from the mean-field object 
+      optimize_zeros (bool): optimize coefficients that are zero in the mean-field object
+    Returns:
+      slater, to_opt
+    """
     wf = PySCFSlater(mol, mf, twist=twist)
     to_opt = {}
     if optimize_orbitals:
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             to_opt[k] = np.ones(wf.parameters[k].shape).astype(bool)
+            if not optimize_zeros:
+                to_opt[k][np.abs(wf.parameters[k]) < epsilon] = False
+        
     return wf, to_opt
 
 
-def default_multislater(mol, mf, mc, tol=None, optimize_orbitals=False):
+def default_multislater(mol, mf, mc, tol=None, optimize_orbitals=False,optimize_zeros=True, epsilon=1e-8):
     import numpy as np
 
     wf = MultiSlater(mol, mf, mc, tol)
@@ -56,6 +67,8 @@ def default_multislater(mol, mf, mc, tol=None, optimize_orbitals=False):
     if optimize_orbitals:
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             to_opt[k] = np.ones(wf.parameters[k].shape).astype(bool)
+            if not optimize_zeros:
+                to_opt[k][np.abs(wf.parameters[k]) < epsilon] = False
 
     return wf, to_opt
 
@@ -112,7 +125,6 @@ def default_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
             print("Warning: using both ECP and ion_cusp")
     elif ion_cusp is None:
         ion_cusp = [l for l in mol._basis.keys() if l not in mol._ecp.keys()]
-        print("default ion_cusp:", ion_cusp)
     else:
         assert isinstance(ion_cusp, list)
 
@@ -200,10 +212,10 @@ def generate_wf(
     return wf, to_opt
 
 
-def recover_pyscf(chkfile, cancel_outputs=True):
+def recover_pyscf(chkfile, ci_checkfile=None, cancel_outputs=True):
     """Generate pyscf objects from a pyscf checkfile, in a way that is easy to use for pyqmc. The chkfile should be saved by setting mf.chkfile in a pyscf SCF object. 
     
-It is recommended to write and recover the objects, rather than trying to use pyscf objects directly when dask parallelization is being used, since by default the pyscf objects 
+It is recommended to write and recover the objects, rather than trying to use pyscf objects directly when dask parallelization is being used, since by default the pyscf objects contain unserializable objects. (this may be changed in the future)
 
 cancel_outputs will set the outputs of the objects to None. You may need to make cancel_outputs False if you are using this to input to other pyscf functions.
 
@@ -218,26 +230,58 @@ mol, mf = recover_pyscf("dft.hdf5")
 """
 
     import pyscf
+    import h5py
+    import json
 
-    mol = pyscf.lib.chkfile.load_mol(chkfile)
-    if cancel_outputs:
-        mol.output = None
-        mol.stdout = None
+    with h5py.File(chkfile,'r') as f:
+        periodic = 'a' in json.loads(f['mol'][()]).keys()
 
-    if hasattr(mol, "a"):
-        from pyscf import pbc
-
-        mol = pbc.lib.chkfile.load_cell(chkfile)
+    if not periodic:
+        mol = pyscf.lib.chkfile.load_mol(chkfile)
+        with h5py.File(chkfile,'r') as f:
+            mo_occ_shape = f['scf/mo_occ'].shape
         if cancel_outputs:
             mol.output = None
             mol.stdout = None
-        mf = pbc.scf.KRHF(mol)
-    else:
-        # It actually doesn't matter what type of object we make it for
-        # pyqmc. Now if you try to run this, it might cause issues.
-        mf = pyscf.scf.RHF(mol)
-
+        if len(mo_occ_shape)==2:
+            mf = pyscf.scf.UHF(mol)
+        elif len(mo_occ_shape)==1:
+            mf = pyscf.scf.ROHF(mol) if mol.spin !=0 else pyscf.scf.RHF(mol)
+        else:
+            raise Exception("Couldn't determine type from chkfile")
+    else: 
+        import pyscf.pbc
+        mol = pyscf.pbc.lib.chkfile.load_cell(chkfile)
+        with h5py.File(chkfile,'r') as f:
+            has_kpts = 'mo_occ__from_list__' in f['/scf'].keys()
+            if has_kpts:
+                rhf = '000000' in f['/scf/mo_occ__from_list__/'].keys()
+            else:
+                rhf = len(f['/scf/mo_occ'].shape)==1
+        if cancel_outputs:
+            mol.output = None
+            mol.stdout = None
+        if not rhf and has_kpts:
+            mf = pyscf.pbc.scf.KUHF(mol)
+        elif has_kpts:
+            mf = pyscf.pbc.scf.KROHF(mol) if mol.spin !=0 else pyscf.pbc.scf.KRHF(mol)
+        elif rhf:
+            mf = pyscf.pbc.scf.ROHF(mol) if mol.spin !=0 else pyscf.pbc.scf.RHF(mol)
+        else:
+            mf = pyscf.pbc.scf.UHF(mol)
     mf.__dict__.update(pyscf.scf.chkfile.load(chkfile, "scf"))
+
+    if ci_checkfile is not None:
+        with h5py.File(ci_checkfile,'r') as f:
+            hci='ci/_strs' in f.keys()
+        if hci:            
+            mc = pyscf.hci.SCI(mol)
+        else:
+            import pyscf.casci
+            mc = pyscf.casci.CASCI(mol)
+        mc.__dict__.update(pyscf.lib.chkfile.load(ci_checkfile,'ci'))
+
+        return mol, mf, mc
     return mol, mf
 
 
@@ -263,4 +307,9 @@ read_wf(wf, "linemin.hdf5")
         if "wf" in hdf.keys():
             grp = hdf["wf"]
             for k in grp.keys():
-                wf.parameters[k] = np.array(grp[k])
+                new_parms = np.array(grp[k])
+                if wf.parameters[k].shape!=new_parms.shape:
+                    raise Exception(f"For wave function parameter {k}, shape in {wf_file} is {new_parms.shape}, while current shape is {wf.parameters[k].shape}")
+                wf.parameters[k] = new_parms
+        else:
+            raise Exception("Did not find wf in hdf file")

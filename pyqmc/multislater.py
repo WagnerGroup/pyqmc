@@ -179,22 +179,20 @@ class MultiSlater:
 
     def value(self):
         """Return logarithm of the wave function as noted in recompute()"""
-        wf_val = 0
-        wf_sign = 0
+        updets = self._dets[0][:, :, self._det_map[0]]
+        dndets = self._dets[1][:, :, self._det_map[1]]
+        upref = np.amax(self._dets[0][1])
+        dnref = np.amax(self._dets[1][1])
+        phases = updets[0] * dndets[0]
+        logvals = updets[1] - upref + dndets[1] - dnref
+
         wf_val = np.einsum(
-            "d,di->i",
-            self.parameters["det_coeff"],
-            self._dets[0][0, :, self._det_map[0]]
-            * self._dets[1][0, :, self._det_map[1]]
-            * np.exp(
-                self._dets[0][1, :, self._det_map[0]]
-                + self._dets[1][1, :, self._det_map[1]]
-            ),
+            "d,id->i", self.parameters["det_coeff"], phases * np.exp(logvals)
         )
 
         wf_sign = self.get_phase(wf_val)
-        wf_val = np.log(np.abs(wf_val))
-        return wf_sign, wf_val
+        wf_logval = np.log(np.abs(wf_val)) + upref + dnref
+        return wf_sign, wf_logval
 
     def _updateval(self, ratio, s, mask):
         self._dets[s][0, mask, :] *= self.get_phase(ratio)

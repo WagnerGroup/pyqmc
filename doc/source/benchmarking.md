@@ -1,7 +1,7 @@
-Developer information 
+Benchmarking 
 -------------------------------
 
-### Performance profiling
+### Performance profiling using asv
 Benchmarks are present in the /benchmark directory in the repository. These benchmarks can be run directly, or using [asv](https://asv.readthedocs.io).
 
 

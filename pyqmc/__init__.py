@@ -36,17 +36,28 @@ def gradient_generator(mol, wf, to_opt=None, **ewald_kwargs):
     )
 
 
-def default_slater(mol, mf, optimize_orbitals=False, twist=None):
-
+def default_slater(mol, mf, optimize_orbitals=False, twist=None, optimize_zeros=True, epsilon=1e-8):
+    """
+    Construct a Slater determinant
+    Args:
+      optimize_orbitals (bool): make to_opt true for orbital parameters
+      twist (vector): The twist to extract from the mean-field object 
+      optimize_zeros (bool): optimize coefficients that are zero in the mean-field object
+    Returns:
+      slater, to_opt
+    """
     wf = PySCFSlater(mol, mf, twist=twist)
     to_opt = {}
     if optimize_orbitals:
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             to_opt[k] = np.ones(wf.parameters[k].shape).astype(bool)
+            if not optimize_zeros:
+                to_opt[k][np.abs(wf.parameters[k]) < epsilon] = False
+        
     return wf, to_opt
 
 
-def default_multislater(mol, mf, mc, tol=None, optimize_orbitals=False):
+def default_multislater(mol, mf, mc, tol=None, optimize_orbitals=False,optimize_zeros=True, epsilon=1e-8):
     import numpy as np
 
     wf = MultiSlater(mol, mf, mc, tol)
@@ -56,6 +67,8 @@ def default_multislater(mol, mf, mc, tol=None, optimize_orbitals=False):
     if optimize_orbitals:
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             to_opt[k] = np.ones(wf.parameters[k].shape).astype(bool)
+            if not optimize_zeros:
+                to_opt[k][np.abs(wf.parameters[k]) < epsilon] = False
 
     return wf, to_opt
 
@@ -195,7 +208,7 @@ def generate_wf(
     return wf, to_opt
 
 
-def recover_pyscf(chkfile, cancel_outputs=True):
+def recover_pyscf(chkfile, ci_checkfile=None, cancel_outputs=True):
     """Generate pyscf objects from a pyscf checkfile, in a way that is easy to use for pyqmc. The chkfile should be saved by setting mf.chkfile in a pyscf SCF object. 
     
 It is recommended to write and recover the objects, rather than trying to use pyscf objects directly when dask parallelization is being used, since by default the pyscf objects contain unserializable objects. (this may be changed in the future)
@@ -253,6 +266,18 @@ mol, mf = recover_pyscf("dft.hdf5")
         else:
             mf = pyscf.pbc.scf.UHF(mol)
     mf.__dict__.update(pyscf.scf.chkfile.load(chkfile, "scf"))
+
+    if ci_checkfile is not None:
+        with h5py.File(ci_checkfile,'r') as f:
+            hci='ci/_strs' in f.keys()
+        if hci:            
+            mc = pyscf.hci.SCI(mol)
+        else:
+            import pyscf.casci
+            mc = pyscf.casci.CASCI(mol)
+        mc.__dict__.update(pyscf.lib.chkfile.load(ci_checkfile,'ci'))
+
+        return mol, mf, mc
     return mol, mf
 
 

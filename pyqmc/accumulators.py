@@ -11,21 +11,8 @@ class EnergyAccumulator:
         self.mol = mol
         self.threshold = threshold
         if hasattr(mol, "a"):
-            self.ewald = Ewald(mol, **kwargs)
-
-            def compute_energy(mol, configs, wf, threshold):
-                ee, ei, ii = self.ewald.energy(configs)
-                ecp_val = energy.get_ecp(mol, configs, wf, threshold)
-                ke = energy.kinetic(configs, wf)
-                return {
-                    "ke": ke,
-                    "ee": ee,
-                    "ei": ei,
-                    "ecp": ecp_val,
-                    "total": ke + ee + ei + ecp_val + ii,
-                }
-
-            self.compute_energy = compute_energy
+            ewald = Ewald(mol, **kwargs)
+            self.compute_energy = ewald.compute_total_energy
         else:
             self.compute_energy = energy.energy
 

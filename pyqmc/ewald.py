@@ -190,7 +190,9 @@ class Ewald:
         return -ne * self.i_sum * self.ijconst
 
     def e_single(self, ne):
-        return 0.5 * (ne - 1) * self.ijconst - self.i_sum * self.ijconst + self.squareconst
+        return (
+            0.5 * (ne - 1) * self.ijconst - self.i_sum * self.ijconst + self.squareconst
+        )
 
     def ewald_ion(self):
         r"""

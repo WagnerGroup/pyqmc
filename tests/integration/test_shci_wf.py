@@ -49,7 +49,7 @@ def run_test():
     )
     en, err = avg(data["energytotal"][1:])
     nsigma = 4
-    assert len(wf.parameters['det_coeff']) == len(cisolver.ci)
+    assert len(wf.parameters["det_coeff"]) == len(cisolver.ci)
     assert en - nsigma * err < e_hf
     assert en + nsigma * err > ci_energy
 

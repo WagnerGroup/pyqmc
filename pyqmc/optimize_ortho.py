@@ -525,7 +525,7 @@ def optimize_orthogonal(
     # warm up to equilibrate the configurations before running optimization
     if warmup_options is None:
         warmup_options = {}
- 
+
     data, coords = pyqmc.mc.vmc(
         wfs[-1],
         coords,
@@ -534,7 +534,6 @@ def optimize_orthogonal(
         npartitions=npartitions,
         **warmup_options
     )
-
 
     # One set of configurations for every wave function
     allcoords = [coords.copy() for _ in wfs[:-1]]

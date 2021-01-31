@@ -242,7 +242,7 @@ class PolyPadeFunction:
         Returns:
           grad, lap: (nconfig,...,3) vectors (components of laplacian d^2/dx_i^2 separately)
         """
-        grad=np.zeros(rvec.shape)
+        grad = np.zeros(rvec.shape)
         lap = np.zeros(rvec.shape)
         mask = r < self.parameters["rcut"]
         r = r[mask, np.newaxis]
@@ -258,7 +258,9 @@ class PolyPadeFunction:
         d2pdz2_over_dpdz = (3 * z - 1) / (z * (z - 1))
         d2bdp2_over_dbdp = -2 * beta / (1 + beta * p)
         d2zdx2 = (1 - (rvec / r) ** 2) / (r * self.parameters["rcut"])
-        lap[mask] = grad[mask] * (d2bdp2_over_dbdp * dpdz * dzdx + d2pdz2_over_dpdz * dzdx)
+        lap[mask] = grad[mask] * (
+            d2bdp2_over_dbdp * dpdz * dzdx + d2pdz2_over_dpdz * dzdx
+        )
         lap[mask] += dbdp * dpdz * d2zdx2
         return grad, lap
 

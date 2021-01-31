@@ -5,8 +5,8 @@ from pyqmc.slater import sherman_morrison_row
 def test_sherman_morrison():
     ratio_err, inv_err = run_sherman_morrison()
 
-    assert ratio_err < 1e-13, f"ratios don't match {npratio} {smratio}"
-    assert inv_err < 1e-13, "inverses don't match"
+    assert ratio_err < 1e-13, f"ratios don't match {ratio_err}"
+    assert inv_err < 1e-13, f"inverses don't match {inv_err}"
 
 
 def run_sherman_morrison():

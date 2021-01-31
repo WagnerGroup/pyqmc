@@ -129,6 +129,7 @@ def DMC(
     output,
     nconfig=1000,
     start_from=None,
+    ci_checkfile=None,
     S=None,
     client=None,
     npartitions=None,

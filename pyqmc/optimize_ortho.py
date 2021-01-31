@@ -77,7 +77,7 @@ from pyqmc.mc import limdrift
 
 def construct_rho_gradient(grads, log_values):
     total_grad = np.zeros_like(grads[0])
-    for g, v in zip(grads, values):
+    for g, v in zip(grads, log_values):
         denominator = np.sum(np.exp(2 * np.real(log_values - v)))
         total_grad += g / denominator
     return total_grad

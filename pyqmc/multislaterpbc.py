@@ -246,7 +246,7 @@ class MultiSlaterPBC:
         ratios = np.zeros((epos.configs.shape[0], e.shape[0]), dtype=self.dtype)
         for spin in [0, 1]:
             ind = s == spin
-            mo = self.evaluate_mos(aos, spin)
+            mo = self.evaluate_mos(ao, spin)
             mo = mo.reshape(nmask, *epos.configs.shape[1:-1], -1, self._nelec[spin])
             ratios[:, ind] = self._testrow(e[ind], mo, mask=mask, spin=spin)
         return ratios

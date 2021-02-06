@@ -16,7 +16,7 @@ mol = pyscf.gto.M(
 )
 
 mf = pyscf.scf.RHF(mol)
-mf.chkfile = "mf.chk"
+mf.chkfile = "h2o.hdf5"
 mf.kernel()
 ```
 

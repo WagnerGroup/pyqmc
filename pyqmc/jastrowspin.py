@@ -30,8 +30,8 @@ class JastrowSpin:
         self.parameters = {}
         self._nelec = np.sum(mol.nelec)
         self._mol = mol
-        self.parameters["bcoeff"] = np.zeros((nexpand, 3))
-        self.parameters["acoeff"] = np.zeros((self._mol.natm, aexpand, 2))
+        self.parameters["bcoeff"] = np.zeros((len(b_basis), 3))
+        self.parameters["acoeff"] = np.zeros((self._mol.natm, len(a_basis), 2))
         self.iscomplex = False
 
     def recompute(self, configs):

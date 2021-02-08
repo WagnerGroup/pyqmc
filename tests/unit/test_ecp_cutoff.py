@@ -2,10 +2,10 @@ import pandas as pd
 from pyqmc.mc import vmc, initial_guess
 from pyscf import gto, scf, mcscf
 from pyqmc.slater import PySCFSlater
-from pyqmc.jastrowspin import JastrowSpin
 from pyqmc.accumulators import EnergyAccumulator
 from pyqmc.multiplywf import MultiplyWF
 from pyqmc.multislater import MultiSlater
+from pyqmc import default_jastrow
 import numpy as np
 import time
 
@@ -26,8 +26,8 @@ def test_ecp():
     ind = 0
     for wf in [
         PySCFSlater(mol, mf),
-        JastrowSpin(mol),
-        MultiplyWF(PySCFSlater(mol, mf), JastrowSpin(mol)),
+        default_jastrow(mol)[0],
+        MultiplyWF(PySCFSlater(mol, mf), default_jastrow(mol)[0]),
     ]:
         wf.recompute(coords)
         print(label[ind])

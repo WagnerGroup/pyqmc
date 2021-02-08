@@ -78,22 +78,21 @@ def default_multislater(
     return wf, to_opt
 
 
+def expand_beta_qwalk(beta0, n):
+    """polypade expansion coefficients 
+    for n basis functions with first 
+    coeff beta0"""
+    if n == 0:
+        return np.zeros(0)
+    beta = np.zeros(n)
+    beta[0] = beta0
+    beta1 = np.log(beta0 + 1.00001)
+    for i in range(1, n):
+        beta[i] = np.exp(beta1 + 1.6 * i) - 1
+    return beta
+
+
 def default_jastrow_basis(mol, ion_cusp=False, na=4, nb=3, rcut=None):
-    import numpy as np
-
-    def expand_beta_qwalk(beta0, n):
-        """polypade expansion coefficients 
-        for n basis functions with first 
-        coeff beta0"""
-        if n == 0:
-            return np.zeros(0)
-        beta = np.zeros(n)
-        beta[0] = beta0
-        beta1 = np.log(beta0 + 1.00001)
-        for i in range(1, n):
-            beta[i] = np.exp(beta1 + 1.6 * i) - 1
-        return beta
-
     if rcut is None:
         if hasattr(mol, "a"):
             rcut = np.amin(np.pi / np.linalg.norm(mol.reciprocal_vectors(), axis=1))

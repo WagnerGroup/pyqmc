@@ -1,4 +1,5 @@
 
+![Python package](https://github.com/WagnerGroup/pyqmc/workflows/Python%20package/badge.svg)
 [![Build Status](https://travis-ci.com/WagnerGroup/pyqmc.svg?branch=master)](https://travis-ci.com/WagnerGroup/pyqmc)
 [![Documentation Status](https://readthedocs.org/projects/pyqmc/badge/?version=latest)](https://pyqmc.readthedocs.io/en/latest/?badge=latest)
 [![Gitter chat](https://badges.gitter.im/gitterHQ/gitter.png)](https://gitter.im//pyqmc/community)

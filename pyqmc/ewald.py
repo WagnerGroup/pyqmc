@@ -1,6 +1,7 @@
 import numpy as np
 import pyqmc
 from scipy.special import erfc
+import pyqmc.energy
 
 
 class Ewald:
@@ -190,7 +191,9 @@ class Ewald:
         return -ne * self.i_sum * self.ijconst
 
     def e_single(self, ne):
-        return 0.5 * (ne - 1) * self.ijconst - self.i_sum * self.ijconst + self.squareconst
+        return (
+            0.5 * (ne - 1) * self.ijconst - self.i_sum * self.ijconst + self.squareconst
+        )
 
     def ewald_ion(self):
         r"""
@@ -385,3 +388,15 @@ class Ewald:
         Vtest[:, -1] += 2 * ei_recip_separated
 
         return Vtest
+
+    def compute_total_energy(self, mol, configs, wf, threshold):
+        ee, ei, ii = self.energy(configs)
+        ecp_val = pyqmc.energy.get_ecp(mol, configs, wf, threshold)
+        ke = pyqmc.energy.kinetic(configs, wf)
+        return {
+            "ke": ke,
+            "ee": ee,
+            "ei": ei,
+            "ecp": ecp_val,
+            "total": ke + ee + ei + ecp_val + ii,
+        }

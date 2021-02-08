@@ -1,4 +1,5 @@
 name = "pyqmc"
+from pyqmc.recipes import OPTIMIZE, VMC, DMC
 from pyqmc.mc import vmc, initial_guess
 from pyqmc.slater import PySCFSlater
 from pyqmc.multislater import MultiSlater
@@ -36,7 +37,9 @@ def gradient_generator(mol, wf, to_opt=None, **ewald_kwargs):
     )
 
 
-def default_slater(mol, mf, optimize_orbitals=False, twist=None, optimize_zeros=True, epsilon=1e-8):
+def default_slater(
+    mol, mf, optimize_orbitals=False, twist=None, optimize_zeros=True, epsilon=1e-8
+):
     """
     Construct a Slater determinant
     Args:
@@ -53,11 +56,13 @@ def default_slater(mol, mf, optimize_orbitals=False, twist=None, optimize_zeros=
             to_opt[k] = np.ones(wf.parameters[k].shape).astype(bool)
             if not optimize_zeros:
                 to_opt[k][np.abs(wf.parameters[k]) < epsilon] = False
-        
+
     return wf, to_opt
 
 
-def default_multislater(mol, mf, mc, tol=None, optimize_orbitals=False,optimize_zeros=True, epsilon=1e-8):
+def default_multislater(
+    mol, mf, mc, tol=None, optimize_orbitals=False, optimize_zeros=True, epsilon=1e-8
+):
     import numpy as np
 
     wf = MultiSlater(mol, mf, mc, tol)
@@ -233,53 +238,55 @@ mol, mf = recover_pyscf("dft.hdf5")
     import h5py
     import json
 
-    with h5py.File(chkfile,'r') as f:
-        periodic = 'a' in json.loads(f['mol'][()]).keys()
+    with h5py.File(chkfile, "r") as f:
+        periodic = "a" in json.loads(f["mol"][()]).keys()
 
     if not periodic:
         mol = pyscf.lib.chkfile.load_mol(chkfile)
-        with h5py.File(chkfile,'r') as f:
-            mo_occ_shape = f['scf/mo_occ'].shape
+        with h5py.File(chkfile, "r") as f:
+            mo_occ_shape = f["scf/mo_occ"].shape
         if cancel_outputs:
             mol.output = None
             mol.stdout = None
-        if len(mo_occ_shape)==2:
+        if len(mo_occ_shape) == 2:
             mf = pyscf.scf.UHF(mol)
-        elif len(mo_occ_shape)==1:
-            mf = pyscf.scf.ROHF(mol) if mol.spin !=0 else pyscf.scf.RHF(mol)
+        elif len(mo_occ_shape) == 1:
+            mf = pyscf.scf.ROHF(mol) if mol.spin != 0 else pyscf.scf.RHF(mol)
         else:
             raise Exception("Couldn't determine type from chkfile")
-    else: 
+    else:
         import pyscf.pbc
+
         mol = pyscf.pbc.lib.chkfile.load_cell(chkfile)
-        with h5py.File(chkfile,'r') as f:
-            has_kpts = 'mo_occ__from_list__' in f['/scf'].keys()
+        with h5py.File(chkfile, "r") as f:
+            has_kpts = "mo_occ__from_list__" in f["/scf"].keys()
             if has_kpts:
-                rhf = '000000' in f['/scf/mo_occ__from_list__/'].keys()
+                rhf = "000000" in f["/scf/mo_occ__from_list__/"].keys()
             else:
-                rhf = len(f['/scf/mo_occ'].shape)==1
+                rhf = len(f["/scf/mo_occ"].shape) == 1
         if cancel_outputs:
             mol.output = None
             mol.stdout = None
         if not rhf and has_kpts:
             mf = pyscf.pbc.scf.KUHF(mol)
         elif has_kpts:
-            mf = pyscf.pbc.scf.KROHF(mol) if mol.spin !=0 else pyscf.pbc.scf.KRHF(mol)
+            mf = pyscf.pbc.scf.KROHF(mol) if mol.spin != 0 else pyscf.pbc.scf.KRHF(mol)
         elif rhf:
-            mf = pyscf.pbc.scf.ROHF(mol) if mol.spin !=0 else pyscf.pbc.scf.RHF(mol)
+            mf = pyscf.pbc.scf.ROHF(mol) if mol.spin != 0 else pyscf.pbc.scf.RHF(mol)
         else:
             mf = pyscf.pbc.scf.UHF(mol)
     mf.__dict__.update(pyscf.scf.chkfile.load(chkfile, "scf"))
 
     if ci_checkfile is not None:
-        with h5py.File(ci_checkfile,'r') as f:
-            hci='ci/_strs' in f.keys()
-        if hci:            
+        with h5py.File(ci_checkfile, "r") as f:
+            hci = "ci/_strs" in f.keys()
+        if hci:
             mc = pyscf.hci.SCI(mol)
         else:
             import pyscf.casci
+
             mc = pyscf.casci.CASCI(mol)
-        mc.__dict__.update(pyscf.lib.chkfile.load(ci_checkfile,'ci'))
+        mc.__dict__.update(pyscf.lib.chkfile.load(ci_checkfile, "ci"))
 
         return mol, mf, mc
     return mol, mf
@@ -308,8 +315,10 @@ read_wf(wf, "linemin.hdf5")
             grp = hdf["wf"]
             for k in grp.keys():
                 new_parms = np.array(grp[k])
-                if wf.parameters[k].shape!=new_parms.shape:
-                    raise Exception(f"For wave function parameter {k}, shape in {wf_file} is {new_parms.shape}, while current shape is {wf.parameters[k].shape}")
+                if wf.parameters[k].shape != new_parms.shape:
+                    raise Exception(
+                        f"For wave function parameter {k}, shape in {wf_file} is {new_parms.shape}, while current shape is {wf.parameters[k].shape}"
+                    )
                 wf.parameters[k] = new_parms
         else:
             raise Exception("Did not find wf in hdf file")

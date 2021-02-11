@@ -1,4 +1,5 @@
 import numpy as np
+from pyqmc.cupy import fuse
 
 """ 
 Collection of 3d function objects. Each has a dictionary parameters, which corresponds
@@ -160,6 +161,12 @@ class PadeFunction:
         return {"alphak": akderiv}
 
 
+@fuse()
+def polypadevalue(z, beta):
+    p = z * z * (6 - 8 * z + 3 * z * z)
+    return (1 - p) / (1 + beta * p)
+
+
 class PolyPadeFunction:
     """
     :math:`b(r) = \frac{1-p(z)}{1+\beta p(z)}`
@@ -183,8 +190,7 @@ class PolyPadeFunction:
           func: (1-p(r/rcut))/(1+beta*p(r/rcut))
         """
         z = r / self.parameters["rcut"]
-        p = z * z * (6 - 8 * z + 3 * z * z)
-        func = (1 - p) / (1 + self.parameters["beta"] * p)
+        func = polypadevalue(z, self.parameters["beta"])
         func[z >= 1] = 0.0
         return func
 
@@ -195,7 +201,6 @@ class PolyPadeFunction:
         Returns:
           grad: (nconf,...,3)
         """
-        grad = np.zeros(rvec.shape)
         mask = r >= self.parameters["rcut"]
         r = r[..., np.newaxis]
         z = r / self.parameters["rcut"]
@@ -204,7 +209,7 @@ class PolyPadeFunction:
         dbdp = -(1 + self.parameters["beta"]) / (1 + self.parameters["beta"] * p) ** 2
         dzdx = rvec / (r * self.parameters["rcut"])
         grad = dbdp * dpdz * dzdx
-        grad[mask] = 0
+        grad[mask] = 0.0
         return grad
 
     def laplacian(self, rvec, r):
@@ -215,10 +220,8 @@ class PolyPadeFunction:
           lapl: (nconf,...,3) 
               returns components of laplacian d^2/dx_i^2 separately
         """
-        lapl = np.zeros(rvec.shape)
-        mask = r < self.parameters["rcut"]
-        r = r[mask, np.newaxis]
-        rvec = rvec[mask]
+        mask = r >= self.parameters["rcut"]
+        r = r[..., np.newaxis]
         z = r / self.parameters["rcut"]
         beta = self.parameters["beta"]
 
@@ -230,8 +233,9 @@ class PolyPadeFunction:
         d2bdp2_over_dbdp = -2 * beta / (1 + beta * p)
         d2zdx2 = (1 - (rvec / r) ** 2) / (r * self.parameters["rcut"])
         grad = dbdp * dpdz * dzdx
-        lapl[mask] = grad * (d2bdp2_over_dbdp * dpdz * dzdx + d2pdz2_over_dpdz * dzdx)
-        lapl[mask] += dbdp * dpdz * d2zdx2
+        lapl = grad * (d2bdp2_over_dbdp * dpdz * dzdx + d2pdz2_over_dpdz * dzdx)
+        lapl += dbdp * dpdz * d2zdx2
+        lapl[mask] = 0.0
         return lapl
 
     def gradient_laplacian(self, rvec, r):
@@ -242,11 +246,8 @@ class PolyPadeFunction:
         Returns:
           grad, lap: (nconfig,...,3) vectors (components of laplacian d^2/dx_i^2 separately)
         """
-        grad = np.zeros(rvec.shape)
-        lap = np.zeros(rvec.shape)
-        mask = r < self.parameters["rcut"]
-        r = r[mask, np.newaxis]
-        rvec = rvec[mask]
+        mask = r >= self.parameters["rcut"]
+        r = r[..., np.newaxis]
         z = r / self.parameters["rcut"]
         beta = self.parameters["beta"]
 
@@ -254,14 +255,14 @@ class PolyPadeFunction:
         dpdz = 12 * z * (z * z - 2 * z + 1)
         dbdp = -(1 + beta) / (1 + beta * p) ** 2
         dzdx = rvec / (r * self.parameters["rcut"])
-        grad[mask] = dbdp * dpdz * dzdx
+        grad = dbdp * dpdz * dzdx
         d2pdz2_over_dpdz = (3 * z - 1) / (z * (z - 1))
         d2bdp2_over_dbdp = -2 * beta / (1 + beta * p)
         d2zdx2 = (1 - (rvec / r) ** 2) / (r * self.parameters["rcut"])
-        lap[mask] = grad[mask] * (
-            d2bdp2_over_dbdp * dpdz * dzdx + d2pdz2_over_dpdz * dzdx
-        )
-        lap[mask] += dbdp * dpdz * d2zdx2
+        lap = grad * (d2bdp2_over_dbdp * dpdz * dzdx + d2pdz2_over_dpdz * dzdx)
+        lap += dbdp * dpdz * d2zdx2
+        grad[mask] = 0.0
+        lap[mask] = 0.0
         return grad, lap
 
     def pgradient(self, rvec, r):
@@ -272,17 +273,18 @@ class PolyPadeFunction:
         Returns:
           paramderivs: dictionary {'rcut':d/drcut,'beta':d/dbeta}
         """
-        pderiv = {"rcut": np.zeros(r.shape), "beta": np.zeros(r.shape)}
-        mask = r < self.parameters["rcut"]
-        r = r[mask]
+        mask = r >= self.parameters["rcut"]
         z = r / self.parameters["rcut"]
         beta = self.parameters["beta"]
 
         p = z * z * (6 - 8 * z + 3 * z * z)
         dbdp = -(1 + beta) / (1 + beta * p) ** 2
         dpdz = 12 * z * (z * z - 2 * z + 1)
-        pderiv["rcut"][mask] = dbdp * dpdz * (-z / self.parameters["rcut"])
-        pderiv["beta"][mask] = -p * (1 - p) / (1 + beta * p) ** 2
+        derivrcut = dbdp * dpdz * (-z / self.parameters["rcut"])
+        derivbeta = -p * (1 - p) / (1 + beta * p) ** 2
+        derivrcut[mask] = 0.0
+        derivbeta[mask] = 0.0
+        pderiv = {"rcut": derivrcut, "beta": derivbeta}
         return pderiv
 
 
@@ -319,7 +321,6 @@ class CutoffCuspFunction:
         Returns:
           grad: has same dimensions as rvec 
         """
-        grad = np.zeros(rvec.shape)
         rcut = self.parameters["rcut"]
         gamma = self.parameters["gamma"]
         mask = r > rcut
@@ -341,7 +342,6 @@ class CutoffCuspFunction:
         Returns:
           lapl: has same dimensions as rvec, because returns components of laplacian d^2/dx_i^2 separately
         """
-        lap = np.zeros(rvec.shape)
         rcut = self.parameters["rcut"]
         gamma = self.parameters["gamma"]
         mask = r > rcut
@@ -368,8 +368,6 @@ class CutoffCuspFunction:
         Returns:
           grad, lap: (nconfig,...,3) vectors (components of laplacian d^2/dx_i^2 separately)
         """
-        grad = np.zeros(rvec.shape)
-        lap = np.zeros(rvec.shape)
         rcut = self.parameters["rcut"]
         gamma = self.parameters["gamma"]
         mask = r > rcut
@@ -397,11 +395,10 @@ class CutoffCuspFunction:
         Returns:
           paramderivs: dictionary {'rcut':d/drcut,'gamma':d/dgamma}
         """
-        func = {"rcut": np.zeros(r.shape), "gamma": np.zeros(r.shape)}
         rcut = self.parameters["rcut"]
         gamma = self.parameters["gamma"]
-        mask = r <= rcut
-        r = r[mask]
+        mask = r > rcut
+        r = r
         y = r / rcut
 
         a = 1 - 2 * y + y * y
@@ -409,8 +406,11 @@ class CutoffCuspFunction:
         c = a / (1 + gamma * b) ** 2 / (rcut * r)
         val = -b / (1 + gamma * b) + 1 / (3 + gamma)
 
-        func["rcut"][mask] = y * a / (1 + gamma * b) ** 2 + val
-        func["gamma"][mask] = ((b / (1 + gamma * b)) ** 2 - 1 / (3 + gamma) ** 2) * rcut
+        dfdrcut = y * a / (1 + gamma * b) ** 2 + val
+        dfdgamma = ((b / (1 + gamma * b)) ** 2 - 1 / (3 + gamma) ** 2) * rcut
+        dfdrcut[mask] = 0.0
+        dfdgamma[mask] = 0.0
+        func = {"rcut": dfdrcut, "gamma": dfdgamma}
 
         return func
 

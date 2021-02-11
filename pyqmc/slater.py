@@ -1,4 +1,5 @@
 import numpy as np
+from pyqmc.cupy import cp, asnumpy
 from pyqmc import pbc
 
 
@@ -15,7 +16,7 @@ _gldict = {"laplacian": np.s_[:1], "gradient_laplacian": np.s_[0:4]}
 
 
 def _aostack_mol(ao, gl):
-    return np.concatenate(
+    return cp.concatenate(
         [ao[_gldict[gl]], ao[[4, 7, 9]].sum(axis=0, keepdims=True)], axis=0
     )
 
@@ -33,7 +34,7 @@ def get_wrapphase_complex(x):
 
 
 def get_complex_phase(x):
-    return x / np.abs(x)
+    return x / cp.abs(x)
 
 
 def get_k_indices(cell, mf, kpts, tol=1e-6):
@@ -56,7 +57,7 @@ class PySCFSlater:
           mf: scf object of primitive cell calculation. scf calculation must include k points that fold onto the gamma point of the supercell
           twist: (3,) array, twisted boundary condition in fractional coordinates, i.e. as coefficients of the reciprocal lattice vectors of the supercell. Integer values are equivalent to zero.
         """
-        self.parameters = {"det_coeff": np.array([1.0])}
+        self.parameters = {"det_coeff": cp.array([1.0])}
         self.real_tol = 1e4
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
 
@@ -72,7 +73,7 @@ class PySCFSlater:
             self.get_phase = get_complex_phase
             self.get_wrapphase = get_wrapphase_complex
         else:
-            self.get_phase = np.sign
+            self.get_phase = cp.sign
             self.get_wrapphase = get_wrapphase_real
 
     def _init_mol(self, mol, mf):
@@ -80,12 +81,14 @@ class PySCFSlater:
 
         for s, lookup in enumerate(self._coefflookup):
             if len(mf.mo_occ.shape) == 2:
-                self.parameters[lookup] = mf.mo_coeff[s][
-                    :, np.asarray(mf.mo_occ[s] > 0.9)
-                ]
+                self.parameters[lookup] = cp.array(
+                    mf.mo_coeff[s][:, np.asarray(mf.mo_occ[s] > 0.9)]
+                )
             else:
                 minocc = (0.9, 1.1)[s]
-                self.parameters[lookup] = mf.mo_coeff[:, np.asarray(mf.mo_occ > minocc)]
+                self.parameters[lookup] = cp.array(
+                    mf.mo_coeff[:, np.asarray(mf.mo_occ > minocc)]
+                )
         self._nelec = tuple(mol.nelec)
         self._mol = mol
         self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
@@ -127,12 +130,12 @@ class PySCFSlater:
                 else:
                     minocc = (0.9, 1.1)[s]
                     mca = mf.mo_coeff[kind][:, np.asarray(mf.mo_occ[kind] > minocc)]
-                mca = np.real_if_close(mca, tol=self.real_tol)
-                mclist.append(mca / np.sqrt(self.nk))
+                mca = cp.asarray(np.real_if_close(mca, tol=self.real_tol))
+                mclist.append(mca / cp.sqrt(self.nk))
             self.param_split[lookup] = np.cumsum([m.shape[1] for m in mclist])
-            self.parameters[lookup] = np.concatenate(mclist, axis=-1)
+            self.parameters[lookup] = cp.concatenate(mclist, axis=-1)
 
-        self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
+        self.iscomplex = bool(sum(map(cp.iscomplexobj, self.parameters.values())))
         self.iscomplex = self.iscomplex or np.linalg.norm(self._kpts) > 1e-12
 
         # Define nelec
@@ -149,17 +152,16 @@ class PySCFSlater:
             scale = self.supercell.scale
             self._nelec = [int(np.round(n * scale)) for n in self._cell.nelec]
         self._nelec = tuple(self._nelec)
-
         self.evaluate_orbitals = self._evaluate_orbitals_pbc
         self.evaluate_mos = self._evaluate_mos_pbc
 
     def _evaluate_orbitals_mol(self, configs, mask=None, eval_str="GTOval_sph"):
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
-        return self._mol.eval_gto(eval_str, mycoords)
+        return cp.array(self._mol.eval_gto(eval_str, mycoords))
 
     def _evaluate_mos_mol(self, ao, s):
-        return ao.dot(self.parameters[self._coefflookup[s]])
+        return cp.dot(ao, self.parameters[self._coefflookup[s]])
 
     def _evaluate_orbitals_pbc(self, configs, mask=None, eval_str="GTOval_sph"):
         mycoords = configs.configs
@@ -179,16 +181,16 @@ class PySCFSlater:
         # evaluate AOs for all electron positions
         ao = self._cell.eval_gto("PBC" + eval_str, prim_coords, kpts=self._kpts)
         ao = [ao[k] * wrap_phase[k][:, np.newaxis] for k in range(self.nk)]
-        return ao
+        return cp.asarray(ao)
 
     def _evaluate_mos_pbc(self, aos, s):
         """
         Evaluate MOs for spin s given aos
         """
         c = self._coefflookup[s]
-        p = np.split(self.parameters[c], self.param_split[c], axis=-1)
+        p = cp.split(self.parameters[c], self.param_split[c], axis=-1)
         mo = [ao.dot(p[k]) for k, ao in enumerate(aos)]
-        return np.concatenate(mo, axis=-1)
+        return cp.concatenate(mo, axis=-1)
 
     def recompute(self, configs):
         """This computes the value from scratch. Returns the logarithm of the wave function as
@@ -199,7 +201,7 @@ class PySCFSlater:
             aos_shape = (self.nk, nconf, nelec, -1)
         else:
             aos_shape = (1, nconf, nelec, -1)
-        aos = np.reshape(aos, aos_shape)
+        aos = cp.reshape(aos, aos_shape)
         self._aovals = aos
         self._dets = []
         self._inverse = []
@@ -207,9 +209,10 @@ class PySCFSlater:
             i0, i1 = s * self._nelec[0], self._nelec[0] + s * self._nelec[1]
             ne = self._nelec[s]
             mo = self.evaluate_mos(aos[:, :, i0:i1], s).reshape(nconf, ne, ne)
-            phase, mag = np.linalg.slogdet(mo)
-            self._dets.append((phase, mag))
-            self._inverse.append(np.linalg.inv(mo))
+            # cupy slogdet is mindblowingly slow
+            phase, mag = np.linalg.slogdet(asnumpy(mo))
+            self._dets.append((cp.asarray(phase), cp.asarray(mag)))
+            self._inverse.append(cp.linalg.inv(mo))
 
         return self.value()
 
@@ -219,7 +222,7 @@ class PySCFSlater:
             mask = [True] * epos.configs.shape[0]
         eeff = e - s * self._nelec[0]
         aos = self.evaluate_orbitals(epos, mask=mask)
-        self._aovals[:, mask, e, :] = np.asarray(aos)  # (kpt, config, ao)
+        self._aovals[:, :, e][:, mask] = aos  # (kpt, config, ao)
         mo = self.evaluate_mos(aos, s)
         ratio, self._inverse[s][mask, :, :] = sherman_morrison_row(
             eeff, self._inverse[s][mask, :, :], mo
@@ -228,17 +231,19 @@ class PySCFSlater:
 
     def _updateval(self, ratio, s, mask):
         self._dets[s][0][mask] *= self.get_phase(ratio)
-        self._dets[s][1][mask] += np.log(np.abs(ratio))
+        self._dets[s][1][mask] += cp.log(cp.abs(ratio))
 
     ### not state-changing functions
 
     def value(self):
         """Return logarithm of the wave function as noted in recompute()"""
         return (
-            self._dets[0][0] * self._dets[1][0],
-            self._dets[0][1]
-            + self._dets[1][1]
-            + np.log(np.abs(self.parameters["det_coeff"][0])),
+            asnumpy(self._dets[0][0] * self._dets[1][0]),
+            asnumpy(
+                self._dets[0][1]
+                + self._dets[1][1]
+                + cp.log(cp.abs(self.parameters["det_coeff"][0]))
+            ),
         )
 
     def _testrow(self, e, vec, mask=None, spin=None):
@@ -246,13 +251,13 @@ class PySCFSlater:
         s = int(e >= self._nelec[0]) if spin is None else spin
         elec = e - s * self._nelec[0]
         if mask is None:
-            return np.einsum("i...j,ij...->i...", vec, self._inverse[s][:, :, elec])
+            return cp.einsum("i...j,ij...->i...", vec, self._inverse[s][:, :, elec])
 
-        return np.einsum("i...j,ij...->i...", vec, self._inverse[s][mask][:, :, elec])
+        return cp.einsum("i...j,ij...->i...", vec, self._inverse[s][mask][:, :, elec])
 
     def _testcol(self, i, s, vec):
         """vec is a nconfig,nmo vector which replaces column i"""
-        return np.einsum("ij...,ij->i...", vec, self._inverse[s][:, i, :])
+        return cp.einsum("ij...,ij->i...", vec, self._inverse[s][:, i, :])
 
     def testvalue(self, e, epos, mask=None):
         """ return the ratio between the current wave function and the wave function if 
@@ -263,8 +268,9 @@ class PySCFSlater:
             return np.zeros((0, epos.configs.shape[1]))
         aos = self.evaluate_orbitals(epos, mask)
         mo = self.evaluate_mos(aos, s)
+        # shape = cp.array([nmask] + list(epos.configs.shape[1:-1]) + [self._nelec[s]])
         mo = mo.reshape(nmask, *epos.configs.shape[1:-1], self._nelec[s])
-        return self._testrow(e, mo, mask)
+        return asnumpy(self._testrow(e, mo, mask))
 
     def testvalue_many(self, e, epos, mask=None):
         """ return the ratio between the current wave function and the wave function if 
@@ -275,13 +281,13 @@ class PySCFSlater:
             return np.zeros((0, epos.configs.shape[1]))
 
         aos = self.evaluate_orbitals(epos, mask)
-        ratios = np.zeros((epos.configs.shape[0], e.shape[0]), dtype=self.dtype)
+        ratios = cp.zeros((epos.configs.shape[0], e.shape[0]), dtype=self.dtype)
         for spin in [0, 1]:
             ind = s == spin
             mo = self.evaluate_mos(aos, spin)
             mo = mo.reshape(nmask, *epos.configs.shape[1:-1], self._nelec[spin])
             ratios[:, ind] = self._testrow(e[ind], mo, mask=mask, spin=spin)
-        return ratios
+        return asnumpy(ratios)
 
     def gradient(self, e, epos):
         """ Compute the gradient of the log wave function 
@@ -290,22 +296,23 @@ class PySCFSlater:
         s = int(e >= self._nelec[0])
         aograd = self.evaluate_orbitals(epos, eval_str="GTOval_sph_deriv1")
         mograd = self.evaluate_mos(aograd, s)
-        ratios = np.asarray([self._testrow(e, x) for x in mograd])
-        return ratios[1:] / ratios[:1]
+        ratios = cp.asarray([self._testrow(e, x) for x in mograd])
+        return asnumpy(ratios[1:] / ratios[:1])
 
     def laplacian(self, e, epos):
         s = int(e >= self._nelec[0])
         ao = self.evaluate_orbitals(epos, eval_str="GTOval_sph_deriv2")
         mo = self.evaluate_mos(self._aostack(ao, "laplacian"), s)
-        ratios = np.asarray([self._testrow(e, x) for x in mo])
-        return ratios[1] / ratios[0]
+        ratios = cp.asarray([self._testrow(e, x) for x in mo])
+        return asnumpy(ratios[1] / ratios[0])
 
     def gradient_laplacian(self, e, epos):
         s = int(e >= self._nelec[0])
         ao = self.evaluate_orbitals(epos, eval_str="GTOval_sph_deriv2")
         mo = self.evaluate_mos(self._aostack(ao, "gradient_laplacian"), s)
-        ratios = np.asarray([self._testrow(e, x) for x in mo])
-        return ratios[1:-1] / ratios[:1], ratios[-1] / ratios[0]
+        ratios = cp.asarray([self._testrow(e, x) for x in mo])
+        ratios = asnumpy(ratios / ratios[:1])
+        return ratios[1:-1], ratios[-1]
 
     def pgradient(self):
         d = {"det_coeff": np.zeros(self._aovals.shape[-3])}
@@ -315,16 +322,18 @@ class PySCFSlater:
             i0, i1 = s * self._nelec[0], self._nelec[0] + s * self._nelec[1]
             ao = self._aovals[:, :, i0:i1, :]  # (kpt, config, electron, ao)
             pgrad_shape = (ao.shape[-3],) + self.parameters[parm].shape
-            pgrad = np.zeros(pgrad_shape, dtype=self.dtype)  # (nconf, coeff)
+            pgrad = cp.zeros(pgrad_shape, dtype=self.dtype)  # (nconf, coeff)
             # Compute derivatives w.r.t. MO coefficients
             if ao.shape[0] > 1:  # multiple kpts
-                split_sizes = np.diff([0] + list(self.param_split[parm]))
+                split_sizes = np.diff(
+                    [0] + list(self.param_split[parm])
+                )  # must be numpy
                 k = np.repeat(np.arange(self.nk), split_sizes)
                 for i in range(self._nelec[s]):  # MO loop
                     pgrad[:, :, i] = self._testcol(i, s, ao[k[i]])
             else:
                 ao = ao[0]
-                for i in range(self._nelec[s]):  # MO loop
+                for i in cp.arange(self._nelec[s]):  # MO loop
                     pgrad[:, :, i] = self._testcol(i, s, ao)
-            d[parm] = np.asarray(pgrad)
+            d[parm] = asnumpy(pgrad)
         return d

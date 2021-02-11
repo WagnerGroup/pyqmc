@@ -1,5 +1,5 @@
 import numpy as np
-from pyqmc.cupy import fuse
+from pyqmc.loadcupy import fuse
 
 """ 
 Collection of 3d function objects. Each has a dictionary parameters, which corresponds

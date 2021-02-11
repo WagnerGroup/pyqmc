@@ -1,5 +1,5 @@
 import numpy as np
-from pyqmc.cupy import cp, asnumpy
+from pyqmc.loadcupy import cp, asnumpy
 from pyqmc.func3d import GaussianFunction
 from pyqmc.distance import RawDistance
 
@@ -118,8 +118,8 @@ class JastrowSpin:
         edown = int(e >= self._mol.nelec[0])
         aupdate = self._a_update(e, epos, mask)
         bupdate = self._b_update(e, epos, mask)
-        self._avalues[mask][:, :, :, edown] += aupdate - self._a_partial[e][mask]
-        self._bvalues[mask][:, :, edown : edown + 2] += (
+        self._avalues[:, :, :, edown][mask] += aupdate - self._a_partial[e][mask]
+        self._bvalues[:, :, edown : edown + 2][mask] += (
             bupdate - self._b_partial[e][mask]
         )
         self._a_partial[e][mask] = aupdate

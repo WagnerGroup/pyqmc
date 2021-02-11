@@ -1,5 +1,5 @@
 import numpy as np
-from pyqmc.cupy import asnumpy
+from pyqmc.loadcupy import asnumpy
 import pyqmc.energy as energy
 from pyqmc.ewald import Ewald
 

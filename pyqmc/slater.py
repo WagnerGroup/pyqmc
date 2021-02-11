@@ -1,5 +1,5 @@
 import numpy as np
-from pyqmc.cupy import cp, asnumpy
+from pyqmc.loadcupy import cp, asnumpy
 from pyqmc import pbc
 
 

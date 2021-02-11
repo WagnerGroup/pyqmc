@@ -1,4 +1,5 @@
 import numpy as np
+from pyqmc.cupy import cp, get_array_module
 import scipy
 import h5py
 import os
@@ -150,6 +151,10 @@ def line_minimization(
     if update_kws is None:
         update_kws = {}
 
+    for k, v in wf.parameters.items():
+        array_module = get_array_module(v)
+        break
+
     # Restart
     iteration_offset = 0
     if hdf_file is not None and os.path.isfile(hdf_file):
@@ -157,7 +162,7 @@ def line_minimization(
             if "wf" in hdf.keys():
                 grp = hdf["wf"]
                 for k in grp.keys():
-                    wf.parameters[k] = np.array(grp[k])
+                    wf.parameters[k] = array_module.array(grp[k])
             if "iteration" in hdf.keys():
                 iteration_offset = np.max(hdf["iteration"][...]) + 1
 
@@ -167,7 +172,7 @@ def line_minimization(
     def gradient_energy_function(x, coords):
         newparms = pgrad_acc.transform.deserialize(x)
         for k in newparms:
-            wf.parameters[k] = newparms[k]
+            wf.parameters[k] = array_module.asarray(newparms[k])
         df, coords = pyqmc.mc.vmc(
             wf,
             coords,
@@ -255,7 +260,7 @@ def line_minimization(
 
     newparms = pgrad_acc.transform.deserialize(x0)
     for k in newparms:
-        wf.parameters[k] = newparms[k]
+        wf.parameters[k] = array_module.asarray(newparms[k])
 
     return wf, df
 
@@ -279,10 +284,14 @@ def correlated_compute(wf, configs, params, pgrad_acc):
 
     data = []
     psi0 = wf.recompute(configs)[1]  # recompute gives logdet
+    for k, v in wf.parameters.items():
+        array_module = get_array_module(v)
+        break
+
     for p in params:
         newparms = pgrad_acc.transform.deserialize(p)
         for k in newparms:
-            wf.parameters[k] = newparms[k]
+            wf.parameters[k] = array_module.asarray(newparms[k])
         psi = wf.recompute(configs)[1]  # recompute gives logdet
         rawweights = np.exp(2 * (psi - psi0))  # convert from log(|psi|) to |psi|**2
         df = pgrad_acc.enacc(configs, wf)

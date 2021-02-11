@@ -1,7 +1,7 @@
 try:
     import cupy as cp
     from cupy import get_array_module, asnumpy, fuse
-except:
+except ImportError:
     import numpy as np
 
     cp = np

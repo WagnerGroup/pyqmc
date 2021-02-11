@@ -1,5 +1,5 @@
 import numpy as np
-from pyqmc.cupy import cp, get_array_module
+from pyqmc.cupy import cp, get_array_module, asnumpy
 import scipy
 import h5py
 import os
@@ -36,7 +36,7 @@ def opt_hdf(hdf_file, data, attr, configs, parameters):
             hdftools.append_hdf(hdf, data)
             configs.to_hdf(hdf)
             for k, it in parameters.items():
-                hdf["wf/" + k][...] = it.copy()
+                hdf["wf/" + k][...] = asnumpy(it.copy())
 
 
 def polyfit_relative(xfit, yfit, degree):

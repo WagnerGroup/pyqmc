@@ -17,9 +17,9 @@ def test_wfs():
 
     from pyscf import lib, gto, scf
     from pyqmc.slater import PySCFSlater
-    from pyqmc.jastrowspin import JastrowSpin
     from pyqmc.multiplywf import MultiplyWF
     from pyqmc.manybody_jastrow import J3
+    from pyqmc import default_jastrow
     import pyqmc
 
     mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="sto-3g", unit="bohr")
@@ -30,10 +30,10 @@ def test_wfs():
     nconf = 10
     epos = pyqmc.initial_guess(mol, nconf)
     for wf in [
-        JastrowSpin(mol),
+        default_jastrow(mol)[0],
         J3(mol),
-        MultiplyWF(PySCFSlater(mol, mf), JastrowSpin(mol)),
-        MultiplyWF(PySCFSlater(mol, mf), JastrowSpin(mol), J3(mol)),
+        MultiplyWF(PySCFSlater(mol, mf), default_jastrow(mol)[0]),
+        MultiplyWF(PySCFSlater(mol, mf), default_jastrow(mol)[0], J3(mol)),
         PySCFSlater(mol, mf_uhf),
         PySCFSlater(mol, mf),
         PySCFSlater(mol, mf_rohf),
@@ -73,8 +73,8 @@ def test_pbc_wfs():
     from pyqmc.supercell import get_supercell
     from pyqmc.slater import PySCFSlater
     from pyqmc.multislaterpbc import MultiSlaterPBC
-    from pyqmc.jastrowspin import JastrowSpin
     from pyqmc.multiplywf import MultiplyWF
+    from pyqmc import default_jastrow
     import pyqmc
 
     mol = gto.M(
@@ -99,7 +99,7 @@ def test_pbc_wfs():
     occup = [[d1, d2], [d1]]
     map_dets = [[0, 1], [0, 0]]
     for wf in [
-        MultiplyWF(PySCFSlater(supercell, mf), JastrowSpin(supercell)),
+        MultiplyWF(PySCFSlater(supercell, mf), default_jastrow(supercell)[0]),
         PySCFSlater(supercell, mf),
         MultiSlaterPBC(supercell, mf, detwt=detwt, occup=occup, map_dets=map_dets),
         # PySCFSlaterPBC(supercell, mf_uhf),

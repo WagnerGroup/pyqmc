@@ -74,16 +74,16 @@ def OPTIMIZE(
 def generate_accumulators(mol, mf, energy=True, rdm1=False, extra_accumulators=None):
     acc = {} if extra_accumulators is None else extra_accumulators
 
-    if len(mf.mo_coeff.shape) == 2:
-        mo_coeff = [mf.mo_coeff, mf.mo_coeff]
-    else:
-        mo_coeff = mf.mo_coeff
 
     if energy:
         if "energy" in acc.keys():
             raise Exception("Found energy in extra_accumulators and energy is True")
         acc["energy"] = pyqmc.EnergyAccumulator(mol)
     if rdm1:
+        if len(mf.mo_coeff.shape) == 2:
+            mo_coeff = [mf.mo_coeff, mf.mo_coeff]
+        else:
+            mo_coeff = mf.mo_coeff
         if "rdm1_up" in acc.keys() or "rdm1_down" in acc.keys():
             raise Exception(
                 "Found rdm1_up or rdm1_down in extra_accumulators and rdm1 is True"
@@ -124,6 +124,7 @@ def VMC(
         mc.ci = mc.ci[target_root]
 
     if S is not None:
+        print("S",S)
         mol = pyqmc.get_supercell(mol, np.asarray(S))
 
     if accumulators is None:

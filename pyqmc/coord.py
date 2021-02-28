@@ -4,6 +4,12 @@ from pyqmc.pbc import enforce_pbc
 import copy
 
 
+class OpenElectron:
+    def __init__(self, epos, dist):
+        self.configs=epos
+        self.dist=dist
+
+
 class OpenConfigs:
     def __init__(self, configs):
         self.configs = configs
@@ -15,14 +21,14 @@ class OpenConfigs:
     def mask(self, mask):
         return OpenConfigs(self.configs[mask])
 
-    def make_irreducible(self, e, vec):
+    def make_irreducible(self, e, vec, mask):
         """ 
           Input: 
             e: unused electron index
             vec: a (nconfig, 3) vector 
           Output: OpenConfigs object with just one electron
         """
-        return OpenConfigs(vec)
+        return OpenElectron(vec, dist)
 
     def move(self, e, new, accept):
         """

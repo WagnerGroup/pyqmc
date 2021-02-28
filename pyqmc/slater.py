@@ -66,7 +66,6 @@ class PySCFSlater:
             self._init_mol(mol, mf)
         self.pbc_str = "PBC" if hasattr(mol, "a") else ""
         self._aostack = _aostack_pbc if hasattr(mol, "a") else _aostack_mol
-
         self.dtype = complex if self.iscomplex else float
         if self.iscomplex:
             self.get_phase = get_complex_phase

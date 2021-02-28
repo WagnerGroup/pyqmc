@@ -34,6 +34,8 @@ def ecp_ea(mol, configs, wf, e, atom, threshold):
     masked_v_l = v_l[mask]
     masked_v_l[:, :-1] /= prob[mask, np.newaxis]
 
+    #print(np.sum(mask))
+
     # Use masked objects internally
     r_ea = r_ea[mask]
     r_ea_vec = r_ea_vec[mask]
@@ -41,13 +43,24 @@ def ecp_ea(mol, configs, wf, e, atom, threshold):
 
     # Note: epos_rot is not just apos+r_ea_i because of the boundary;
     # positions of the samples are relative to the electron, not atom.
-    epos_rot = (configs.configs[mask, e, :] - r_ea_vec)[:, np.newaxis] + r_ea_i
+    #epos_rot = (configs.configs[mask, e, :] - r_ea_vec)[:, np.newaxis] + r_ea_i
+    epos_rot = np.repeat(configs.configs[:,e,:][:,np.newaxis,:],P_l.shape[1], axis=1)
+    epos_rot[mask] = (configs.configs[mask, e, :] - r_ea_vec)[:, np.newaxis] + r_ea_i
 
-    # Expand externally
-    expanded_epos_rot = np.zeros((nconf, P_l.shape[1], 3))
-    expanded_epos_rot[mask] = epos_rot
-    epos = configs.make_irreducible(e, expanded_epos_rot)
-    ratio = wf.testvalue(e, epos, mask)
+    # 
+    ratio = np.zeros((np.sum(mask),P_l.shape[1]))
+    for integration_pt in range(P_l.shape[1]):
+        epos=configs.make_irreducible(e,epos_rot[:,integration_pt,:],mask)
+        ratio[:,integration_pt] = wf.testvalue(e,epos,mask)
+    #expanded_epos_rot = np.zeros((nconf, P_l.shape[1], 3))
+    #expanded_epos_rot[mask] = epos_rot
+    #print(expanded_epos_rot.shape, np.sum(mask), epos_rot.shape, masked_v_l.shape)
+    #epos = configs.make_irreducible(e, expanded_epos_rot, mask)
+    #ratio = wf.testvalue(e, epos, mask)
+
+    
+    #print(P_l.shape[1])
+    #print('ratio',ratio.shape)
 
     # Compute local and non-local parts
     ecp_val[mask] = np.einsum("ij,ik,ijk->i", ratio, masked_v_l, P_l)

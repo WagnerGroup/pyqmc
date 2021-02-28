@@ -92,6 +92,17 @@ class OpenConfigs:
         self.configs = np.array(hdf["configs"])
 
 
+class PeriodicElectron:
+    def __init__(self, epos, lattice_vectors, dist, wrap=None):
+        self.configs=epos
+        self.lvec=lattice_vectors
+        if wrap is not None:
+            self.wrap=wrap
+        else:
+            self.wrap=np.zeros_like(epos)
+        self.dist=dist
+    
+
 class PeriodicConfigs:
     def __init__(self, configs, lattice_vectors, wrap=None):
         configs, wrap_ = enforce_pbc(lattice_vectors, configs)
@@ -108,16 +119,21 @@ class PeriodicConfigs:
     def mask(self, mask):
         return PeriodicConfigs(self.configs[mask], self.lvecs, wrap=self.wrap[mask])
 
-    def make_irreducible(self, e, vec):
+    def make_irreducible(self, e, vec, mask):
         """ 
          Input: a (nconfig, 3) vector 
          Output: a tuple with the wrapped vector and the number of wraps
         """
-        epos, wrap = enforce_pbc(self.lvecs, vec)
-        currentwrap = self.wrap if len(self.wrap.shape) == 2 else self.wrap[:, e]
-        if len(vec.shape) == 3:
-            currentwrap = currentwrap[:, np.newaxis]
-        return PeriodicConfigs(epos, self.lvecs, wrap=wrap + currentwrap)
+        epos_, wrap_ = enforce_pbc(self.lvecs, vec[mask])
+        epos = vec.copy()
+        epos[mask] = epos_
+        wrap = self.wrap[:,e]
+        wrap[mask] = wrap_
+        #currentwrap = self.wrap.copy() if len(self.wrap.shape) == 2 else self.wrap[:, e]
+#        if len(vec.shape) == 3:
+#            currentwrap[mask]=currentwrap[mask]+wrap
+        #return PeriodicConfigs(epos, self.lvecs, wrap=wrap)
+        return PeriodicElectron(epos, self.lvecs, wrap=wrap, dist=self.dist)
 
     def move(self, e, new, accept):
         """

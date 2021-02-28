@@ -48,10 +48,13 @@ def ecp_ea(mol, configs, wf, e, atom, threshold):
     epos_rot[mask] = (configs.configs[mask, e, :] - r_ea_vec)[:, np.newaxis] + r_ea_i
 
     # 
-    ratio = np.zeros((np.sum(mask),P_l.shape[1]))
-    for integration_pt in range(P_l.shape[1]):
-        epos=configs.make_irreducible(e,epos_rot[:,integration_pt,:],mask)
-        ratio[:,integration_pt] = wf.testvalue(e,epos,mask)
+    #ratio = np.zeros((np.sum(mask),P_l.shape[1]))
+    epos = configs.make_irreducible(e, epos_rot, mask)
+    ratio = wf.testvalue(e,epos, mask)
+
+    #for integration_pt in range(P_l.shape[1]):
+    #    epos=configs.make_irreducible(e,epos_rot[:,integration_pt,:],mask)
+    #    ratio[:,integration_pt] = wf.testvalue(e,epos,mask)
     #expanded_epos_rot = np.zeros((nconf, P_l.shape[1], 3))
     #expanded_epos_rot[mask] = epos_rot
     #print(expanded_epos_rot.shape, np.sum(mask), epos_rot.shape, masked_v_l.shape)

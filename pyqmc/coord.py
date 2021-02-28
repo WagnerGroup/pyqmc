@@ -28,7 +28,7 @@ class OpenConfigs:
             vec: a (nconfig, 3) vector 
           Output: OpenConfigs object with just one electron
         """
-        return OpenElectron(vec, dist)
+        return OpenElectron(vec, self.dist)
 
     def move(self, e, new, accept):
         """
@@ -99,13 +99,18 @@ class OpenConfigs:
 
 
 class PeriodicElectron:
+    """
+    Represents the coordinates of a test electron position, for many walkers and 
+    potentially several different points.
+
+    configs is a 2D or 3D vector with elements [config, point, dimension]
+    wrap is same shape as configs
+    lvec and dist will most likely be references to the parent object
+    """
     def __init__(self, epos, lattice_vectors, dist, wrap=None):
         self.configs=epos
         self.lvec=lattice_vectors
-        if wrap is not None:
-            self.wrap=wrap
-        else:
-            self.wrap=np.zeros_like(epos)
+        self.wrap = wrap if wrap is not None else np.zeros_like(epos)
         self.dist=dist
     
 
@@ -127,18 +132,16 @@ class PeriodicConfigs:
 
     def make_irreducible(self, e, vec, mask):
         """ 
-         Input: a (nconfig, 3) vector 
-         Output: a tuple with the wrapped vector and the number of wraps
+         Input: a (nconfig, 3) vector or a (nconfig, N, 3) vector
+         Output: A Periodic Electron
         """
         epos_, wrap_ = enforce_pbc(self.lvecs, vec[mask])
         epos = vec.copy()
         epos[mask] = epos_
         wrap = self.wrap[:,e]
-        wrap[mask] = wrap_
-        #currentwrap = self.wrap.copy() if len(self.wrap.shape) == 2 else self.wrap[:, e]
-#        if len(vec.shape) == 3:
-#            currentwrap[mask]=currentwrap[mask]+wrap
-        #return PeriodicConfigs(epos, self.lvecs, wrap=wrap)
+        if len(vec.shape)==3:
+            wrap=np.repeat(self.wrap[:,e][:,np.newaxis],vec.shape[1], axis=1)
+        wrap[mask] += wrap_
         return PeriodicElectron(epos, self.lvecs, wrap=wrap, dist=self.dist)
 
     def move(self, e, new, accept):

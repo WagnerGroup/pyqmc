@@ -16,6 +16,19 @@ def get_supercell_kpts(supercell):
     return np.dot(possible_kpts[select], reclatvec)
 
 
+def get_supercell_copies(latvec, S):
+    Sinv = np.linalg.inv(S).T
+    u = [0, 1]
+    unit_box = np.stack([x.ravel() for x in np.meshgrid(*[u] * 3, indexing="ij")]).T
+    unit_box_ = np.dot(unit_box, S)
+    xyz_range = np.stack([f(unit_box_, axis=0) for f in (np.amin, np.amax)]).T
+    mesh = np.meshgrid(*[np.arange(*r) for r in xyz_range], indexing="ij")
+    possible_pts = np.dot(np.stack([x.ravel() for x in mesh]).T, Sinv.T)
+    in_unit_box = (possible_pts >= 0) * (possible_pts < 1 - 1e-12)
+    select = np.where(np.all(in_unit_box, axis=1))[0]
+    return np.linalg.multi_dot((possible_pts[select], S, latvec))
+
+
 def get_supercell(cell, S):
     """
     Inputs:
@@ -23,19 +36,6 @@ def get_supercell(cell, S):
         S: (3, 3) supercell matrix for QMC from cell defined by cell.a. In other words, the QMC calculation cell is qmc_cell = np.dot(S, cell.lattice_vectors()). For a 2x2x2 supercell, S is [[2, 0, 0], [0, 2, 0], [0, 0, 2]].
     """
     from pyscf.pbc import gto
-
-    def get_supercell_copies(latvec, S):
-        Sinv = np.linalg.inv(S).T
-        u = [0, 1]
-        unit_box = np.stack([x.ravel() for x in np.meshgrid(*[u] * 3, indexing="ij")]).T
-        unit_box_ = np.dot(unit_box, S)
-        xyz_range = np.stack([f(unit_box_, axis=0) for f in (np.amin, np.amax)]).T
-        mesh = np.meshgrid(*[np.arange(*r) for r in xyz_range], indexing="ij")
-        possible_pts = np.dot(np.stack([x.ravel() for x in mesh]).T, Sinv.T)
-        in_unit_box = (possible_pts >= 0) * (possible_pts < 1 - 1e-12)
-        select = np.where(np.all(in_unit_box, axis=1))[0]
-        return np.linalg.multi_dot((possible_pts[select], S, latvec))
-
     scale = np.abs(int(np.round(np.linalg.det(S))))
     superlattice = np.dot(S, cell.lattice_vectors())
     Rpts = get_supercell_copies(cell.lattice_vectors(), S)

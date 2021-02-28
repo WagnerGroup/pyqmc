@@ -392,7 +392,7 @@ def rundmc(
         dmc_file(hdf_file, df_, {}, configs, weights)
         # print(df_)
         df.append(df_)
-        eref = df_[ekey[0] + ekey[1]] - feedback * np.log(np.mean(weights))
+        eref = (df_[ekey[0] + ekey[1]] - feedback * np.log(np.mean(weights))).real
         configs, weights = branch(configs, weights)
         if verbose:
             print(

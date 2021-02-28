@@ -115,6 +115,8 @@ class PySCFSlater:
         self.kinds = get_k_indices(self._cell, mf, get_supercell_kpts(cell) + twist)
         self._kpts = mf.kpts[self.kinds]
         assert len(self.kinds) == len(self._kpts), (self._kpts, mf.kpts)
+        if len(self.kinds)!= cell.scale:
+            raise Exception(f"Expected to find {cell.scale} k-points, but only found {len(self.kinds)}.")
         self.nk = len(self._kpts)
 
         # Define parameters
@@ -138,17 +140,16 @@ class PySCFSlater:
         # Define nelec
         if len(mf.mo_coeff[0][0].shape) == 2:
             # Then indices are (spin, kpt, basis, mo)
-            self._nelec = [int(np.sum([o[k] for k in self.kinds])) for o in mf.mo_occ]
+            self._nelec = tuple(int(np.sum([o[k] for k in self.kinds])) for o in mf.mo_occ)
         elif len(mf.mo_coeff[0][0].shape) == 1:
             # Then indices are (kpt, basis, mo)
-            self._nelec = [
+            self._nelec = tuple(
                 int(np.sum([mf.mo_occ[k] > t for k in self.kinds])) for t in (0.9, 1.1)
-            ]
+            )
         else:
             print("Warning: PySCFSlater not expecting scf object of type", type(mf))
             scale = self.supercell.scale
-            self._nelec = [int(np.round(n * scale)) for n in self._cell.nelec]
-        self._nelec = tuple(self._nelec)
+            self._nelec = tuple(int(np.round(n * scale)) for n in self._cell.nelec)
 
         self.evaluate_orbitals = self._evaluate_orbitals_pbc
         self.evaluate_mos = self._evaluate_mos_pbc
@@ -248,7 +249,7 @@ class PySCFSlater:
         if mask is None:
             return np.einsum("i...j,ij...->i...", vec, self._inverse[s][:, :, elec])
 
-        return np.einsum("i...j,ij...->i...", vec, self._inverse[s][mask][:, :, elec])
+        return np.einsum("i...j,ij...->i...", vec, self._inverse[s][mask, :, elec])
 
     def _testcol(self, i, s, vec):
         """vec is a nconfig,nmo vector which replaces column i"""

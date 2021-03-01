@@ -158,7 +158,6 @@ class MultiSlater:
     def updateinternals(self, e, epos, mask=None):
         """Update any internals given that electron e moved to epos. mask is a Boolean array 
         which allows us to update only certain walkers"""
-        # MAY want to vectorize later if it really hangs here, shouldn't!
 
         s = int(e >= self._nelec[0])
         if mask is None:
@@ -209,12 +208,17 @@ class MultiSlater:
             vec,
             self._inverse[s][mask][..., e - s * self._nelec[0]],
         )
+
+        upref = np.amax(self._dets[0][1])
+        dnref = np.amax(self._dets[1][1])
+
+        
         det_array = (
             self._dets[0][0, :, self._det_map[0]][:, mask]
             * self._dets[1][0, :, self._det_map[1]][:, mask]
             * np.exp(
                 self._dets[0][1, :, self._det_map[0]][:, mask]
-                + self._dets[1][1, :, self._det_map[1]][:, mask]
+                + self._dets[1][1, :, self._det_map[1]][:, mask]-upref-dnref
             )
         )
         numer = np.einsum(
@@ -223,9 +227,13 @@ class MultiSlater:
             self.parameters["det_coeff"],
             det_array,
         )
-
+        denom = np.einsum(
+            "d,di->i...",
+            self.parameters["det_coeff"],
+            det_array,
+        )
         curr_val = self.value()
-        denom = curr_val[0][mask] * np.exp(curr_val[1][mask])
+        
         if len(numer.shape) == 2:
             denom = denom[:, np.newaxis]
         return numer / denom

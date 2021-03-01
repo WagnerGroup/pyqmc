@@ -21,7 +21,7 @@ class OpenConfigs:
     def mask(self, mask):
         return OpenConfigs(self.configs[mask])
 
-    def make_irreducible(self, e, vec, mask):
+    def make_irreducible(self, e, vec, mask=True):
         """ 
           Input: 
             e: unused electron index
@@ -130,17 +130,21 @@ class PeriodicConfigs:
     def mask(self, mask):
         return PeriodicConfigs(self.configs[mask], self.lvecs, wrap=self.wrap[mask])
 
-    def make_irreducible(self, e, vec, mask):
+    def make_irreducible(self, e, vec, mask=None):
         """ 
          Input: a (nconfig, 3) vector or a (nconfig, N, 3) vector
          Output: A Periodic Electron
         """
+        if mask is None:
+            mask = np.ones(vec.shape[0:-1],dtype=np.bool)
         epos_, wrap_ = enforce_pbc(self.lvecs, vec[mask])
         epos = vec.copy()
         epos[mask] = epos_
-        wrap = self.wrap[:,e]
+        wrap = self.wrap[:,e,:].copy()
+        print("wrap",wrap.shape, self.wrap.shape)
         if len(vec.shape)==3:
             wrap=np.repeat(self.wrap[:,e][:,np.newaxis],vec.shape[1], axis=1)
+        print(wrap.shape, vec.shape, wrap_.shape)
         wrap[mask] += wrap_
         return PeriodicElectron(epos, self.lvecs, wrap=wrap, dist=self.dist)
 

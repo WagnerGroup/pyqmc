@@ -78,7 +78,7 @@ class Ewald:
 
     """
 
-    def __init__(self, cell, ewald_gmax=200, nlatvec=2):
+    def __init__(self, cell, ewald_gmax=200, nlatvec=1):
         """
         Inputs:
             cell: pyscf Cell object (simulation cell)
@@ -124,10 +124,13 @@ class Ewald:
         print("Setting Ewald alpha to ", self.alpha)
 
         # Determine G points to include in reciprocal Ewald sum
-        XYZ = np.meshgrid(*[np.arange(-ewald_gmax, ewald_gmax + 1)] * 3, indexing="ij")
-        X, Y, Z = [x.ravel() for x in XYZ]
+        X, Y, Z = np.meshgrid(
+            *[np.arange(-ewald_gmax, ewald_gmax + 1)] * 3, indexing="ij"
+        )
         positive_octants = X + 1e-6 * Y + 1e-12 * Z > 0  # assume ewald_gmax < 1e5
-        gpoints = np.stack((X, Y, Z), axis=-1)[positive_octants]
+        gpoints = np.stack(
+            (X[positive_octants], Y[positive_octants], Z[positive_octants]), axis=-1
+        )
         gpoints = np.dot(gpoints, recvec) * 2 * np.pi
         gsquared = np.sum(gpoints ** 2, axis=1)
         gweight = 4 * np.pi * np.exp(-gsquared / (4 * self.alpha ** 2))

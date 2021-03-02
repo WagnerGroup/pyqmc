@@ -93,7 +93,7 @@ class PySCFSlater:
         self.evaluate_mos = self._evaluate_mos_mol
 
     def _init_pbc(self, cell, mf, twist):
-        from pyscf.pbc import scf
+        from pyscf.pbc import scf, gto
         from pyqmc.supercell import get_supercell_kpts
 
         # Make sure supercell has attributes S and original_cell
@@ -115,8 +115,10 @@ class PySCFSlater:
         self.kinds = get_k_indices(self._cell, mf, get_supercell_kpts(cell) + twist)
         self._kpts = mf.kpts[self.kinds]
         assert len(self.kinds) == len(self._kpts), (self._kpts, mf.kpts)
-        if len(self.kinds)!= cell.scale:
-            raise Exception(f"Expected to find {cell.scale} k-points, but only found {len(self.kinds)}.")
+        if len(self.kinds) != cell.scale:
+            raise Exception(
+                f"Expected to find {cell.scale} k-points, but only found {len(self.kinds)}."
+            )
         self.nk = len(self._kpts)
 
         # Define parameters
@@ -140,7 +142,9 @@ class PySCFSlater:
         # Define nelec
         if len(mf.mo_coeff[0][0].shape) == 2:
             # Then indices are (spin, kpt, basis, mo)
-            self._nelec = tuple(int(np.sum([o[k] for k in self.kinds])) for o in mf.mo_occ)
+            self._nelec = tuple(
+                int(np.sum([o[k] for k in self.kinds])) for o in mf.mo_occ
+            )
         elif len(mf.mo_coeff[0][0].shape) == 1:
             # Then indices are (kpt, basis, mo)
             self._nelec = tuple(
@@ -153,6 +157,10 @@ class PySCFSlater:
 
         self.evaluate_orbitals = self._evaluate_orbitals_pbc
         self.evaluate_mos = self._evaluate_mos_pbc
+
+        Ls = self._cell.get_lattice_Ls(dimension=3)
+        self.Ls = Ls[np.argsort(np.linalg.norm(Ls, axis=1))]
+        self.rcut = gto.eval_gto._estimate_rcut(self._cell)
 
     def _evaluate_orbitals_mol(self, configs, mask=None, eval_str="GTOval_sph"):
         mycoords = configs.configs if mask is None else configs.configs[mask]
@@ -178,7 +186,9 @@ class PySCFSlater:
         )
         wrap_phase = self.get_wrapphase(kdotR)
         # evaluate AOs for all electron positions
-        ao = self._cell.eval_gto("PBC" + eval_str, prim_coords, kpts=self._kpts)
+        ao = self._cell.pbc_eval_gto(
+            "PBC" + eval_str, prim_coords, kpts=self._kpts, Ls=self.Ls, rcut=self.rcut
+        )
         ao = [ao[k] * wrap_phase[k][:, np.newaxis] for k in range(self.nk)]
         return ao
 

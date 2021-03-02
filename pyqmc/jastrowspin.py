@@ -15,7 +15,7 @@ class JastrowSpin:
 
         """
 
-    def __init__(self, mol, a_basis=None, b_basis=None):
+    def __init__(self, mol, a_basis, b_basis):
         r"""
         Args:
 
@@ -26,29 +26,13 @@ class JastrowSpin:
         b_basis : list of func3d objects that comprise the electron-electron basis
 
         """
-        if b_basis is None:
-            nexpand = 5
-            self.b_basis = [
-                GaussianFunction(0.2 * 2 ** n) for n in range(1, nexpand + 1)
-            ]
-        else:
-            nexpand = len(b_basis)
-            self.b_basis = b_basis
-
-        if a_basis is None:
-            aexpand = 4
-            self.a_basis = [
-                GaussianFunction(0.2 * 2 ** n) for n in range(1, aexpand + 1)
-            ]
-        else:
-            aexpand = len(a_basis)
-            self.a_basis = a_basis
-
+        self.a_basis = a_basis
+        self.b_basis = b_basis
         self.parameters = {}
         self._nelec = np.sum(mol.nelec)
         self._mol = mol
-        self.parameters["bcoeff"] = cp.zeros((nexpand, 3))
-        self.parameters["acoeff"] = cp.zeros((self._mol.natm, aexpand, 2))
+        self.parameters["bcoeff"] = cp.zeros((len(b_basis), 3))
+        self.parameters["acoeff"] = cp.zeros((self._mol.natm, len(a_basis), 2))
         self.iscomplex = False
 
     def recompute(self, configs):

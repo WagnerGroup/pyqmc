@@ -78,29 +78,21 @@ def default_multislater(
     return wf, to_opt
 
 
-def default_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
-    """         
-    Default 2-body jastrow from qwalk,
-    Args:
-      ion_cusp (bool): add an extra term to satisfy electron-ion cusp.
-    Returns:
-      jastrow, to_opt
-    """
-    import numpy as np
+def expand_beta_qwalk(beta0, n):
+    """polypade expansion coefficients 
+    for n basis functions with first 
+    coeff beta0"""
+    if n == 0:
+        return np.zeros(0)
+    beta = np.zeros(n)
+    beta[0] = beta0
+    beta1 = np.log(beta0 + 1.00001)
+    for i in range(1, n):
+        beta[i] = np.exp(beta1 + 1.6 * i) - 1
+    return beta
 
-    def expand_beta_qwalk(beta0, n):
-        """polypade expansion coefficients 
-        for n basis functions with first 
-        coeff beta0"""
-        if n == 0:
-            return np.zeros(0)
-        beta = np.zeros(n)
-        beta[0] = beta0
-        beta1 = np.log(beta0 + 1.00001)
-        for i in range(1, n):
-            beta[i] = np.exp(beta1 + 1.6 * i) - 1
-        return beta
 
+def default_jastrow_basis(mol, ion_cusp=False, na=4, nb=3, rcut=None):
     if rcut is None:
         if hasattr(mol, "a"):
             rcut = np.amin(np.pi / np.linalg.norm(mol.reciprocal_vectors(), axis=1))
@@ -109,6 +101,24 @@ def default_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
 
     beta_abasis = expand_beta_qwalk(0.2, na)
     beta_bbasis = expand_beta_qwalk(0.5, nb)
+    if ion_cusp:
+        abasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
+    else:
+        abasis = []
+    abasis += [PolyPadeFunction(beta=ba, rcut=rcut) for ba in beta_abasis]
+    bbasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
+    bbasis += [PolyPadeFunction(beta=bb, rcut=rcut) for bb in beta_bbasis]
+    return abasis, bbasis
+
+
+def default_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
+    """         
+    Default 2-body jastrow from qwalk,
+    Args:
+      ion_cusp (bool): add an extra term to satisfy electron-ion cusp.
+    Returns:
+      jastrow, to_opt
+    """
     if ion_cusp == False:
         ion_cusp = []
         if not mol.has_ecp():
@@ -122,14 +132,7 @@ def default_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
     else:
         assert isinstance(ion_cusp, list)
 
-    if len(ion_cusp) > 0:
-        abasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
-    else:
-        abasis = []
-    abasis += [PolyPadeFunction(beta=ba, rcut=rcut) for ba in beta_abasis]
-    bbasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
-    bbasis += [PolyPadeFunction(beta=bb, rcut=rcut) for bb in beta_bbasis]
-
+    abasis, bbasis = default_jastrow_basis(mol, len(ion_cusp) > 0, na, nb, rcut)
     jastrow = JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
     if len(ion_cusp) > 0:
         coefs = mol.atom_charges().copy()

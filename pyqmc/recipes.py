@@ -8,7 +8,6 @@ import pandas as pd
 import copy
 
 
-
 def OPTIMIZE(
     dft_checkfile,
     output,
@@ -74,7 +73,6 @@ def OPTIMIZE(
 def generate_accumulators(mol, mf, energy=True, rdm1=False, extra_accumulators=None):
     acc = {} if extra_accumulators is None else extra_accumulators
 
-
     if energy:
         if "energy" in acc.keys():
             raise Exception("Found energy in extra_accumulators and energy is True")
@@ -124,7 +122,7 @@ def VMC(
         mc.ci = mc.ci[target_root]
 
     if S is not None:
-        print("S",S)
+        print("S", S)
         mol = pyqmc.get_supercell(mol, np.asarray(S))
 
     if accumulators is None:

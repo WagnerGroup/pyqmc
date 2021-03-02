@@ -36,6 +36,7 @@ def get_supercell(cell, S):
         S: (3, 3) supercell matrix for QMC from cell defined by cell.a. In other words, the QMC calculation cell is qmc_cell = np.dot(S, cell.lattice_vectors()). For a 2x2x2 supercell, S is [[2, 0, 0], [0, 2, 0], [0, 0, 2]].
     """
     from pyscf.pbc import gto
+
     scale = np.abs(int(np.round(np.linalg.det(S))))
     superlattice = np.dot(S, cell.lattice_vectors())
     Rpts = get_supercell_copies(cell.lattice_vectors(), S)

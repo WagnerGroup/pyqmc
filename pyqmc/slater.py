@@ -115,8 +115,10 @@ class PySCFSlater:
         self.kinds = get_k_indices(self._cell, mf, get_supercell_kpts(cell) + twist)
         self._kpts = mf.kpts[self.kinds]
         assert len(self.kinds) == len(self._kpts), (self._kpts, mf.kpts)
-        if len(self.kinds)!= cell.scale:
-            raise Exception(f"Expected to find {cell.scale} k-points, but only found {len(self.kinds)}.")
+        if len(self.kinds) != cell.scale:
+            raise Exception(
+                f"Expected to find {cell.scale} k-points, but only found {len(self.kinds)}."
+            )
         self.nk = len(self._kpts)
 
         # Define parameters
@@ -140,7 +142,9 @@ class PySCFSlater:
         # Define nelec
         if len(mf.mo_coeff[0][0].shape) == 2:
             # Then indices are (spin, kpt, basis, mo)
-            self._nelec = tuple(int(np.sum([o[k] for k in self.kinds])) for o in mf.mo_occ)
+            self._nelec = tuple(
+                int(np.sum([o[k] for k in self.kinds])) for o in mf.mo_occ
+            )
         elif len(mf.mo_coeff[0][0].shape) == 1:
             # Then indices are (kpt, basis, mo)
             self._nelec = tuple(

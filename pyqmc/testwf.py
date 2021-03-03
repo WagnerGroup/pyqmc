@@ -195,13 +195,13 @@ def test_wf_gradient_laplacian(wf, configs):
     tsep = 0
     ttog = 0
     for e in range(nelec):
-        ts0 = time.time()
+        ts0 = time.perf_counter()
         lap[:, e] = wf.laplacian(e, configs.electron(e))
         grad[e] = wf.gradient(e, configs.electron(e))
-        ts1 = time.time()
-        tt0 = time.time()
+        ts1 = time.perf_counter()
+        tt0 = time.perf_counter()
         andgrad[e], andlap[:, e] = wf.gradient_laplacian(e, configs.electron(e))
-        tt1 = time.time()
+        tt1 = time.perf_counter()
         tsep += ts1 - ts0
         ttog += tt1 - tt0
         rmae_grad = np.mean(np.abs((andgrad - grad) / grad))
@@ -217,4 +217,42 @@ def test_wf_gradient_laplacian(wf, configs):
     d.append({"error": rmae_lap, "deriv": "lap", "type": "mae"})
     d.append({"error": norm_grad, "deriv": "grad", "type": "norm"})
     d.append({"error": norm_lap, "deriv": "lap", "type": "norm"})
+    return d
+
+
+def test_wf_gradient_value(wf, configs):
+    nconf, nelec = configs.configs.shape[0:2]
+    iscomplex = 1j if wf.iscomplex else 1
+    wf.recompute(configs)
+    maxerror = 0
+    val = np.zeros(configs.configs.shape[:2]) * iscomplex
+    grad = np.zeros(configs.configs.shape).transpose((1, 2, 0)) * iscomplex
+    andval = np.zeros(configs.configs.shape[:2]) * iscomplex
+    andgrad = np.zeros(configs.configs.shape).transpose((1, 2, 0)) * iscomplex
+
+    tsep = 0
+    ttog = 0
+    for e in range(nelec):
+        ts0 = time.perf_counter()
+        val[:, e] = wf.testvalue(e, configs.electron(e))
+        grad[e] = wf.gradient(e, configs.electron(e))
+        ts1 = time.perf_counter()
+        tt0 = time.perf_counter()
+        andgrad[e], andval[:, e] = wf.gradient_value(e, configs.electron(e))
+        tt1 = time.perf_counter()
+        tsep += ts1 - ts0
+        ttog += tt1 - tt0
+        rmae_grad = np.mean(np.abs((andgrad - grad) / grad))
+        rmae_val = np.mean(np.abs((andval - val) / val))
+        norm_grad = np.linalg.norm((andgrad - grad) / grad)
+        norm_val = np.linalg.norm((andval - val) / val)
+
+    print("separate", tsep)
+    print("together", ttog)
+
+    d = []
+    d.append({"error": rmae_grad, "deriv": "grad", "type": "mae"})
+    d.append({"error": rmae_val, "deriv": "val", "type": "mae"})
+    d.append({"error": norm_grad, "deriv": "grad", "type": "norm"})
+    d.append({"error": norm_val, "deriv": "val", "type": "norm"})
     return d

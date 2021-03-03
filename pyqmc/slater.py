@@ -304,6 +304,16 @@ class PySCFSlater:
         ratios = np.asarray([self._testrow(e, x) for x in mograd])
         return ratios[1:] / ratios[:1]
 
+    def gradient_value(self, e, epos):
+        """ Compute the gradient of the log wave function 
+        Note that this can be called even if the internals have not been updated for electron e,
+        if epos differs from the current position of electron e."""
+        s = int(e >= self._nelec[0])
+        aograd = self.evaluate_orbitals(epos, eval_str="GTOval_sph_deriv1")
+        mograd = self.evaluate_mos(aograd, s)
+        ratios = np.asarray([self._testrow(e, x) for x in mograd])
+        return ratios[1:] / ratios[:1], ratios[0]
+
     def laplacian(self, e, epos):
         s = int(e >= self._nelec[0])
         ao = self.evaluate_orbitals(epos, eval_str="GTOval_sph_deriv2")

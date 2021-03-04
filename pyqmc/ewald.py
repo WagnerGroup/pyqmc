@@ -316,7 +316,7 @@ class Ewald:
         ei_recip = np.dot(coscos_sinsin, self.gweight)
         return ee_recip, ei_recip
 
-    def save_separated(ee_recip, ei_recip, ee_real, ei_real):
+    def save_separated(self, ee_recip, ei_recip, ee_real, ei_real):
         # Combine parts
         self.ei_separated = ei_real + 2 * ei_recip
         self.ee_separated = ee_real + 1 * ee_recip

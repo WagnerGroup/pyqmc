@@ -252,6 +252,20 @@ class MultiSlater:
         ratios = np.asarray([self._testrow(e, x) for x in mograd_vals])
         return ratios[1:] / ratios[:1]
 
+    def gradient_value(self, e, epos):
+        """ Compute the gradient of the log wave function 
+        Note that this can be called even if the internals have not been updated for electron e,
+        if epos differs from the current position of electron e."""
+        s = int(e >= self._nelec[0])
+        aograd = np.real_if_close(
+            self._mol.eval_gto("GTOval_sph_deriv1", epos.configs), tol=1e4
+        )
+        mograd = aograd.dot(self.parameters[self._coefflookup[s]])
+        mograd_vals = mograd[:, :, self._det_occup[s]]
+
+        ratios = np.asarray([self._testrow(e, x) for x in mograd_vals])
+        return ratios[1:] / ratios[:1], ratios[0]
+
     def laplacian(self, e, epos):
         """ Compute the laplacian Psi/ Psi. """
         s = int(e >= self._nelec[0])

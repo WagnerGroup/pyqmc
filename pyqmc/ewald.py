@@ -363,6 +363,7 @@ class Ewald:
         Returns: 
             (nelec,) energies
         """
+        raise NotImplementedError("ewalde_separated is currently not computed anywhere")
         nelec = configs.configs.shape[1]
         return self.e_single(nelec) + self.ewalde_separated
 

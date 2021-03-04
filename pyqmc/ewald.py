@@ -321,7 +321,7 @@ class Ewald:
         self.ei_separated = ei_real + 2 * ei_recip
         self.ee_separated = ee_real + 1 * ee_recip
         self.ewalde_separated = self.ei_separated + self.ee_separated
-        nelec = ee_recip_separated.shape[1]
+        nelec = ee_recip.shape[1]
         ### Add back the 0.5 that was subtracted earlier
         ee = self.ee_separated.sum(axis=1) + nelec / 2 * self.gweight.sum()
         ei = self.ei_separated.sum(axis=1)

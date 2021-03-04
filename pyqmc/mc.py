@@ -117,13 +117,14 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
             newcoorde = configs.make_irreducible(e, newcoorde)
 
             # Compute reverse move
-            new_grad = limdrift(np.real(wf.gradient(e, newcoorde).T))
+            g, new_val = wf.gradient_value(e, newcoorde)
+            new_grad = limdrift(np.real(g.T))
             forward = np.sum(gauss ** 2, axis=1)
             backward = np.sum((gauss + tstep * (grad + new_grad)) ** 2, axis=1)
 
             # Acceptance
             t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
-            ratio = np.multiply(wf.testvalue(e, newcoorde) ** 2, t_prob)
+            ratio = new_val ** 2 * t_prob
             accept = ratio > np.random.rand(nconf)
 
             # Update wave function

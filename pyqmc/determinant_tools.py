@@ -30,7 +30,7 @@ def interpret_ci(mc, tol):
     # find multi slater determinant occupation
     if hasattr(mc, "_strs"):
         # if this is a HCI object, it will have _strs
-        bigcis = np.abs(mc.ci) > self.tol
+        bigcis = np.abs(mc.ci) > tol
         nstrs = int(mc._strs.shape[1] / 2)
         # old code for single strings.
         # deters = [(c,bin(s[0]), bin(s[1])) for c, s in zip(mc.ci[bigcis],mc._strs[bigcis,:])]

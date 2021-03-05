@@ -204,13 +204,14 @@ def test_wf_gradient_laplacian(wf, configs):
         tt1 = time.time()
         tsep += ts1 - ts0
         ttog += tt1 - tt0
-        rmae_grad = np.mean(np.abs((andgrad - grad) / grad))
-        rmae_lap = np.mean(np.abs((andlap - lap) / lap))
-        norm_grad = np.linalg.norm((andgrad - grad) / grad)
-        norm_lap = np.linalg.norm((andlap - lap) / lap)
 
-    print("separate", tsep)
-    print("together", ttog)
+    rmae_grad = np.mean(np.abs((andgrad - grad) / grad))
+    rmae_lap = np.mean(np.abs((andlap - lap) / lap))
+    norm_grad = np.linalg.norm((andgrad - grad) / grad)
+    norm_lap = np.linalg.norm((andlap - lap) / lap)
+
+    print("time evaluated separately", tsep)
+    print("time evaluated together", ttog)
 
     d = []
     d.append({"error": rmae_grad, "deriv": "grad", "type": "mae"})

@@ -20,7 +20,7 @@ def choose_evaluator_from_pyscf(mol, mf, mc=None, det_occ=None, twist=None):
     
 
     Returns:
-    a list of two evaluators, one for each spin. 
+    a molecular orbital evaluator
     """
 
     if hasattr(mol, "a"): 
@@ -93,7 +93,7 @@ class MoleculeOrbitalEvaluator:
         return np.asarray([self._mol.eval_gto(eval_str, mycoords)])
 
     def mos(self, ao, spin):
-        return ao.dot(self.parameters[f'mo_coeff{self.parm_names[spin]}'])
+        return ao[0].dot(self.parameters[f'mo_coeff{self.parm_names[spin]}'])
 
     def pgradient(self, ao, spin):
         return np.array([self.parameters[f'mo_coeff{self.parm_names[spin]}'].shape[1]]),ao

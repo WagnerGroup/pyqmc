@@ -15,26 +15,90 @@ def get_complex_phase(x):
     return x / np.abs(x)
 
 
+def choose_evaluator_from_pyscf(mol, mf, mc=None, det_occ=None, twist=None):
+    """
+    
+
+    Returns:
+    a list of two evaluators, one for each spin. 
+    """
+
+    if hasattr(mol, "a"): 
+        return PBCOrbitalEvaluatorKpoints.from_mean_field(mol, mf, twist)
+    if mc is None:
+        return MoleculeOrbitalEvaluator.from_pyscf(mol, mf)
+    mo_cutoff_alpha = np.max(det_occ[0]) + 1
+    mo_cutoff_beta = np.max(det_occ[1]) + 1
+    return MoleculeOrbitalEvaluator.from_pyscf(mol, mf, mc, [mo_cutoff_alpha, mo_cutoff_beta])
+
+
+
+"""
+The evaluators have the concept of a 'set' of atomic orbitals, that may apply to 
+different sets of molecular orbitals
+
+For example, for the PBC evaluator, each k-point is a set, since each molecular 
+orbital is only a sum over the k-point of its type.
+
+In the future, this could apply to orbitals of a given point group symmetry, for example.
+
+TODO: 
+* test MoleculeOrbitalEvaluator
+* test multislater_orbs.py for gradients
+* implement laplacian and gradient_laplacian in multislater_orbs.py (grab only certain elements from the aos)
+* implement pgradient() for multislater_orbs.py
+* implement testvalue_many() for multislater_orbs.py
+* Make pgradient() overflow-safe for multislater_orbs.py
+"""
 
 class MoleculeOrbitalEvaluator:
     def __init__(self, mol, mo_coeff):
         self.iscomplex=False
-        self.parameters={'mo_coeff':mo_coeff}
+        self.parameters={'mo_coeff_alpha':mo_coeff[0],
+                        'mo_coeff_beta':mo_coeff[1]}
+        self.parm_names=['_alpha','_beta']
+
         self._mol = mol
+
+    @classmethod
+    def from_pyscf(self, mol, mf, mc=None, maxorb = None):
+        """
+        mol: A Mole object
+        mf: An object with mo_coeff and mo_occ. 
+        maxorb: If None, choose occupied orbitals, otherwise choose 0:maxorb
+
+        """
+        obj = mc if hasattr(mc, 'mo_coeff') else mf
+
+        if len(mf.mo_occ.shape) == 2:
+            if maxorb is None:
+                mo_coeff = [obj.mo_coeff[spin][:,mf.mo_occ[spin] > 0.5] for spin in [0,1]]
+            else:
+                mo_coeff = [obj.mo_coeff[spin][:,0:maxorb] for spin in [0,1]]
+        else:
+            if maxorb is None:
+                mo_coeff = [obj.mo_coeff[:,mf.mo_occ > 0.5] for spin in [0,1]]
+            else:
+                mo_coeff = [obj.mo_coeff[:,0:maxorb[spin]] for spin in [0,1]]
+
+        return MoleculeOrbitalEvaluator(mol, mo_coeff)
+
 
     def aos(self, eval_str, configs, mask=None):
         """
+        
         """
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
-        return self._mol.eval_gto(eval_str, mycoords)
+        return np.asarray([self._mol.eval_gto(eval_str, mycoords)])
 
-    def mos(self, ao):
-        return ao.dot(self.parameters['mo_coeff'])
+    def mos(self, ao, spin):
+        return ao.dot(self.parameters[f'mo_coeff{self.parm_names[spin]}'])
 
-    def pgradient(self, ao):
-        return np.array([self.parameters['mo_coeff'].shape[1]]),ao
+    def pgradient(self, ao, spin):
+        return np.array([self.parameters[f'mo_coeff{self.parm_names[spin]}'].shape[1]]),ao
     
+
     
 def get_k_indices(cell, mf, kpts, tol=1e-6):
     """Given a list of kpts, return inds such that mf.kpts[inds] is a list of kpts equivalent to the input list"""
@@ -47,8 +111,9 @@ class PBCOrbitalEvaluatorKpoints:
     """
     Evaluate orbitals from a 
     cell is expected to be one made with make_supercell().
-    mo_coeff should be in [k][ao,mo] order
-    kpts should be a list of the k-points corresponding to mo_coeff    
+    mo_coeff should be in [spin][k][ao,mo] order
+    kpts should be a list of the k-points corresponding to mo_coeff  
+
     """
     def __init__(self, cell, mo_coeff, kpts=None, S = None):
         self.iscomplex=True
@@ -56,14 +121,16 @@ class PBCOrbitalEvaluatorKpoints:
         self.S = cell.S
 
         self._kpts = [0,0,0] if kpts is None else kpts 
-        self.param_split = np.cumsum([m.shape[1] for m in mo_coeff])
-        self.parameters={'mo_coeff': np.concatenate(mo_coeff, axis=1)}
+        self.param_split = [np.cumsum([m.shape[1] for m in mo_coeff[spin]]) for spin in [0,1]]
+        self.parm_names=['_alpha','_beta']
+        self.parameters={'mo_coeff_alpha': np.concatenate(mo_coeff[0], axis=1),
+                         'mo_coeff_beta': np.concatenate(mo_coeff[1], axis=1)}
 
     @classmethod
-    def from_mean_field(self, cell, mf, twist=None, spin = None):
+    def from_mean_field(self, cell, mf, twist=None):
         """
         mf is expected to be a KUHF, KRHF, or equivalent DFT objects. 
-        Selects occupied orbitals from a given twist and spin.
+        Selects occupied orbitals from a given twist 
         If cell is a supercell, will automatically choose the folded k-points that correspond to that twist.
         """
 
@@ -77,15 +144,20 @@ class PBCOrbitalEvaluatorKpoints:
         if len(kinds) != cell.scale:
             raise ValueError("Did not find the right number of k-points for this supercell")
         kpts = mf.kpts[kinds]
-        if spin is None:
-            mo_coeff = [mf.mo_coeff[k] for k in kinds]
+        if len(mf.mo_coeff[0][0].shape) == 2:
+            mo_coeff = [[mf.mo_coeff[spin][k][:,mf.mo_occ[spin][k]>0.5] for k in kinds] for spin in [0,1]]
+        elif len(mf.mo_coeff[0][0].shape) == 1:
+            mo_coeff = [[mf.mo_coeff[k] for k in kinds] for spin in [0,1]]
         else:
-            mo_coeff = [mf.mo_coeff[spin][k][:,mf.mo_occ[spin][k]>0.5] for k in kinds]
+            raise ValueError("Did not expect an scf object of type", type(mf))
+
         return PBCOrbitalEvaluatorKpoints(cell, mo_coeff, kpts)
         
     def aos(self,eval_str,configs, mask=None):
         """
-        Returns an ndarray in order [k,coordinate, orbital] of the ao's
+        Returns an ndarray in order [k,coordinate, orbital] of the ao's if value is requested
+
+        if a derivative is requested, will instead return [k,d,coordinate,orbital]
         """
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
@@ -106,15 +178,17 @@ class PBCOrbitalEvaluatorKpoints:
         return np.einsum("ij,ijk->ijk",wrap_phase, ao)
 
         
-    def mos(self, ao):
+    def mos(self, ao, spin):
         """ao should be [k,coordinate,ao].
         Returns a concatenated list of all molecular orbitals in form [coordinate, mo]
+
+        In the derivative case, returns [d,coordinate, mo]
         """
         # do some split
-        p = np.split(self.parameters['mo_coeff'], self.param_split, axis=-1)
+        p = np.split(self.parameters[f'mo_coeff{self.parm_names[spin]}'], self.param_split[spin], axis=-1)
         return np.concatenate([ak.dot(mok) for ak,mok in zip(ao,p)], axis=-1)
 
-    def pgradient(self,ao):
+    def pgradient(self,ao, spin):
         """
         returns:
         N sets of atomic orbitals
@@ -128,4 +202,4 @@ class PBCOrbitalEvaluatorKpoints:
                 pgrad[:,:,i] = self._testcol(i,spin,ao)
                 
         """
-        return self.param_split, ao
+        return self.param_split[spin], ao

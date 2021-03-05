@@ -7,12 +7,13 @@ import numpy as np
 import os.path
 
 def test_orbitals_all_electron(mol, mf, nconfig=7):
-    evaluator = pyqmc.orbitals.PBCOrbitalEvaluatorKpoints.from_mean_field(mol, mf, spin=0)
+    evaluator = pyqmc.orbitals.PBCOrbitalEvaluatorKpoints.from_mean_field(mol, mf)
     configs = pyqmc.initial_guess(mol, nconfig)
     print(configs.configs.shape)
     aos = evaluator.aos('GTOval_sph',configs)
+    aos = aos.reshape(-1,nconfig, configs.configs.shape[1], aos.shape[-1])
     print(aos.shape)
-    mos = evaluator.mos(aos)
+    mos = evaluator.mos(aos,0)
     print(aos.shape, mos.shape)
 
 

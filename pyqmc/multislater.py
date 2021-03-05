@@ -1,6 +1,6 @@
 import numpy as np
 from pyqmc.slater import sherman_morrison_row, get_complex_phase
-
+import pyqmc.determinant_tools as determinant_tools
 
 def sherman_morrison_ms(e, inv, vec):
     ratio = np.einsum("idj,idj->id", vec, inv[:, :, :, e])
@@ -14,16 +14,6 @@ def sherman_morrison_ms(e, inv, vec):
     return ratio, invnew
 
 
-def binary_to_occ(S, ncore):
-    """
-  Converts the binary cistring for a given determinant
-  to occupation values for molecular orbitals within
-  the determinant.
-  """
-    occup = [int(i) for i in range(ncore)]
-    occup += [int(i + ncore) for i, c in enumerate(reversed(S)) if c == "1"]
-    max_orb = max(occup)
-    return (occup, max_orb)
 
 
 class MultiSlater:
@@ -58,11 +48,13 @@ class MultiSlater:
             self._nelec = (mc.nelecas[0] + mc.ncore, mc.nelecas[1] + mc.ncore)
         else:
             self._nelec = mol.nelec
-        self._copy_ci(mc)
+
+        self.parameters["det_coeff"], self._det_occup, self._det_map = determinant_tools.interpret_ci(mc, self.tol)
+
         mo_coeff = mc.mo_coeff if hasattr(mc, "mo_coeff") else mf.mo_coeff
         mo_cutoff_alpha = np.max(self._det_occup[0]) + 1
         mo_cutoff_beta = np.max(self._det_occup[1]) + 1
-
+        
         if len(mo_coeff.shape) == 3:
             self.parameters["mo_coeff_alpha"] = mo_coeff[0][:, :mo_cutoff_alpha]
             self.parameters["mo_coeff_beta"] = mo_coeff[1][:, :mo_cutoff_beta]
@@ -71,60 +63,12 @@ class MultiSlater:
             self.parameters["mo_coeff_beta"] = mo_coeff[:, :mo_cutoff_beta]
         self._coefflookup = ("mo_coeff_alpha", "mo_coeff_beta")
         self.pbc_str = "PBC" if hasattr(mol, "a") else ""
+
+
         self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
         self.get_phase = get_complex_phase if self.iscomplex else np.sign
         self.freeze_orb = [[], []] if freeze_orb is None else freeze_orb
 
-    def _copy_ci(self, mc):
-        """       
-        Copies over determinant coefficients and MO occupations
-        for a multi-configuration calculation mc.
-        """
-        from pyscf import fci
-
-        ncore = mc.ncore if hasattr(mc, "ncore") else 0
-
-        # find multi slater determinant occupation
-        if hasattr(mc, "_strs"):
-            # if this is a HCI object, it will have _strs
-            bigcis = np.abs(mc.ci) > self.tol
-            nstrs = int(mc._strs.shape[1] / 2)
-            # old code for single strings.
-            # deters = [(c,bin(s[0]), bin(s[1])) for c, s in zip(mc.ci[bigcis],mc._strs[bigcis,:])]
-            deters = []
-            # In pyscf, the first n/2 strings represent the up determinant and the second
-            # represent the down determinant.
-            for c, s in zip(mc.ci[bigcis], mc._strs[bigcis, :]):
-                s1 = "".join(str(bin(p)).replace("0b", "") for p in s[0:nstrs])
-                s2 = "".join(str(bin(p)).replace("0b", "") for p in s[nstrs:])
-                deters.append((c, s1, s2))
-        else:
-            deters = fci.addons.large_ci(mc.ci, mc.ncas, mc.nelecas, tol=-1)
-
-        # Create map and occupation objects
-        detwt = []
-        map_dets = [[], []]
-        occup = [[], []]
-        for x in deters:
-            if np.abs(x[0]) > self.tol:
-                detwt.append(x[0])
-                alpha_occ, __ = binary_to_occ(x[1], ncore)
-                beta_occ, __ = binary_to_occ(x[2], ncore)
-                if alpha_occ not in occup[0]:
-                    map_dets[0].append(len(occup[0]))
-                    occup[0].append(alpha_occ)
-                else:
-                    map_dets[0].append(occup[0].index(alpha_occ))
-
-                if beta_occ not in occup[1]:
-                    map_dets[1].append(len(occup[1]))
-                    occup[1].append(beta_occ)
-                else:
-                    map_dets[1].append(occup[1].index(beta_occ))
-
-        self.parameters["det_coeff"] = np.array(detwt)
-        self._det_occup = occup  # Spin, [Ndet_up_unique, Ndet_dn_unique]
-        self._det_map = np.array(map_dets)  # Spin, N_det
 
     def recompute(self, configs):
         """This computes the value from scratch. Returns the logarithm of the wave function as
@@ -180,18 +124,7 @@ class MultiSlater:
         """Return logarithm of the wave function as noted in recompute()"""
         updets = self._dets[0][:, :, self._det_map[0]]
         dndets = self._dets[1][:, :, self._det_map[1]]
-        upref = np.amax(self._dets[0][1])
-        dnref = np.amax(self._dets[1][1])
-        phases = updets[0] * dndets[0]
-        logvals = updets[1] - upref + dndets[1] - dnref
-
-        wf_val = np.einsum(
-            "d,id->i", self.parameters["det_coeff"], phases * np.exp(logvals)
-        )
-
-        wf_sign = self.get_phase(wf_val)
-        wf_logval = np.log(np.abs(wf_val)) + upref + dnref
-        return wf_sign, wf_logval
+        return determinant_tools.compute_value(updets,dndets, self.parameters["det_coeff"])
 
     def _updateval(self, ratio, s, mask):
         self._dets[s][0, mask, :] *= self.get_phase(ratio)
@@ -351,10 +284,7 @@ class MultiSlater:
         )
 
         # Mo_coeff, adapted from SlaterUHF
-        for parm in ["mo_coeff_alpha", "mo_coeff_beta"]:
-            s = 0
-            if "beta" in parm:
-                s = 1
+        for s,parm in zip([0,1],["mo_coeff_alpha", "mo_coeff_beta"]):
 
             ao = self._aovals[
                 :, s * self._nelec[0] : self._nelec[s] + s * self._nelec[0], :

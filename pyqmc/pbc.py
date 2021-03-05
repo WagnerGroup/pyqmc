@@ -17,11 +17,11 @@ def enforce_pbc(lattvecs, epos):
     """
     # Writes epos in terms of (lattice vecs) fractional coordinates
     recpvecs = np.linalg.inv(lattvecs)
-    epos_lvecs_coord = np.dot(epos, recpvecs)
+    epos_lvecs_coord = np.einsum("...ij,jk->...ik", epos, recpvecs)
 
     # Finds position inside box and wraparound vectors (in lattice vector coordinates)
     tmp = np.divmod(epos_lvecs_coord, 1)
     wraparound = tmp[0]
-    final_epos = np.dot(tmp[1], lattvecs)
+    final_epos = np.einsum("...ij,jk->...ik", tmp[1], lattvecs)
 
     return final_epos, wraparound

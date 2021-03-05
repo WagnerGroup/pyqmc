@@ -32,6 +32,8 @@ class MoleculeOrbitalEvaluator:
     def mos(self, ao):
         return ao.dot(self.parameters['mo_coeff'])
 
+    def pgradient(self, ao):
+        return np.array([self.parameters['mo_coeff'].shape[1]]),ao
     
     
 def get_k_indices(cell, mf, kpts, tol=1e-6):

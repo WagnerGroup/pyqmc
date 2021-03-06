@@ -102,7 +102,11 @@ class MultiSlater:
             self._nelec = mol.nelec
 
         self.myparameters={}
-        self.myparameters["det_coeff"], self._det_occup, self._det_map = determinant_tools.interpret_ci(mc, self.tol)
+        if mc is None:
+            self.myparameters["det_coeff"], self._det_occup, self._det_map = determinant_tools.determinants_from_mean_field(mf)
+        else:
+            self.myparameters["det_coeff"], self._det_occup, self._det_map = determinant_tools.interpret_ci(mc, self.tol)
+
         self.orbitals = pyqmc.orbitals.choose_evaluator_from_pyscf(mol, mf, mc, self._det_occup)
         self.parameters=JoinParameters([self.myparameters,self.orbitals.parameters])
 

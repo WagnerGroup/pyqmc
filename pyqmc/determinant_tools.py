@@ -13,13 +13,21 @@ def binary_to_occ(S, ncore):
     max_orb = max(occup)
     return (occup, max_orb)
 
+def determinants_from_mean_field(mf):
+    detwt=np.array([1.0])
+    print(np.nonzero(mf.mo_occ[0] > 0.9))
+    occup = [[list(np.nonzero(mf.mo_occ[0] > 0.9)[0])],[list(np.nonzero(mf.mo_occ[1] > 0.9)[0])]]
+    map_dets = np.array([[0],[0]])
+    return detwt, occup, map_dets
+
+
 def interpret_ci(mc, tol):
     """       
     Copies over determinant coefficients and MO occupations
     for a multi-configuration calculation mc.
 
     This implementation separates the up and down determinants, so that we only have to compute 
-    
+
 
     returns:
     detwt: array of weights for each determinant

@@ -427,9 +427,8 @@ def test_func3d_gradient(bf, delta=1e-5):
         pos[..., d] -= 2 * delta
         minuval = bf.value(pos, np.linalg.norm(pos, axis=-1))
         numeric[..., d] = (plusval - minuval) / (2 * delta)
-    meanerror = np.mean(np.abs(grad - numeric))
-    normerror = np.linalg.norm(grad - numeric)
-    return (meanerror, normerror)
+    maxerror = np.max(np.abs(grad - numeric))
+    return maxerror
 
 
 def test_func3d_laplacian(bf, delta=1e-5):
@@ -446,9 +445,8 @@ def test_func3d_laplacian(bf, delta=1e-5):
         r = np.linalg.norm(pos, axis=-1)
         minuval = bf.gradient(pos, r)[..., d]
         numeric[..., d] = (plusval - minuval) / (2 * delta)
-    meanerror = np.mean(np.abs(lap - numeric))
-    normerror = np.linalg.norm(lap - numeric)
-    return (meanerror, normerror)
+    maxerror = np.max(np.abs(lap - numeric))
+    return maxerror
 
 
 def test_func3d_gradient_laplacian(bf):
@@ -457,9 +455,9 @@ def test_func3d_gradient_laplacian(bf):
     grad = bf.gradient(rvec, r)
     lap = bf.laplacian(rvec, r)
     andgrad, andlap = bf.gradient_laplacian(rvec, r)
-    graderr = np.linalg.norm((grad - andgrad))
-    laperr = np.linalg.norm((lap - andlap))
-    return (graderr, laperr)
+    graderr = np.amax(np.abs(grad - andgrad))
+    laperr = np.amax(np.abs(lap - andlap))
+    return {"grad": graderr, "lap": laperr}
 
 
 def test_func3d_pgradient(bf, delta=1e-5):
@@ -467,7 +465,7 @@ def test_func3d_pgradient(bf, delta=1e-5):
     r = np.linalg.norm(rvec, axis=-1)
     pgrad = bf.pgradient(rvec, r)
     numeric = {k: np.zeros(v.shape) for k, v in pgrad.items()}
-    meanerror = {k: np.zeros(v.shape) for k, v in pgrad.items()}
+    maxerror = {k: np.zeros(v.shape) for k, v in pgrad.items()}
     normerror = {k: np.zeros(v.shape) for k, v in pgrad.items()}
     for k in pgrad.keys():
         bf.parameters[k] += delta
@@ -476,8 +474,7 @@ def test_func3d_pgradient(bf, delta=1e-5):
         minuval = bf.value(rvec, r)
         bf.parameters[k] += delta
         numeric[k] = (plusval - minuval) / (2 * delta)
-        meanerror[k] = np.mean(np.abs(pgrad[k] - numeric[k]))
-        normerror[k] = np.linalg.norm(pgrad[k] - numeric[k])
-        if meanerror[k] > 1e-5:
+        maxerror[k] = np.max(np.abs(pgrad[k] - numeric[k]))
+        if maxerror[k] > 1e-5:
             print(k, "\n", pgrad[k] - numeric[k])
-    return (meanerror, normerror)
+    return maxerror

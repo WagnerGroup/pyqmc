@@ -213,9 +213,9 @@ def test_wf_gradient_laplacian(wf, configs):
     print("time evaluated separately", tsep)
     print("time evaluated together", ttog)
 
-    d = []
-    d.append({"error": rmae_grad, "deriv": "grad", "type": "mae"})
-    d.append({"error": rmae_lap, "deriv": "lap", "type": "mae"})
-    d.append({"error": norm_grad, "deriv": "grad", "type": "norm"})
-    d.append({"error": norm_lap, "deriv": "lap", "type": "norm"})
-    return d
+    return [
+        {"error": rmae_grad, "deriv": "grad", "type": "mae"},
+        {"error": rmae_lap, "deriv": "lap", "type": "mae"},
+        {"error": norm_grad, "deriv": "grad", "type": "norm"},
+        {"error": norm_lap, "deriv": "lap", "type": "norm"},
+    ]

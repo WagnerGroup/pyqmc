@@ -43,12 +43,8 @@ orbital is only a sum over the k-point of its type.
 In the future, this could apply to orbitals of a given point group symmetry, for example.
 
 TODO: 
-* test MoleculeOrbitalEvaluator
-* test multislater_orbs.py for gradients
-* implement laplacian and gradient_laplacian in multislater_orbs.py (grab only certain elements from the aos)
-* implement pgradient() for multislater_orbs.py
-* implement testvalue_many() for multislater_orbs.py
-* Make pgradient() overflow-safe for multislater_orbs.py
+* Implement mc=None case for multislater_orbs.py
+* Try PBC tests 
 """
 
 class MoleculeOrbitalEvaluator:

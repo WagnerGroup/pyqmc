@@ -18,10 +18,13 @@ def interpret_ci(mc, tol):
     Copies over determinant coefficients and MO occupations
     for a multi-configuration calculation mc.
 
+    This implementation separates the up and down determinants, so that we only have to compute 
+    
+
     returns:
     detwt: array of weights for each determinant
     occup: which orbitals go in which determinants
-    map_dets: 
+    map_dets: given a determinant in detwt, which determinant in occup it corresponds to
     """
     from pyscf import fci
 

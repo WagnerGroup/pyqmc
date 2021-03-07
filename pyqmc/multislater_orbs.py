@@ -318,7 +318,7 @@ class MultiSlater:
             nao = aos[0].shape[-1]
             nconf = aos[0].shape[0]
             nmo = split[-1]
-            deriv = np.zeros((len(self._det_occup[s]), nconf, nao, nmo))
+            deriv = np.zeros((len(self._det_occup[s]), nconf, nao, nmo),dtype=curr_val[0].dtype)
             for det, occ in enumerate(self._det_occup[s]):
                 for ao, mo in zip(aos, mos):
                     for i in mo:
@@ -327,7 +327,7 @@ class MultiSlater:
                             deriv[det, :, :, i]= self._testcol(det, col, s, ao) 
 
             # now we reduce over determinants
-            d[parm] = np.zeros(deriv.shape[1:])
+            d[parm] = np.zeros(deriv.shape[1:], dtype=curr_val[0].dtype)
             for di,coeff in enumerate(self.parameters['det_coeff']):
                 whichdet = self._det_map[s][di]
                 d[parm] += deriv[whichdet]*coeff*d["det_coeff"][:,di, np.newaxis, np.newaxis]

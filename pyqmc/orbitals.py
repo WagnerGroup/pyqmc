@@ -141,13 +141,16 @@ class PBCOrbitalEvaluatorKpoints:
 
         detcoeff = np.array([1.0])
         det_map = np.array([[0],[0]])
-        #occup
-        if len(mf.mo_occ.shape) == 2:
-            occup = [[list(np.argwhere(mf.mo_occ[spin] > 0.5)[:,0])] for spin in [0,1]]
-        else:
-            occup = [[list(np.argwhere(mf.mo_occ > 1.5-spin)[:,0])] for spin in [0,1]]
 
+        if len(mf.mo_coeff[0][0].shape) == 2:
+            occup_k = [[[list(np.argwhere(mf.mo_occ[spin][k] > 0.5)[:,0])] for k in kinds ] for spin in [0,1]]
+        elif len(mf.mo_coeff[0][0].shape) == 1:
+            occup_k = [[[list(np.argwhere(mf.mo_occp[k] > 1.5-spin)[:,0])] for k in kinds ] for spin in [0,1]]
 
+        occup = [[],[]]
+        for spin in [0,1]:
+            for occ_k in occup_k[spin]:
+                occup[spin] += occ_k
 
         kpts = mf.kpts[kinds]
         if len(mf.mo_coeff[0][0].shape) == 2:
@@ -180,8 +183,8 @@ class PBCOrbitalEvaluatorKpoints:
 
         # k,coordinate, orbital
         ao = np.asarray(self._cell.eval_gto("PBC"+eval_str, mycoords, kpts=self._kpts))
-        print('ao shape',ao.shape)
-        return np.einsum("ij,ijk->ijk",wrap_phase, ao)
+        #print('ao shape',ao.shape)
+        return np.einsum("...,...k->...k",wrap_phase, ao)
 
         
     def mos(self, ao, spin):

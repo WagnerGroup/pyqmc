@@ -78,7 +78,7 @@ class Ewald:
 
     """
 
-    def __init__(self, cell, ewald_gmax=200, nlatvec=2):
+    def __init__(self, cell, ewald_gmax=200, nlatvec=1):
         """
         Inputs:
             cell: pyscf Cell object (simulation cell)

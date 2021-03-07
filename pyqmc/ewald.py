@@ -135,7 +135,6 @@ class Ewald:
         bigweight = gweight > 1e-10
         self.gpoints = gpoints[bigweight]
         self.gweight = gweight[bigweight]
-        print("no. ewald gpoints", len(self.gpoints))
 
         self.set_ewald_constants(cellvolume)
 

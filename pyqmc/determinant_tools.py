@@ -14,6 +14,19 @@ def binary_to_occ(S, ncore):
     return (occup, max_orb)
 
 def determinants_from_mean_field(mf):
+    """
+    mf can be a few different things:
+    RHF on molecule or single k-point:
+        mf.mo_coeff is [nao, nmo]
+    ROHF on molecule or single k-point:
+        mf.mo_coeff is [nao, nmo]
+    UHF on molecule or single k-point
+        mf.mo_coeff is [spin][nao,nmo]
+    KRHF:
+        mf.mo_coeff is [k][nao,nmo]
+    KUHF:
+        mf.mo_coeff is [spin][k][nao,nmo]
+    """
     detwt=np.array([1.0])
     print(np.nonzero(mf.mo_occ[0] > 0.9))
     occup = [[list(np.nonzero(mf.mo_occ[0] > 0.9)[0])],[list(np.nonzero(mf.mo_occ[1] > 0.9)[0])]]

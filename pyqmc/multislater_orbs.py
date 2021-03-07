@@ -13,11 +13,6 @@ class JoinParameters:
     def __init__(self, dicts):
         self.data = {}
         self.data = dicts
-        for d1 in self.data:
-            for d2 in self.data:
-                for k in d1.keys():
-                    if k in d2:
-                        raise ValueError("JoinParameters initialized with conflicting keys")
 
 
     def find_i(self,idx):
@@ -109,12 +104,12 @@ class MultiSlater:
             self._nelec = mol.nelec
 
         self.myparameters={}
-        if mc is None:
-            self.myparameters["det_coeff"], self._det_occup, self._det_map = determinant_tools.determinants_from_mean_field(mf)
-        else:
-            self.myparameters["det_coeff"], self._det_occup, self._det_map = determinant_tools.interpret_ci(mc, self.tol)
-
-        self.orbitals = pyqmc.orbitals.choose_evaluator_from_pyscf(mol, mf, mc, self._det_occup)
+        #if mc is None:
+        #    = determinant_tools.determinants_from_mean_field(mf)
+        #else:
+        #    self.myparameters["det_coeff"], self._det_occup, self._det_map = determinant_tools.interpret_ci(mc, self.tol)
+        self.myparameters["det_coeff"], self._det_occup, self._det_map,\
+        self.orbitals = pyqmc.orbitals.choose_evaluator_from_pyscf(mol, mf, mc)
         self.parameters=JoinParameters([self.myparameters,self.orbitals.parameters])
 
         self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))

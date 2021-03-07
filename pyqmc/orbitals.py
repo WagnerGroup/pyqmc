@@ -1,6 +1,7 @@
 import numpy as np
 import pyqmc.pbc as pbc
 from pyqmc.supercell import get_supercell_kpts, get_supercell
+import pyqmc.determinant_tools
 
 def get_wrapphase_real(x):
     return (-1) ** np.round(x / np.pi)
@@ -11,19 +12,20 @@ def get_wrapphase_complex(x):
 def get_complex_phase(x):
     return x / np.abs(x)
 
-def choose_evaluator_from_pyscf(mol, mf, mc=None, det_occ=None, twist=None):
+def choose_evaluator_from_pyscf(mol, mf, mc=None, twist=None):
     """
     Returns:
     a molecular orbital evaluator
+
     """
 
     if hasattr(mol, "a"): 
+        if mc is not None:
+            raise NotImplementedError("Do not support multiple determinants for k-points orbital evaluator")
         return PBCOrbitalEvaluatorKpoints.from_mean_field(mol, mf, twist)
     if mc is None:
         return MoleculeOrbitalEvaluator.from_pyscf(mol, mf)
-    mo_cutoff_alpha = np.max(det_occ[0]) + 1
-    mo_cutoff_beta = np.max(det_occ[1]) + 1
-    return MoleculeOrbitalEvaluator.from_pyscf(mol, mf, mc, [mo_cutoff_alpha, mo_cutoff_beta])
+    return MoleculeOrbitalEvaluator.from_pyscf(mol, mf, mc)
 
 
 
@@ -36,9 +38,6 @@ orbital is only a sum over the k-point of its type.
 
 In the future, this could apply to orbitals of a given point group symmetry, for example.
 
-TODO: 
-* Try PBC tests 
-* Update determinant_from_mean_field for RHF and KRHF, and KUHF cases.
 """
 
 class MoleculeOrbitalEvaluator:
@@ -51,27 +50,33 @@ class MoleculeOrbitalEvaluator:
         self._mol = mol
 
     @classmethod
-    def from_pyscf(self, mol, mf, mc=None, maxorb = None):
+    def from_pyscf(self, mol, mf, mc=None, tol=-1):
         """
         mol: A Mole object
         mf: An object with mo_coeff and mo_occ. 
-        maxorb: If None, choose occupied orbitals, otherwise choose 0:maxorb
+        mc: (optional) a CI object from pyscf
 
         """
         obj = mc if hasattr(mc, 'mo_coeff') else mf
+        if mc is not None:
+            detcoeff, occup, det_map = pyqmc.determinant_tools.interpret_ci(mc, tol)
+        else: 
+            detcoeff = np.array([1.0])
+            det_map = np.array([[0],[0]])
+            #occup
+            if len(mf.mo_occ.shape) == 2:
+                occup = [[list(np.argwhere(mf.mo_occ[spin] > 0.5)[:,0])] for spin in [0,1]]
+            else:
+                occup = [[list(np.argwhere(mf.mo_occ > 1.5-spin)[:,0])] for spin in [0,1]]
+
+        max_orb = [np.max(occup[s])+1 for s in [0,1]]
 
         if len(mf.mo_occ.shape) == 2:
-            if maxorb is None:
-                mo_coeff = [obj.mo_coeff[spin][:,mf.mo_occ[spin] > 0.5] for spin in [0,1]]
-            else:
-                mo_coeff = [obj.mo_coeff[spin][:,0:maxorb] for spin in [0,1]]
+            mo_coeff = [obj.mo_coeff[spin][:,0:max_orb[spin]] for spin in [0,1]]
         else:
-            if maxorb is None:
-                mo_coeff = [obj.mo_coeff[:,mf.mo_occ > 0.5] for spin in [0,1]]
-            else:
-                mo_coeff = [obj.mo_coeff[:,0:maxorb[spin]] for spin in [0,1]]
+            mo_coeff = [obj.mo_coeff[:,0:max_orb[spin]] for spin in [0,1]]
 
-        return MoleculeOrbitalEvaluator(mol, mo_coeff)
+        return detcoeff, occup, det_map, MoleculeOrbitalEvaluator(mol, mo_coeff)
 
 
     def aos(self, eval_str, configs, mask=None):
@@ -133,6 +138,17 @@ class PBCOrbitalEvaluatorKpoints:
         kinds = list(set(get_k_indices(cell, mf, get_supercell_kpts(cell) + twist)))
         if len(kinds) != cell.scale:
             raise ValueError("Did not find the right number of k-points for this supercell")
+
+        detcoeff = np.array([1.0])
+        det_map = np.array([[0],[0]])
+        #occup
+        if len(mf.mo_occ.shape) == 2:
+            occup = [[list(np.argwhere(mf.mo_occ[spin] > 0.5)[:,0])] for spin in [0,1]]
+        else:
+            occup = [[list(np.argwhere(mf.mo_occ > 1.5-spin)[:,0])] for spin in [0,1]]
+
+
+
         kpts = mf.kpts[kinds]
         if len(mf.mo_coeff[0][0].shape) == 2:
             mo_coeff = [[mf.mo_coeff[spin][k][:,mf.mo_occ[spin][k]>0.5] for k in kinds] for spin in [0,1]]
@@ -141,7 +157,7 @@ class PBCOrbitalEvaluatorKpoints:
         else:
             raise ValueError("Did not expect an scf object of type", type(mf))
 
-        return PBCOrbitalEvaluatorKpoints(cell, mo_coeff, kpts)
+        return detcoeff, occup, det_map, PBCOrbitalEvaluatorKpoints(cell, mo_coeff, kpts)
         
     def aos(self,eval_str,configs, mask=None):
         """

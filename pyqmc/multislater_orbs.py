@@ -8,10 +8,17 @@ class JoinParameters:
     This class provides a dict-like interface that actually references 
     other dictionaries in the background.
     If keys collide, then the first dictionary that matches the key will be returned.
+    However, some bad things may happen if you have colliding keys.
     """
     def __init__(self, dicts):
         self.data = {}
         self.data = dicts
+        for d1 in self.data:
+            for d2 in self.data:
+                for k in d1.keys():
+                    if k in d2:
+                        raise ValueError("JoinParameters initialized with conflicting keys")
+
 
     def find_i(self,idx):
         for i,d in enumerate(self.data):

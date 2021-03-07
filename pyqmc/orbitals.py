@@ -1,24 +1,18 @@
 import numpy as np
 import pyqmc.pbc as pbc
-
 from pyqmc.supercell import get_supercell_kpts, get_supercell
 
 def get_wrapphase_real(x):
     return (-1) ** np.round(x / np.pi)
 
-
 def get_wrapphase_complex(x):
     return np.exp(1j * x)
-
 
 def get_complex_phase(x):
     return x / np.abs(x)
 
-
 def choose_evaluator_from_pyscf(mol, mf, mc=None, det_occ=None, twist=None):
     """
-    
-
     Returns:
     a molecular orbital evaluator
     """
@@ -43,8 +37,8 @@ orbital is only a sum over the k-point of its type.
 In the future, this could apply to orbitals of a given point group symmetry, for example.
 
 TODO: 
-* Implement mc=None case for multislater_orbs.py
 * Try PBC tests 
+* Update determinant_from_mean_field for RHF and KRHF, and KUHF cases.
 """
 
 class MoleculeOrbitalEvaluator:

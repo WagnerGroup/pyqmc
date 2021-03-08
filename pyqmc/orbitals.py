@@ -3,6 +3,17 @@ import pyqmc.pbc as pbc
 from pyqmc.supercell import get_supercell_kpts, get_supercell
 import pyqmc.determinant_tools
 
+"""
+The evaluators have the concept of a 'set' of atomic orbitals, that may apply to 
+different sets of molecular orbitals
+
+For example, for the PBC evaluator, each k-point is a set, since each molecular 
+orbital is only a sum over the k-point of its type.
+
+In the future, this could apply to orbitals of a given point group symmetry, for example.
+"""
+
+
 def get_wrapphase_real(x):
     return (-1) ** np.round(x / np.pi)
 
@@ -15,8 +26,7 @@ def get_complex_phase(x):
 def choose_evaluator_from_pyscf(mol, mf, mc=None, twist=None):
     """
     Returns:
-    a molecular orbital evaluator
-
+    an orbital evaluator chosen based on the inputs. 
     """
 
     if hasattr(mol, "a"): 
@@ -29,16 +39,6 @@ def choose_evaluator_from_pyscf(mol, mf, mc=None, twist=None):
 
 
 
-"""
-The evaluators have the concept of a 'set' of atomic orbitals, that may apply to 
-different sets of molecular orbitals
-
-For example, for the PBC evaluator, each k-point is a set, since each molecular 
-orbital is only a sum over the k-point of its type.
-
-In the future, this could apply to orbitals of a given point group symmetry, for example.
-
-"""
 
 class MoleculeOrbitalEvaluator:
     def __init__(self, mol, mo_coeff):
@@ -104,7 +104,7 @@ def get_k_indices(cell, mf, kpts, tol=1e-6):
 
 class PBCOrbitalEvaluatorKpoints:
     """
-    Evaluate orbitals from a 
+    Evaluate orbitals from a PBC object. 
     cell is expected to be one made with make_supercell().
     mo_coeff should be in [spin][k][ao,mo] order
     kpts should be a list of the k-points corresponding to mo_coeff  
@@ -193,7 +193,6 @@ class PBCOrbitalEvaluatorKpoints:
 
         In the derivative case, returns [d,coordinate, mo]
         """
-        # do some split
         p = np.split(self.parameters[f'mo_coeff{self.parm_names[spin]}'], self.param_split[spin], axis=-1)
         return np.concatenate([ak.dot(mok) for ak,mok in zip(ao,p)], axis=-1)
 

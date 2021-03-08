@@ -70,8 +70,7 @@ class MoleculeOrbitalEvaluator:
                 occup = [[list(np.argwhere(mf.mo_occ > 1.5-spin)[:,0])] for spin in [0,1]]
 
         max_orb = [int(np.max(occup[s], initial=0)+1) for s in [0,1]]
-
-        if len(mf.mo_occ.shape) == 2:
+        if len(obj.mo_coeff[0].shape) == 2:
             mo_coeff = [obj.mo_coeff[spin][:,0:max_orb[spin]] for spin in [0,1]]
         else:
             mo_coeff = [obj.mo_coeff[:,0:max_orb[spin]] for spin in [0,1]]
@@ -145,7 +144,7 @@ class PBCOrbitalEvaluatorKpoints:
         if len(mf.mo_coeff[0][0].shape) == 2:
             occup_k = [[[list(np.argwhere(mf.mo_occ[spin][k] > 0.5)[:,0])] for k in kinds ] for spin in [0,1]]
         elif len(mf.mo_coeff[0][0].shape) == 1:
-            occup_k = [[[list(np.argwhere(mf.mo_occp[k] > 1.5-spin)[:,0])] for k in kinds ] for spin in [0,1]]
+            occup_k = [[[list(np.argwhere(mf.mo_occ[k] > 1.5-spin)[:,0])] for k in kinds ] for spin in [0,1]]
 
         occup = [[],[]]
         for spin in [0,1]:
@@ -183,7 +182,6 @@ class PBCOrbitalEvaluatorKpoints:
 
         # k,coordinate, orbital
         ao = np.asarray(self._cell.eval_gto("PBC"+eval_str, mycoords, kpts=self._kpts))
-        #print('ao shape',ao.shape)
         return np.einsum("...,...k->...k",wrap_phase, ao)
 
         

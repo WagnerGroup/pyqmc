@@ -141,10 +141,8 @@ class PeriodicConfigs:
         epos = vec.copy()
         epos[mask] = epos_
         wrap = self.wrap[:,e,:].copy()
-        print("wrap",wrap.shape, self.wrap.shape)
         if len(vec.shape)==3:
             wrap=np.repeat(self.wrap[:,e][:,np.newaxis],vec.shape[1], axis=1)
-        print(wrap.shape, vec.shape, wrap_.shape)
         wrap[mask] += wrap_
         return PeriodicElectron(epos, self.lvecs, wrap=wrap, dist=self.dist)
 

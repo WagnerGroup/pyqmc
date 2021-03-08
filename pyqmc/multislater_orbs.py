@@ -256,6 +256,8 @@ class MultiSlater:
         ao = self.orbitals.aos('GTOval_sph',epos, mask)
         mo = self.orbitals.mos(ao, s)
         mo_vals = mo[..., self._det_occup[s]]
+        if len(epos.configs.shape) > 2:
+            mo_vals = mo_vals.reshape(-1, epos.configs.shape[1], mo_vals.shape[1], mo_vals.shape[2])
         return self._testrow(e, mo_vals, mask)
 
     def testvalue_many(self, e, epos, mask=None):

@@ -109,7 +109,7 @@ class MultiSlater:
         #else:
         #    self.myparameters["det_coeff"], self._det_occup, self._det_map = determinant_tools.interpret_ci(mc, self.tol)
         self.myparameters["det_coeff"], self._det_occup, self._det_map,\
-        self.orbitals = pyqmc.orbitals.choose_evaluator_from_pyscf(mol, mf, mc)
+        self.orbitals = pyqmc.orbitals.choose_evaluator_from_pyscf(mol, mf, mc, twist=twist)
         self.parameters=JoinParameters([self.myparameters,self.orbitals.parameters])
 
         self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
@@ -253,8 +253,10 @@ class MultiSlater:
         """ return the ratio between the current wave function and the wave function if 
         electron e's position is replaced by epos"""
         s = int(e >= self._nelec[0])
+        nmask = epos.configs.shape[0] if mask is None else np.sum(mask)
         ao = self.orbitals.aos('GTOval_sph',epos, mask)
         mo = self.orbitals.mos(ao, s)
+        mo = mo.reshape(nmask, *epos.configs.shape[1:-1], self._nelec[s])
         mo_vals = mo[..., self._det_occup[s]]
         return self._testrow(e, mo_vals, mask)
 
@@ -262,6 +264,7 @@ class MultiSlater:
         """ return the ratio between the current wave function and the wave function if 
         electron e's position is replaced by epos for each electron"""
         s = (e >= self._nelec[0]).astype(int)
+        nmask = epos.configs.shape[0] if mask is None else np.sum(mask)
         ao = self.orbitals.aos('GTOval_sph', epos, mask)
 
         ratios = np.zeros((epos.configs.shape[0], e.shape[0]))
@@ -269,6 +272,7 @@ class MultiSlater:
             ind = s == spin
             #mo = ao.dot(self.parameters[self._coefflookup[spin]])
             mo = self.orbitals.mos(ao, spin)
+            mo = mo.reshape(nmask, *epos.configs.shape[1:-1], self._nelec[spin])
             mo_vals = mo[..., self._det_occup[spin]]
             ratios[:, ind] = self._testrow(e[ind], mo_vals, mask, spin=spin)
 

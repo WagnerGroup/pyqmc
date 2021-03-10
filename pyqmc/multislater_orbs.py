@@ -253,10 +253,8 @@ class MultiSlater:
         """ return the ratio between the current wave function and the wave function if 
         electron e's position is replaced by epos"""
         s = int(e >= self._nelec[0])
-        nmask = epos.configs.shape[0] if mask is None else np.sum(mask)
         ao = self.orbitals.aos('GTOval_sph',epos, mask)
         mo = self.orbitals.mos(ao, s)
-        mo = mo.reshape(nmask, *epos.configs.shape[1:-1], self._nelec[s])
         mo_vals = mo[..., self._det_occup[s]]
         if len(epos.configs.shape) > 2:
             mo_vals = mo_vals.reshape(-1, epos.configs.shape[1], mo_vals.shape[1], mo_vals.shape[2])
@@ -266,7 +264,6 @@ class MultiSlater:
         """ return the ratio between the current wave function and the wave function if 
         electron e's position is replaced by epos for each electron"""
         s = (e >= self._nelec[0]).astype(int)
-        nmask = epos.configs.shape[0] if mask is None else np.sum(mask)
         ao = self.orbitals.aos('GTOval_sph', epos, mask)
 
         ratios = np.zeros((epos.configs.shape[0], e.shape[0]))
@@ -274,7 +271,7 @@ class MultiSlater:
             ind = s == spin
             #mo = ao.dot(self.parameters[self._coefflookup[spin]])
             mo = self.orbitals.mos(ao, spin)
-            mo = mo.reshape(nmask, *epos.configs.shape[1:-1], self._nelec[spin])
+            mo = mo.reshape(-1, *epos.configs.shape[1:-1], self._nelec[spin])
             mo_vals = mo[..., self._det_occup[spin]]
             ratios[:, ind] = self._testrow(e[ind], mo_vals, mask, spin=spin)
 

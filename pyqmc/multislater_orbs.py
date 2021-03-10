@@ -74,8 +74,7 @@ def sherman_morrison_ms(e, inv, vec):
 class MultiSlater:
     """
     A multi-determinant wave function object initialized
-    via an SCF calculation. Methods and structure are very similar
-    to the PySCFSlaterUHF class.
+    via an SCF calculation.
 
     How to use with hci
 
@@ -104,10 +103,6 @@ class MultiSlater:
             self._nelec = mol.nelec
 
         self.myparameters={}
-        #if mc is None:
-        #    = determinant_tools.determinants_from_mean_field(mf)
-        #else:
-        #    self.myparameters["det_coeff"], self._det_occup, self._det_map = determinant_tools.interpret_ci(mc, self.tol)
         self.myparameters["det_coeff"], self._det_occup, self._det_map,\
         self.orbitals = pyqmc.orbitals.choose_evaluator_from_pyscf(mol, mf, mc, twist=twist)
         self.parameters=JoinParameters([self.myparameters,self.orbitals.parameters])
@@ -269,7 +264,6 @@ class MultiSlater:
         ratios = np.zeros((epos.configs.shape[0], e.shape[0]))
         for spin in [0, 1]:
             ind = s == spin
-            #mo = ao.dot(self.parameters[self._coefflookup[spin]])
             mo = self.orbitals.mos(ao, spin)
             mo = mo.reshape(-1, *epos.configs.shape[1:-1], self._nelec[spin])
             mo_vals = mo[..., self._det_occup[spin]]

@@ -7,7 +7,12 @@ from pyqmc.coord import PeriodicConfigs
 from pyscf.pbc import gto, scf
 from pyscf.pbc.dft.multigrid import multigrid
 from pyscf.scf.addons import remove_linear_dep_
+<<<<<<< HEAD
 import pyqmc.multislater_orbs
+=======
+from pyqmc.multislater_orbs import MultiSlater
+
+>>>>>>> 1a093beb034c432c8393544b82b4bcc94e01fc01
 
 def test_cubic_with_ecp(kind=1, nk=(2, 2, 2)):
     from pyscf.pbc.dft.multigrid import multigrid

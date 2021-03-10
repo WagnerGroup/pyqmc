@@ -1,6 +1,5 @@
 """ Evaluate the OBDM for a wave function object. """
 import numpy as np
-from copy import deepcopy
 from pyqmc.mc import initial_guess
 from pyqmc import pbc, slater
 
@@ -193,7 +192,7 @@ class OBDMAccumulator:
         allconfigs = []
         for s in range(nsamples):
             shift = np.sqrt(self._tstep) * np.random.randn(*configs.configs.shape)
-            newconfigs = configs.make_irreducible(None, configs.configs + shift)
+            newconfigs = configs.make_irreducible(0, configs.configs + shift)
             borbnew = self.evaluate_orbitals(newconfigs)
             fsumnew = (np.abs(borbnew) ** 2).sum(axis=1)
             accept = fsumnew / fsum > np.random.rand(n)

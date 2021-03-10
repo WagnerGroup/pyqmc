@@ -195,7 +195,7 @@ class TBDMAccumulator:
                 * orb_b_configs[..., self._ijkl[2]]
             )
 
-            # Calculation of wf ratio (no McMillan trick yet)
+            # Calculation of wf ratio 
             epos_a = configs.make_irreducible(
                 -1, aux_configs_a[sweep][auxassignments_a[sweep]]
             )

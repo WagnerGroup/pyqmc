@@ -23,13 +23,14 @@ def test():
     from pyqmc.func3d import CutoffCuspFunction
     from pyqmc.multiplywf import MultiplyWF
     from pyqmc.coord import OpenConfigs
+    from pyqmc.multislater_orbs import MultiSlater
     import pandas as pd
 
     mol = gto.M(atom="H 0. 0. 0.", basis="sto-3g", unit="bohr", spin=1)
     mf = scf.UHF(mol).run()
     nconf = 1000
     configs = OpenConfigs(np.random.randn(nconf, 1, 3))
-    wf1 = PySCFSlater(mol, mf)
+    wf1 = MultiSlater(mol, mf)
     wf = wf1
     wf2 = JastrowSpin(mol, a_basis=[CutoffCuspFunction(5, 0.2)], b_basis=[])
     wf2.parameters["acoeff"] = np.asarray([[[1.0, 0]]])

@@ -1,6 +1,6 @@
 import numpy as np
 from pyscf import gto, scf, lo
-from pyqmc import PySCFSlater
+from pyqmc import MultiSlater
 from pyqmc.mc import initial_guess, vmc
 from pyqmc.accumulators import EnergyAccumulator
 from pyqmc.tbdm import TBDMAccumulator, normalize_tbdm
@@ -164,7 +164,7 @@ def test(atom="He", total_spin=0, total_charge=0, scf_basis="sto-3g"):
     tbdm_sweeps = 4
     tbdm_tstep = 0.5
 
-    wf = PySCFSlater(mol, mf)  # Single-Slater (no jastrow) wf
+    wf = MultiSlater(mol, mf)  # Single-Slater (no jastrow) wf
     configs = initial_guess(mol, nconf)
     energy = EnergyAccumulator(mol)
     obdm_up = OBDMAccumulator(mol=mol, orb_coeff=iaos[0], nsweeps=tbdm_sweeps, spin=0)

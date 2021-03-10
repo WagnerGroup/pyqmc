@@ -99,7 +99,7 @@ def test_pbc():
     nconf = 800
     nsteps = 50
     warmup = 6
-    wf = PySCFSlater(mol, mf)
+    wf = MultiSlater(mol, mf)
     configs = initial_guess(mol, nconf)
     obdm_dict = dict(mol=mol, orb_coeff=lowdin, kpts=kpts, nsweeps=4, warmup=10)
     obdm = OBDMAccumulator(**obdm_dict)

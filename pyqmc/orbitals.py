@@ -177,10 +177,8 @@ class PBCOrbitalEvaluatorKpoints:
         kdotR = np.linalg.multi_dot(
             (self._kpts, self._cell.lattice_vectors().T, wrap.T)
         )
-        print("wrap",configs.configs, configs.wrap)
         # k, coordinate
         wrap_phase = get_wrapphase_complex(kdotR)
-        print("phase",wrap_phase)
         # k,coordinate, orbital
         ao = np.asarray(self._cell.eval_gto("PBC"+eval_str, mycoords, kpts=self._kpts))
         return np.einsum("...,...k->...k",wrap_phase, ao)

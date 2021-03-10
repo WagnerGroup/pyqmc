@@ -155,7 +155,7 @@ class PBCOrbitalEvaluatorKpoints:
         if len(mf.mo_coeff[0][0].shape) == 2:
             mo_coeff = [[mf.mo_coeff[spin][k][:,mf.mo_occ[spin][k]>0.5] for k in kinds] for spin in [0,1]]
         elif len(mf.mo_coeff[0][0].shape) == 1:
-            mo_coeff = [[mf.mo_coeff[k] for k in kinds] for spin in [0,1]]
+            mo_coeff = [[mf.mo_coeff[k][:, mf.mo_occ[k] > 1.5-spin] for k in kinds] for spin in [0,1]]
         else:
             raise ValueError("Did not expect an scf object of type", type(mf))
 

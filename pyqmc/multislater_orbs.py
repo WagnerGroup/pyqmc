@@ -109,7 +109,7 @@ class MultiSlater:
         #else:
         #    self.myparameters["det_coeff"], self._det_occup, self._det_map = determinant_tools.interpret_ci(mc, self.tol)
         self.myparameters["det_coeff"], self._det_occup, self._det_map,\
-        self.orbitals = pyqmc.orbitals.choose_evaluator_from_pyscf(mol, mf, mc)
+        self.orbitals = pyqmc.orbitals.choose_evaluator_from_pyscf(mol, mf, mc, twist=twist)
         self.parameters=JoinParameters([self.myparameters,self.orbitals.parameters])
 
         self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
@@ -271,6 +271,7 @@ class MultiSlater:
             ind = s == spin
             #mo = ao.dot(self.parameters[self._coefflookup[spin]])
             mo = self.orbitals.mos(ao, spin)
+            mo = mo.reshape(-1, *epos.configs.shape[1:-1], self._nelec[spin])
             mo_vals = mo[..., self._det_occup[spin]]
             ratios[:, ind] = self._testrow(e[ind], mo_vals, mask, spin=spin)
 

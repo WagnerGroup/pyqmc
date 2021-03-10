@@ -40,9 +40,9 @@ def test():
 
         for k, item in testwf.test_updateinternals(wf, epos).items():
             assert item < epsilon
-        assert testwf.test_wf_gradient(wf, epos, delta=delta)[0] < epsilon
-        assert testwf.test_wf_laplacian(wf, epos, delta=delta)[0] < epsilon
-        assert testwf.test_wf_pgradient(wf, epos, delta=delta)[0] < epsilon
+        assert testwf.test_wf_gradient(wf, epos, delta=delta) < epsilon
+        assert testwf.test_wf_laplacian(wf, epos, delta=delta) < epsilon
+        assert testwf.test_wf_pgradient(wf, epos, delta=delta) < epsilon
 
         # Test same number of elecs
         mc = mcscf.CASCI(mf, ncas=4, nelecas=(1, 1))
@@ -54,9 +54,9 @@ def test():
 
         for k, item in testwf.test_updateinternals(wf, epos).items():
             assert item < epsilon
-        assert testwf.test_wf_gradient(wf, epos, delta=delta)[0] < epsilon
-        assert testwf.test_wf_laplacian(wf, epos, delta=delta)[0] < epsilon
-        assert testwf.test_wf_pgradient(wf, epos, delta=delta)[0] < epsilon
+        assert testwf.test_wf_gradient(wf, epos, delta=delta) < epsilon
+        assert testwf.test_wf_laplacian(wf, epos, delta=delta) < epsilon
+        assert testwf.test_wf_pgradient(wf, epos, delta=delta) < epsilon
 
         # Test different number of elecs
         mc = mcscf.CASCI(mf, ncas=4, nelecas=(2, 0))
@@ -68,9 +68,9 @@ def test():
 
         for k, item in testwf.test_updateinternals(wf, epos).items():
             assert item < epsilon
-        assert testwf.test_wf_gradient(wf, epos, delta=delta)[0] < epsilon
-        assert testwf.test_wf_laplacian(wf, epos, delta=delta)[0] < epsilon
-        assert testwf.test_wf_pgradient(wf, epos, delta=delta)[0] < epsilon
+        assert testwf.test_wf_gradient(wf, epos, delta=delta) < epsilon
+        assert testwf.test_wf_laplacian(wf, epos, delta=delta) < epsilon
+        assert testwf.test_wf_pgradient(wf, epos, delta=delta) < epsilon
 
         # Quick VMC test
         nconf = 1000

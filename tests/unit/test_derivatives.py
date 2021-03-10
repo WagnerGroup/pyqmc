@@ -59,7 +59,7 @@ def test_wfs():
         ):
             err = []
             for delta in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8]:
-                err.append(func(wf, epos, delta)[0])
+                err.append(func(wf, epos, delta))
             print(type(wf), fname, min(err))
             assert min(err) < epsilon, "epsilon {0}".format(epsilon)
 
@@ -124,7 +124,7 @@ def test_pbc_wfs():
         ):
             err = []
             for delta in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8]:
-                err.append(func(wf, epos, delta)[0])
+                err.append(func(wf, epos, delta))
             print(type(wf), fname, min(err))
             assert min(err) < epsilon
 
@@ -162,19 +162,19 @@ def test_func3d():
     epsilon = 1e-5
 
     for name, func in test_functions.items():
-        grad = test_func3d_gradient(func, delta=delta)[0]
-        lap = test_func3d_laplacian(func, delta=delta)[0]
-        andg, andl = test_func3d_gradient_laplacian(func)
-        gv_g, gv_v = test_func3d_gradient_value(func)
-        pgrad = test_func3d_pgradient(func, delta=1e-9)[0]
-        print(name, grad, lap, "both:", andg, andl)
+        grad = test_func3d_gradient(func, delta=delta)
+        lap = test_func3d_laplacian(func, delta=delta)
+        gl = test_func3d_gradient_laplacian(func)
+        gv = test_func3d_gradient_value(func)
+        pgrad = test_func3d_pgradient(func, delta=1e-9)
+        print(name, grad, lap, "both:", gl["grad"], gl["lap"])
         print(name, pgrad)
         assert grad < epsilon
         assert lap < epsilon
-        assert andg < epsilon
-        assert andl < epsilon, andl
-        assert gv_g < epsilon
-        assert gv_v < epsilon, gv_v
+        assert gl["grad"] < epsilon
+        assert gl["lap"] < epsilon
+        assert gv["grad"] < epsilon
+        assert gv["val"] < epsilon
         for k, v in pgrad.items():
             assert v < epsilon, (name, k, v)
 

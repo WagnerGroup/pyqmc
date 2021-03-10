@@ -100,11 +100,7 @@ def test_wf_gradient(wf, configs, delta=1e-5):
             minuval = wf.testvalue(e, epos)
             numeric[:, e, d] = (plusval - minuval) / (2 * delta)
     maxerror = np.amax(np.abs(grad - numeric))
-    normerror = np.mean(np.abs(grad - numeric))
-
-    # print('maxerror', maxerror, np.log10(maxerror))
-    # print('normerror', normerror, np.log10(normerror))
-    return (maxerror, normerror)
+    return maxerror
 
 
 def test_wf_pgradient(wf, configs, delta=1e-5):
@@ -132,7 +128,7 @@ def test_wf_pgradient(wf, configs, delta=1e-5):
             wf.parameters[k] = flt.reshape(wf.parameters[k].shape)
 
         pgerr = np.abs(gradient[k].reshape((-1, nparms)) - numgrad)
-        error[k] = (np.amax(pgerr), np.mean(pgerr))
+        error[k] = np.amax(pgerr)
     if len(error) == 0:
         return (0, 0)
     return error[max(error)]  # Return maximum coefficient error
@@ -176,10 +172,7 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
             numeric[:, e] += np.real(plusgrad - minugrad) / (2 * delta)
 
     maxerror = np.amax(np.abs(lap - numeric))
-    normerror = np.mean(np.abs((lap - numeric) / numeric))
-    # print('maxerror', maxerror, np.log10(maxerror))
-    # print('normerror', normerror, np.log10(normerror))
-    return (maxerror, normerror)
+    return maxerror
 
 
 def test_wf_gradient_laplacian(wf, configs):
@@ -204,20 +197,15 @@ def test_wf_gradient_laplacian(wf, configs):
         tt1 = time.perf_counter()
         tsep += ts1 - ts0
         ttog += tt1 - tt0
-        rmae_grad = np.mean(np.abs((andgrad - grad) / grad))
-        rmae_lap = np.mean(np.abs((andlap - lap) / lap))
-        norm_grad = np.linalg.norm((andgrad - grad) / grad)
-        norm_lap = np.linalg.norm((andlap - lap) / lap)
+        rel_grad = np.abs((andgrad - grad) / grad)
+        rel_lap = np.abs((andlap - lap) / lap)
+        rmax_grad = np.max(rel_grad)
+        rmax_lap = np.max(rel_lap)
 
     print("separate", tsep)
     print("together", ttog)
 
-    d = []
-    d.append({"error": rmae_grad, "deriv": "grad", "type": "mae"})
-    d.append({"error": rmae_lap, "deriv": "lap", "type": "mae"})
-    d.append({"error": norm_grad, "deriv": "grad", "type": "norm"})
-    d.append({"error": norm_lap, "deriv": "lap", "type": "norm"})
-    return d
+    return {"grad": rmax_grad, "lap": rmax_lap}
 
 
 def test_wf_gradient_value(wf, configs):
@@ -242,17 +230,12 @@ def test_wf_gradient_value(wf, configs):
         tt1 = time.perf_counter()
         tsep += ts1 - ts0
         ttog += tt1 - tt0
-        rmae_grad = np.mean(np.abs((andgrad - grad) / grad))
-        rmae_val = np.mean(np.abs((andval - val) / val))
-        norm_grad = np.linalg.norm((andgrad - grad) / grad)
-        norm_val = np.linalg.norm((andval - val) / val)
+        rel_grad = np.abs((andgrad - grad) / grad)
+        rel_val = np.abs((andval - val) / val)
+        rmax_grad = np.max(rel_grad)
+        rmax_val = np.max(rel_val)
 
     print("separate", tsep)
     print("together", ttog)
 
-    d = []
-    d.append({"error": rmae_grad, "deriv": "grad", "type": "mae"})
-    d.append({"error": rmae_val, "deriv": "val", "type": "mae"})
-    d.append({"error": norm_grad, "deriv": "grad", "type": "norm"})
-    d.append({"error": norm_val, "deriv": "val", "type": "norm"})
-    return d
+    return {"grad": rmax_grad, "val": rmax_val}

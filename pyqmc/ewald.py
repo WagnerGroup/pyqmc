@@ -286,23 +286,41 @@ class Ewald:
                 ee_real_separated[:, j] += val
             ee_real_separated /= 2
 
+        ee_recip, ei_recip = self.reciprocal_space_electron(configs.configs)
+        ee = ee_real_separated.sum(axis=1) + ee_recip
+        ei = ei_real_separated.sum(axis=1) + ei_recip
+        return ee, ei
+
+    def reciprocal_space_electron(self, configs):
         # Reciprocal space electron-electron part
-        e_GdotR = np.dot(configs.configs, self.gpoints.T)
-        e_expGdotR = np.exp(1j * e_GdotR)
-        sum_e_exp = np.sum(e_expGdotR, axis=1, keepdims=True)
-        coscos_sinsin = np.real(sum_e_exp.conj() * e_expGdotR)
-        ### Don't know why we subtract 0.5 for "separated"
-        ee_recip_separated = np.dot(coscos_sinsin - 0.5, self.gweight)
+        e_GdotR = np.einsum("hik,jk->hij", configs, self.gpoints)
+        sum_e_sin = np.sin(e_GdotR).sum(axis=1)
+        sum_e_cos = np.cos(e_GdotR).sum(axis=1)
+        ee_recip = np.dot(sum_e_sin ** 2 + sum_e_cos ** 2, self.gweight)
+        ## Reciprocal space electron-ion part
+        coscos_sinsin = -self.ion_exp.real * sum_e_cos + self.ion_exp.imag * sum_e_sin
+        ei_recip = 2 * np.dot(coscos_sinsin, self.gweight)
+        return ee_recip, ei_recip
 
-        # Reciprocal space electron-ion part
-        coscos_sinsin = np.real(-self.ion_exp.conj() * e_expGdotR)
-        ei_recip_separated = np.dot(coscos_sinsin, self.gweight)
+    def reciprocal_space_electron_separated(self, configs):
+        # Reciprocal space electron-electron part
+        e_GdotR = np.einsum("hik,jk->hij", configs, self.gpoints)
+        e_sin = np.sin(e_GdotR)
+        e_cos = np.cos(e_GdotR)
+        sinsin = e_sin.sum(axis=1, keepdims=True) * e_sin
+        coscos = e_cos.sum(axis=1, keepdims=True) * e_cos
+        ee_recip = np.dot(coscos + sinsin - 0.5, self.gweight)
+        ## Reciprocal space electron-ion part
+        coscos_sinsin = -self.ion_exp.real * e_cos + self.ion_exp.imag * e_sin
+        ei_recip = np.dot(coscos_sinsin, self.gweight)
+        return ee_recip, ei_recip
 
+    def save_separated(self, ee_recip, ei_recip, ee_real, ei_real):
         # Combine parts
-        self.ei_separated = ei_real_separated + 2 * ei_recip_separated
-        self.ee_separated = ee_real_separated + 1 * ee_recip_separated
+        self.ei_separated = ei_real + 2 * ei_recip
+        self.ee_separated = ee_real + 1 * ee_recip
         self.ewalde_separated = self.ei_separated + self.ee_separated
-        nelec = ee_recip_separated.shape[1]
+        nelec = ee_recip.shape[1]
         ### Add back the 0.5 that was subtracted earlier
         ee = self.ee_separated.sum(axis=1) + nelec / 2 * self.gweight.sum()
         ei = self.ei_separated.sum(axis=1)
@@ -344,6 +362,7 @@ class Ewald:
         Returns: 
             (nelec,) energies
         """
+        raise NotImplementedError("ewalde_separated is currently not computed anywhere")
         nelec = configs.configs.shape[1]
         return self.e_single(nelec) + self.ewalde_separated
 

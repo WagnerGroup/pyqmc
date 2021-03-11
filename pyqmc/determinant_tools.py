@@ -95,8 +95,8 @@ def compute_value(updets, dndets, det_coeffs):
     """
     Given the up and down determinant values, safely compute the total log wave function.
     """
-    upref = np.amax(updets[1])
-    dnref = np.amax(dndets[1])
+    upref = np.amax(np.real(updets[1]))
+    dnref = np.amax(np.real(dndets[1]))
     phases = updets[0] * dndets[0]
     logvals = updets[1] - upref + dndets[1] - dnref
 

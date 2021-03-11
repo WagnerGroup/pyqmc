@@ -148,8 +148,14 @@ class PBCOrbitalEvaluatorKpoints:
 
         occup = [[],[]]
         for spin in [0,1]:
+            offset = [0] + list(np.cumsum([len(occ[0]) for occ in occup_k[spin][:-1]]))
+            index_offset = 0
+            occ_list = []
             for occ_k in occup_k[spin]:
-                occup[spin] += occ_k
+                # this only works for one determinant
+                occ_list.append(np.asarray(occ_k[0]) + index_offset)
+                index_offset += len(occ_k[0])
+            occup[spin].append(np.concatenate(occ_list))
 
         kpts = mf.kpts[kinds]
         if len(mf.mo_coeff[0][0].shape) == 2:
@@ -182,7 +188,7 @@ class PBCOrbitalEvaluatorKpoints:
 
         # k,coordinate, orbital
         ao = np.asarray(self._cell.eval_gto("PBC"+eval_str, mycoords, kpts=self._kpts))
-        return np.einsum("...,...k->...k",wrap_phase, ao)
+        return np.einsum("ij,i...jk->i...jk",wrap_phase, ao)
 
         
     def mos(self, ao, spin):

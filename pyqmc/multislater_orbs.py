@@ -122,7 +122,7 @@ class MultiSlater:
 
         nconf, nelec, ndim = configs.configs.shape
 
-        aos = self.orbitals.aos('GTOval_sph', configs).reshape(nconf, nelec, -1)
+        aos = self.orbitals.aos('GTOval_sph', configs)
         self._aovals = aos.reshape(-1,nconf,nelec, aos.shape[-1])
 
         self._dets = []

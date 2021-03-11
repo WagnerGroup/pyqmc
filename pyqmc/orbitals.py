@@ -110,6 +110,7 @@ class PBCOrbitalEvaluatorKpoints:
 
     """
     def __init__(self, cell, mo_coeff, kpts=None, S = None):
+        from pyscf.pbc import gto
         self.iscomplex=True
         self._cell = cell.original_cell
         self.S = cell.S
@@ -119,6 +120,10 @@ class PBCOrbitalEvaluatorKpoints:
         self.parm_names=['_alpha','_beta']
         self.parameters={'mo_coeff_alpha': np.concatenate(mo_coeff[0], axis=1),
                          'mo_coeff_beta': np.concatenate(mo_coeff[1], axis=1)}
+        Ls = self._cell.get_lattice_Ls(dimension=3)
+        self.Ls = Ls[np.argsort(np.linalg.norm(Ls, axis=1))]
+        self.rcut = gto.eval_gto._estimate_rcut(self._cell)
+
 
     @classmethod
     def from_mean_field(self, cell, mf, twist=None):
@@ -187,7 +192,9 @@ class PBCOrbitalEvaluatorKpoints:
         wrap_phase = get_wrapphase_complex(kdotR)
 
         # k,coordinate, orbital
-        ao = np.asarray(self._cell.eval_gto("PBC"+eval_str, mycoords, kpts=self._kpts))
+        ao = np.asarray(self._cell.pbc_eval_gto(
+            "PBC" + eval_str, mycoords, kpts=self._kpts, Ls=self.Ls, rcut=self.rcut
+        ))
         return np.einsum("ij,i...jk->i...jk",wrap_phase, ao)
 
         

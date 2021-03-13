@@ -109,7 +109,7 @@ class PBCOrbitalEvaluatorKpoints:
     kpts should be a list of the k-points corresponding to mo_coeff  
 
     """
-    def __init__(self, cell, mo_coeff, kpts=None, S = None):
+    def __init__(self, cell, mo_coeff, kpts=None):
         self.iscomplex=True
         self._cell = cell.original_cell
         self.S = cell.S
@@ -148,17 +148,21 @@ class PBCOrbitalEvaluatorKpoints:
 
         occup = [[],[]]
         for spin in [0,1]:
+            count = 0
             for occ_k in occup_k[spin]:
-                occup[spin] += occ_k
+                print(occ_k)
+                occup[spin] += [o+count for o in occ_k[0]]
+                count+=len(occ_k[0])
 
         kpts = mf.kpts[kinds]
         if len(mf.mo_coeff[0][0].shape) == 2:
-            mo_coeff = [[mf.mo_coeff[spin][k][:,mf.mo_occ[spin][k]>0.5] for k in kinds] for spin in [0,1]]
+            mo_coeff = [[mf.mo_coeff[spin][k][:,occup_k[spin][kinds.index(k)][0]] for k in kinds] for spin in [0,1]]
         elif len(mf.mo_coeff[0][0].shape) == 1:
-            mo_coeff = [[mf.mo_coeff[k][:, mf.mo_occ[k] > 1.5-spin] for k in kinds] for spin in [0,1]]
+            mo_coeff = [[mf.mo_coeff[k][:, occup_k[spin][kinds.index(k)][0]] for k in kinds] for spin in [0,1]]
         else:
             raise ValueError("Did not expect an scf object of type", type(mf))
-
+        for s in [0,1]:
+            occup[s] = [occup[s]]
         return detcoeff, occup, det_map, PBCOrbitalEvaluatorKpoints(cell, mo_coeff, kpts)
         
     def aos(self,eval_str,configs, mask=None):
@@ -181,7 +185,9 @@ class PBCOrbitalEvaluatorKpoints:
         wrap_phase = get_wrapphase_complex(kdotR)
         # k,coordinate, orbital
         ao = np.asarray(self._cell.eval_gto("PBC"+eval_str, mycoords, kpts=self._kpts))
-        return np.einsum("...,...k->...k",wrap_phase, ao)
+        #print("aoshape", ao.shape)
+        #print("wrap phase", wrap_phase.shape)
+        return np.einsum("k...,k...a->k...a",wrap_phase, ao)
 
         
     def mos(self, ao, spin):
@@ -191,7 +197,9 @@ class PBCOrbitalEvaluatorKpoints:
         In the derivative case, returns [d,coordinate, mo]
         """
         p = np.split(self.parameters[f'mo_coeff{self.parm_names[spin]}'], self.param_split[spin], axis=-1)
-        return np.concatenate([ak.dot(mok) for ak,mok in zip(ao,p)], axis=-1)
+        #print('mos:ao',ao.shape)
+        #print('mos:mo_coeff', self.parameters[f'mo_coeff{self.parm_names[spin]}'].shape)
+        return np.concatenate([ak.dot(mok) for ak,mok in zip(ao,p[0:-1])], axis=-1)
 
     def pgradient(self,ao, spin):
         """

@@ -1,7 +1,10 @@
 """ Evaluate the OBDM for a wave function object. """
+from pyqmc.orbitals import MoleculeOrbitalEvaluator, PBCOrbitalEvaluatorKpoints
 import numpy as np
 from pyqmc.mc import initial_guess
-from pyqmc import pbc, slater
+
+
+
 
 
 class OBDMAccumulator:
@@ -69,42 +72,21 @@ class OBDMAccumulator:
             self._electrons = np.arange(0, np.sum(mol.nelec))
 
         self.iscomplex = bool(sum(map(np.iscomplexobj, orb_coeff)))
-        if hasattr(mol, "lattice_vectors"):
-            assert kpts is not None
-            assert len(orb_coeff) == len(kpts)
-            self.iscomplex = self.iscomplex or np.linalg.norm(kpts) > 1e-12
-            self._kpts = kpts
-            self.evaluate_orbitals = self._evaluate_orbitals_pbc
-            if self.iscomplex:
-                self.get_wrapphase = slater.get_wrapphase_complex
-            else:
-                self.get_wrapphase = slater.get_wrapphase_real
-            for attribute in ["original_cell", "S"]:
-                if not hasattr(mol, attribute):
-                    from pyqmc.supercell import get_supercell
 
-                    mol = get_supercell(mol, np.eye(3))
-            self.supercell = mol
-            self._mol = mol.original_cell
-        else:
-            self._mol = mol
-            self.evaluate_orbitals = self._evaluate_orbitals
-            assert (
-                len(orb_coeff.shape) == 2
-            ), "orb_coeff should be a list of orbital coefficients."
+        if kpts is None:
+            self.orbitals = MoleculeOrbitalEvaluator(mol, [orb_coeff, orb_coeff])
+        else: 
+            self.orbitals = PBCOrbitalEvaluatorKpoints(mol, [orb_coeff, orb_coeff], kpts)
 
-        self._orb_coeff = orb_coeff
-        if hasattr(self._orb_coeff, "shape"):
-            self.norb = self._orb_coeff.shape[1]
-        else:
-            self.norb = sum(c.shape[1] for c in self._orb_coeff)
+
         self._tstep = tstep
         self.nelec = len(self._electrons)
         self._nsweeps = nsweeps
         self._nstep = nsweeps * self.nelec
+        self.norb = self.orbitals.parameters['mo_coeff_alpha'].shape[-1]
 
         self._extra_config = initial_guess(mol, int(naux / self.nelec) + 1)
-        self._extra_config.reshape((-1, 3))
+        self._extra_config.reshape((-1,1,3))
 
         accept, extra_configs = self.sample_onebody(self._extra_config, warmup)
         self._extra_config = extra_configs[-1]
@@ -202,31 +184,12 @@ class OBDMAccumulator:
             allconfigs.append(configs.copy())
             allaccept[s] = accept
 
-        # config_pack = configs.mask(np.tile(np.arange(n), 2)) # two copies of configs
-        # config_pack.join([configs, newconfigs])
-
-        # borb = self.evaluate_orbitals(config_pack)
-
         return allaccept, allconfigs
 
-    def _evaluate_orbitals(self, configs):
-        ao = self._mol.eval_gto("GTOval_sph", configs.configs.reshape(-1, 3))
-        return ao.dot(self._orb_coeff)
 
-    def _evaluate_orbitals_pbc(self, configs):
-        # wrap supercell positions into primitive cell
-        lvecs = self._mol.lattice_vectors()
-        prim_coords, prim_wrap = pbc.enforce_pbc(lvecs, configs.configs)
-        wrap = prim_wrap + np.dot(configs.wrap, self.supercell.S)
-        wrap = wrap.reshape(-1, 3)
-        prim_coords = prim_coords.reshape(-1, 3)
-        kdotR = np.linalg.multi_dot((self._kpts, lvecs.T, wrap.T))
-        wrap_phase = self.get_wrapphase(kdotR)
-        # evaluate AOs for all electron positions
-        ao = self._mol.eval_gto("PBCGTOval_sph", prim_coords, kpts=self._kpts)
-        ao = [aok * wrap_phase[k][:, np.newaxis] for k, aok in enumerate(ao)]
-        borb = [aok.dot(ock) for aok, ock in zip(ao, self._orb_coeff)]
-        return np.concatenate(borb, axis=1)
+    def evaluate_orbitals(self, configs):
+        ao = self.orbitals.aos("GTOval_sph",configs)
+        return self.orbitals.mos(ao, spin=0)
 
     def keys(self):
         return set(["value", "norm", "acceptance"])
@@ -236,14 +199,14 @@ class OBDMAccumulator:
         return {"value": (norb, norb), "norm": (norb,), "acceptance": ()}
 
 
-def sample_onebody(mol, orb_coeff, configs, tstep=2.0):
+def sample_onebody(mol, orbitals, configs, tstep=2.0):
     r""" For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i \phi_i(r)^2`. """
     n = configs.shape[0]
     config_pack = np.concatenate([configs, configs], axis=0)
     config_pack[n:] += np.sqrt(tstep) * np.random.randn(*configs.shape)
 
-    ao = mol.eval_gto("GTOval_sph", config_pack)
-    borb = ao.dot(orb_coeff)
+    ao = orbitals.aos("GTOval_sph", config_pack)
+    borb = orbitals.mos(ao)
     fsum = (np.abs(borb) ** 2).sum(axis=1)
 
     accept = fsum[n:] / fsum[0:n] > np.random.rand(n)

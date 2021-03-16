@@ -102,7 +102,6 @@ class OBDMAccumulator:
             "norm": np.zeros((nconf, self.norb)),
             "acceptance": np.zeros(nconf),
         }
-        acceptance = 0
         naux = self._extra_config.configs.shape[0]
 
         if extra_configs is None:
@@ -199,7 +198,7 @@ class OBDMAccumulator:
         return {"value": (norb, norb), "norm": (norb,), "acceptance": ()}
 
 
-def sample_onebody(mol, orbitals, configs, tstep=2.0):
+def sample_onebody_old(mol, orbitals, configs, spin, tstep=2.0):
     r""" For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i \phi_i(r)^2`. """
     n = configs.shape[0]
     config_pack = np.concatenate([configs, configs], axis=0)
@@ -212,6 +211,34 @@ def sample_onebody(mol, orbitals, configs, tstep=2.0):
     accept = fsum[n:] / fsum[0:n] > np.random.rand(n)
     configs[accept] = config_pack[n:][accept]
     return accept, configs
+
+
+
+def sample_onebody(configs, orbitals, spin, nsamples=1, tstep=0.5):
+    r""" For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i \phi_i(r)^2`. """
+    n = configs.configs.shape[0]
+    ao = orbitals.aos("GTOval_sph",configs)
+    borb= orbitals.mos(ao, spin=spin)
+    fsum = (np.abs(borb) ** 2).sum(axis=1)
+
+    allaccept = np.zeros((nsamples, n))
+    allconfigs = []
+    allorbs = []
+    for s in range(nsamples):
+        shift = np.sqrt(tstep) * np.random.randn(*configs.configs.shape)
+        newconfigs = configs.make_irreducible(0, configs.configs + shift)
+        ao = orbitals.aos("GTOval_sph",newconfigs)
+        borbnew = orbitals.mos(ao, spin=spin)
+        fsumnew = (np.abs(borbnew) ** 2).sum(axis=1)
+        accept = fsumnew / fsum > np.random.rand(n)
+        configs.move_all(newconfigs, accept)
+        borb[accept] = borbnew[accept]
+        fsum[accept] = fsumnew[accept]
+        allconfigs.append(configs.copy())
+        allaccept[s] = accept
+        allorbs.append(borb.copy())
+
+    return allaccept, allconfigs, allorbs
 
 
 def normalize_obdm(obdm, norm):

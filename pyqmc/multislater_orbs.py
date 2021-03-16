@@ -108,6 +108,7 @@ class MultiSlater:
         self.parameters=JoinParameters([self.myparameters,self.orbitals.parameters])
 
         self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
+        self.dtype = complex if self.iscomplex else float
         self.get_phase = get_complex_phase if self.iscomplex else np.sign
 
 
@@ -175,8 +176,8 @@ class MultiSlater:
             self._inverse[s][mask][..., e - s * self._nelec[0]],
         )
 
-        upref = np.amax(self._dets[0][1])
-        dnref = np.amax(self._dets[1][1])
+        upref = np.amax(self._dets[0][1]).real
+        dnref = np.amax(self._dets[1][1]).real
         
         det_array = (
             self._dets[0][0, :, self._det_map[0]][:, mask]
@@ -260,7 +261,7 @@ class MultiSlater:
         s = (e >= self._nelec[0]).astype(int)
         ao = self.orbitals.aos('GTOval_sph', epos, mask)
 
-        ratios = np.zeros((epos.configs.shape[0], e.shape[0]))
+        ratios = np.zeros((epos.configs.shape[0], e.shape[0]),dtype=self.dtype)
         for spin in [0, 1]:
             ind = s == spin
             mo = self.orbitals.mos(ao, spin)

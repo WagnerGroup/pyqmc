@@ -5,6 +5,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 
 import numpy as np
+np.random.seed(12534234)
 from pyscf import gto, scf, lo
 from numpy.linalg import solve
 from pyqmc import MultiSlater
@@ -137,5 +138,5 @@ def test_pbc():
 
 
 if __name__ == "__main__":
-    #test()
+    test()
     test_pbc()

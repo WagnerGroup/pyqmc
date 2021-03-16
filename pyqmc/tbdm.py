@@ -4,11 +4,17 @@ from copy import copy, deepcopy
 from pyqmc.mc import initial_guess
 from pyqmc.obdm import sample_onebody
 from sys import stdout
+from pyqmc.orbitals import MoleculeOrbitalEvaluator, PBCOrbitalEvaluatorKpoints
 
 
 class TBDMAccumulator:
     """ Returns one spin sector of the tbdm[s1,s2] as an array (norb_s1,norb_s1,norb_s2,norb_s2) with indices (using pySCF's 
     convention): tbdm[s1,s2][i,j,k,l] = < c^+_{s1,i} c^+_{s2,k} c_{s2,l} c_{s1,j} > = \phi*_{s1,j} \phi*_{s2,l} \phi_{s2,k} \phi_{s1,i}.
+
+
+    We use pySCF's index convention (while Eq. 10 in DOI:10.1063/1.4793531 uses QWalk's)
+    QWalk -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,j} c_{s2,l} c_{s1,k} > = \phi*_{s1,k} \phi*_{s2,l} \phi_{s2,j} \phi_{s1,i}
+    pySCF -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,k} c_{s2,l} c_{s1,j} > = \phi*_{s1,j} \phi*_{s2,l} \phi_{s2,k} \phi_{s1,i}
 
     Args:
 
@@ -42,47 +48,42 @@ class TBDMAccumulator:
         warmup=200,
         naux=500,
         ijkl=None,
+        kpts=None
     ):
         assert (
             len(orb_coeff.shape) == 3
         ), "orb_coeff should be a list of orbital coefficients with size (2,num_mobasis,num_orb)."
 
         self._mol = mol
-        self._orb_coeff = orb_coeff
         self._tstep = tstep
         self._nsweeps = nsweeps
         self._spin = spin
 
+        if kpts is None:
+            self.orbitals = MoleculeOrbitalEvaluator(mol, orb_coeff)
+        else: 
+            self.orbitals = PBCOrbitalEvaluatorKpoints(mol, orb_coeff, kpts)
+
         self._spin_sector = spin
-        self._electrons_a = np.arange(
-            spin[0] * mol.nelec[0], mol.nelec[0] + spin[0] * mol.nelec[1]
-        )
-        self._electrons_b = np.arange(
-            spin[1] * mol.nelec[0], mol.nelec[0] + spin[1] * mol.nelec[1]
-        )
+        self._electrons=[np.arange(spin[s] * mol.nelec[0], mol.nelec[0] + spin[s] * mol.nelec[1]) for s in [0,1]]
         self._pairs = np.array(
-            np.meshgrid(self._electrons_a, self._electrons_b)
+            np.meshgrid(self._electrons[0], self._electrons[1])
         ).T.reshape(-1, 2)
         self._pairs = self._pairs[
             self._pairs[:, 0] != self._pairs[:, 1]
         ]  # Removes repeated electron pairs
 
-        # Initialization and warmup of aux_configs_a
-        self._aux_configs_a = initial_guess(
-            mol, int(naux / sum(self._mol.nelec))
-        ).configs.reshape(-1, 3)
-        for i in range(warmup):
-            accept_a, self._aux_configs_a = sample_onebody(
-                mol, orb_coeff[self._spin_sector[0]], self._aux_configs_a, tstep
-            )
-        # Initialization and warmup of aux_configs_b
-        self._aux_configs_b = initial_guess(
-            mol, int(naux / sum(self._mol.nelec))
-        ).configs.reshape(-1, 3)
-        for i in range(warmup):
-            accept_b, self._aux_configs_b = sample_onebody(
-                mol, orb_coeff[self._spin_sector[1]], self._aux_configs_b, tstep
-            )
+        # Initialization and warmup of configurations
+        nwalkers = int(naux / sum(self._mol.nelec))
+        self._aux_configs=[]
+        for spin in [0,1]:
+            self._aux_configs.append(initial_guess(mol, nwalkers))
+            self._aux_configs[spin].reshape((-1,1, 3))
+            _, self._aux_configs[spin], _ = \
+                sample_onebody(self._aux_configs[spin], self.orbitals, 0, nsamples=warmup)
+            self._aux_configs[spin] = self._aux_configs[spin][-1]
+
+
         # Default to full 2rdm if ijkl not specified
         if ijkl is None:
             norb_up = orb_coeff[0].shape[1]
@@ -96,127 +97,95 @@ class TBDMAccumulator:
             ]
         self._ijkl = np.array(ijkl).T
 
+    def get_configurations(self, nconf):
+        """
+        Obtain a sequence of auxilliary configurations with assignments.
+        Changes internal state: self._aux_configs is updated to the last sampled location. 
+
+        returns a dictionary with the following elements, separated by spin:
+            assignments: [nsweeps, nconf]: assign configurations for each sweep to an auxilliary walker.
+            orbs: [nsweeps, naux, norb]: orbital values
+            configs: [nsweeps] Configuration object with naux configurations of 1 electron
+            acceptance: [nsweeps, naux] acceptance probability for each 
+        """
+        configs=[]
+        assignments = []
+        orbs = []
+        acceptance = []
+        for spin in [0,1]:
+            accept, tmp_config, tmp_orbs = sample_onebody(self._aux_configs[spin], self.orbitals, 0, self._nsweeps, tstep=self._tstep)
+            acceptance.append(accept)
+            configs.append(tmp_config)
+            orbs.append(tmp_orbs)
+            self._aux_configs[spin] = configs[spin][-1]
+            configs[spin] = np.array(configs[spin])
+            naux = self._aux_configs[spin].configs.shape[0]
+            assignments.append(np.random.randint(0, naux, size=(self._nsweeps, nconf)))
+
+        return {'acceptance':acceptance, 'orbs':orbs, 'configs':configs, 'assignments':assignments}
+
+
     def __call__(self, configs, wf, extra_configs=None, auxassignments=None):
         """Gathers quantities from equation (10) of DOI:10.1063/1.4793531."""
 
-        # Constructs results dictionary
         nconf = configs.configs.shape[0]
-        results = {}
-        orb_a_size = self._orb_coeff[self._spin_sector[0]].shape[1]
-        orb_b_size = self._orb_coeff[self._spin_sector[1]].shape[1]
-        results["value"] = np.zeros((nconf, self._ijkl.shape[1]))
-        for i, e in enumerate(["a", "b"]):
-            results["norm_%s" % e] = np.zeros(
-                (nconf, self._orb_coeff[self._spin_sector[i]].shape[1])
-            )
-            results["acceptance_%s" % e] = np.zeros(nconf)
+        if extra_configs is not None:
+            raise NotImplementedError("have not implemented extra_configs")
 
-        # Returns empty arrays if no electron pairs
-        if len(self._pairs) == 0:
-            return results
+        aux = self.get_configurations(nconf)
 
-        if extra_configs is None:
-            # Generates aux_configs_a and aux_configs_b
-            aux_configs_a = []
-            aux_configs_b = []
-            for step in range(self._nsweeps):
-                aux_configs_a.append(np.copy(self._aux_configs_a))
-                accept_a, self._aux_configs_a = sample_onebody(
-                    self._mol,
-                    self._orb_coeff[self._spin_sector[0]],
-                    self._aux_configs_a,
-                    tstep=self._tstep,
-                )
-                aux_configs_b.append(np.copy(self._aux_configs_b))
-                accept_b, self._aux_configs_b = sample_onebody(
-                    self._mol,
-                    self._orb_coeff[self._spin_sector[1]],
-                    self._aux_configs_b,
-                    tstep=self._tstep,
-                )
-                results["acceptance_a"] += np.mean(accept_a)
-                results["acceptance_b"] += np.mean(accept_b)
-            results["acceptance_a"] /= self._nsweeps
-            results["acceptance_b"] /= self._nsweeps
-            aux_configs_a = np.array(aux_configs_a)
-            aux_configs_b = np.array(aux_configs_b)
-            # Generates random choice of aux_config_a and aux_config_b for moving electron_a and electron_b
-            naux_a = self._aux_configs_a.shape[0]
-            naux_b = self._aux_configs_b.shape[0]
-            auxassignments_a = np.random.randint(0, naux_a, size=(self._nsweeps, nconf))
-            auxassignments_b = np.random.randint(0, naux_b, size=(self._nsweeps, nconf))
-        else:
-            assert auxassignments is not None
-            aux_configs_a = extra_configs[0]
-            aux_configs_b = extra_configs[1]
-            naux_a = self._aux_configs_a.shape[0]
-            naux_b = self._aux_configs_b.shape[0]
-            auxassignments_a = auxassignments[0]
-            auxassignments_b = auxassignments[1]
+        # Evaluate orbital values for the primary samples
+        ao_configs = self.orbitals.aos("GTOval_sph", configs)
+        ao_configs = ao_configs.reshape((ao_configs.shape[0], nconf, -1, ao_configs.shape[-1]))
+        orb_configs = [self.orbitals.mos(ao_configs[...,self._electrons[spin], :], spin) for spin in [0,1]]
+        results = {"value": np.zeros((nconf, self._ijkl.shape[1])),
+            'norm_a': np.zeros((nconf, orb_configs[0].shape[-1])),
+            'norm_b': np.zeros((nconf, orb_configs[1].shape[-1]))}
 
-        # Evaluate VMC configurations
-        coords = configs.configs.reshape(
-            (configs.configs.shape[0] * configs.configs.shape[1], -1)
-        )
-        ao_configs = self._mol.eval_gto("GTOval_sph", coords)
-        orb_a_configs = ao_configs.dot(self._orb_coeff[self._spin_sector[0]]).reshape(
-            (configs.configs.shape[0], configs.configs.shape[1], -1)
-        )
-        orb_b_configs = ao_configs.dot(self._orb_coeff[self._spin_sector[1]]).reshape(
-            (configs.configs.shape[0], configs.configs.shape[1], -1)
-        )
-        orb_a_configs = orb_a_configs[:, self._pairs[:, 0], :]
-        orb_b_configs = orb_b_configs[:, self._pairs[:, 1], :]
+        orb_configs = [orb_configs[s][:,:, self._ijkl[2*s]] for s in [0,1]]
 
         # Sweeps over electron pairs
+        down_start = [np.min(self._electrons[s]) for s in [0,1]]
         for sweep in range(self._nsweeps):
-            ao_a_aux = self._mol.eval_gto("GTOval_sph", aux_configs_a[sweep])
-            ao_b_aux = self._mol.eval_gto("GTOval_sph", aux_configs_b[sweep])
-            orb_a_aux = ao_a_aux.dot(self._orb_coeff[self._spin_sector[0]])
-            orb_b_aux = ao_b_aux.dot(self._orb_coeff[self._spin_sector[1]])
-            fsum_a = np.sum(orb_a_aux * orb_a_aux, axis=1)
-            fsum_b = np.sum(orb_b_aux * orb_b_aux, axis=1)
-            norm_a = orb_a_aux * orb_a_aux / fsum_a[:, np.newaxis]
-            norm_b = orb_b_aux * orb_b_aux / fsum_b[:, np.newaxis]
+            fsum = [np.sum(np.abs(aux['orbs'][spin][sweep])**2, axis=1) for spin in [0,1]]
+            norm = [np.abs(aux['orbs'][spin][sweep])**2/fsum[spin][:,np.newaxis] for spin in [0,1]]
 
-            # We use pySCF's index convention (while Eq. 10 in DOI:10.1063/1.4793531 uses QWalk's)
-            # QWalk -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,j} c_{s2,l} c_{s1,k} > = \phi*_{s1,k} \phi*_{s2,l} \phi_{s2,j} \phi_{s1,i}
-            # pySCF -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,k} c_{s2,l} c_{s1,j} > = \phi*_{s1,j} \phi*_{s2,l} \phi_{s2,k} \phi_{s1,i}
-            orbratio = (
-                (
-                    orb_a_aux[auxassignments_a[sweep]][:, self._ijkl[1]]
-                    / fsum_a[auxassignments_a[sweep], np.newaxis]
-                )[:, np.newaxis, :]
-                * (
-                    orb_b_aux[auxassignments_b[sweep]][:, self._ijkl[3]]
-                    / fsum_b[auxassignments_b[sweep], np.newaxis]
-                )[:, np.newaxis, :]
-                * orb_a_configs[..., self._ijkl[0]]
-                * orb_b_configs[..., self._ijkl[2]]
-            )
-
-            # Calculation of wf ratio 
-            epos_a = configs.make_irreducible(
-                -1, aux_configs_a[sweep][auxassignments_a[sweep]]
-            )
-            epos_b = configs.make_irreducible(
-                -1, aux_configs_b[sweep][auxassignments_b[sweep]]
-            )
+            """
+            orbratio collects 
+            phi_i(r1) phi_j(r1') phi_k(r2) phi_l(r2')/rho(r1') rho(r2')
+            """
+            phi_j_r1p = aux['orbs'][0][sweep][aux['assignments'][0][sweep]][:, self._ijkl[1]]
+            phi_l_r2p = aux['orbs'][1][sweep][aux['assignments'][1][sweep]][:, self._ijkl[3]]
+            rho1rho2 = fsum[0][aux['assignments'][0][sweep]]*fsum[1][aux['assignments'][1][sweep]]
 
             wfratio = []
-            for ea in self._electrons_a:
-                electrons_b = self._electrons_b[self._electrons_b != ea]
+            electrons_a_ind = []
+            electrons_b_ind = []
+            for ea in self._electrons[0]:
+                # Don't move the same electron twice
+                electrons_b = self._electrons[1][self._electrons[1] != ea]
+                epos_a = aux['configs'][0][sweep].electron(0)
+                epos_b = aux['configs'][1][sweep].electron(0)
                 wfratio_a = wf.testvalue(ea, epos_a)
                 wf.updateinternals(ea, epos_a)
                 wfratio_b = wf.testvalue_many(electrons_b, epos_b)
                 wf.updateinternals(ea, configs.electron(ea))
                 wfratio.append(wfratio_a[:, np.newaxis] * wfratio_b)
+                electrons_a_ind.extend([ea-down_start[0]]*len(electrons_b))
+                electrons_b_ind.extend(electrons_b-down_start[1])
+
+
             wfratio = np.concatenate(wfratio, axis=1)
+            orbratio = np.einsum("nio,nio,no,no ->nio", 
+                                 orb_configs[0][:,electrons_a_ind,:], 
+                                 orb_configs[1][:,electrons_b_ind,:],
+                                 phi_j_r1p,
+                                 phi_l_r2p)/rho1rho2[:,np.newaxis, np.newaxis]
 
             # Adding to results
             results["value"] += np.einsum("in,inj->ij", wfratio, orbratio)
-            results["norm_a"] += norm_a[auxassignments_a[sweep]]
-            results["norm_b"] += norm_b[auxassignments_b[sweep]]
+            results["norm_a"] += norm[0]
+            results["norm_b"] += norm[1]
 
         # Average over sweeps and pairs
         results["value"] /= self._nsweeps

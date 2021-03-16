@@ -143,11 +143,13 @@ class MinimalImageDistance(RawDistance):
             v = vec.transpose((1, 0, 2))[:, :, np.newaxis]
         else:
             v = vec[:, np.newaxis, :]
-        d1 = v - configs
-        for i in range(3):
-            L = self._latvec[i, i]
-            d1[..., i] = (d1[..., i] + L /2) % L - L/2
-        return d1
+        return diagonal_dist_kernel(self._latvec, configs, v)
 
 
+def diagonal_dist_kernel(lvec, configs, v):
+    d1 = v - configs
+    for i in range(3):
+        L = lvec[i, i]
+        d1[..., i] = (d1[..., i] + L /2) % L - L/2
+    return d1
 

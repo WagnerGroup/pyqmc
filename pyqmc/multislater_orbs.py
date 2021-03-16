@@ -57,15 +57,23 @@ class JoinParameters:
 
 
 
+#def sherman_morrison_ms(e, inv, vec):
+#    ratio = np.einsum("idj,idj->id", vec, inv[:, :, :, e])
+#    tmp = np.einsum("edk,edkj->edj", vec, inv)
+#    invnew = (
+#        inv
+#        - np.einsum("kdi,kdj->kdij", inv[:, :, :, e], tmp)
+#        / ratio[:, :, np.newaxis, np.newaxis]
+#    )
+#    invnew[:, :, :, e] = inv[:, :, :, e] / ratio[:, :, np.newaxis]
+#    return ratio, invnew
+
 def sherman_morrison_ms(e, inv, vec):
-    ratio = np.einsum("idj,idj->id", vec, inv[:, :, :, e])
     tmp = np.einsum("edk,edkj->edj", vec, inv)
-    invnew = (
-        inv
-        - np.einsum("kdi,kdj->kdij", inv[:, :, :, e], tmp)
-        / ratio[:, :, np.newaxis, np.newaxis]
-    )
-    invnew[:, :, :, e] = inv[:, :, :, e] / ratio[:, :, np.newaxis]
+    ratio = tmp[:, :, e]
+    inv_ratio = inv[:, :, :, e] / ratio[:, :, np.newaxis]
+    invnew = inv - np.einsum("kdi,kdj->kdij", inv_ratio, tmp)
+    invnew[:, :, :, e] = inv_ratio
     return ratio, invnew
 
 
@@ -209,13 +217,51 @@ class MultiSlater:
             denom = denom[:, np.newaxis]
         return numer / denom
 
+    def _testrow_deriv(self, e, vec):
+        """vec is a nconfig,nmo vector which replaces row e"""
+        s = int(e >= self._nelec[0])
+
+        ratios = np.einsum(
+            "ci...dj,idj...->ci...d",
+            vec,
+            self._inverse[s][..., e - s * self._nelec[0]],
+        )
+
+        upref = np.amax(self._dets[0][1])
+        dnref = np.amax(self._dets[1][1])
+        
+        det_array = (
+            self._dets[0][0, :, self._det_map[0]]
+            * self._dets[1][0, :, self._det_map[1]]
+            * np.exp(
+                self._dets[0][1, :, self._det_map[0]]
+                + self._dets[1][1, :, self._det_map[1]]-upref-dnref
+            )
+        )
+        numer = np.einsum(
+            "ci...d,d,di->ci...",
+            ratios[..., self._det_map[s]],
+            self.parameters["det_coeff"],
+            det_array,
+        )
+        denom = np.einsum(
+            "d,di->i...",
+            self.parameters["det_coeff"],
+            det_array,
+        )
+        #curr_val = self.value()
+        
+        if len(numer.shape) == 3:
+            denom = denom[:, np.newaxis]
+        return numer / denom
+
+
+
     def _testcol(self, det, i, s, vec):
         """vec is a nconfig,nmo vector which replaces column i 
         of spin s in determinant det"""
 
-        return np.einsum(
-            "ij...,ij->i...", vec, self._inverse[s][:, det, i, :], optimize="greedy"
-        )
+        return np.einsum("ij...,ij->i...", vec, self._inverse[s][:, det, i, :])
 
     def gradient(self, e, epos):
         """ Compute the gradient of the log wave function 
@@ -227,7 +273,7 @@ class MultiSlater:
 
         mograd_vals = mograd[:, :, self._det_occup[s]]
 
-        ratios = np.asarray([self._testrow(e, x) for x in mograd_vals])
+        ratios = self._testrow_deriv(e, mograd_vals)
         return ratios[1:] / ratios[0]
 
     def gradient_value(self, e, epos):
@@ -240,7 +286,7 @@ class MultiSlater:
 
         mograd_vals = mograd[:, :, self._det_occup[s]]
 
-        ratios = np.asarray([self._testrow(e, x) for x in mograd_vals])
+        ratios = self._testrow_deriv(e, mograd_vals)
         return ratios[1:] / ratios[0], ratios[0]
 
     def laplacian(self, e, epos):
@@ -250,7 +296,7 @@ class MultiSlater:
         ao_val = ao[:,0,:,:]
         ao_lap = np.sum(ao[:,[4,7,9],:,:],axis=1)
         mos = [self.orbitals.mos(x,s)[...,self._det_occup[s]] for x in [ao_val, ao_lap]]
-        ratios = [self._testrow(e,mo) for mo in mos]
+        ratios = self._testrow_deriv(e, mos)
         return ratios[1]/ratios[0]
 
     def gradient_laplacian(self, e, epos):
@@ -259,7 +305,7 @@ class MultiSlater:
         ao = np.concatenate([ao[:,0:4,...], ao[:,[4,7,9],...].sum(axis=1,keepdims=True)],axis=1)
         mo = self.orbitals.mos(ao,s)
         mo_vals = mo[:, :, self._det_occup[s]]
-        ratios = np.asarray([self._testrow(e, x) for x in mo_vals])
+        ratios = self._testrow_deriv(e, mo_vals)
         return ratios[1:-1] / ratios[:1], ratios[-1] / ratios[0]
 
     def testvalue(self, e, epos, mask=None):

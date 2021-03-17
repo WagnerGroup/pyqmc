@@ -150,7 +150,6 @@ class PBCOrbitalEvaluatorKpoints:
         for spin in [0,1]:
             count = 0
             for occ_k in occup_k[spin]:
-                print(occ_k)
                 occup[spin] += [o+count for o in occ_k[0]]
                 count+=len(occ_k[0])
 

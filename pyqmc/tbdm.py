@@ -66,12 +66,6 @@ class TBDMAccumulator:
 
         self._spin_sector = spin
         self._electrons=[np.arange(spin[s] * mol.nelec[0], mol.nelec[0] + spin[s] * mol.nelec[1]) for s in [0,1]]
-        self._pairs = np.array(
-            np.meshgrid(self._electrons[0], self._electrons[1])
-        ).T.reshape(-1, 2)
-        self._pairs = self._pairs[
-            self._pairs[:, 0] != self._pairs[:, 1]
-        ]  # Removes repeated electron pairs
 
         # Initialization and warmup of configurations
         nwalkers = int(naux / sum(self._mol.nelec))
@@ -99,39 +93,45 @@ class TBDMAccumulator:
 
     def get_configurations(self, nconf):
         """
-        Obtain a sequence of auxilliary configurations with assignments.
+        Obtain a sequence of auxilliary configurations. This function returns one auxilliary configuration 
+        for each nconf.
         Changes internal state: self._aux_configs is updated to the last sampled location. 
 
+        This will resample the auxilliary configurations to match the number of walkers.
+
         returns a dictionary with the following elements, separated by spin:
-            assignments: [nsweeps, nconf]: assign configurations for each sweep to an auxilliary walker.
-            orbs: [nsweeps, naux, norb]: orbital values
-            configs: [nsweeps] Configuration object with naux configurations of 1 electron
+            assignments: [nsweeps, nconf]: assignment of configurations for each sweep to an auxilliary walker.
+            orbs: [nsweeps, conf, norb]: orbital values
+            configs: [nsweeps] Configuration object with nconf configurations of 1 electron
             acceptance: [nsweeps, naux] acceptance probability for each 
         """
         configs=[]
         assignments = []
         orbs = []
         acceptance = []
+
         for spin in [0,1]:
-            accept, tmp_config, tmp_orbs = sample_onebody(self._aux_configs[spin], self.orbitals, 0, self._nsweeps, tstep=self._tstep)
-            acceptance.append(accept)
-            configs.append(tmp_config)
-            orbs.append(tmp_orbs)
-            self._aux_configs[spin] = configs[spin][-1]
-            configs[spin] = np.array(configs[spin])
             naux = self._aux_configs[spin].configs.shape[0]
+            accept, tmp_config, tmp_orbs = sample_onebody(self._aux_configs[spin], self.orbitals, spin, self._nsweeps, tstep=self._tstep)
             assignments.append(np.random.randint(0, naux, size=(self._nsweeps, nconf)))
+            self._aux_configs[spin] = tmp_config[-1].copy()
+            acceptance.append(accept)
+            for conf,assign in zip(tmp_config,assignments[-1]):
+                conf.resample(assign)
+            configs.append(tmp_config)
+            orbs.append([orb[assign,...] for orb, assign in zip(tmp_orbs,assignments[-1])])
 
         return {'acceptance':acceptance, 'orbs':orbs, 'configs':configs, 'assignments':assignments}
 
 
-    def __call__(self, configs, wf, extra_configs=None, auxassignments=None):
-        """Gathers quantities from equation (10) of DOI:10.1063/1.4793531."""
+    def __call__(self, configs, wf):
+        """Gathers quantities from equation (10) of DOI:10.1063/1.4793531.
+        
+        assignments maps from the auxilliary walkers onto the main walkers. 
+        It should be of length [nsweeps,nconf], and contain integers between 0 and naux.
+        """
 
         nconf = configs.configs.shape[0]
-        if extra_configs is not None:
-            raise NotImplementedError("have not implemented extra_configs")
-
         aux = self.get_configurations(nconf)
 
         # Evaluate orbital values for the primary samples
@@ -141,22 +141,12 @@ class TBDMAccumulator:
         results = {"value": np.zeros((nconf, self._ijkl.shape[1])),
             'norm_a': np.zeros((nconf, orb_configs[0].shape[-1])),
             'norm_b': np.zeros((nconf, orb_configs[1].shape[-1]))}
-
         orb_configs = [orb_configs[s][:,:, self._ijkl[2*s]] for s in [0,1]]
 
-        # Sweeps over electron pairs
         down_start = [np.min(self._electrons[s]) for s in [0,1]]
         for sweep in range(self._nsweeps):
             fsum = [np.sum(np.abs(aux['orbs'][spin][sweep])**2, axis=1) for spin in [0,1]]
             norm = [np.abs(aux['orbs'][spin][sweep])**2/fsum[spin][:,np.newaxis] for spin in [0,1]]
-
-            """
-            orbratio collects 
-            phi_i(r1) phi_j(r1') phi_k(r2) phi_l(r2')/rho(r1') rho(r2')
-            """
-            phi_j_r1p = aux['orbs'][0][sweep][aux['assignments'][0][sweep]][:, self._ijkl[1]]
-            phi_l_r2p = aux['orbs'][1][sweep][aux['assignments'][1][sweep]][:, self._ijkl[3]]
-            rho1rho2 = fsum[0][aux['assignments'][0][sweep]]*fsum[1][aux['assignments'][1][sweep]]
 
             wfratio = []
             electrons_a_ind = []
@@ -173,21 +163,27 @@ class TBDMAccumulator:
                 wfratio.append(wfratio_a[:, np.newaxis] * wfratio_b)
                 electrons_a_ind.extend([ea-down_start[0]]*len(electrons_b))
                 electrons_b_ind.extend(electrons_b-down_start[1])
-
-
             wfratio = np.concatenate(wfratio, axis=1)
-            orbratio = np.einsum("nio,nio,no,no ->nio", 
-                                 orb_configs[0][:,electrons_a_ind,:], 
-                                 orb_configs[1][:,electrons_b_ind,:],
-                                 phi_j_r1p,
-                                 phi_l_r2p)/rho1rho2[:,np.newaxis, np.newaxis]
 
-            # Adding to results
+            """
+            orbratio collects 
+            phi_i(r1) phi_j(r1') phi_k(r2) phi_l(r2')/rho(r1') rho(r2')
+            """
+            phi_j_r1p = aux['orbs'][0][sweep][...,self._ijkl[1]]
+            phi_l_r2p = aux['orbs'][1][sweep][...,self._ijkl[3]]
+            rho1rho2 = 1.0/(fsum[0]*fsum[1])
+            #n is the walker number, i is the electron pair index, o is the orbital
+            orbratio = np.einsum("nio,nio,no,no,n ->nio", 
+                                 orb_configs[0][:,electrons_a_ind,:], #phi_i(r1)
+                                 orb_configs[1][:,electrons_b_ind,:], #phi_k(r2)
+                                 phi_j_r1p, #phi_j
+                                 phi_l_r2p, #phi_l
+                                 rho1rho2)
+
             results["value"] += np.einsum("in,inj->ij", wfratio, orbratio)
             results["norm_a"] += norm[0]
             results["norm_b"] += norm[1]
 
-        # Average over sweeps and pairs
         results["value"] /= self._nsweeps
         for e in ["a", "b"]:
             results["norm_%s" % e] /= self._nsweeps
@@ -210,38 +206,6 @@ class TBDMAccumulator:
         d = {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
         d["ijkl"] = self._ijkl.T
         return d
-
-    def get_extra_configs(self, configs):
-        """ Returns an nstep length array of configurations
-        starting from self._extra_config """
-        nconf = configs.configs.shape[0]
-
-        aux_configs_a = []
-        aux_configs_b = []
-        for step in range(self._nsweeps):
-            aux_configs_a.append(np.copy(self._aux_configs_a))
-            accept_a, self._aux_configs_a = sample_onebody(
-                self._mol,
-                self._orb_coeff[self._spin_sector[0]],
-                self._aux_configs_a,
-                tstep=self._tstep,
-            )
-            aux_configs_b.append(np.copy(self._aux_configs_b))
-            accept_b, self._aux_configs_b = sample_onebody(
-                self._mol,
-                self._orb_coeff[self._spin_sector[1]],
-                self._aux_configs_b,
-                tstep=self._tstep,
-            )
-        aux_configs_a = np.array(aux_configs_a)
-        aux_configs_b = np.array(aux_configs_b)
-
-        # Generates random choice of aux_config_a and aux_config_b for moving electron_a and electron_b
-        naux_a = self._aux_configs_a.shape[0]
-        naux_b = self._aux_configs_b.shape[0]
-        auxassignments_a = np.random.randint(0, naux_a, size=(self._nsweeps, nconf))
-        auxassignments_b = np.random.randint(0, naux_b, size=(self._nsweeps, nconf))
-        return [aux_configs_a, aux_configs_b], [auxassignments_a, auxassignments_b]
 
 
 def normalize_tbdm(tbdm, norm_a, norm_b):

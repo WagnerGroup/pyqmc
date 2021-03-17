@@ -91,7 +91,7 @@ class OBDMAccumulator:
         accept, extra_configs = self.sample_onebody(self._extra_config, warmup)
         self._extra_config = extra_configs[-1]
 
-    def __call__(self, configs, wf, extra_configs=None, auxassignments=None):
+    def __call__(self, configs, wf):
         """ 
         """
 
@@ -104,15 +104,12 @@ class OBDMAccumulator:
         }
         naux = self._extra_config.configs.shape[0]
 
-        if extra_configs is None:
-            auxassignments = np.random.randint(0, naux, size=(self._nsweeps, nconf))
-            accept, extra_configs = self.sample_onebody(
-                self._extra_config, self._nsweeps
-            )
-            self._extra_config = extra_configs[-1]
-            results["acceptance"] += np.sum(accept) / naux
-        else:
-            assert auxassignments is not None
+        auxassignments = np.random.randint(0, naux, size=(self._nsweeps, nconf))
+        accept, extra_configs = self.sample_onebody(
+            self._extra_config, self._nsweeps
+        )
+        self._extra_config = extra_configs[-1]
+        results["acceptance"] += np.sum(accept) / naux
 
         borb_configs = self.evaluate_orbitals(configs.electron(self._electrons))
         borb_configs = borb_configs.reshape(nconf, self.nelec, -1)
@@ -153,16 +150,6 @@ class OBDMAccumulator:
     def avg(self, configs, wf):
         return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
 
-    def get_extra_configs(self, configs):
-        """ Returns an nstep length array of configurations
-            starting from self._extra_config """
-        nconf = configs.configs.shape[0]
-        naux = self._extra_config.configs.shape[0]
-        auxassignments = np.random.randint(0, naux, size=(self._nsweeps, nconf))
-        accept, extra_configs = self.sample_onebody(self._extra_config, self._nsweeps)
-        self._extra_config = extra_configs[-1]
-        return extra_configs, auxassignments
-
     def sample_onebody(self, configs, nsamples=1):
         r""" For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i \phi_i(r)^2`. """
         n = configs.configs.shape[0]
@@ -197,20 +184,6 @@ class OBDMAccumulator:
         norb = self.norb
         return {"value": (norb, norb), "norm": (norb,), "acceptance": ()}
 
-
-def sample_onebody_old(mol, orbitals, configs, spin, tstep=2.0):
-    r""" For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i \phi_i(r)^2`. """
-    n = configs.shape[0]
-    config_pack = np.concatenate([configs, configs], axis=0)
-    config_pack[n:] += np.sqrt(tstep) * np.random.randn(*configs.shape)
-
-    ao = orbitals.aos("GTOval_sph", config_pack)
-    borb = orbitals.mos(ao)
-    fsum = (np.abs(borb) ** 2).sum(axis=1)
-
-    accept = fsum[n:] / fsum[0:n] > np.random.rand(n)
-    configs[accept] = config_pack[n:][accept]
-    return accept, configs
 
 
 

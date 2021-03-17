@@ -216,17 +216,16 @@ def test(atom="He", total_spin=0, total_charge=0, scf_basis="sto-3g"):
     # Compares tbdm from QMC and MF
     avg_norm = {}
     avg_tbdm = {}
-    tbdm_est = {}
     for t in ["tbdm_upup", "tbdm_updown", "tbdm_downup", "tbdm_downdown"]:
         for k in df.keys():
             if k.startswith(t + "norm_"):
                 avg_norm[k.split("_")[-1]] = np.mean(df[k][vmc_warmup:], axis=0)
             if k.startswith(t + "value"):
                 avg_tbdm[k.split("_")[-1]] = np.mean(df[k][vmc_warmup:], axis=0)
-    for k in avg_tbdm:
-        tbdm_est[k] = normalize_tbdm(
+
+    tbdm_est = {k: normalize_tbdm(
             avg_tbdm[k].reshape(2, 2, 2, 2), avg_norm["a"], avg_norm["b"]
-        )
+        ) for k in avg_tbdm}
     qmctbdm = np.array(
         [
             [tbdm_est["upupvalue"], tbdm_est["updownvalue"]],
@@ -236,15 +235,15 @@ def test(atom="He", total_spin=0, total_charge=0, scf_basis="sto-3g"):
     print("\nComparing QMC and MF tbdm:")
     for sa, sb in [[0, 0], [0, 1], [1, 0], [1, 1]]:
         print("spins", sa, sb)
-        print('QMC tbdm[%d,%d]:\n'%(sa,sb),qmctbdm[sa,sb])
-        print('MF tbdm[%d,%d]:\n'%(sa,sb),mftbdm[sa,sb])
+        print('QMC tbdm[%d,%d]:\n'%(sa,sb),qmctbdm[sa,sb].round(3))
+        print('MF tbdm[%d,%d]:\n'%(sa,sb),mftbdm[sa,sb].round(3))
         diff = qmctbdm[sa, sb] - mftbdm[sa, sb]
         print("diff[%d,%d]:\n" % (sa, sb), diff)
-        #assert np.max(np.abs(diff)) < 0.05
+        assert np.max(np.abs(diff)) < 0.05
 
 
 if __name__ == "__main__":
     # Tests He2 molecule (Sz=0)
     test(atom="He", total_spin=0, scf_basis="cc-pvdz")
     # Tests He2- molecule (Sz=1)
-    #test(atom="He", total_spin=1, total_charge=-1, scf_basis="cc-pvdz")
+    test(atom="He", total_spin=1, total_charge=-1, scf_basis="cc-pvdz")

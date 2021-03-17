@@ -175,9 +175,9 @@ class PBCOrbitalEvaluatorKpoints:
 
     def aos(self,eval_str,configs, mask=None):
         """
-        Returns an ndarray in order [k,coordinate, orbital] of the ao's if value is requested
+        Returns an ndarray in order [k,..., orbital] of the ao's if value is requested
 
-        if a derivative is requested, will instead return [k,d,coordinate,orbital]
+        if a derivative is requested, will instead return [k,d,...,orbital]
         """
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
@@ -202,10 +202,10 @@ class PBCOrbitalEvaluatorKpoints:
 
         
     def mos(self, ao, spin):
-        """ao should be [k,coordinate,ao].
-        Returns a concatenated list of all molecular orbitals in form [coordinate, mo]
+        """ao should be [k,[d],...,ao].
+        Returns a concatenated list of all molecular orbitals in form [..., mo]
 
-        In the derivative case, returns [d,coordinate, mo]
+        In the derivative case, returns [d,..., mo]
         """
         p = np.split(self.parameters[f'mo_coeff{self.parm_names[spin]}'], self.param_split[spin], axis=-1)
         return np.concatenate([ak.dot(mok) for ak,mok in zip(ao,p[0:-1])], axis=-1)

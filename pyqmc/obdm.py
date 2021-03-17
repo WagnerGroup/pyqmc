@@ -3,7 +3,7 @@ from pyqmc.orbitals import MoleculeOrbitalEvaluator, PBCOrbitalEvaluatorKpoints
 import numpy as np
 from pyqmc.mc import initial_guess
 
-
+import pyqmc.supercell as supercell
 
 
 
@@ -76,6 +76,8 @@ class OBDMAccumulator:
         if kpts is None:
             self.orbitals = MoleculeOrbitalEvaluator(mol, [orb_coeff, orb_coeff])
         else: 
+            if not hasattr(mol, "original_cell"):
+                mol = supercell.get_supercell(mol, np.eye(3))
             self.orbitals = PBCOrbitalEvaluatorKpoints(mol, [orb_coeff, orb_coeff], kpts)
 
 
@@ -88,7 +90,7 @@ class OBDMAccumulator:
         self._extra_config = initial_guess(mol, int(naux / self.nelec) + 1)
         self._extra_config.reshape((-1,1,3))
 
-        accept, extra_configs = self.sample_onebody(self._extra_config, warmup)
+        accept, extra_configs, _ = sample_onebody(self._extra_config, self.orbitals, spin=0, nsamples=warmup, tstep=self._tstep)
         self._extra_config = extra_configs[-1]
 
     def __call__(self, configs, wf):
@@ -105,41 +107,37 @@ class OBDMAccumulator:
         naux = self._extra_config.configs.shape[0]
 
         auxassignments = np.random.randint(0, naux, size=(self._nsweeps, nconf))
-        accept, extra_configs = self.sample_onebody(
-            self._extra_config, self._nsweeps
+        accept, extra_configs, borb_aux = sample_onebody(
+            self._extra_config, self.orbitals, spin=0, nsamples=self._nsweeps, tstep=self._tstep
         )
         self._extra_config = extra_configs[-1]
+
+        for conf,assign in zip(extra_configs,auxassignments):
+            conf.resample(assign)
+        borb_aux = [orb[assign,...] for orb, assign in zip(borb_aux,auxassignments)]
+
         results["acceptance"] += np.sum(accept) / naux
 
         borb_configs = self.evaluate_orbitals(configs.electron(self._electrons))
         borb_configs = borb_configs.reshape(nconf, self.nelec, -1)
-        # Orbital evaluations at extra coordinate.
-        all_extra_configs = extra_configs[0].mask(
-            np.zeros(naux * self._nsweeps, dtype=int)
-        )
-        all_extra_configs.join(extra_configs)
-        borb_aux = self.evaluate_orbitals(all_extra_configs)
-        borb_aux = borb_aux.reshape(self._nsweeps, naux, -1)
+
         bauxsquared = np.abs(borb_aux) ** 2
         fsum = np.sum(bauxsquared, axis=-1, keepdims=True)
         norm = bauxsquared / fsum
         baux_f = borb_aux / fsum
 
         for sweep, aux in enumerate(auxassignments):
-            epos = extra_configs[sweep].configs[aux]
-            newconfigs = configs.make_irreducible(0, epos)
-            wfratio = wf.testvalue_many(self._electrons, newconfigs)
-
+            wfratio = wf.testvalue_many(self._electrons, extra_configs[sweep].electron(0))
             ratio = np.einsum(
                 "ie,ij,iek->ijk",
                 wfratio.conj(),
-                baux_f[sweep, aux],
+                baux_f[sweep, :],
                 borb_configs.conj(),
                 optimize=True,
             )
 
             results["value"] += ratio
-            results["norm"] += norm[sweep, aux]
+            results["norm"] += norm[sweep, :]
 
         results["value"] /= self._nstep
         results["norm"] = results["norm"] / self._nstep
@@ -149,29 +147,6 @@ class OBDMAccumulator:
 
     def avg(self, configs, wf):
         return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
-
-    def sample_onebody(self, configs, nsamples=1):
-        r""" For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i \phi_i(r)^2`. """
-        n = configs.configs.shape[0]
-        borb = self.evaluate_orbitals(configs)
-        fsum = (np.abs(borb) ** 2).sum(axis=1)
-
-        allaccept = np.zeros((nsamples, n))
-        allconfigs = []
-        for s in range(nsamples):
-            shift = np.sqrt(self._tstep) * np.random.randn(*configs.configs.shape)
-            newconfigs = configs.make_irreducible(0, configs.configs + shift)
-            borbnew = self.evaluate_orbitals(newconfigs)
-            fsumnew = (np.abs(borbnew) ** 2).sum(axis=1)
-            accept = fsumnew / fsum > np.random.rand(n)
-            configs.move_all(newconfigs, accept)
-            borb[accept] = borbnew[accept]
-            fsum[accept] = fsumnew[accept]
-            allconfigs.append(configs.copy())
-            allaccept[s] = accept
-
-        return allaccept, allconfigs
-
 
     def evaluate_orbitals(self, configs):
         ao = self.orbitals.aos("GTOval_sph",configs)
@@ -200,7 +175,7 @@ def sample_onebody(configs, orbitals, spin, nsamples=1, tstep=0.5):
     for s in range(nsamples):
         shift = np.sqrt(tstep) * np.random.randn(*configs.configs.shape)
         newconfigs = configs.make_irreducible(0, configs.configs + shift)
-        ao = orbitals.aos("GTOval_sph",newconfigs)
+        ao = orbitals.aos("GTOval_sph", newconfigs)
         borbnew = orbitals.mos(ao, spin=spin)
         fsumnew = (np.abs(borbnew) ** 2).sum(axis=1)
         accept = fsumnew / fsum > np.random.rand(n)

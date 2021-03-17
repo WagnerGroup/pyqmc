@@ -140,7 +140,9 @@ class TBDMAccumulator:
         orb_configs = [self.orbitals.mos(ao_configs[...,self._electrons[spin], :], spin) for spin in [0,1]]
         results = {"value": np.zeros((nconf, self._ijkl.shape[1])),
             'norm_a': np.zeros((nconf, orb_configs[0].shape[-1])),
-            'norm_b': np.zeros((nconf, orb_configs[1].shape[-1]))}
+            'norm_b': np.zeros((nconf, orb_configs[1].shape[-1])),
+            'acceptance_a': np.mean(aux['acceptance'][0], axis=0),
+            'acceptance_b': np.mean(aux['acceptance'][0],axis=0) }
         orb_configs = [orb_configs[s][:,:, self._ijkl[2*s]] for s in [0,1]]
 
         down_start = [np.min(self._electrons[s]) for s in [0,1]]
@@ -197,8 +199,9 @@ class TBDMAccumulator:
 
     def shapes(self):
         d = {"value": (self._ijkl.shape[1],), "ijkl": self._ijkl.T.shape}
+        nmo = self.orbitals.nmo()
         for e, s in zip(["a", "b"], self._spin_sector):
-            d["norm_%s" % e] = (self._orb_coeff[s].shape[1],)
+            d["norm_%s" % e] = (nmo[s],)
             d["acceptance_%s" % e] = ()
         return d
 

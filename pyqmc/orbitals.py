@@ -77,6 +77,8 @@ class MoleculeOrbitalEvaluator:
 
         return detcoeff, occup, det_map, MoleculeOrbitalEvaluator(mol, mo_coeff)
 
+    def nmo(self):
+        return [self.parameters['mo_coeff_alpha'].shape[-1], self.parameters['mo_coeff_beta'].shape[-1]]
 
     def aos(self, eval_str, configs, mask=None):
         """
@@ -84,7 +86,11 @@ class MoleculeOrbitalEvaluator:
         """
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
-        return np.asarray([self._mol.eval_gto(eval_str, mycoords)])
+        aos= np.asarray([self._mol.eval_gto(eval_str, mycoords)])
+        if len(aos.shape)==4: # if derivatives are included
+            return aos.reshape((1,aos.shape[1], *mycoords.shape[:-1], aos.shape[-1]))
+        else:
+            return aos.reshape((1,*mycoords.shape[:-1], aos.shape[-1]))
 
     def mos(self, ao, spin):
         return ao[0].dot(self.parameters[f'mo_coeff{self.parm_names[spin]}'])
@@ -164,6 +170,9 @@ class PBCOrbitalEvaluatorKpoints:
             occup[s] = [occup[s]]
         return detcoeff, occup, det_map, PBCOrbitalEvaluatorKpoints(cell, mo_coeff, kpts)
         
+    def nmo(self):
+        return [self.parameters['mo_coeff_alpha'].shape[-1], self.parameters['mo_coeff_beta'].shape[-1]]
+
     def aos(self,eval_str,configs, mask=None):
         """
         Returns an ndarray in order [k,coordinate, orbital] of the ao's if value is requested
@@ -184,9 +193,12 @@ class PBCOrbitalEvaluatorKpoints:
         wrap_phase = get_wrapphase_complex(kdotR)
         # k,coordinate, orbital
         ao = np.asarray(self._cell.eval_gto("PBC"+eval_str, mycoords, kpts=self._kpts))
-        #print("aoshape", ao.shape)
-        #print("wrap phase", wrap_phase.shape)
-        return np.einsum("k...,k...a->k...a",wrap_phase, ao)
+        ao= np.einsum("k...,k...a->k...a",wrap_phase, ao)
+        if len(ao.shape)==4: # if derivatives are included
+            return ao.reshape((ao.shape[0],ao.shape[1], *mycoords.shape[:-1], ao.shape[-1]))
+        else:
+            return ao.reshape((ao.shape[0],*mycoords.shape[:-1], ao.shape[-1]))
+
 
         
     def mos(self, ao, spin):
@@ -196,8 +208,6 @@ class PBCOrbitalEvaluatorKpoints:
         In the derivative case, returns [d,coordinate, mo]
         """
         p = np.split(self.parameters[f'mo_coeff{self.parm_names[spin]}'], self.param_split[spin], axis=-1)
-        #print('mos:ao',ao.shape)
-        #print('mos:mo_coeff', self.parameters[f'mo_coeff{self.parm_names[spin]}'].shape)
         return np.concatenate([ak.dot(mok) for ak,mok in zip(ao,p[0:-1])], axis=-1)
 
     def pgradient(self,ao, spin):

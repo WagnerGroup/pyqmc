@@ -260,7 +260,6 @@ class MultiSlater:
         electron e's position is replaced by epos for each electron"""
         s = (e >= self._nelec[0]).astype(int)
         ao = self.orbitals.aos('GTOval_sph', epos, mask)
-
         ratios = np.zeros((epos.configs.shape[0], e.shape[0]),dtype=self.dtype)
         for spin in [0, 1]:
             ind = s == spin

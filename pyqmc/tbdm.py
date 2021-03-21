@@ -5,7 +5,7 @@ from pyqmc.mc import initial_guess
 from pyqmc.obdm import sample_onebody
 from sys import stdout
 from pyqmc.orbitals import MoleculeOrbitalEvaluator, PBCOrbitalEvaluatorKpoints
-
+import pyqmc.supercell as supercell
 
 class TBDMAccumulator:
     """ Returns one spin sector of the tbdm[s1,s2] as an array (norb_s1,norb_s1,norb_s2,norb_s2) with indices (using pySCF's 
@@ -62,6 +62,8 @@ class TBDMAccumulator:
         if kpts is None:
             self.orbitals = MoleculeOrbitalEvaluator(mol, orb_coeff)
         else: 
+            if not hasattr(mol, "original_cell"):
+                mol = supercell.get_supercell(mol, np.eye(3))
             self.orbitals = PBCOrbitalEvaluatorKpoints(mol, orb_coeff, kpts)
 
         self._spin_sector = spin
@@ -103,7 +105,9 @@ class TBDMAccumulator:
             assignments: [nsweeps, nconf]: assignment of configurations for each sweep to an auxilliary walker.
             orbs: [nsweeps, conf, norb]: orbital values
             configs: [nsweeps] Configuration object with nconf configurations of 1 electron
-            acceptance: [nsweeps, naux] acceptance probability for each 
+            acceptance: [nsweeps, naux] acceptance probability for each auxilliary walker
+
+        TODO: Should we just resize the configurations to nconf instead of taking naux as an input?
         """
         configs=[]
         assignments = []

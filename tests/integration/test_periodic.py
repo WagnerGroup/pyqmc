@@ -6,7 +6,6 @@ from pyqmc.reblock import reblock
 from pyqmc.supercell import get_supercell
 from pyscf.pbc.dft.multigrid import multigrid
 from pyscf.scf.addons import remove_linear_dep_
-import pyqmc.multislater_orbs
 import time
 import uuid
 
@@ -115,7 +114,7 @@ def runtest(mol, mf, kind=0, do_mc=False):
             dm = np.sum(dm, axis=0)
     else:
         kpt = mf.kpts[kind]
-        wf = pyqmc.multislater_orbs.MultiSlater(mol, mf)
+        wf = pyqmc.Slater(mol, mf)
         dm = mf.make_rdm1()
         print("original dm shape", dm.shape)
         if len(dm.shape) == 4:

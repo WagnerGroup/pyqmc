@@ -1,9 +1,7 @@
 name = "pyqmc"
 from pyqmc.recipes import OPTIMIZE, VMC, DMC
 from pyqmc.mc import vmc, initial_guess
-#from pyqmc.slater import PySCFSlater
-#from pyqmc.multislater import MultiSlater
-from pyqmc.multislater_orbs import MultiSlater
+from pyqmc.slater import Slater
 from pyqmc.multiplywf import MultiplyWF
 from pyqmc.jastrowspin import JastrowSpin
 from pyqmc.manybody_jastrow import J3
@@ -49,7 +47,7 @@ def default_slater(
     Returns:
       slater, to_opt
     """
-    wf = MultiSlater(mol, mf, twist=twist)
+    wf = Slater(mol, mf, twist=twist)
     to_opt = {}
     if optimize_orbitals:
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
@@ -65,7 +63,7 @@ def default_multislater(
 ):
     import numpy as np
 
-    wf = MultiSlater(mol, mf, mc, tol)
+    wf = Slater(mol, mf, mc, tol)
     to_opt = ["det_coeff"]
     to_opt = {"det_coeff": np.ones(wf.parameters["det_coeff"].shape).astype(bool)}
     to_opt["det_coeff"][0] = False  # Determinant coefficient pivot

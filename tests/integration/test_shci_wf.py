@@ -5,7 +5,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
 import pyscf
-import pyqmc.multislater_orbs
+import pyqmc
 import pyscf.hci
 
 
@@ -16,7 +16,7 @@ def avg(vec):
     return avg, std / np.sqrt(nblock)
 
 
-def run_test():
+def test_shci_wf():
     mol = pyscf.gto.M(
         atom="O 0. 0. 0.; H 0. 0. 2.0",
         basis="ccecpccpvtz",
@@ -39,7 +39,7 @@ def run_test():
 
     tol = 0.0
     configs = pyqmc.initial_guess(mol, 1000)
-    wf = pyqmc.multislater_orbs.MultiSlater(mol, mf, cisolver, tol=tol)
+    wf = pyqmc.Slater(mol, mf, cisolver, tol=tol)
     data, configs = pyqmc.vmc(
         wf,
         configs,
@@ -55,4 +55,4 @@ def run_test():
 
 
 if __name__ == "__main__":
-    run_test()
+    test_shci_wf()

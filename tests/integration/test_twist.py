@@ -7,7 +7,7 @@ from pyqmc.coord import PeriodicConfigs
 from pyscf.pbc import gto, scf
 from pyscf.pbc.dft.multigrid import multigrid
 from pyscf.scf.addons import remove_linear_dep_
-import pyqmc.multislater_orbs
+import pyqmc
 
 def test_cubic_with_ecp(kind=1, nk=(2, 2, 2)):
     from pyscf.pbc.dft.multigrid import multigrid
@@ -78,8 +78,8 @@ def runtest(mol, mf, kind=0):
     twist = np.dot(kpt, mol.lattice_vectors().T / (2 * np.pi))
     print("kpt", kpt)
     print("twist", twist)
-    wf0 = pyqmc.multislater_orbs.MultiSlater(mol, mf)
-    wft = pyqmc.multislater_orbs.MultiSlater(mol, mf, twist=twist)
+    wf0 = pyqmc.Slater(mol, mf)
+    wft = pyqmc.Slater(mol, mf, twist=twist)
 
     #####################################
     ## compare values across boundary

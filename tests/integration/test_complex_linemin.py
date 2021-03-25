@@ -1,7 +1,7 @@
 import numpy as np
 import os
 import pyqmc
-
+import pytest
 
 def run_scf(chkfile):
     from pyscf import gto, scf
@@ -15,7 +15,7 @@ def run_scf(chkfile):
     mf = remove_linear_dep_(mf)
     energy = mf.kernel()
 
-
+@pytest.mark.slow
 def test():
     chkfile = "h2.hdf5"
     optfile = "linemin.hdf5"

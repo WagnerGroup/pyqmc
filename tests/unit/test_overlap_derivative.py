@@ -1,4 +1,3 @@
-import copy
 import numpy as np
 from pyscf import gto, scf
 import pyqmc
@@ -67,7 +66,7 @@ def test():
     mf.stdout = None
 
     print("setting up wfs", flush=True)
-    wf0 = pyqmc.PySCFSlater(mol, mf)
+    wf0 = pyqmc.Slater(mol, mf)
     mf.mo_coeff[0][:, 0] = np.mean(mf.mo_coeff[0][:, :2], axis=1)
     wf1, to_opt = pyqmc.default_slater(mol, mf, optimize_orbitals=True)
 

@@ -8,9 +8,9 @@ os.environ["OMP_NUM_THREADS"] = "1"
 import pandas as pd
 from pyscf import lib, gto, scf
 from pyqmc import default_sj, line_minimization, initial_guess, gradient_generator
-import h5py
+import pytest
 
-
+@pytest.mark.slow
 def test():
     """ Optimize a Helium atom's wave function and check that it's 
     better than Hartree-Fock"""

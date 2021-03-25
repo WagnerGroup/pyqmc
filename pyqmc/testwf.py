@@ -197,12 +197,12 @@ def test_wf_gradient_laplacian(wf, configs):
         tt1 = time.time()
         tsep += ts1 - ts0
         ttog += tt1 - tt0
-        rel_grad = np.abs((andgrad - grad) / grad)
-        rel_lap = np.abs((andlap - lap) / lap)
-        rmax_grad = np.max(rel_grad)
-        rmax_lap = np.max(rel_lap)
+    rel_grad = np.abs((andgrad - grad) / grad)
+    rel_lap = np.abs((andlap - lap) / lap)
+    rmax_grad = np.max(rel_grad)
+    rmax_lap = np.max(rel_lap)
 
-    print("separate", tsep)
-    print("together", ttog)
+    print("time evaluated separately", tsep)
+    print("time evaluated together", ttog)
 
     return {"grad": rmax_grad, "lap": rmax_lap}

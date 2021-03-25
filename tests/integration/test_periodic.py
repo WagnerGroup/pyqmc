@@ -114,7 +114,7 @@ def runtest(mol, mf, kind=0, do_mc=False):
             dm = np.sum(dm, axis=0)
     else:
         kpt = mf.kpts[kind]
-        wf = pyqmc.PySCFSlater(mol, mf)
+        wf = pyqmc.Slater(mol, mf)
         dm = mf.make_rdm1()
         print("original dm shape", dm.shape)
         if len(dm.shape) == 4:

@@ -10,8 +10,9 @@ from pyscf import gto, scf
 from pyqmc.reblock import reblock
 from pyqmc import Slater
 from pyqmc.accumulators import EnergyAccumulator
+import pytest
 
-
+@pytest.mark.slow
 def test_vmc():
     """
     Test that a VMC calculation of a Slater determinant matches Hartree-Fock within error bars.

@@ -7,7 +7,9 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
 from pyqmc import reblock
+import pytest 
 
+@pytest.mark.slow
 def test():
     """ Ensure that DMC obtains the exact result for a hydrogen atom """
     from pyscf import gto, scf

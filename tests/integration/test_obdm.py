@@ -12,7 +12,7 @@ from pyqmc import Slater
 from pyqmc.mc import initial_guess, vmc
 from pandas import DataFrame
 from pyqmc.obdm import OBDMAccumulator, normalize_obdm
-
+import pytest
 
 def test():
 
@@ -61,7 +61,7 @@ def test():
     print(obdm_est["obdm_down"].diagonal().round(3))
     assert np.mean(np.abs(obdm_est["obdm_up"] + obdm_est["obdm_down"] - mfobdm)) < 0.05
 
-
+@pytest.mark.slow
 def test_pbc():
     from pyscf.pbc import gto, scf
     from pyqmc import supercell

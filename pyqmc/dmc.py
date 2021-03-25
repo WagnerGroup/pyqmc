@@ -166,13 +166,16 @@ def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **k
     confweight_avg = confweight / (np.mean(confweight) * npartitions)
     weight = np.array([w["weight"] for w in allresults[0]])
     weight_avg = weight / np.mean(weight)
-    block_avg = {k: np.sum(
+    block_avg = {
+        k: np.sum(
             [
                 res[k] * ww * cw
                 for res, cw, ww in zip(allresults[0], confweight_avg, weight_avg)
             ],
             axis=0,
-        ) for k in allresults[0][0].keys()}
+        )
+        for k in allresults[0][0].keys()
+    }
     block_avg["weight"] = np.mean(weight)
     return block_avg, configs, weights
 
@@ -235,7 +238,9 @@ def branch(configs, weights):
     probability = np.cumsum(weights)
     wtot = probability[-1]
     base = np.random.rand()
-    newinds = np.searchsorted(probability, (base + np.linspace(0,wtot,nconfig)) % wtot)
+    newinds = np.searchsorted(
+        probability, (base + np.linspace(0, wtot, nconfig)) % wtot
+    )
     configs.resample(newinds)
     weights.fill(wtot / nconfig)
     return configs, weights
@@ -387,7 +392,7 @@ def rundmc(
         dmc_file(hdf_file, df_, {}, configs, weights)
         # print(df_)
         df.append(df_)
-        eref = df_[ekey[0] + ekey[1]] - feedback * np.log(np.mean(weights))
+        eref = (df_[ekey[0] + ekey[1]] - feedback * np.log(np.mean(weights))).real
         configs, weights = branch(configs, weights)
         if verbose:
             print(

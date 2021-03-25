@@ -77,7 +77,7 @@ from pyqmc.mc import limdrift
 
 def construct_rho_gradient(grads, log_values):
     total_grad = np.zeros_like(grads[0])
-    for g, v in zip(grads, values):
+    for g, v in zip(grads, log_values):
         denominator = np.sum(np.exp(2 * np.real(log_values - v)))
         total_grad += g / denominator
     return total_grad
@@ -525,7 +525,7 @@ def optimize_orthogonal(
     # warm up to equilibrate the configurations before running optimization
     if warmup_options is None:
         warmup_options = {}
- 
+
     data, coords = pyqmc.mc.vmc(
         wfs[-1],
         coords,
@@ -534,7 +534,6 @@ def optimize_orthogonal(
         npartitions=npartitions,
         **warmup_options
     )
-
 
     # One set of configurations for every wave function
     allcoords = [coords.copy() for _ in wfs[:-1]]

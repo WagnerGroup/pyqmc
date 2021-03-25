@@ -14,7 +14,7 @@ class JastrowSpin:
 
         """
 
-    def __init__(self, mol, a_basis=None, b_basis=None):
+    def __init__(self, mol, a_basis, b_basis):
         r"""
         Args:
 
@@ -25,29 +25,13 @@ class JastrowSpin:
         b_basis : list of func3d objects that comprise the electron-electron basis
 
         """
-        if b_basis is None:
-            nexpand = 5
-            self.b_basis = [
-                GaussianFunction(0.2 * 2 ** n) for n in range(1, nexpand + 1)
-            ]
-        else:
-            nexpand = len(b_basis)
-            self.b_basis = b_basis
-
-        if a_basis is None:
-            aexpand = 4
-            self.a_basis = [
-                GaussianFunction(0.2 * 2 ** n) for n in range(1, aexpand + 1)
-            ]
-        else:
-            aexpand = len(a_basis)
-            self.a_basis = a_basis
-
+        self.a_basis = a_basis
+        self.b_basis = b_basis
         self.parameters = {}
         self._nelec = np.sum(mol.nelec)
         self._mol = mol
-        self.parameters["bcoeff"] = np.zeros((nexpand, 3))
-        self.parameters["acoeff"] = np.zeros((self._mol.natm, aexpand, 2))
+        self.parameters["bcoeff"] = np.zeros((len(b_basis), 3))
+        self.parameters["acoeff"] = np.zeros((self._mol.natm, len(a_basis), 2))
         self.iscomplex = False
 
     def recompute(self, configs):
@@ -167,6 +151,8 @@ class JastrowSpin:
 
     def _b_update_many(self, e, epos, mask, spin):
         r"""
+        Compute the update to b for each electron moving to epos. 
+
           Calculate b (e-e) partial sums for electron e
         _b_partial_e is the array :math:`B^p_{ils} = \sum_s b_l(r^i_{es}`, with e fixed; :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums, not including electron e. 
           :math:`i` is the configuration index.
@@ -175,16 +161,21 @@ class JastrowSpin:
               epos: configs object for electron e
               mask: mask over configs axis, only return values for configs where mask==True. b_partial_e might have a smaller configs axis than epos, _configscurrent, and _b_partial because of the mask.
         """
+        #print(type(epos), epos.configs.shape)
         nup = self._mol.nelec[0]
-        d = epos.dist.dist_i(self._configscurrent.configs[mask], epos.configs[mask])
+        d = epos.dist.dist_i(self._configscurrent.configs[mask], epos.configs[mask,:])
+        #print("d shape", d.shape)
         r = np.linalg.norm(d, axis=-1)
+        #print("electrons", e)
         b_partial_e = np.zeros((e.shape[0], *r.shape[:-1], *self._b_partial.shape[2:]))
-
+        #print('partial', b_partial_e.shape)
         for l, b in enumerate(self.b_basis):
             bval = b.value(d, r)
+            #print("bval", bval.shape, d.shape, r.shape)
             b_partial_e[..., l, 0] = bval[..., :nup].sum(axis=-1)
             b_partial_e[..., l, 1] = bval[..., nup:].sum(axis=-1)
-            b_partial_e[..., l, spin] -= bval[..., e].T
+            #b_partial_e[..., l, spin] -= bval[..., e].T
+            b_partial_e[..., l, spin] -= np.moveaxis(bval[..., e],-1,0)
 
         return b_partial_e
 
@@ -323,7 +314,8 @@ class JastrowSpin:
 
     def testvalue_many(self, e, epos, mask=None):
         r"""
-        Compute the ratio :math:`\Psi_{\rm new}/\Psi_{\rm old}` for moving electron e to epos.
+        Compute the ratio :math:`\Psi_{\rm new}/\Psi_{\rm old}` for moving electrons in e to epos.
+
         _avalues is the array for current configurations :math:`A_{Iks} = \sum_s a_{k}(r_{Is})` where :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums.
         _bvalues is the array for current configurations :math:`B_{ls} = \sum_s b_{l}(r_{s})` where :math:`s` indexes over :math:`\uparrow\uparrow` (:math:`\alpha_1 < \alpha_2`), :math:`\uparrow\downarrow` (:math:`\alpha, \beta`), and :math:`\downarrow\downarrow` (:math:`\beta_1 < \beta_2`)  sums.
         The update for _avalues and _b_values from moving one electron only requires computing the new sum for that electron. The sums for the electron in the current configuration are stored in _a_partial and _b_partial.

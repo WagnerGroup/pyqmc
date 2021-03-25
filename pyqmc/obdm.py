@@ -6,45 +6,44 @@ from pyqmc.mc import initial_guess
 import pyqmc.supercell as supercell
 
 
-
 class OBDMAccumulator:
-    r""" Return the obdm as an array with indices rho[spin][i][j] = <c_{spin,i}c^+_{spin,j}>
+    r"""Return the obdm as an array with indices rho[spin][i][j] = <c_{spin,i}c^+_{spin,j}>
 
-  .. math:: \rho^\sigma_{ij} = \langle c_{\sigma, i} c^\dagger_{\sigma, j} \rangle
+    .. math:: \rho^\sigma_{ij} = \langle c_{\sigma, i} c^\dagger_{\sigma, j} \rangle
 
-  We are measuring the amplitude of moving one electron (e.g. the first one) from orbital :math:`\phi_i` to orbital :math:`\phi_j` (Eq (7) of DOI:10.1063/1.4793531)
+    We are measuring the amplitude of moving one electron (e.g. the first one) from orbital :math:`\phi_i` to orbital :math:`\phi_j` (Eq (7) of DOI:10.1063/1.4793531)
 
-  .. math:: \rho_{i,k} = \int dR dr' \Psi^*(R') \phi_k(r') \phi_i^*(r) \Psi(R)
+    .. math:: \rho_{i,k} = \int dR dr' \Psi^*(R') \phi_k(r') \phi_i^*(r) \Psi(R)
 
-  (The complex conjugate is on the wrong orbital in Eq (7) in the paper.) Sampling :math:`R` from :math:`|\Psi(R)^2|` and :math:`r'` from :math:`f(r) = \sum_i |\phi(r)|^2`
+    (The complex conjugate is on the wrong orbital in Eq (7) in the paper.) Sampling :math:`R` from :math:`|\Psi(R)^2|` and :math:`r'` from :math:`f(r) = \sum_i |\phi(r)|^2`
 
-  .. math:: \rho_{i,k} = \int dR dr' \frac{\Psi^*(R')}{\Psi^*(R)} \left[\Psi^*(R) \Psi(R)\right] \frac{\phi_k(r') \phi_i^*(r)}{f(r)} \left[f(r)\right]
+    .. math:: \rho_{i,k} = \int dR dr' \frac{\Psi^*(R')}{\Psi^*(R)} \left[\Psi^*(R) \Psi(R)\right] \frac{\phi_k(r') \phi_i^*(r)}{f(r)} \left[f(r)\right]
 
-  The distributions (in square brackets) are accounted for by the Monte Carlo integration
+    The distributions (in square brackets) are accounted for by the Monte Carlo integration
 
-  .. math:: \rho_{i,k} = \left\langle \frac{\Psi^*(R')}{\Psi^*(R)} \frac{\phi_k(r') \phi_i^*(r)}{f(r)} \right\rangle
+    .. math:: \rho_{i,k} = \left\langle \frac{\Psi^*(R')}{\Psi^*(R)} \frac{\phi_k(r') \phi_i^*(r)}{f(r)} \right\rangle
 
-  Eq (9) in the paper is the complex conjugate of this
+    Eq (9) in the paper is the complex conjugate of this
 
-  .. math:: \rho_{i,k}^* = \left\langle \frac{\Psi(R')}{\Psi(R)} \frac{\phi_k^*(r') \phi_i(r)}{f(r)} \right\rangle
+    .. math:: \rho_{i,k}^* = \left\langle \frac{\Psi(R')}{\Psi(R)} \frac{\phi_k^*(r') \phi_i(r)}{f(r)} \right\rangle
 
 
-  Args:
+    Args:
 
-    mol (Mole): PySCF Mole object.
+      mol (Mole): PySCF Mole object.
 
-    configs (array): electron positions.
+      configs (array): electron positions.
 
-    wf (pyqmc wave function object): wave function to evaluate on.
+      wf (pyqmc wave function object): wave function to evaluate on.
 
-    orb_coeff (array): coefficients with size (nbasis,norb) relating mol basis to basis 
-      of 1-RDM desired.
-      
-    tstep (float): width of the Gaussian to update a walker position for the 
-      extra coordinate.
+      orb_coeff (array): coefficients with size (nbasis,norb) relating mol basis to basis
+        of 1-RDM desired.
 
-    spin: 0 or 1 for up or down. Defaults to all electrons.
-  """
+      tstep (float): width of the Gaussian to update a walker position for the
+        extra coordinate.
+
+      spin: 0 or 1 for up or down. Defaults to all electrons.
+    """
 
     def __init__(
         self,
@@ -75,27 +74,33 @@ class OBDMAccumulator:
 
         if kpts is None:
             self.orbitals = MoleculeOrbitalEvaluator(mol, [orb_coeff, orb_coeff])
-        else: 
+        else:
             if not hasattr(mol, "original_cell"):
                 mol = supercell.get_supercell(mol, np.eye(3))
-            self.orbitals = PBCOrbitalEvaluatorKpoints(mol, [orb_coeff, orb_coeff], kpts)
-
+            self.orbitals = PBCOrbitalEvaluatorKpoints(
+                mol, [orb_coeff, orb_coeff], kpts
+            )
 
         self._tstep = tstep
         self.nelec = len(self._electrons)
         self._nsweeps = nsweeps
         self._nstep = nsweeps * self.nelec
-        self.norb = self.orbitals.parameters['mo_coeff_alpha'].shape[-1]
+        self.norb = self.orbitals.parameters["mo_coeff_alpha"].shape[-1]
 
         self._extra_config = initial_guess(mol, int(naux / self.nelec) + 1)
-        self._extra_config.reshape((-1,1,3))
+        self._extra_config.reshape((-1, 1, 3))
 
-        accept, extra_configs, _ = sample_onebody(self._extra_config, self.orbitals, spin=0, nsamples=warmup, tstep=self._tstep)
+        accept, extra_configs, _ = sample_onebody(
+            self._extra_config,
+            self.orbitals,
+            spin=0,
+            nsamples=warmup,
+            tstep=self._tstep,
+        )
         self._extra_config = extra_configs[-1]
 
     def __call__(self, configs, wf):
-        """ 
-        """
+        """"""
 
         nconf = configs.configs.shape[0]
         dtype = complex if self.iscomplex else float
@@ -108,13 +113,17 @@ class OBDMAccumulator:
 
         auxassignments = np.random.randint(0, naux, size=(self._nsweeps, nconf))
         accept, extra_configs, borb_aux = sample_onebody(
-            self._extra_config, self.orbitals, spin=0, nsamples=self._nsweeps, tstep=self._tstep
+            self._extra_config,
+            self.orbitals,
+            spin=0,
+            nsamples=self._nsweeps,
+            tstep=self._tstep,
         )
         self._extra_config = extra_configs[-1]
 
-        for conf,assign in zip(extra_configs,auxassignments):
+        for conf, assign in zip(extra_configs, auxassignments):
             conf.resample(assign)
-        borb_aux = [orb[assign,...] for orb, assign in zip(borb_aux,auxassignments)]
+        borb_aux = [orb[assign, ...] for orb, assign in zip(borb_aux, auxassignments)]
 
         results["acceptance"] += np.sum(accept) / naux
 
@@ -127,7 +136,9 @@ class OBDMAccumulator:
         baux_f = borb_aux / fsum
 
         for sweep, aux in enumerate(auxassignments):
-            wfratio = wf.testvalue_many(self._electrons, extra_configs[sweep].electron(0))
+            wfratio = wf.testvalue_many(
+                self._electrons, extra_configs[sweep].electron(0)
+            )
             ratio = np.einsum(
                 "ie,ij,iek->ijk",
                 wfratio.conj(),
@@ -149,7 +160,7 @@ class OBDMAccumulator:
         return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
 
     def evaluate_orbitals(self, configs):
-        ao = self.orbitals.aos("GTOval_sph",configs)
+        ao = self.orbitals.aos("GTOval_sph", configs)
         return self.orbitals.mos(ao, spin=0)
 
     def keys(self):
@@ -160,13 +171,11 @@ class OBDMAccumulator:
         return {"value": (norb, norb), "norm": (norb,), "acceptance": ()}
 
 
-
-
 def sample_onebody(configs, orbitals, spin, nsamples=1, tstep=0.5):
     r""" For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i \phi_i(r)^2`. """
     n = configs.configs.shape[0]
-    ao = orbitals.aos("GTOval_sph",configs)
-    borb= orbitals.mos(ao, spin=spin)
+    ao = orbitals.aos("GTOval_sph", configs)
+    borb = orbitals.mos(ao, spin=spin)
     fsum = (np.abs(borb) ** 2).sum(axis=1)
 
     allaccept = np.zeros((nsamples, n))

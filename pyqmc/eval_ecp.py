@@ -17,7 +17,7 @@ def ecp(mol, configs, wf, threshold):
 
 
 def ecp_ea(mol, configs, wf, e, atom, threshold):
-    """ 
+    """
     Returns the ECP value between electron e and atom at, local+nonlocal.
     """
     nconf = configs.configs.shape[0]
@@ -34,7 +34,7 @@ def ecp_ea(mol, configs, wf, e, atom, threshold):
     masked_v_l = v_l[mask]
     masked_v_l[:, :-1] /= prob[mask, np.newaxis]
 
-    #print(np.sum(mask))
+    # print(np.sum(mask))
 
     # Use masked objects internally
     r_ea = r_ea[mask]
@@ -43,11 +43,13 @@ def ecp_ea(mol, configs, wf, e, atom, threshold):
 
     # Note: epos_rot is not just apos+r_ea_i because of the boundary;
     # positions of the samples are relative to the electron, not atom.
-    epos_rot = np.repeat(configs.configs[:,e,:][:,np.newaxis,:],P_l.shape[1], axis=1)
+    epos_rot = np.repeat(
+        configs.configs[:, e, :][:, np.newaxis, :], P_l.shape[1], axis=1
+    )
     epos_rot[mask] = (configs.configs[mask, e, :] - r_ea_vec)[:, np.newaxis] + r_ea_i
 
     epos = configs.make_irreducible(e, epos_rot, mask)
-    ratio = wf.testvalue(e,epos, mask)
+    ratio = wf.testvalue(e, epos, mask)
 
     # Compute local and non-local parts
     ecp_val[mask] = np.einsum("ij,ik,ijk->i", ratio, masked_v_l, P_l)
@@ -82,7 +84,7 @@ def generate_ecp_functors(coeffs):
     """
     Returns a functor, with keys as the angular momenta:
     -1 stands for the nonlocal part, 0,1,2,... are the s,p,d channels, etc.
-    Parameters: 
+    Parameters:
       mol._ecp[atom_name][1] (coefficients of the ECP)
     Returns:
       v_l function, with key = angular momentum
@@ -153,7 +155,7 @@ def get_P_l(r_ea, r_ea_vec, l_list):
       l_list: [-1,0,1,...] list of given angular momenta
       weights: integration weights
     Return:
-      P_l values: nconf x naip x nl array  
+      P_l values: nconf x naip x nl array
     """
     naip = 6 if len(l_list) <= 2 else 12
     nconf = r_ea.shape[0]
@@ -173,12 +175,12 @@ def get_P_l(r_ea, r_ea_vec, l_list):
 def get_rot(nconf, naip):
     """
     Returns the integration weights (naip), and the positions of the rotated electron e (nconf x naip x 3)
-    Parameters: 
+    Parameters:
       configs[:,e,:]: epos of the electron e to be rotated
     Returns:
       weights: naip array
       epos_rot: positions of the rotated electron, nconf x naip x 3
-      
+
     """
     # t and p are sampled randomly over a sphere around the atom
     t = np.random.uniform(low=0.0, high=np.pi, size=nconf)

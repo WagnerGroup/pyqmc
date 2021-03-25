@@ -4,8 +4,8 @@ from pyqmc.ewald import Ewald
 
 
 class EnergyAccumulator:
-    """returns energy of each configuration in a dictionary. 
-  Keys and their meanings can be found in energy.energy """
+    """returns energy of each configuration in a dictionary.
+    Keys and their meanings can be found in energy.energy"""
 
     def __init__(self, mol, threshold=10, **kwargs):
         self.mol = mol
@@ -34,9 +34,9 @@ class EnergyAccumulator:
 
 class LinearTransform:
     """
-    Linearize a dictionary of wf parameters. 
+    Linearize a dictionary of wf parameters.
     to_opt is a dictionary with the keys to optimize, and its values are boolean arrays indicating which specific elements to optimize
-    Note: to_opt[k] can't be boolean scalar; it has to be an array with the same dimension as parameters[k]. 
+    Note: to_opt[k] can't be boolean scalar; it has to be an array with the same dimension as parameters[k].
     to_opt doesn't have to have all the keys of parameters, but all keys of to_opt must be keys of parameters.
     """
 
@@ -78,8 +78,7 @@ class LinearTransform:
         return np.concatenate((grads, grads[:, self.complex_inds] * 1j), axis=1)
 
     def deserialize(self, parameters):
-        """Convert serialized parameters to dictionary
-        """
+        """Convert serialized parameters to dictionary"""
         n = 0
         m = self.nparams
         d = {}
@@ -108,10 +107,10 @@ class PGradTransform:
         self.nodal_cutoff = nodal_cutoff
 
     def _node_regr(self, configs, wf):
-        """ 
-        Return true if a given configuration is within nodal_cutoff 
-        of the node 
-        Also return the regularization polynomial if true, 
+        """
+        Return true if a given configuration is within nodal_cutoff
+        of the node
+        Also return the regularization polynomial if true,
         f = a * r ** 2 + b * r ** 4 + c * r ** 3
         """
         ne = configs.configs.shape[1]
@@ -185,7 +184,7 @@ class PGradTransform:
 
 class SqAccumulator:
     r"""
-    Accumulates structure factor 
+    Accumulates structure factor
 
     .. math:: S(\vec{q}) = \langle \rho_{\vec{q}} \rho_{-\vec{q}} \rangle
                          = \langle \left| \sum_{j=1}^{N_e} e^{i\vec{q}\cdot\vec{r}_j} \right| \rangle

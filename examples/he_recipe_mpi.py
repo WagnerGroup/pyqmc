@@ -1,4 +1,4 @@
-#You must run using if __name__ == "__main__" when using mpi4py
+# You must run using if __name__ == "__main__" when using mpi4py
 if __name__ == "__main__":
     import pyscf
     import pyqmc
@@ -15,31 +15,37 @@ if __name__ == "__main__":
     jastrow_kws = {}
     slater_kws = {"optimize_orbitals": True}
 
-    npartitions=2
+    npartitions = 2
     with mpi4py.futures.MPIPoolExecutor(max_workers=npartitions) as client:
         pyqmc.recipes.OPTIMIZE(
-            "he_dft.hdf5", "he_sj.hdf5", jastrow_kws=jastrow_kws, slater_kws=slater_kws,
-            client=client, npartitions=npartitions
-        )   
+            "he_dft.hdf5",
+            "he_sj.hdf5",
+            jastrow_kws=jastrow_kws,
+            slater_kws=slater_kws,
+            client=client,
+            npartitions=npartitions,
+        )
 
         pyqmc.recipes.VMC(
-        "he_dft.hdf5",
-        "he_sj_vmc.hdf5",
-        start_from="he_sj.hdf5",
-        accumulators={"rdm1": True},
-        jastrow_kws=jastrow_kws,
-        slater_kws=slater_kws,
-        vmc_kws={"nblocks": 40},
-        client=client, npartitions=npartitions
-    )
+            "he_dft.hdf5",
+            "he_sj_vmc.hdf5",
+            start_from="he_sj.hdf5",
+            accumulators={"rdm1": True},
+            jastrow_kws=jastrow_kws,
+            slater_kws=slater_kws,
+            vmc_kws={"nblocks": 40},
+            client=client,
+            npartitions=npartitions,
+        )
 
         pyqmc.recipes.DMC(
-        "he_dft.hdf5",
-        "he_sj_dmc.hdf5",
-        start_from="he_sj.hdf5",
-        accumulators={"rdm1": True},
-        jastrow_kws=jastrow_kws,
-        slater_kws=slater_kws,
-        dmc_kws={"nsteps": 4000, "tstep": 0.02},
-        client=client, npartitions=npartitions
-    )
+            "he_dft.hdf5",
+            "he_sj_dmc.hdf5",
+            start_from="he_sj.hdf5",
+            accumulators={"rdm1": True},
+            jastrow_kws=jastrow_kws,
+            slater_kws=slater_kws,
+            dmc_kws={"nsteps": 4000, "tstep": 0.02},
+            client=client,
+            npartitions=npartitions,
+        )

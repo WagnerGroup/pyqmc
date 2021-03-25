@@ -71,14 +71,11 @@ class JoinParameters:
 
 
 def sherman_morrison_ms(e, inv, vec):
-    ratio = np.einsum("idj,idj->id", vec, inv[:, :, :, e])
     tmp = np.einsum("edk,edkj->edj", vec, inv)
-    invnew = (
-        inv
-        - np.einsum("kdi,kdj->kdij", inv[:, :, :, e], tmp)
-        / ratio[:, :, np.newaxis, np.newaxis]
-    )
-    invnew[:, :, :, e] = inv[:, :, :, e] / ratio[:, :, np.newaxis]
+    ratio = tmp[:, :, e]
+    inv_ratio = inv[:, :, :, e] / ratio[:, :, np.newaxis]
+    invnew = inv - np.einsum("kdi,kdj->kdij", inv_ratio, tmp)
+    invnew[:, :, :, e] = inv_ratio
     return ratio, invnew
 
 

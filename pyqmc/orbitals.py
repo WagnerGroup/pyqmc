@@ -77,6 +77,8 @@ class MoleculeOrbitalEvaluator:
 
         return detcoeff, occup, det_map, MoleculeOrbitalEvaluator(mol, mo_coeff)
 
+    def nmo(self):
+        return [self.parameters['mo_coeff_alpha'].shape[-1], self.parameters['mo_coeff_beta'].shape[-1]]
 
     def aos(self, eval_str, configs, mask=None):
         """
@@ -84,7 +86,11 @@ class MoleculeOrbitalEvaluator:
         """
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
-        return np.asarray([self._mol.eval_gto(eval_str, mycoords)])
+        aos= np.asarray([self._mol.eval_gto(eval_str, mycoords)])
+        if len(aos.shape)==4: # if derivatives are included
+            return aos.reshape((1,aos.shape[1], *mycoords.shape[:-1], aos.shape[-1]))
+        else:
+            return aos.reshape((1,*mycoords.shape[:-1], aos.shape[-1]))
 
     def mos(self, ao, spin):
         return ao[0].dot(self.parameters[f'mo_coeff{self.parm_names[spin]}'])
@@ -109,8 +115,7 @@ class PBCOrbitalEvaluatorKpoints:
     kpts should be a list of the k-points corresponding to mo_coeff  
 
     """
-    def __init__(self, cell, mo_coeff, kpts=None, S = None):
-        from pyscf.pbc import gto
+    def __init__(self, cell, mo_coeff, kpts=None):
         self.iscomplex=True
         self._cell = cell.original_cell
         self.S = cell.S
@@ -122,7 +127,7 @@ class PBCOrbitalEvaluatorKpoints:
                          'mo_coeff_beta': np.concatenate(mo_coeff[1], axis=1)}
         Ls = self._cell.get_lattice_Ls(dimension=3)
         self.Ls = Ls[np.argsort(np.linalg.norm(Ls, axis=1))]
-        self.rcut = gto.eval_gto._estimate_rcut(self._cell)
+        self.rcut = pbc.gto.eval_gto._estimate_rcut(self._cell)
 
 
     @classmethod
@@ -153,30 +158,30 @@ class PBCOrbitalEvaluatorKpoints:
 
         occup = [[],[]]
         for spin in [0,1]:
-            offset = [0] + list(np.cumsum([len(occ[0]) for occ in occup_k[spin][:-1]]))
-            index_offset = 0
-            occ_list = []
+            count = 0
             for occ_k in occup_k[spin]:
-                # this only works for one determinant
-                occ_list.append(np.asarray(occ_k[0]) + index_offset)
-                index_offset += len(occ_k[0])
-            occup[spin].append(np.concatenate(occ_list))
+                occup[spin] += [o+count for o in occ_k[0]]
+                count+=len(occ_k[0])
 
         kpts = mf.kpts[kinds]
         if len(mf.mo_coeff[0][0].shape) == 2:
-            mo_coeff = [[mf.mo_coeff[spin][k][:,mf.mo_occ[spin][k]>0.5] for k in kinds] for spin in [0,1]]
+            mo_coeff = [[mf.mo_coeff[spin][k][:,occup_k[spin][kinds.index(k)][0]] for k in kinds] for spin in [0,1]]
         elif len(mf.mo_coeff[0][0].shape) == 1:
-            mo_coeff = [[mf.mo_coeff[k][:, mf.mo_occ[k] > 1.5-spin] for k in kinds] for spin in [0,1]]
+            mo_coeff = [[mf.mo_coeff[k][:, occup_k[spin][kinds.index(k)][0]] for k in kinds] for spin in [0,1]]
         else:
             raise ValueError("Did not expect an scf object of type", type(mf))
-
+        for s in [0,1]:
+            occup[s] = [occup[s]]
         return detcoeff, occup, det_map, PBCOrbitalEvaluatorKpoints(cell, mo_coeff, kpts)
         
+    def nmo(self):
+        return [self.parameters['mo_coeff_alpha'].shape[-1], self.parameters['mo_coeff_beta'].shape[-1]]
+
     def aos(self,eval_str,configs, mask=None):
         """
-        Returns an ndarray in order [k,coordinate, orbital] of the ao's if value is requested
+        Returns an ndarray in order [k,..., orbital] of the ao's if value is requested
 
-        if a derivative is requested, will instead return [k,d,coordinate,orbital]
+        if a derivative is requested, will instead return [k,d,...,orbital]
         """
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
@@ -190,22 +195,23 @@ class PBCOrbitalEvaluatorKpoints:
         )
         # k, coordinate
         wrap_phase = get_wrapphase_complex(kdotR)
-
         # k,coordinate, orbital
-        ao = np.asarray(self._cell.pbc_eval_gto(
-            "PBC" + eval_str, mycoords, kpts=self._kpts, Ls=self.Ls, rcut=self.rcut
-        ))
-        return np.einsum("ij,i...jk->i...jk",wrap_phase, ao)
+        ao = np.asarray(self._cell.eval_gto("PBC"+eval_str, mycoords, kpts=self._kpts))
+        ao= np.einsum("k...,k...a->k...a",wrap_phase, ao)
+        if len(ao.shape)==4: # if derivatives are included
+            return ao.reshape((ao.shape[0],ao.shape[1], *mycoords.shape[:-1], ao.shape[-1]))
+        else:
+            return ao.reshape((ao.shape[0],*mycoords.shape[:-1], ao.shape[-1]))
 
-        
+
     def mos(self, ao, spin):
-        """ao should be [k,coordinate,ao].
-        Returns a concatenated list of all molecular orbitals in form [coordinate, mo]
+        """ao should be [k,[d],...,ao].
+        Returns a concatenated list of all molecular orbitals in form [..., mo]
 
-        In the derivative case, returns [d,coordinate, mo]
+        In the derivative case, returns [d,..., mo]
         """
         p = np.split(self.parameters[f'mo_coeff{self.parm_names[spin]}'], self.param_split[spin], axis=-1)
-        return np.concatenate([ak.dot(mok) for ak,mok in zip(ao,p)], axis=-1)
+        return np.concatenate([ak.dot(mok) for ak,mok in zip(ao,p[0:-1])], axis=-1)
 
     def pgradient(self,ao, spin):
         """

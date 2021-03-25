@@ -10,7 +10,7 @@ from pyscf import lib, gto, scf, mcscf
 import pyqmc.testwf as testwf
 from pyqmc.mc import vmc, initial_guess
 from pyqmc.accumulators import EnergyAccumulator
-from pyqmc.multislater_orbs import MultiSlater
+from pyqmc import Slater
 from pyqmc.coord import OpenConfigs
 from pyqmc.reblock import reblock
 import pyqmc
@@ -31,7 +31,7 @@ def test():
         # Test same number of elecs
         mc = mcscf.CASCI(mf, ncas=4, nelecas=(1, 1))
         mc.kernel()
-        wf = MultiSlater(mol, mf, mc)
+        wf = Slater(mol, mf, mc)
 
         nconf = 10
 
@@ -61,7 +61,7 @@ def test():
         # Test different number of elecs
         mc = mcscf.CASCI(mf, ncas=4, nelecas=(2, 0))
         mc.kernel()
-        wf = MultiSlater(mol, mf, mc)
+        wf = Slater(mol, mf, mc)
 
         nelec = np.sum(mol.nelec)
         epos = initial_guess(mol, nconf)

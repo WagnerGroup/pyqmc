@@ -1,6 +1,6 @@
 import numpy as np
 from pyscf import gto, scf, lo
-from pyqmc import PySCFSlater
+from pyqmc import Slater
 from pyqmc.mc import initial_guess, vmc
 from pyqmc.accumulators import EnergyAccumulator
 from pyqmc.tbdm import TBDMAccumulator, normalize_tbdm
@@ -164,7 +164,7 @@ def test(atom="He", total_spin=0, total_charge=0, scf_basis="sto-3g"):
     tbdm_sweeps = 4
     tbdm_tstep = 0.5
 
-    wf = PySCFSlater(mol, mf)  # Single-Slater (no jastrow) wf
+    wf = Slater(mol, mf)  # Single-Slater (no jastrow) wf
     configs = initial_guess(mol, nconf)
     energy = EnergyAccumulator(mol)
     obdm_up = OBDMAccumulator(mol=mol, orb_coeff=iaos[0], nsweeps=tbdm_sweeps, spin=0)
@@ -216,17 +216,16 @@ def test(atom="He", total_spin=0, total_charge=0, scf_basis="sto-3g"):
     # Compares tbdm from QMC and MF
     avg_norm = {}
     avg_tbdm = {}
-    tbdm_est = {}
     for t in ["tbdm_upup", "tbdm_updown", "tbdm_downup", "tbdm_downdown"]:
         for k in df.keys():
             if k.startswith(t + "norm_"):
                 avg_norm[k.split("_")[-1]] = np.mean(df[k][vmc_warmup:], axis=0)
             if k.startswith(t + "value"):
                 avg_tbdm[k.split("_")[-1]] = np.mean(df[k][vmc_warmup:], axis=0)
-    for k in avg_tbdm:
-        tbdm_est[k] = normalize_tbdm(
+
+    tbdm_est = {k: normalize_tbdm(
             avg_tbdm[k].reshape(2, 2, 2, 2), avg_norm["a"], avg_norm["b"]
-        )
+        ) for k in avg_tbdm}
     qmctbdm = np.array(
         [
             [tbdm_est["upupvalue"], tbdm_est["updownvalue"]],
@@ -235,8 +234,9 @@ def test(atom="He", total_spin=0, total_charge=0, scf_basis="sto-3g"):
     )
     print("\nComparing QMC and MF tbdm:")
     for sa, sb in [[0, 0], [0, 1], [1, 0], [1, 1]]:
-        # print('QMC tbdm[%d,%d]:\n'%(sa,sb),qmctbdm[sa,sb])
-        # print('MF tbdm[%d,%d]:\n'%(sa,sb),mftbdm[sa,sb])
+        print("spins", sa, sb)
+        print('QMC tbdm[%d,%d]:\n'%(sa,sb),qmctbdm[sa,sb].round(3))
+        print('MF tbdm[%d,%d]:\n'%(sa,sb),mftbdm[sa,sb].round(3))
         diff = qmctbdm[sa, sb] - mftbdm[sa, sb]
         print("diff[%d,%d]:\n" % (sa, sb), diff)
         assert np.max(np.abs(diff)) < 0.05

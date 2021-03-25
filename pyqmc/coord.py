@@ -136,7 +136,7 @@ class PeriodicConfigs:
          Output: A Periodic Electron
         """
         if mask is None:
-            mask = np.ones(vec.shape[0:-1],dtype=np.bool)
+            mask = np.ones(vec.shape[0:-1],dtype=bool)
         epos_, wrap_ = enforce_pbc(self.lvecs, vec[mask])
         epos = vec.copy()
         epos[mask] = epos_

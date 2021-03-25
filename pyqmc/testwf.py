@@ -197,7 +197,6 @@ def test_wf_gradient_laplacian(wf, configs):
         tt1 = time.perf_counter()
         tsep += ts1 - ts0
         ttog += tt1 - tt0
-
     rel_grad = np.abs((andgrad - grad) / grad)
     rel_lap = np.abs((andlap - lap) / lap)
     rmax_grad = np.max(rel_grad)

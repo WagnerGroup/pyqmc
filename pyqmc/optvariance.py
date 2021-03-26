@@ -5,9 +5,9 @@ from pyqmc.energy import kinetic
 
 def optvariance(energy, wf, coords, params=None, **kwargs):
     """Optimizes variance of wave function against parameters indicated by params.
-    
+
     Does not use gradient information, and assumes that only the kinetic energy changes.
-    
+
     Args:
       energy: An Accumulator object that returns total energy in 'total' and kinetic energy in 'ke'
 
@@ -16,10 +16,10 @@ def optvariance(energy, wf, coords, params=None, **kwargs):
       params: list of dictionary entries in wf.parameters to optimize
 
       kwargs: options for scipy.minimize
-      
+
     Returns:
       opt_variance, modifying params into optimized values.
-      
+
     """
     if params is None:
         params = list(wf.parameters.keys())

@@ -22,7 +22,7 @@ def test_updateinternals(wf, configs):
     configs: nconf x nelec x 3 position array
 
     Returns:
-    tuple which 
+    tuple which
 
     """
     from pyqmc import vmc
@@ -68,7 +68,7 @@ def test_updateinternals(wf, configs):
 
 
 def test_wf_gradient(wf, configs, delta=1e-5):
-    """ 
+    """
     Parameters:
         wf: a wavefunction object with functions wf.recompute(configs), wf.testvalue(e,configs) and wf.gradient(e,configs)
         configs: nconf x nelec x 3 position array to set the wf object
@@ -79,7 +79,7 @@ def test_wf_gradient(wf, configs, delta=1e-5):
         epos is nconf x 3 positions of electron e
     wf.testvalue(e,epos) should return a ratio: the wf value at the position where electron e is moved to epos divided by the current value
     wf.gradient(e,epos) should return grad ln Psi(epos), while keeping all the other electrons at current position. epos may be different from the current position of electron e
-    
+
     """
     nconf, nelec = configs.configs.shape[0:2]
     iscomplex = 1j if wf.iscomplex else 1
@@ -137,7 +137,7 @@ def test_wf_pgradient(wf, configs, delta=1e-5):
 def test_wf_laplacian(wf, configs, delta=1e-5):
     """
     Parameters:
-        wf: a wavefunction object with functions wf.recompute(configs), 
+        wf: a wavefunction object with functions wf.recompute(configs),
              wf.gradient(e,configs) and wf.laplacian(e,configs)
         configs: nconf x nelec x 3 position array to set the wf object
         delta: the finite difference step; 1e-5 to 1e-6 seem to be the best compromise between accuracy and machine precision

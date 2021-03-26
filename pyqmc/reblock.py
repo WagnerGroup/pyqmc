@@ -58,9 +58,9 @@ def _reblock_summary_single(df, nblocks):
 
 def optimally_reblocked(data):
     """
-        Find optimal reblocking of input data. Takes in pandas
-        DataFrame of raw data to reblock, returns DataFrame
-        of reblocked data.
+    Find optimal reblocking of input data. Takes in pandas
+    DataFrame of raw data to reblock, returns DataFrame
+    of reblocked data.
     """
     opt = opt_block(data)
     n_reblock = int(np.amax(opt))
@@ -77,8 +77,8 @@ def optimally_reblocked(data):
 
 def reblock_by2(df, ntimes, c=None):
     """
-        Reblocks data according to “Error estimates on averages of correlated data”,
-        H. Flyvbjerg, H.G. Petersen, J. Chem. Phys. 91, 461 (1989).
+    Reblocks data according to “Error estimates on averages of correlated data”,
+    H. Flyvbjerg, H.G. Petersen, J. Chem. Phys. 91, 461 (1989).
     """
     newdf = df.copy()
     if c is not None:
@@ -122,14 +122,14 @@ def opt_block(df):
 
 def test_reblocking():
     """
-        Tests reblocking against known distribution.
+    Tests reblocking against known distribution.
     """
     from scipy.stats import sem
 
     def corr_data(N, L):
         """
-            Creates correlated data. Taken from 
-            https://pyblock.readthedocs.io/en/latest/tutorial.html.
+        Creates correlated data. Taken from
+        https://pyblock.readthedocs.io/en/latest/tutorial.html.
         """
         return np.convolve(np.random.randn(2 ** N), np.ones(2 ** L) / 10, "same")
 

@@ -3,6 +3,7 @@ import os
 import pyqmc
 import pytest
 
+
 def run_scf(chkfile):
     from pyscf import gto, scf
     from pyscf.scf.addons import remove_linear_dep_
@@ -14,6 +15,7 @@ def run_scf(chkfile):
     mf.chkfile = chkfile
     mf = remove_linear_dep_(mf)
     energy = mf.kernel()
+
 
 @pytest.mark.slow
 def test():

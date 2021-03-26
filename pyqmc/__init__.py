@@ -42,7 +42,7 @@ def default_slater(
     Construct a Slater determinant
     Args:
       optimize_orbitals (bool): make to_opt true for orbital parameters
-      twist (vector): The twist to extract from the mean-field object 
+      twist (vector): The twist to extract from the mean-field object
       optimize_zeros (bool): optimize coefficients that are zero in the mean-field object
     Returns:
       slater, to_opt
@@ -77,8 +77,8 @@ def default_multislater(
 
 
 def expand_beta_qwalk(beta0, n):
-    """polypade expansion coefficients 
-    for n basis functions with first 
+    """polypade expansion coefficients
+    for n basis functions with first
     coeff beta0"""
     if n == 0:
         return np.zeros(0)
@@ -110,7 +110,7 @@ def default_jastrow_basis(mol, ion_cusp=False, na=4, nb=3, rcut=None):
 
 
 def default_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
-    """         
+    """
     Default 2-body jastrow from qwalk,
     Args:
       ion_cusp (bool): add an extra term to satisfy electron-ion cusp.
@@ -171,7 +171,7 @@ def generate_wf(
     mol, mf, jastrow=default_jastrow, jastrow_kws=None, slater_kws=None, mc=None
 ):
     """
-    Generate a wave function from pyscf objects. 
+    Generate a wave function from pyscf objects.
 
     :param mol: The molecule or cell
     :type mol: pyscf Mole or Cell
@@ -185,7 +185,7 @@ def generate_wf(
     :return: wf
     :rtype: A (multi) Slater-Jastrow wave function object
     :return: to_opt
-    :rtype: A dictionary of parameters to optimize, given the settings. 
+    :rtype: A dictionary of parameters to optimize, given the settings.
     """
     if jastrow_kws is None:
         jastrow_kws = {}
@@ -215,21 +215,20 @@ def generate_wf(
 
 
 def recover_pyscf(chkfile, ci_checkfile=None, cancel_outputs=True):
-    """Generate pyscf objects from a pyscf checkfile, in a way that is easy to use for pyqmc. The chkfile should be saved by setting mf.chkfile in a pyscf SCF object. 
-    
-It is recommended to write and recover the objects, rather than trying to use pyscf objects directly when dask parallelization is being used, since by default the pyscf objects contain unserializable objects. (this may be changed in the future)
+    """Generate pyscf objects from a pyscf checkfile, in a way that is easy to use for pyqmc. The chkfile should be saved by setting mf.chkfile in a pyscf SCF object.
 
-cancel_outputs will set the outputs of the objects to None. You may need to make cancel_outputs False if you are using this to input to other pyscf functions.
+    It is recommended to write and recover the objects, rather than trying to use pyscf objects directly when dask parallelization is being used, since by default the pyscf objects contain unserializable objects. (this may be changed in the future)
 
-Typical usage:
+    cancel_outputs will set the outputs of the objects to None. You may need to make cancel_outputs False if you are using this to input to other pyscf functions.
 
-mol, mf = recover_pyscf("dft.hdf5")
+    Typical usage:
 
-:param chkfile: The filename to read from. 
-:type chkfile: string
-:return: mol, mf
-:rtype: pyscf Mole, SCF objects
-"""
+    mol, mf = recover_pyscf("dft.hdf5")
+
+    :param chkfile: The filename to read from.
+    :type chkfile: string
+    :return: mol, mf
+    :rtype: pyscf Mole, SCF objects"""
 
     import pyscf
     import h5py
@@ -290,22 +289,21 @@ mol, mf = recover_pyscf("dft.hdf5")
 
 
 def read_wf(wf, wf_file):
-    """Read the wave function parameters from wf_file into wf. 
+    """Read the wave function parameters from wf_file into wf.
 
-Typical usage:
+    Typical usage:
 
-.. code-block::python
+    .. code-block::python
 
-linemin(wf, coords, ..., hdf_file="linemin.hdf5")
-read_wf(wf, "linemin.hdf5")
+    linemin(wf, coords, ..., hdf_file="linemin.hdf5")
+    read_wf(wf, "linemin.hdf5")
 
-:param wf: A pyqmc wave function object. This will 
-:type wf: wave function object with parameters dictionary
-:param wf_file: A HDF5 file with "wf" key. The parameters in this file will be read into the wave function in-place
-:type wf_file: string
+    :param wf: A pyqmc wave function object. This will
+    :type wf: wave function object with parameters dictionary
+    :param wf_file: A HDF5 file with "wf" key. The parameters in this file will be read into the wave function in-place
+    :type wf_file: string
 
-:return: nothing
-"""
+    :return: nothing"""
 
     with h5py.File(wf_file, "r") as hdf:
         if "wf" in hdf.keys():

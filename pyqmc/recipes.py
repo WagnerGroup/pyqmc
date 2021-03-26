@@ -8,7 +8,6 @@ import pandas as pd
 import copy
 
 
-
 def OPTIMIZE(
     dft_checkfile,
     output,
@@ -123,7 +122,7 @@ def VMC(
         mc.ci = mc.ci[target_root]
 
     if S is not None:
-        print("S",S)
+        print("S", S)
         mol = pyqmc.get_supercell(mol, np.asarray(S))
 
     if accumulators is None:

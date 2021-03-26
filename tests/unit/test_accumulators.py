@@ -6,7 +6,7 @@ import pyqmc
 
 
 def test_transform():
-    """ Just prints things out; 
+    """Just prints things out;
     TODO: figure out a thing to test.
     """
     from pyscf import gto, scf

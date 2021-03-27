@@ -19,7 +19,7 @@ pgradient(x)
 
 
 class GaussianFunction:
-    r"""A representation of a Gaussian: 
+    r"""A representation of a Gaussian:
     :math: `\exp(-\alpha r^2)`
     where :math: `\alpha` can be accessed through parameters['exponent']
 
@@ -105,7 +105,7 @@ class PadeFunction:
         Parameters:
           rvec: nconf x ... x 3 (number of inner dimensions doesn't matter)
         Return:
-          func: same dimensions as rvec, but the last one removed 
+          func: same dimensions as rvec, but the last one removed
         """
         a = self.parameters["alphak"] * r
         return (a / (1 + a)) ** 2
@@ -161,7 +161,7 @@ class PadeFunction:
         return grad, lap
 
     def pgradient(self, rvec, r):
-        """ Return gradient of value with respect to parameter alphak
+        """Return gradient of value with respect to parameter alphak
         Parameters:
           rvec: nconf x ... x 3
         Return:
@@ -176,9 +176,9 @@ class PolyPadeFunction:
     """
     :math:`b(r) = \frac{1-p(z)}{1+\beta p(z)}`
     :math:`z = r/r_{\rm cut}`
-    where 
+    where
     :math:`p(z) = 6z^2 - 8z^3 + 3z^4`
-    This function is positive at small r, decreasing to zero at r=rcut, being cutoff to 
+    This function is positive at small r, decreasing to zero at r=rcut, being cutoff to
     zero for r>rcut.
     """
 
@@ -186,10 +186,10 @@ class PolyPadeFunction:
         self.parameters = {"beta": beta, "rcut": rcut}
 
     def value(self, rvec, r):
-        """Returns 
+        """Returns
         Parameters:
-          rvec: (nconf,...,3) 
-          r: (nconf,...) 
+          rvec: (nconf,...,3)
+          r: (nconf,...)
               magnitude of rvec
         Returns:
           func: (1-p(r/rcut))/(1+beta*p(r/rcut))
@@ -227,7 +227,7 @@ class PolyPadeFunction:
     def gradient(self, rvec, r):
         """
         Parameters:
-          rvec: (nconf,...,3) 
+          rvec: (nconf,...,3)
         Returns:
           grad: (nconf,...,3)
         """
@@ -246,9 +246,9 @@ class PolyPadeFunction:
     def laplacian(self, rvec, r):
         """
         Parameters:
-          rvec: (nconf,...,3) 
+          rvec: (nconf,...,3)
         Returns:
-          lapl: (nconf,...,3) 
+          lapl: (nconf,...,3)
               returns components of laplacian d^2/dx_i^2 separately
         """
         return self.gradient_laplacian(rvec, r)[1]
@@ -284,10 +284,10 @@ class PolyPadeFunction:
         return grad, lap
 
     def pgradient(self, rvec, r):
-        """ Returns gradient of self.value with respect to all parameters
+        """Returns gradient of self.value with respect to all parameters
         Parameters:
-          rvec: (nconf,...,3) 
-          rvec: (nconf,...) 
+          rvec: (nconf,...,3)
+          rvec: (nconf,...)
         Returns:
           paramderivs: dictionary {'rcut':d/drcut,'beta':d/dbeta}
         """
@@ -307,10 +307,10 @@ class PolyPadeFunction:
 
 class CutoffCuspFunction:
     r"""
-    :math:`b(r) = -\frac{p(r/r_{cut})}{1+\gamma*p(r/r_{cut})} + \frac{1}{3+\gamma}` 
-    where 
+    :math:`b(r) = -\frac{p(r/r_{cut})}{1+\gamma*p(r/r_{cut})} + \frac{1}{3+\gamma}`
+    where
     :math:`p(y) = y - y^2 + y^3/3`
-    This function is positive at small r, decreasing to zero at r=rcut, being cutoff to 
+    This function is positive at small r, decreasing to zero at r=rcut, being cutoff to
     zero for r>rcut.
     """
 
@@ -318,7 +318,7 @@ class CutoffCuspFunction:
         self.parameters = {"gamma": gamma, "rcut": rcut}
 
     def value(self, rvec, r):
-        """Returns 
+        """Returns
         Parameters:
           rvec: (nconf,...,3) vector
         Returns:
@@ -337,7 +337,7 @@ class CutoffCuspFunction:
         Parameters:
           rvec: (nconf,...,3) vector
         Returns:
-          grad: has same dimensions as rvec 
+          grad: has same dimensions as rvec
         """
         grad = np.zeros(rvec.shape)
         rcut = self.parameters["rcut"]
@@ -431,7 +431,7 @@ class CutoffCuspFunction:
         return grad, lap
 
     def pgradient(self, rvec, r):
-        """ Returns gradient of self.value with respect to all parameters
+        """Returns gradient of self.value with respect to all parameters
         Parameters:
           rvec: (nconf,...,3) vector
         Returns:

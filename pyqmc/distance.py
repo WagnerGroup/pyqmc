@@ -21,11 +21,11 @@ class RawDistance:
 
     def dist_matrix(self, configs):
         """
-        All pairwise distances within the set of positions. 
+        All pairwise distances within the set of positions.
 
-        Returns: 
-        
-          dist: array of size nconf x n(n-1)/2 x 3 
+        Returns:
+
+          dist: array of size nconf x n(n-1)/2 x 3
 
           ij : list of size n(n-1)/2 tuples that document i,j
         """
@@ -47,9 +47,9 @@ class RawDistance:
         """
         All pairwise distances from config1 to config2
 
-        Returns: 
-        
-          dist: array of size nconf x n1*n2 x 3 
+        Returns:
+
+          dist: array of size nconf x n1*n2 x 3
 
           ij : list of size n1*n2 tuples that document i,j
         """
@@ -68,7 +68,7 @@ class RawDistance:
 
 
 class MinimalImageDistance(RawDistance):
-    """ Compute distance vectors under a minimal image condition
+    """Compute distance vectors under a minimal image condition
     using periodic boundary conditions."""
 
     def __init__(self, latvec):
@@ -124,7 +124,7 @@ class MinimalImageDistance(RawDistance):
 
     def orthogonal_dist_i(self, configs, vec):
         """Like dist_i, but assuming lattice vectors are orthogonal
-           It's about 10x faster than the general one checking all 27 lattice points
+        It's about 10x faster than the general one checking all 27 lattice points
         """
         if len(vec.shape) == 3:
             v = vec.transpose((1, 0, 2))[:, :, np.newaxis]

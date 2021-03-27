@@ -93,13 +93,13 @@ def test_pbc_wfs():
     supercell = get_supercell(mol, S=(np.ones((3, 3)) - 2 * np.eye(3)))
     epos = pyqmc.initial_guess(supercell, nconf)
     # For multislaterpbc
-    #kinds = 0, 3, 5, 6  # G, X, Y, Z
-    #d1 = {kind: [0] for kind in kinds}
-    #d2 = d1.copy()
-    #d2.update({0: [], 3: [0, 1]})
-    #detwt = [2 ** 0.5, 2 ** 0.5]
-    #occup = [[d1, d2], [d1]]
-    #map_dets = [[0, 1], [0, 0]]
+    # kinds = 0, 3, 5, 6  # G, X, Y, Z
+    # d1 = {kind: [0] for kind in kinds}
+    # d2 = d1.copy()
+    # d2.update({0: [], 3: [0, 1]})
+    # detwt = [2 ** 0.5, 2 ** 0.5]
+    # occup = [[d1, d2], [d1]]
+    # map_dets = [[0, 1], [0, 0]]
     for wf in [
         MultiplyWF(Slater(supercell, mf), default_jastrow(supercell)[0]),
         Slater(supercell, mf),

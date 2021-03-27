@@ -17,6 +17,7 @@ def run_scf(chkfile):
     mf.chkfile = chkfile
     mf.kernel()
 
+
 @pytest.mark.slow
 def test_parallel():
     run_scf("h2.hdf5")

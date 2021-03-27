@@ -12,6 +12,7 @@ from pyqmc import Slater
 from pyqmc.accumulators import EnergyAccumulator
 import pytest
 
+
 @pytest.mark.slow
 def test_vmc():
     """
@@ -69,8 +70,7 @@ def test_vmc():
 
 
 def test_accumulator():
-    """ Tests that the accumulator gets inserted into the data output correctly.
-    """
+    """Tests that the accumulator gets inserted into the data output correctly."""
     mol = gto.M(
         atom="Li 0. 0. 0.; Li 0. 0. 1.5", basis="cc-pvtz", unit="bohr", verbose=5
     )

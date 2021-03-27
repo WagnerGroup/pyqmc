@@ -56,7 +56,7 @@ class Parameters:
 
 class MultiplyWF:
     """
-    A general representation of a wavefunction as a product of multiple wf_factors 
+    A general representation of a wavefunction as a product of multiple wf_factors
     """
 
     def __init__(self, *wf_factors):

@@ -126,6 +126,6 @@ class MinimalImageDistance(RawDistance):
         else:
             v = vec[:, np.newaxis, :]
         d1 = v - configs
-        frac_disps = np.dot(d1, self._invvec)
+        frac_disps = np.einsum("...ij,jk->...ik", d1, self._invvec)
         frac_disps = (frac_disps + 0.5) % 1 - 0.5
-        return np.dot(frac_disps, self._latvec)
+        return np.einsum("...ij,jk->...ik", frac_disps, self._latvec)

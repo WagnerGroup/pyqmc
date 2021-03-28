@@ -508,7 +508,7 @@ def test_func3d_gradient_value(bf):
     andgrad, andval = bf.gradient_value(rvec, r)
     graderr = np.linalg.norm((grad - andgrad))
     valerr = np.linalg.norm((val - andval))
-    return (graderr, valerr)
+    return {"grad": graderr, "val": valerr}
 
 
 def test_func3d_pgradient(bf, delta=1e-5):

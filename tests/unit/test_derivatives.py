@@ -63,8 +63,17 @@ def test_wfs():
             print(type(wf), fname, min(err))
             assert min(err) < epsilon, "epsilon {0}".format(epsilon)
 
-        testwf.test_wf_gradient_laplacian(wf, epos)
-        testwf.test_wf_gradient_value(wf, epos)
+        for fname, func in zip(
+            ["gradient_value", "gradient_laplacian"],
+            [
+                testwf.test_wf_gradient_value,
+                testwf.test_wf_gradient_laplacian,
+            ],
+        ):
+            d = func(wf, epos)
+            print(type(wf), fname, min(err))
+            for k, v in d.items():
+                assert v < 1e-10, (k, v)
 
 
 def test_pbc_wfs():
@@ -128,8 +137,18 @@ def test_pbc_wfs():
             print(k, item)
             assert item < epsilon
 
-        testwf.test_wf_gradient_laplacian(wf, epos)
-        testwf.test_wf_gradient_value(wf, epos)
+        for fname, func in zip(
+            ["gradient_value", "gradient_laplacian"],
+            [
+                testwf.test_wf_gradient_value,
+                testwf.test_wf_gradient_laplacian,
+            ],
+        ):
+            d = func(wf, epos)
+            print(type(wf), fname, min(err))
+            for k, v in d.items():
+                assert v < 1e-10, (k, v)
+
 
 
 def test_func3d():

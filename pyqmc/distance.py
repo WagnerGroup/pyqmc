@@ -81,21 +81,17 @@ class MinimalImageDistance(RawDistance):
         Can also do something smarter by dividing the unit cell up into pieces that need to be determined or not.
         """
         ortho_tol = 1e-10
-        diagonal = np.all(np.abs(latvec - np.diag(np.diagonal(latvec))) < ortho_tol)
-        if diagonal:
-            self.dist_i = self.diagonal_dist_i
+        orthogonal = (
+            np.dot(latvec[0], latvec[1]) < ortho_tol
+            and np.dot(latvec[1], latvec[2]) < ortho_tol
+            and np.dot(latvec[2], latvec[0]) < ortho_tol
+        )
+        if orthogonal:
+            self.dist_i = self.orthogonal_dist_i
+            # print("Orthogonal lattics vectors")
         else:
-            orthogonal = (
-                np.dot(latvec[0], latvec[1]) < ortho_tol
-                and np.dot(latvec[1], latvec[2]) < ortho_tol
-                and np.dot(latvec[2], latvec[0]) < ortho_tol
-            )
-            if orthogonal:
-                self.dist_i = self.orthogonal_dist_i
-                # print("Orthogonal lattics vectors")
-            else:
-                self.dist_i = self.general_dist_i
-                # print("Non-orthogonal lattics vectors")
+            self.dist_i = self.general_dist_i
+            # print("Non-orthogonal lattics vectors")
         self._latvec = latvec
         self._invvec = np.linalg.inv(latvec)
         # list of all 26 neighboring cells
@@ -133,22 +129,3 @@ class MinimalImageDistance(RawDistance):
         frac_disps = np.einsum("...ij,jk->...ik", d1, self._invvec)
         frac_disps = (frac_disps + 0.5) % 1 - 0.5
         return np.einsum("...ij,jk->...ik", frac_disps, self._latvec)
-
-    def diagonal_dist_i(self, configs, vec):
-        """Like dist_i, but assuming lattice vectors are orthogonal
-           It's about 10x faster than the general one checking all 27 lattice points
-        """
-        if len(vec.shape) == 3:
-            v = vec.transpose((1, 0, 2))[:, :, np.newaxis]
-        else:
-            v = vec[:, np.newaxis, :]
-        return diagonal_dist_kernel(self._latvec, configs, v)
-
-
-def diagonal_dist_kernel(lvec, configs, v):
-    d1 = v - configs
-    for i in range(3):
-        L = lvec[i, i]
-        d1[..., i] = (d1[..., i] + L /2) % L - L/2
-    return d1
-

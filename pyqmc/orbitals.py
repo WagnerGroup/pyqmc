@@ -127,7 +127,6 @@ class PBCOrbitalEvaluatorKpoints:
     """
 
     def __init__(self, cell, mo_coeff, kpts=None):
-        from pyscf.pbc import gto
         self.iscomplex = True
         self._cell = cell.original_cell
         self.S = cell.S
@@ -141,9 +140,6 @@ class PBCOrbitalEvaluatorKpoints:
             "mo_coeff_alpha": np.concatenate(mo_coeff[0], axis=1),
             "mo_coeff_beta": np.concatenate(mo_coeff[1], axis=1),
         }
-        Ls = self._cell.get_lattice_Ls(dimension=3)
-        self.Ls = Ls[np.argsort(np.linalg.norm(Ls, axis=1))]
-        self.rcut = gto.eval_gto._estimate_rcut(self._cell)
 
     @classmethod
     def from_mean_field(self, cell, mf, twist=None):

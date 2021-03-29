@@ -126,7 +126,9 @@ class PeriodicConfigs:
         self.dist = MinimalImageDistance(lattice_vectors)
 
     def electron(self, e):
-        return PeriodicElectron(self.configs[:, e], self.lvecs, self.dist, wrap=self.wrap[:, e])
+        return PeriodicElectron(
+            self.configs[:, e], self.lvecs, self.dist, wrap=self.wrap[:, e]
+        )
 
     def mask(self, mask):
         return PeriodicConfigs(self.configs[mask], self.lvecs, wrap=self.wrap[mask])

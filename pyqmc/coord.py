@@ -4,25 +4,31 @@ from pyqmc.pbc import enforce_pbc
 import copy
 
 
+class OpenElectron:
+    def __init__(self, epos, dist):
+        self.configs = epos
+        self.dist = dist
+
+
 class OpenConfigs:
     def __init__(self, configs):
         self.configs = configs
         self.dist = RawDistance()
 
     def electron(self, e):
-        return OpenConfigs(self.configs[:, e])
+        return OpenElectron(self.configs[:, e], self.dist)
 
     def mask(self, mask):
         return OpenConfigs(self.configs[mask])
 
-    def make_irreducible(self, e, vec):
-        """ 
-          Input: 
-            e: unused electron index
-            vec: a (nconfig, 3) vector 
-          Output: OpenConfigs object with just one electron
+    def make_irreducible(self, e, vec, mask=True):
         """
-        return OpenConfigs(vec)
+        Input:
+          e: unused electron index
+          vec: a (nconfig, 3) vector
+        Output: OpenConfigs object with just one electron
+        """
+        return OpenElectron(vec, self.dist)
 
     def move(self, e, new, accept):
         """
@@ -92,6 +98,23 @@ class OpenConfigs:
         self.configs = np.array(hdf["configs"])
 
 
+class PeriodicElectron:
+    """
+    Represents the coordinates of a test electron position, for many walkers and
+    potentially several different points.
+
+    configs is a 2D or 3D vector with elements [config, point, dimension]
+    wrap is same shape as configs
+    lvec and dist will most likely be references to the parent object
+    """
+
+    def __init__(self, epos, lattice_vectors, dist, wrap=None):
+        self.configs = epos
+        self.lvec = lattice_vectors
+        self.wrap = wrap if wrap is not None else np.zeros_like(epos)
+        self.dist = dist
+
+
 class PeriodicConfigs:
     def __init__(self, configs, lattice_vectors, wrap=None):
         configs, wrap_ = enforce_pbc(lattice_vectors, configs)
@@ -103,21 +126,28 @@ class PeriodicConfigs:
         self.dist = MinimalImageDistance(lattice_vectors)
 
     def electron(self, e):
-        return PeriodicConfigs(self.configs[:, e], self.lvecs, wrap=self.wrap[:, e])
+        return PeriodicElectron(
+            self.configs[:, e], self.lvecs, self.dist, wrap=self.wrap[:, e]
+        )
 
     def mask(self, mask):
         return PeriodicConfigs(self.configs[mask], self.lvecs, wrap=self.wrap[mask])
 
-    def make_irreducible(self, e, vec):
-        """ 
-         Input: a (nconfig, 3) vector 
-         Output: a tuple with the wrapped vector and the number of wraps
+    def make_irreducible(self, e, vec, mask=None):
         """
-        epos, wrap = enforce_pbc(self.lvecs, vec)
-        currentwrap = self.wrap if len(self.wrap.shape) == 2 else self.wrap[:, e]
+        Input: a (nconfig, 3) vector or a (nconfig, N, 3) vector
+        Output: A Periodic Electron
+        """
+        if mask is None:
+            mask = np.ones(vec.shape[0:-1], dtype=bool)
+        epos_, wrap_ = enforce_pbc(self.lvecs, vec[mask])
+        epos = vec.copy()
+        epos[mask] = epos_
+        wrap = self.wrap[:, e, :].copy()
         if len(vec.shape) == 3:
-            currentwrap = currentwrap[:, np.newaxis]
-        return PeriodicConfigs(epos, self.lvecs, wrap=wrap + currentwrap)
+            wrap = np.repeat(self.wrap[:, e][:, np.newaxis], vec.shape[1], axis=1)
+        wrap[mask] += wrap_
+        return PeriodicElectron(epos, self.lvecs, wrap=wrap, dist=self.dist)
 
     def move(self, e, new, accept):
         """

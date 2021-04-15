@@ -5,17 +5,15 @@ import os
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
-import sys
 import numpy as np
-import pyqmc.testwf as testwf
-import pytest
 from pyqmc import reblock
+import pytest
 
 
+@pytest.mark.slow
 def test():
     """ Ensure that DMC obtains the exact result for a hydrogen atom """
-    from pyscf import lib, gto, scf
-    from pyqmc.slater import PySCFSlater
+    from pyscf import gto, scf
     from pyqmc.jastrowspin import JastrowSpin
     from pyqmc.dmc import limdrift, rundmc
     from pyqmc.mc import vmc
@@ -23,13 +21,14 @@ def test():
     from pyqmc.func3d import CutoffCuspFunction
     from pyqmc.multiplywf import MultiplyWF
     from pyqmc.coord import OpenConfigs
+    from pyqmc import Slater
     import pandas as pd
 
     mol = gto.M(atom="H 0. 0. 0.", basis="sto-3g", unit="bohr", spin=1)
     mf = scf.UHF(mol).run()
     nconf = 1000
     configs = OpenConfigs(np.random.randn(nconf, 1, 3))
-    wf1 = PySCFSlater(mol, mf)
+    wf1 = Slater(mol, mf)
     wf = wf1
     wf2 = JastrowSpin(mol, a_basis=[CutoffCuspFunction(5, 0.2)], b_basis=[])
     wf2.parameters["acoeff"] = np.asarray([[[1.0, 0]]])

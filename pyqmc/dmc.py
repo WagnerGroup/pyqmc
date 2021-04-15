@@ -13,10 +13,10 @@ def limdrift(g, tau, acyrus=0.25):
       g: a [nconf,ndim] vector
 
       tau: time step
-      
+
       acyrus: the maximum magnitude
 
-    Returns: 
+    Returns:
       The vector with the cut off applied and multiplied by tau.
     """
     tot = np.linalg.norm(g, axis=1) * acyrus
@@ -32,10 +32,10 @@ def limdrift_cutoff(g, tau, cutoff=1):
 
     Args:
       g: a [nconf,ndim] vector
-      
+
       cutoff: the maximum magnitude
 
-    Returns: 
+    Returns:
       The vector with the cut off applied and multiplied by tau.
     """
     return mc.limdrift(g, cutoff) * tau
@@ -56,7 +56,7 @@ def dmc_propagate(
 ):
     """
     Propagate DMC without branching
-    
+
     Args:
       wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as anything (such as laplacian() ) used by accumulators
 
@@ -81,7 +81,7 @@ def dmc_propagate(
       coords: The final coordinates from this calculation.
 
       weights: The final weights from this calculation
-      
+
     """
     assert accumulators is not None, "Need an energy accumulator for DMC"
     nconfig, nelec = configs.configs.shape[0:2]
@@ -197,12 +197,12 @@ def limit_timestep(weights, elocnew, elocold, eref, start, stop):
         number of sigmas to start damping tstep
       stop: scalar
         number of sigmas where tstep becomes zero
-    
+
     Return:
       tdamp: scalar
-        Damping factor to multiply timestep; always between 0 and 1. The damping factor is 
-            1 if eref-eloc < branchcut_start*sigma, 
-            0 if eref-eloc > branchcut_stop*sigma,  
+        Damping factor to multiply timestep; always between 0 and 1. The damping factor is
+            1 if eref-eloc < branchcut_start*sigma,
+            0 if eref-eloc > branchcut_stop*sigma,
             decreases linearly inbetween.
     """
     if start is None or stop is None:
@@ -222,7 +222,7 @@ def branch(configs, weights):
     Perform branching on a set of walkers using the 'stochastic comb'
 
     Walkers are resampled with probability proportional to the weights, and the new weights are all set to be equal to the average weight.
-    
+
     Args:
       configs: (nconfig,nelec,3) walker coordinates
 
@@ -283,12 +283,12 @@ def rundmc(
     **kwargs,
 ):
     """
-    Run DMC 
-    
+    Run DMC
+
     Args:
       wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as anything (such as laplacian() ) used by accumulators
 
-      configs: (nconfig, nelec, 3) - initial coordinates to start calculation. 
+      configs: (nconfig, nelec, 3) - initial coordinates to start calculation.
 
       weights: (nconfig,) - initial weights to start calculation, defaults to uniform.
 
@@ -302,7 +302,7 @@ def rundmc(
 
       ekey: tuple of strings; energy is needed for DMC weights. Access total energy by accumulators[ekey[0]](configs, wf)[ekey[1]
 
-      verbose: Print out step information 
+      verbose: Print out step information
 
       drift_limiter: a function that takes a gradient and a cutoff and returns an adjusted gradient
 
@@ -314,7 +314,7 @@ def rundmc(
       coords: The final coordinates from this calculation.
 
       weights: The final weights from this calculation
-      
+
     """
     # Restart from HDF file
     if hdf_file is not None and os.path.isfile(hdf_file):
@@ -392,7 +392,7 @@ def rundmc(
         dmc_file(hdf_file, df_, {}, configs, weights)
         # print(df_)
         df.append(df_)
-        eref = df_[ekey[0] + ekey[1]] - feedback * np.log(np.mean(weights))
+        eref = (df_[ekey[0] + ekey[1]] - feedback * np.log(np.mean(weights))).real
         configs, weights = branch(configs, weights)
         if verbose:
             print(

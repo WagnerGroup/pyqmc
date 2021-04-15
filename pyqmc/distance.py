@@ -20,11 +20,11 @@ class RawDistance:
 
     def dist_matrix(self, configs):
         """
-        All pairwise distances within the set of positions. 
+        All pairwise distances within the set of positions.
 
-        Returns: 
-        
-          dist: array of size nconf x n(n-1)/2 x 3 
+        Returns:
+
+          dist: array of size nconf x n(n-1)/2 x 3
 
           ij : list of size n(n-1)/2 tuples that document i,j
         """
@@ -46,9 +46,9 @@ class RawDistance:
         """
         All pairwise distances from config1 to config2
 
-        Returns: 
-        
-          dist: array of size nconf x n1*n2 x 3 
+        Returns:
+
+          dist: array of size nconf x n1*n2 x 3
 
           ij : list of size n1*n2 tuples that document i,j
         """
@@ -67,7 +67,7 @@ class RawDistance:
 
 
 class MinimalImageDistance(RawDistance):
-    """ Compute distance vectors under a minimal image condition
+    """Compute distance vectors under a minimal image condition
     using periodic boundary conditions."""
 
     def __init__(self, latvec):
@@ -81,17 +81,21 @@ class MinimalImageDistance(RawDistance):
         Can also do something smarter by dividing the unit cell up into pieces that need to be determined or not.
         """
         ortho_tol = 1e-10
-        orthogonal = (
-            np.dot(latvec[0], latvec[1]) < ortho_tol
-            and np.dot(latvec[1], latvec[2]) < ortho_tol
-            and np.dot(latvec[2], latvec[0]) < ortho_tol
-        )
-        if orthogonal:
-            self.dist_i = self.orthogonal_dist_i
-            # print("Orthogonal lattics vectors")
+        diagonal = np.all(np.abs(latvec - np.diag(np.diagonal(latvec))) < ortho_tol)
+        if diagonal:
+            self.dist_i = self.diagonal_dist_i
         else:
-            self.dist_i = self.general_dist_i
-            # print("Non-orthogonal lattics vectors")
+            orthogonal = (
+                np.dot(latvec[0], latvec[1]) < ortho_tol
+                and np.dot(latvec[1], latvec[2]) < ortho_tol
+                and np.dot(latvec[2], latvec[0]) < ortho_tol
+            )
+            if orthogonal:
+                self.dist_i = self.orthogonal_dist_i
+                # print("Orthogonal lattics vectors")
+            else:
+                self.dist_i = self.general_dist_i
+                # print("Non-orthogonal lattics vectors")
         self._latvec = latvec
         self._invvec = np.linalg.inv(latvec)
         # list of all 26 neighboring cells
@@ -119,6 +123,19 @@ class MinimalImageDistance(RawDistance):
 
     def orthogonal_dist_i(self, configs, vec):
         """Like dist_i, but assuming lattice vectors are orthogonal
+        It's about 10x faster than the general one checking all 27 lattice points
+        """
+        if len(vec.shape) == 3:
+            v = vec.transpose((1, 0, 2))[:, :, np.newaxis]
+        else:
+            v = vec[:, np.newaxis, :]
+        d1 = v - configs
+        frac_disps = np.einsum("...ij,jk->...ik", d1, self._invvec)
+        frac_disps = (frac_disps + 0.5) % 1 - 0.5
+        return np.einsum("...ij,jk->...ik", frac_disps, self._latvec)
+
+    def diagonal_dist_i(self, configs, vec):
+        """Like dist_i, but assuming lattice vectors are orthogonal
            It's about 10x faster than the general one checking all 27 lattice points
         """
         if len(vec.shape) == 3:
@@ -126,6 +143,7 @@ class MinimalImageDistance(RawDistance):
         else:
             v = vec[:, np.newaxis, :]
         d1 = v - configs
-        frac_disps = np.dot(d1, self._invvec)
-        frac_disps = (frac_disps + 0.5) % 1 - 0.5
-        return np.dot(frac_disps, self._latvec)
+        for i in range(3):
+            L = self._latvec[i, i]
+            d1[..., i] = (d1[..., i] + L /2) % L - L/2
+        return d1

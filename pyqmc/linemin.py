@@ -48,7 +48,7 @@ def polyfit_relative(xfit, yfit, degree):
 
 
 def stable_fit2(xfit, yfit, tolerance=1e-2):
-    """ Try to fit to a quadratic. If the fit is not good, 
+    """Try to fit to a quadratic. If the fit is not good,
     then just take the lowest value of yfit
     """
     steprange = np.max(xfit)
@@ -130,9 +130,9 @@ def line_minimization(
 
       :lmoptions: a dictionary of options for the lm method
 
-      :update: A function that generates a parameter change 
+      :update: A function that generates a parameter change
 
-      :update_kws: Any keywords 
+      :update_kws: Any keywords
 
       :npts: number of points to fit to in each line minimization
 
@@ -266,16 +266,16 @@ def line_minimization(
 
 
 def correlated_compute(wf, configs, params, pgrad_acc):
-    """ 
+    """
     Evaluates accumulator on the same set of configs for correlated sampling of different wave function parameters
 
     Args:
         :wf: wave function object
         :configs: (nconf, nelec, 3) array
-        :params: (nsteps, nparams) array 
+        :params: (nsteps, nparams) array
             list of arrays of parameters (serialized) at each step
 
-        :pgrad_acc: PGradAccumulator 
+        :pgrad_acc: PGradAccumulator
 
     Returns:
         :data: a single dict with indices [parameter, values]

@@ -22,7 +22,7 @@ def test_updateinternals(wf, configs):
     configs: nconf x nelec x 3 position array
 
     Returns:
-    tuple which 
+    tuple which
 
     """
     from pyqmc import vmc
@@ -68,7 +68,7 @@ def test_updateinternals(wf, configs):
 
 
 def test_wf_gradient(wf, configs, delta=1e-5):
-    """ 
+    """
     Parameters:
         wf: a wavefunction object with functions wf.recompute(configs), wf.testvalue(e,configs) and wf.gradient(e,configs)
         configs: nconf x nelec x 3 position array to set the wf object
@@ -79,7 +79,7 @@ def test_wf_gradient(wf, configs, delta=1e-5):
         epos is nconf x 3 positions of electron e
     wf.testvalue(e,epos) should return a ratio: the wf value at the position where electron e is moved to epos divided by the current value
     wf.gradient(e,epos) should return grad ln Psi(epos), while keeping all the other electrons at current position. epos may be different from the current position of electron e
-    
+
     """
     nconf, nelec = configs.configs.shape[0:2]
     iscomplex = 1j if wf.iscomplex else 1
@@ -100,11 +100,7 @@ def test_wf_gradient(wf, configs, delta=1e-5):
             minuval = wf.testvalue(e, epos)
             numeric[:, e, d] = (plusval - minuval) / (2 * delta)
     maxerror = np.amax(np.abs(grad - numeric))
-    normerror = np.mean(np.abs(grad - numeric))
-
-    # print('maxerror', maxerror, np.log10(maxerror))
-    # print('normerror', normerror, np.log10(normerror))
-    return (maxerror, normerror)
+    return maxerror
 
 
 def test_wf_pgradient(wf, configs, delta=1e-5):
@@ -132,7 +128,7 @@ def test_wf_pgradient(wf, configs, delta=1e-5):
             wf.parameters[k] = flt.reshape(wf.parameters[k].shape)
 
         pgerr = np.abs(gradient[k].reshape((-1, nparms)) - numgrad)
-        error[k] = (np.amax(pgerr), np.mean(pgerr))
+        error[k] = np.amax(pgerr)
     if len(error) == 0:
         return (0, 0)
     return error[max(error)]  # Return maximum coefficient error
@@ -141,7 +137,7 @@ def test_wf_pgradient(wf, configs, delta=1e-5):
 def test_wf_laplacian(wf, configs, delta=1e-5):
     """
     Parameters:
-        wf: a wavefunction object with functions wf.recompute(configs), 
+        wf: a wavefunction object with functions wf.recompute(configs),
              wf.gradient(e,configs) and wf.laplacian(e,configs)
         configs: nconf x nelec x 3 position array to set the wf object
         delta: the finite difference step; 1e-5 to 1e-6 seem to be the best compromise between accuracy and machine precision
@@ -176,10 +172,7 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
             numeric[:, e] += np.real(plusgrad - minugrad) / (2 * delta)
 
     maxerror = np.amax(np.abs(lap - numeric))
-    normerror = np.mean(np.abs((lap - numeric) / numeric))
-    # print('maxerror', maxerror, np.log10(maxerror))
-    # print('normerror', normerror, np.log10(normerror))
-    return (maxerror, normerror)
+    return maxerror
 
 
 def test_wf_gradient_laplacian(wf, configs):
@@ -204,17 +197,12 @@ def test_wf_gradient_laplacian(wf, configs):
         tt1 = time.time()
         tsep += ts1 - ts0
         ttog += tt1 - tt0
-        rmae_grad = np.mean(np.abs((andgrad - grad) / grad))
-        rmae_lap = np.mean(np.abs((andlap - lap) / lap))
-        norm_grad = np.linalg.norm((andgrad - grad) / grad)
-        norm_lap = np.linalg.norm((andlap - lap) / lap)
+    rel_grad = np.abs((andgrad - grad) / grad)
+    rel_lap = np.abs((andlap - lap) / lap)
+    rmax_grad = np.max(rel_grad)
+    rmax_lap = np.max(rel_lap)
 
-    print("separate", tsep)
-    print("together", ttog)
+    print("time evaluated separately", tsep)
+    print("time evaluated together", ttog)
 
-    d = []
-    d.append({"error": rmae_grad, "deriv": "grad", "type": "mae"})
-    d.append({"error": rmae_lap, "deriv": "lap", "type": "mae"})
-    d.append({"error": norm_grad, "deriv": "grad", "type": "norm"})
-    d.append({"error": norm_lap, "deriv": "lap", "type": "norm"})
-    return d
+    return {"grad": rmax_grad, "lap": rmax_lap}

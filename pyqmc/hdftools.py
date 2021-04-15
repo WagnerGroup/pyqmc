@@ -3,12 +3,12 @@ import numpy as np
 
 
 def setup_hdf(f, data, attr):
-    """ 
+    """
     f should be an h5py file object
     data should be a dictionary of numpy arrays.
-    attr is a dictionary that should go into attributes 
+    attr is a dictionary that should go into attributes
 
-    It's assumed that data consists of representative sizes. 
+    It's assumed that data consists of representative sizes.
     This function will not insert data into the HDF5 object, only set up the datasets.
     """
     for k, it in data.items():
@@ -28,7 +28,9 @@ def append_hdf(f, data):
             )
         currshape = f[k].shape
         f[k].resize((currshape[0] + 1, *currshape[1:]))
-        f[k][-1,] = it
+        f[k][
+            -1,
+        ] = it
 
 
 if __name__ == "__main__":

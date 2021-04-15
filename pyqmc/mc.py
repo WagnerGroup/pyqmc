@@ -10,14 +10,14 @@ import h5py
 
 
 def initial_guess(mol, nconfig, r=1.0):
-    """ Generate an initial guess by distributing electrons near atoms
+    """Generate an initial guess by distributing electrons near atoms
     proportional to their charge.
 
     assign electrons to atoms based on atom charges
     assign the minimum number first, and assign the leftover ones randomly
     this algorithm chooses atoms *with replacement* to assign leftover electrons
 
-    Args: 
+    Args:
 
      mol: A PySCF-like molecule object. Should have atom_charges(), atom_coords(), and nelec
 
@@ -25,11 +25,11 @@ def initial_guess(mol, nconfig, r=1.0):
 
      r: How far from the atoms to distribute the electrons
 
-    Returns: 
+    Returns:
 
-     A numpy array with shape (nconfig,nelectrons,3) with the electrons randomly distributed near 
+     A numpy array with shape (nconfig,nelectrons,3) with the electrons randomly distributed near
      the atoms.
-    
+
     """
     from pyqmc.coord import OpenConfigs, PeriodicConfigs
 
@@ -73,10 +73,10 @@ def limdrift(g, cutoff=1):
 
     Args:
       g: a [nconf,ndim] vector
-      
+
       cutoff: the maximum magnitude
 
-    Returns: 
+    Returns:
       The vector with the cut off applied.
     """
     tot = np.linalg.norm(g, axis=1)
@@ -101,7 +101,7 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
     """
     Run VMC for nsteps.
 
-    Return a dictionary of averages from each accumulator.  
+    Return a dictionary of averages from each accumulator.
     """
     nconf, nelec, _ = configs.configs.shape
     block_avg = {}
@@ -180,12 +180,12 @@ def vmc(
     """Run a Monte Carlo sample of a given wave function.
 
     Args:
-      wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as 
+      wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as
       anything (such as laplacian() ) used by accumulators
-      
+
       configs: Initial electron coordinates
 
-      nblocks: Number of VMC blocks to run 
+      nblocks: Number of VMC blocks to run
 
       nsteps_per_block: Number of steps to run per block
 
@@ -194,11 +194,11 @@ def vmc(
       tstep: Time step for move proposals. Only affects efficiency.
 
       accumulators: A dictionary of functor objects that take in (configs,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If None, then the coordinates will only be propagated with acceptance information.
-      
-      verbose: Print out step information 
+
+      verbose: Print out step information
 
       stepoffset: If continuing a run, what to start the step numbering at.
-  
+
       hdf_file: Hdf_file to store vmc output.
 
       client: an object with submit() functions that return futures
@@ -209,7 +209,7 @@ def vmc(
        df: A list of dictionaries nstep long that contains all results from the accumulators. These are averaged across all walkers.
 
        configs: The final coordinates from this calculation.
-       
+
     """
     if nsteps is not None:
         nblocks = nsteps

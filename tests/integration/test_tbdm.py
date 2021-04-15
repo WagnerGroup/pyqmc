@@ -1,6 +1,6 @@
 import numpy as np
 from pyscf import gto, scf, lo
-from pyqmc import PySCFSlater
+from pyqmc import Slater
 from pyqmc.mc import initial_guess, vmc
 from pyqmc.accumulators import EnergyAccumulator
 from pyqmc.tbdm import TBDMAccumulator, normalize_tbdm
@@ -41,16 +41,16 @@ def singledet_tbdm(mf, mfobdm):
 
 ###########################################################
 def make_combined_spin_iaos(cell, mf, mos, iao_basis="minao"):
-    """ Make IAOs for up and down MOs together for all k points. 
-  Args:
-    cell (PySCF cell): Cell for the calculation.
-    mf (PySCF UKS or UHF object): Contains the MOs information.
-    mos (array): indices of the MOs to use to make the IAOs.
-    basis (basis): IAO basis desired (in PySCF format).
-  Returns:
-    iaos_all (list): each list entry is np array of IAO orbitals 
-                     in the basis of cell for a given k point.
-  """
+    """Make IAOs for up and down MOs together for all k points.
+    Args:
+      cell (PySCF cell): Cell for the calculation.
+      mf (PySCF UKS or UHF object): Contains the MOs information.
+      mos (array): indices of the MOs to use to make the IAOs.
+      basis (basis): IAO basis desired (in PySCF format).
+    Returns:
+      iaos_all (list): each list entry is np array of IAO orbitals
+                       in the basis of cell for a given k point.
+    """
     # print("Making combined spin-up and spin-dw IAOs...")
     ovlp = mf.get_ovlp()
     # Concatenates the spin-up and the spin-down chosen MOs
@@ -68,16 +68,16 @@ def make_combined_spin_iaos(cell, mf, mos, iao_basis="minao"):
 
 ###########################################################
 def make_separate_spin_iaos(cell, mf, mos, iao_basis="minao"):
-    """ Make IAOs for up and down MOs separately for all k points. 
-  Args:
-    cell (PySCF cell): Cell for the calculation.
-    mf (PySCF UKS or UHF object): Contains the MOs information.
-    mos (array): indices of the MOs to use to make the IAOs.
-    basis (basis): IAO basis desired (in PySCF format).
-  Returns:
-    iaos_all (list): each list entry is np array of IAO orbitals 
-                     in the basis of cell for a given k point.
-  """
+    """Make IAOs for up and down MOs separately for all k points.
+    Args:
+      cell (PySCF cell): Cell for the calculation.
+      mf (PySCF UKS or UHF object): Contains the MOs information.
+      mos (array): indices of the MOs to use to make the IAOs.
+      basis (basis): IAO basis desired (in PySCF format).
+    Returns:
+      iaos_all (list): each list entry is np array of IAO orbitals
+                       in the basis of cell for a given k point.
+    """
     # print("Making combined spin-up and spin-dw IAOs...")
     ovlp = mf.get_ovlp()
     coefs = np.array(mf.mo_coeff)[:, :, mos]
@@ -93,14 +93,14 @@ def make_separate_spin_iaos(cell, mf, mos, iao_basis="minao"):
 
 ###########################################################
 def reps_combined_spin_iaos(iaos, mf, mos):
-    """ Representation of MOs in IAO basis.
-  Args:
-    iaos (array): coefficients of IAOs in AO basis.
-    mf (UKS or UHF object): the MOs are in here.
-    mos (array): MOs to find representation of. Not necessarily the same as in make_combined_spin_iaos()!!!
-  Returns:
-    array: MO coefficients in IAO basis (remember that MOs are the columns).
-  """
+    """Representation of MOs in IAO basis.
+    Args:
+      iaos (array): coefficients of IAOs in AO basis.
+      mf (UKS or UHF object): the MOs are in here.
+      mos (array): MOs to find representation of. Not necessarily the same as in make_combined_spin_iaos()!!!
+    Returns:
+      array: MO coefficients in IAO basis (remember that MOs are the columns).
+    """
     # Checks if mos has 2 spins
     if len(mos) != 2:
         mos = np.array([mos, mos])
@@ -164,7 +164,7 @@ def test(atom="He", total_spin=0, total_charge=0, scf_basis="sto-3g"):
     tbdm_sweeps = 4
     tbdm_tstep = 0.5
 
-    wf = PySCFSlater(mol, mf)  # Single-Slater (no jastrow) wf
+    wf = Slater(mol, mf)  # Single-Slater (no jastrow) wf
     configs = initial_guess(mol, nconf)
     energy = EnergyAccumulator(mol)
     obdm_up = OBDMAccumulator(mol=mol, orb_coeff=iaos[0], nsweeps=tbdm_sweeps, spin=0)
@@ -216,17 +216,17 @@ def test(atom="He", total_spin=0, total_charge=0, scf_basis="sto-3g"):
     # Compares tbdm from QMC and MF
     avg_norm = {}
     avg_tbdm = {}
-    tbdm_est = {}
     for t in ["tbdm_upup", "tbdm_updown", "tbdm_downup", "tbdm_downdown"]:
         for k in df.keys():
             if k.startswith(t + "norm_"):
                 avg_norm[k.split("_")[-1]] = np.mean(df[k][vmc_warmup:], axis=0)
             if k.startswith(t + "value"):
                 avg_tbdm[k.split("_")[-1]] = np.mean(df[k][vmc_warmup:], axis=0)
-    for k in avg_tbdm:
-        tbdm_est[k] = normalize_tbdm(
-            avg_tbdm[k].reshape(2, 2, 2, 2), avg_norm["a"], avg_norm["b"]
-        )
+
+    tbdm_est = {
+        k: normalize_tbdm(avg_tbdm[k].reshape(2, 2, 2, 2), avg_norm["a"], avg_norm["b"])
+        for k in avg_tbdm
+    }
     qmctbdm = np.array(
         [
             [tbdm_est["upupvalue"], tbdm_est["updownvalue"]],
@@ -235,8 +235,9 @@ def test(atom="He", total_spin=0, total_charge=0, scf_basis="sto-3g"):
     )
     print("\nComparing QMC and MF tbdm:")
     for sa, sb in [[0, 0], [0, 1], [1, 0], [1, 1]]:
-        # print('QMC tbdm[%d,%d]:\n'%(sa,sb),qmctbdm[sa,sb])
-        # print('MF tbdm[%d,%d]:\n'%(sa,sb),mftbdm[sa,sb])
+        print("spins", sa, sb)
+        print("QMC tbdm[%d,%d]:\n" % (sa, sb), qmctbdm[sa, sb].round(3))
+        print("MF tbdm[%d,%d]:\n" % (sa, sb), mftbdm[sa, sb].round(3))
         diff = qmctbdm[sa, sb] - mftbdm[sa, sb]
         print("diff[%d,%d]:\n" % (sa, sb), diff)
         assert np.max(np.abs(diff)) < 0.05

@@ -16,10 +16,10 @@ def test_wfs():
     """
 
     from pyscf import lib, gto, scf
-    from pyqmc.slater import PySCFSlater
-    from pyqmc.jastrowspin import JastrowSpin
+    from pyqmc import Slater
     from pyqmc.multiplywf import MultiplyWF
     from pyqmc.manybody_jastrow import J3
+    from pyqmc import default_jastrow
     import pyqmc
 
     mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="sto-3g", unit="bohr")
@@ -30,13 +30,13 @@ def test_wfs():
     nconf = 10
     epos = pyqmc.initial_guess(mol, nconf)
     for wf in [
-        JastrowSpin(mol),
+        default_jastrow(mol)[0],
         J3(mol),
-        MultiplyWF(PySCFSlater(mol, mf), JastrowSpin(mol)),
-        MultiplyWF(PySCFSlater(mol, mf), JastrowSpin(mol), J3(mol)),
-        PySCFSlater(mol, mf_uhf),
-        PySCFSlater(mol, mf),
-        PySCFSlater(mol, mf_rohf),
+        MultiplyWF(Slater(mol, mf), default_jastrow(mol)[0]),
+        MultiplyWF(Slater(mol, mf), default_jastrow(mol)[0], J3(mol)),
+        Slater(mol, mf_uhf),
+        Slater(mol, mf),
+        Slater(mol, mf_rohf),
     ]:
         for k in wf.parameters:
             if k != "mo_coeff":
@@ -59,7 +59,7 @@ def test_wfs():
         ):
             err = []
             for delta in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8]:
-                err.append(func(wf, epos, delta)[0])
+                err.append(func(wf, epos, delta))
             print(type(wf), fname, min(err))
             assert min(err) < epsilon, "epsilon {0}".format(epsilon)
 
@@ -71,10 +71,9 @@ def test_pbc_wfs():
 
     from pyscf.pbc import lib, gto, scf
     from pyqmc.supercell import get_supercell
-    from pyqmc.slater import PySCFSlater
-    from pyqmc.multislaterpbc import MultiSlaterPBC
-    from pyqmc.jastrowspin import JastrowSpin
+    from pyqmc.slater import Slater
     from pyqmc.multiplywf import MultiplyWF
+    from pyqmc import default_jastrow
     import pyqmc
 
     mol = gto.M(
@@ -91,19 +90,16 @@ def test_pbc_wfs():
     supercell = get_supercell(mol, S=(np.ones((3, 3)) - 2 * np.eye(3)))
     epos = pyqmc.initial_guess(supercell, nconf)
     # For multislaterpbc
-    kinds = 0, 3, 5, 6  # G, X, Y, Z
-    d1 = {kind: [0] for kind in kinds}
-    d2 = d1.copy()
-    d2.update({0: [], 3: [0, 1]})
-    detwt = [2 ** 0.5, 2 ** 0.5]
-    occup = [[d1, d2], [d1]]
-    map_dets = [[0, 1], [0, 0]]
+    # kinds = 0, 3, 5, 6  # G, X, Y, Z
+    # d1 = {kind: [0] for kind in kinds}
+    # d2 = d1.copy()
+    # d2.update({0: [], 3: [0, 1]})
+    # detwt = [2 ** 0.5, 2 ** 0.5]
+    # occup = [[d1, d2], [d1]]
+    # map_dets = [[0, 1], [0, 0]]
     for wf in [
-        MultiplyWF(PySCFSlater(supercell, mf), JastrowSpin(supercell)),
-        PySCFSlater(supercell, mf),
-        MultiSlaterPBC(supercell, mf, detwt=detwt, occup=occup, map_dets=map_dets),
-        # PySCFSlaterPBC(supercell, mf_uhf),
-        # PySCFSlaterPBC(supercell, mf_rohf),
+        MultiplyWF(Slater(supercell, mf), default_jastrow(supercell)[0]),
+        Slater(supercell, mf),
     ]:
         for k in wf.parameters:
             if "mo_coeff" not in k and k != "det_coeff":
@@ -121,7 +117,7 @@ def test_pbc_wfs():
         ):
             err = []
             for delta in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8]:
-                err.append(func(wf, epos, delta)[0])
+                err.append(func(wf, epos, delta))
             print(type(wf), fname, min(err))
             assert min(err) < epsilon
 
@@ -155,16 +151,16 @@ def test_func3d():
     epsilon = 1e-5
 
     for name, func in test_functions.items():
-        grad = test_func3d_gradient(func, delta=delta)[0]
-        lap = test_func3d_laplacian(func, delta=delta)[0]
-        andg, andl = test_func3d_gradient_laplacian(func)
-        pgrad = test_func3d_pgradient(func, delta=1e-9)[0]
-        print(name, grad, lap, "both:", andg, andl)
+        grad = test_func3d_gradient(func, delta=delta)
+        lap = test_func3d_laplacian(func, delta=delta)
+        gl = test_func3d_gradient_laplacian(func)
+        pgrad = test_func3d_pgradient(func, delta=1e-9)
+        print(name, grad, lap, "both:", gl["grad"], gl["lap"])
         print(name, pgrad)
         assert grad < epsilon
         assert lap < epsilon
-        assert andg < epsilon
-        assert andl < epsilon, andl
+        assert gl["grad"] < epsilon
+        assert gl["lap"] < epsilon
         for k, v in pgrad.items():
             assert v < epsilon, (name, k, v)
 

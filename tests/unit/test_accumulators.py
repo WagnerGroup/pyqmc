@@ -6,7 +6,7 @@ import pyqmc
 
 
 def test_transform():
-    """ Just prints things out; 
+    """Just prints things out;
     TODO: figure out a thing to test.
     """
     from pyscf import gto, scf
@@ -40,7 +40,7 @@ def test_info_functions_mol():
     from pyqmc.tbdm import TBDMAccumulator
 
     mol = gto.Mole()
-    mol.atom = """He 0.00 0.00 0.00 """
+    mol.atom = """Li 0.00 0.00 0.00; H 0. 0. 1.5 """
     mol.basis = "ccpvdz"
     mol.build()
 

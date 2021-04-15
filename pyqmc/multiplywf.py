@@ -47,10 +47,16 @@ class Parameters:
             for k2 in self.data[k1].keys():
                 yield k1 + k2
 
+    def values(self):
+        for i in range(self.wf_count):
+            k1 = "wf" + str(i + 1)
+            for k2 in self.data[k1].keys():
+                yield self.data[k1][k2]
+
 
 class MultiplyWF:
     """
-    A general representation of a wavefunction as a product of multiple wf_factors 
+    A general representation of a wavefunction as a product of multiple wf_factors
     """
 
     def __init__(self, *wf_factors):

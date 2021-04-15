@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import numpy as np
 from pyqmc.loadcupy import cp, asnumpy
 

@@ -17,9 +17,9 @@ import pyqmc
 
 
 def test():
-    """ 
-    Tests that the multi-slater wave function value, gradient and 
-    parameter gradient evaluations are working correctly. Also 
+    """
+    Tests that the multi-slater wave function value, gradient and
+    parameter gradient evaluations are working correctly. Also
     checks that VMC energy matches energy calculated in PySCF
     """
     mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="cc-pvtz", unit="bohr", spin=0)
@@ -27,7 +27,9 @@ def test():
     delta = 1e-5
     nsteps = 200
     warmup = 10
-    for mf in [scf.UHF(mol).run()]:#[scf.RHF(mol).run(), scf.ROHF(mol).run(), scf.UHF(mol).run()]:
+    for mf in [
+        scf.UHF(mol).run()
+    ]:  # [scf.RHF(mol).run(), scf.ROHF(mol).run(), scf.UHF(mol).run()]:
         # Test same number of elecs
         mc = mcscf.CASCI(mf, ncas=4, nelecas=(1, 1))
         mc.kernel()

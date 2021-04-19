@@ -63,6 +63,18 @@ def test_wfs():
             print(type(wf), fname, min(err))
             assert min(err) < epsilon, "epsilon {0}".format(epsilon)
 
+        for fname, func in zip(
+            ["gradient_value", "gradient_laplacian"],
+            [
+                testwf.test_wf_gradient_value,
+                testwf.test_wf_gradient_laplacian,
+            ],
+        ):
+            d = func(wf, epos)
+            print(type(wf), fname, min(err))
+            for k, v in d.items():
+                assert v < 1e-10, (k, v)
+
 
 def test_pbc_wfs():
     """
@@ -90,13 +102,13 @@ def test_pbc_wfs():
     supercell = get_supercell(mol, S=(np.ones((3, 3)) - 2 * np.eye(3)))
     epos = pyqmc.initial_guess(supercell, nconf)
     # For multislaterpbc
-    #kinds = 0, 3, 5, 6  # G, X, Y, Z
-    #d1 = {kind: [0] for kind in kinds}
-    #d2 = d1.copy()
-    #d2.update({0: [], 3: [0, 1]})
-    #detwt = [2 ** 0.5, 2 ** 0.5]
-    #occup = [[d1, d2], [d1]]
-    #map_dets = [[0, 1], [0, 0]]
+    # kinds = 0, 3, 5, 6  # G, X, Y, Z
+    # d1 = {kind: [0] for kind in kinds}
+    # d2 = d1.copy()
+    # d2.update({0: [], 3: [0, 1]})
+    # detwt = [2 ** 0.5, 2 ** 0.5]
+    # occup = [[d1, d2], [d1]]
+    # map_dets = [[0, 1], [0, 0]]
     for wf in [
         MultiplyWF(Slater(supercell, mf), default_jastrow(supercell)[0]),
         Slater(supercell, mf),
@@ -125,6 +137,19 @@ def test_pbc_wfs():
             print(k, item)
             assert item < epsilon
 
+        for fname, func in zip(
+            ["gradient_value", "gradient_laplacian"],
+            [
+                testwf.test_wf_gradient_value,
+                testwf.test_wf_gradient_laplacian,
+            ],
+        ):
+            d = func(wf, epos)
+            print(type(wf), fname, min(err))
+            for k, v in d.items():
+                assert v < 1e-10, (k, v)
+
+
 
 def test_func3d():
     """
@@ -138,6 +163,7 @@ def test_func3d():
         test_func3d_gradient,
         test_func3d_laplacian,
         test_func3d_gradient_laplacian,
+        test_func3d_gradient_value,
         test_func3d_pgradient,
     )
 
@@ -154,6 +180,7 @@ def test_func3d():
         grad = test_func3d_gradient(func, delta=delta)
         lap = test_func3d_laplacian(func, delta=delta)
         gl = test_func3d_gradient_laplacian(func)
+        gv = test_func3d_gradient_value(func)
         pgrad = test_func3d_pgradient(func, delta=1e-9)
         print(name, grad, lap, "both:", gl["grad"], gl["lap"])
         print(name, pgrad)
@@ -161,6 +188,8 @@ def test_func3d():
         assert lap < epsilon
         assert gl["grad"] < epsilon
         assert gl["lap"] < epsilon
+        assert gv["grad"] < epsilon
+        assert gv["val"] < epsilon
         for k, v in pgrad.items():
             assert v < epsilon, (name, k, v)
 

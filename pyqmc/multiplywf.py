@@ -56,7 +56,7 @@ class Parameters:
 
 class MultiplyWF:
     """
-    A general representation of a wavefunction as a product of multiple wf_factors 
+    A general representation of a wavefunction as a product of multiple wf_factors
     """
 
     def __init__(self, *wf_factors):
@@ -94,6 +94,11 @@ class MultiplyWF:
     def testvalue_many(self, e, epos, mask=None):
         testvalues = [wf.testvalue_many(e, epos, mask=mask) for wf in self.wf_factors]
         return np.prod(testvalues, axis=0)
+
+    def gradient_value(self, e, epos):
+        grad_vals = [wf.gradient_value(e, epos) for wf in self.wf_factors]
+        grads, vals = list(zip(*grad_vals))
+        return np.sum(grads, axis=0), np.prod(vals, axis=0)
 
     def gradient_laplacian(self, e, epos):
         grad_laps = [wf.gradient_laplacian(e, epos) for wf in self.wf_factors]

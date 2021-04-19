@@ -1,5 +1,6 @@
 import numpy as np
-#from pyqmc.slater import sherman_morrison_row, get_complex_phase
+
+# from pyqmc.slater import sherman_morrison_row, get_complex_phase
 import pyqmc.determinant_tools as determinant_tools
 import pyqmc.orbitals
 
@@ -16,23 +17,23 @@ def sherman_morrison_row(e, inv, vec):
 def get_complex_phase(x):
     return x / np.abs(x)
 
+
 class JoinParameters:
     """
-    This class provides a dict-like interface that actually references 
+    This class provides a dict-like interface that actually references
     other dictionaries in the background.
     If keys collide, then the first dictionary that matches the key will be returned.
     However, some bad things may happen if you have colliding keys.
     """
+
     def __init__(self, dicts):
         self.data = {}
         self.data = dicts
 
-
-    def find_i(self,idx):
-        for i,d in enumerate(self.data):
+    def find_i(self, idx):
+        for i, d in enumerate(self.data):
             if idx in d:
                 return i
-
 
     def __setitem__(self, idx, value):
         i = self.find_i(idx)
@@ -63,25 +64,19 @@ class JoinParameters:
     def keys(self):
         for d in self.data:
             yield from d.keys()
-    
+
     def values(self):
         for d in self.data:
             yield from d.values()
 
 
-
 def sherman_morrison_ms(e, inv, vec):
-    ratio = np.einsum("idj,idj->id", vec, inv[:, :, :, e])
     tmp = np.einsum("edk,edkj->edj", vec, inv)
-    invnew = (
-        inv
-        - np.einsum("kdi,kdj->kdij", inv[:, :, :, e], tmp)
-        / ratio[:, :, np.newaxis, np.newaxis]
-    )
-    invnew[:, :, :, e] = inv[:, :, :, e] / ratio[:, :, np.newaxis]
+    ratio = tmp[:, :, e]
+    inv_ratio = inv[:, :, :, e] / ratio[:, :, np.newaxis]
+    invnew = inv - np.einsum("kdi,kdj->kdij", inv_ratio, tmp)
+    invnew[:, :, :, e] = inv_ratio
     return ratio, invnew
-
-
 
 
 class Slater:
@@ -115,15 +110,18 @@ class Slater:
         else:
             self._nelec = mol.nelec
 
-        self.myparameters={}
-        self.myparameters["det_coeff"], self._det_occup, self._det_map,\
-        self.orbitals = pyqmc.orbitals.choose_evaluator_from_pyscf(mol, mf, mc, twist=twist)
-        self.parameters=JoinParameters([self.myparameters,self.orbitals.parameters])
+        self.myparameters = {}
+        (
+            self.myparameters["det_coeff"],
+            self._det_occup,
+            self._det_map,
+            self.orbitals,
+        ) = pyqmc.orbitals.choose_evaluator_from_pyscf(mol, mf, mc, twist=twist)
+        self.parameters = JoinParameters([self.myparameters, self.orbitals.parameters])
 
         self.iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
         self.dtype = complex if self.iscomplex else float
         self.get_phase = get_complex_phase if self.iscomplex else np.sign
-
 
     def recompute(self, configs):
         """This computes the value from scratch. Returns the logarithm of the wave function as
@@ -131,14 +129,14 @@ class Slater:
 
         nconf, nelec, ndim = configs.configs.shape
 
-        aos = self.orbitals.aos('GTOval_sph', configs)
-        self._aovals = aos.reshape(-1,nconf,nelec, aos.shape[-1])
+        aos = self.orbitals.aos("GTOval_sph", configs)
+        self._aovals = aos.reshape(-1, nconf, nelec, aos.shape[-1])
         self._dets = []
         self._inverse = []
         for s in [0, 1]:
-            begin = self._nelec[0]*s
+            begin = self._nelec[0] * s
             end = self._nelec[0] + self._nelec[1] * s
-            mo = self.orbitals.mos(self._aovals[:,:,begin:end, :],s)
+            mo = self.orbitals.mos(self._aovals[:, :, begin:end, :], s)
             mo_vals = np.swapaxes(mo[:, :, self._det_occup[s]], 1, 2)
             self._dets.append(
                 np.array(np.linalg.slogdet(mo_vals))
@@ -149,16 +147,16 @@ class Slater:
         return self.value()
 
     def updateinternals(self, e, epos, mask=None):
-        """Update any internals given that electron e moved to epos. mask is a Boolean array 
+        """Update any internals given that electron e moved to epos. mask is a Boolean array
         which allows us to update only certain walkers"""
 
         s = int(e >= self._nelec[0])
         if mask is None:
             mask = [True] * epos.configs.shape[0]
         eeff = e - s * self._nelec[0]
-        ao = self.orbitals.aos("GTOval_sph",epos,mask)
-        self._aovals[:,mask, e, :] = ao
-        mo = self.orbitals.mos(ao,s)
+        ao = self.orbitals.aos("GTOval_sph", epos, mask)
+        self._aovals[:, mask, e, :] = ao
+        mo = self.orbitals.mos(ao, s)
 
         mo_vals = mo[:, self._det_occup[s]]
         det_ratio, self._inverse[s][mask, :, :, :] = sherman_morrison_ms(
@@ -171,7 +169,9 @@ class Slater:
         """Return logarithm of the wave function as noted in recompute()"""
         updets = self._dets[0][:, :, self._det_map[0]]
         dndets = self._dets[1][:, :, self._det_map[1]]
-        return determinant_tools.compute_value(updets,dndets, self.parameters["det_coeff"])
+        return determinant_tools.compute_value(
+            updets, dndets, self.parameters["det_coeff"]
+        )
 
     def _updateval(self, ratio, s, mask):
         self._dets[s][0, mask, :] *= self.get_phase(ratio)
@@ -191,13 +191,15 @@ class Slater:
 
         upref = np.amax(self._dets[0][1]).real
         dnref = np.amax(self._dets[1][1]).real
-        
+
         det_array = (
             self._dets[0][0, :, self._det_map[0]][:, mask]
             * self._dets[1][0, :, self._det_map[1]][:, mask]
             * np.exp(
                 self._dets[0][1, :, self._det_map[0]][:, mask]
-                + self._dets[1][1, :, self._det_map[1]][:, mask]-upref-dnref
+                + self._dets[1][1, :, self._det_map[1]][:, mask]
+                - upref
+                - dnref
             )
         )
         numer = np.einsum(
@@ -211,14 +213,14 @@ class Slater:
             self.parameters["det_coeff"],
             det_array,
         )
-        #curr_val = self.value()
-        
+        # curr_val = self.value()
+
         if len(numer.shape) == 2:
             denom = denom[:, np.newaxis]
         return numer / denom
 
     def _testcol(self, det, i, s, vec):
-        """vec is a nconfig,nmo vector which replaces column i 
+        """vec is a nconfig,nmo vector which replaces column i
         of spin s in determinant det"""
 
         return np.einsum(
@@ -226,11 +228,11 @@ class Slater:
         )
 
     def gradient(self, e, epos):
-        """ Compute the gradient of the log wave function 
+        """Compute the gradient of the log wave function
         Note that this can be called even if the internals have not been updated for electron e,
         if epos differs from the current position of electron e."""
         s = int(e >= self._nelec[0])
-        aograd = self.orbitals.aos('GTOval_sph_deriv1', epos)
+        aograd = self.orbitals.aos("GTOval_sph_deriv1", epos)
         mograd = self.orbitals.mos(aograd, s)
 
         mograd_vals = mograd[:, :, self._det_occup[s]]
@@ -238,42 +240,61 @@ class Slater:
         ratios = np.asarray([self._testrow(e, x) for x in mograd_vals])
         return ratios[1:] / ratios[0]
 
+    def gradient_value(self, e, epos):
+        """Compute the gradient of the log wave function
+        Note that this can be called even if the internals have not been updated for electron e,
+        if epos differs from the current position of electron e."""
+        s = int(e >= self._nelec[0])
+        aograd = self.orbitals.aos("GTOval_sph_deriv1", epos)
+        mograd = self.orbitals.mos(aograd, s)
+
+        mograd_vals = mograd[:, :, self._det_occup[s]]
+
+        ratios = np.asarray([self._testrow(e, x) for x in mograd_vals])
+        return ratios[1:] / ratios[0], ratios[0]
+
     def laplacian(self, e, epos):
         """ Compute the laplacian Psi/ Psi. """
         s = int(e >= self._nelec[0])
         ao = self.orbitals.aos("GTOval_sph_deriv2", epos)
-        ao_val = ao[:,0,:,:]
-        ao_lap = np.sum(ao[:,[4,7,9],:,:],axis=1)
-        mos = [self.orbitals.mos(x,s)[...,self._det_occup[s]] for x in [ao_val, ao_lap]]
-        ratios = [self._testrow(e,mo) for mo in mos]
-        return ratios[1]/ratios[0]
+        ao_val = ao[:, 0, :, :]
+        ao_lap = np.sum(ao[:, [4, 7, 9], :, :], axis=1)
+        mos = [
+            self.orbitals.mos(x, s)[..., self._det_occup[s]] for x in [ao_val, ao_lap]
+        ]
+        ratios = [self._testrow(e, mo) for mo in mos]
+        return ratios[1] / ratios[0]
 
     def gradient_laplacian(self, e, epos):
         s = int(e >= self._nelec[0])
         ao = self.orbitals.aos("GTOval_sph_deriv2", epos)
-        ao = np.concatenate([ao[:,0:4,...], ao[:,[4,7,9],...].sum(axis=1,keepdims=True)],axis=1)
-        mo = self.orbitals.mos(ao,s)
+        ao = np.concatenate(
+            [ao[:, 0:4, ...], ao[:, [4, 7, 9], ...].sum(axis=1, keepdims=True)], axis=1
+        )
+        mo = self.orbitals.mos(ao, s)
         mo_vals = mo[:, :, self._det_occup[s]]
         ratios = np.asarray([self._testrow(e, x) for x in mo_vals])
         return ratios[1:-1] / ratios[:1], ratios[-1] / ratios[0]
 
     def testvalue(self, e, epos, mask=None):
-        """ return the ratio between the current wave function and the wave function if 
+        """return the ratio between the current wave function and the wave function if
         electron e's position is replaced by epos"""
         s = int(e >= self._nelec[0])
-        ao = self.orbitals.aos('GTOval_sph',epos, mask)
+        ao = self.orbitals.aos("GTOval_sph", epos, mask)
         mo = self.orbitals.mos(ao, s)
         mo_vals = mo[..., self._det_occup[s]]
         if len(epos.configs.shape) > 2:
-            mo_vals = mo_vals.reshape(-1, epos.configs.shape[1], mo_vals.shape[1], mo_vals.shape[2])
+            mo_vals = mo_vals.reshape(
+                -1, epos.configs.shape[1], mo_vals.shape[1], mo_vals.shape[2]
+            )
         return self._testrow(e, mo_vals, mask)
 
     def testvalue_many(self, e, epos, mask=None):
-        """ return the ratio between the current wave function and the wave function if 
+        """return the ratio between the current wave function and the wave function if
         electron e's position is replaced by epos for each electron"""
         s = (e >= self._nelec[0]).astype(int)
-        ao = self.orbitals.aos('GTOval_sph', epos, mask)
-        ratios = np.zeros((epos.configs.shape[0], e.shape[0]),dtype=self.dtype)
+        ao = self.orbitals.aos("GTOval_sph", epos, mask)
+        ratios = np.zeros((epos.configs.shape[0], e.shape[0]), dtype=self.dtype)
         for spin in [0, 1]:
             ind = s == spin
             mo = self.orbitals.mos(ao, spin)
@@ -286,21 +307,21 @@ class Slater:
         return ratios
 
     def pgradient(self):
-        r"""Compute the parameter gradient of Psi. 
+        r"""Compute the parameter gradient of Psi.
         Returns $$d_p \Psi/\Psi$$ as a dictionary of numpy arrays,
         which correspond to the parameter dictionary.
-        
+
         The wave function is given by ci Di, with an implicit sum
 
         We have two sets of parameters:
 
-        Determinant coefficients: 
+        Determinant coefficients:
         di psi/psi = Dui Ddi/psi
 
         Orbital coefficients:
         dj psi/psi = ci dj (Dui Ddi)/psi
 
-        Let's suppose that j corresponds to an up orbital coefficient. Then 
+        Let's suppose that j corresponds to an up orbital coefficient. Then
         dj (Dui Ddi) = (dj Dui)/Dui Dui Ddi/psi = (dj Dui)/Dui di psi/psi
         where di psi/psi is the derivative defined above.
         """
@@ -315,10 +336,11 @@ class Slater:
                 self._dets[0][1, :, self._det_map[0]]
                 + self._dets[1][1, :, self._det_map[1]]
                 - curr_val[1]
-            )/curr_val[0]
+            )
+            / curr_val[0]
         ).T
 
-        for s,parm in zip([0,1],["mo_coeff_alpha", "mo_coeff_beta"]):
+        for s, parm in zip([0, 1], ["mo_coeff_alpha", "mo_coeff_beta"]):
             ao = self._aovals[
                 :, :, s * self._nelec[0] : self._nelec[s] + s * self._nelec[0], :
             ]
@@ -329,18 +351,24 @@ class Slater:
             nao = aos[0].shape[-1]
             nconf = aos[0].shape[0]
             nmo = split[-1]
-            deriv = np.zeros((len(self._det_occup[s]), nconf, nao, nmo),dtype=curr_val[0].dtype)
+            deriv = np.zeros(
+                (len(self._det_occup[s]), nconf, nao, nmo), dtype=curr_val[0].dtype
+            )
             for det, occ in enumerate(self._det_occup[s]):
                 for ao, mo in zip(aos, mos):
                     for i in mo:
                         if i in occ:
                             col = occ.index(i)
-                            deriv[det, :, :, i]= self._testcol(det, col, s, ao) 
+                            deriv[det, :, :, i] = self._testcol(det, col, s, ao)
 
             # now we reduce over determinants
             d[parm] = np.zeros(deriv.shape[1:], dtype=curr_val[0].dtype)
-            for di,coeff in enumerate(self.parameters['det_coeff']):
+            for di, coeff in enumerate(self.parameters["det_coeff"]):
                 whichdet = self._det_map[s][di]
-                d[parm] += deriv[whichdet]*coeff*d["det_coeff"][:,di, np.newaxis, np.newaxis]
+                d[parm] += (
+                    deriv[whichdet]
+                    * coeff
+                    * d["det_coeff"][:, di, np.newaxis, np.newaxis]
+                )
 
         return d

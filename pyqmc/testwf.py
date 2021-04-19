@@ -22,7 +22,7 @@ def test_updateinternals(wf, configs):
     configs: nconf x nelec x 3 position array
 
     Returns:
-    tuple which 
+    tuple which
 
     """
     from pyqmc import vmc
@@ -68,7 +68,7 @@ def test_updateinternals(wf, configs):
 
 
 def test_wf_gradient(wf, configs, delta=1e-5):
-    """ 
+    """
     Parameters:
         wf: a wavefunction object with functions wf.recompute(configs), wf.testvalue(e,configs) and wf.gradient(e,configs)
         configs: nconf x nelec x 3 position array to set the wf object
@@ -79,7 +79,7 @@ def test_wf_gradient(wf, configs, delta=1e-5):
         epos is nconf x 3 positions of electron e
     wf.testvalue(e,epos) should return a ratio: the wf value at the position where electron e is moved to epos divided by the current value
     wf.gradient(e,epos) should return grad ln Psi(epos), while keeping all the other electrons at current position. epos may be different from the current position of electron e
-    
+
     """
     nconf, nelec = configs.configs.shape[0:2]
     iscomplex = 1j if wf.iscomplex else 1
@@ -137,7 +137,7 @@ def test_wf_pgradient(wf, configs, delta=1e-5):
 def test_wf_laplacian(wf, configs, delta=1e-5):
     """
     Parameters:
-        wf: a wavefunction object with functions wf.recompute(configs), 
+        wf: a wavefunction object with functions wf.recompute(configs),
              wf.gradient(e,configs) and wf.laplacian(e,configs)
         configs: nconf x nelec x 3 position array to set the wf object
         delta: the finite difference step; 1e-5 to 1e-6 seem to be the best compromise between accuracy and machine precision
@@ -188,13 +188,13 @@ def test_wf_gradient_laplacian(wf, configs):
     tsep = 0
     ttog = 0
     for e in range(nelec):
-        ts0 = time.time()
+        ts0 = time.perf_counter()
         lap[:, e] = wf.laplacian(e, configs.electron(e))
         grad[e] = wf.gradient(e, configs.electron(e))
-        ts1 = time.time()
-        tt0 = time.time()
+        ts1 = time.perf_counter()
+        tt0 = time.perf_counter()
         andgrad[e], andlap[:, e] = wf.gradient_laplacian(e, configs.electron(e))
-        tt1 = time.time()
+        tt1 = time.perf_counter()
         tsep += ts1 - ts0
         ttog += tt1 - tt0
     rel_grad = np.abs((andgrad - grad) / grad)
@@ -206,3 +206,36 @@ def test_wf_gradient_laplacian(wf, configs):
     print("time evaluated together", ttog)
 
     return {"grad": rmax_grad, "lap": rmax_lap}
+
+
+def test_wf_gradient_value(wf, configs):
+    nconf, nelec = configs.configs.shape[0:2]
+    iscomplex = 1j if wf.iscomplex else 1
+    wf.recompute(configs)
+    maxerror = 0
+    val = np.zeros(configs.configs.shape[:2]) * iscomplex
+    grad = np.zeros(configs.configs.shape).transpose((1, 2, 0)) * iscomplex
+    andval = np.zeros(configs.configs.shape[:2]) * iscomplex
+    andgrad = np.zeros(configs.configs.shape).transpose((1, 2, 0)) * iscomplex
+
+    tsep = 0
+    ttog = 0
+    for e in range(nelec):
+        ts0 = time.perf_counter()
+        val[:, e] = wf.testvalue(e, configs.electron(e))
+        grad[e] = wf.gradient(e, configs.electron(e))
+        ts1 = time.perf_counter()
+        tt0 = time.perf_counter()
+        andgrad[e], andval[:, e] = wf.gradient_value(e, configs.electron(e))
+        tt1 = time.perf_counter()
+        tsep += ts1 - ts0
+        ttog += tt1 - tt0
+        rel_grad = np.abs((andgrad - grad) / grad)
+        rel_val = np.abs((andval - val) / val)
+        rmax_grad = np.max(rel_grad)
+        rmax_val = np.max(rel_val)
+
+    print("separate", tsep)
+    print("together", ttog)
+
+    return {"grad": rmax_grad, "val": rmax_val}

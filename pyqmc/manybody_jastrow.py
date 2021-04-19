@@ -43,6 +43,9 @@ class J3:
         signs = np.ones(len(vals))
         return (signs, vals)
 
+    def gradient_value(self, e, epos):
+        return self.gradient(e, epos), self.testvalue(e, epos)
+
     def gradient(self, e, epos):
         _, e_grad = self._get_val_grad_lap(epos, mode="grad")
         grad1 = np.einsum(

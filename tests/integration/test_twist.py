@@ -9,6 +9,7 @@ from pyscf.pbc.dft.multigrid import multigrid
 from pyscf.scf.addons import remove_linear_dep_
 import pyqmc
 
+
 def test_cubic_with_ecp(kind=1, nk=(2, 2, 2)):
     from pyscf.pbc.dft.multigrid import multigrid
 
@@ -113,7 +114,7 @@ def runtest(mol, mf, kind=0):
     assert np.linalg.norm(rat0 - 1) < 1e-10, rat0 - 1
     ratt = wft.testvalue(e, newcoords.electron(e))
     rattdiff = ratt - phase[:, e]
-    print("phase", phase[:,e])
+    print("phase", phase[:, e])
     assert np.linalg.norm(rattdiff) < 1e-9, [
         np.round(rattdiff, 10),
         np.amax(np.abs(rattdiff)),

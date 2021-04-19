@@ -5,6 +5,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 
 import numpy as np
+
 np.random.seed(12534234)
 from pyscf import gto, scf, lo
 from numpy.linalg import solve
@@ -13,6 +14,7 @@ from pyqmc.mc import initial_guess, vmc
 from pandas import DataFrame
 from pyqmc.obdm import OBDMAccumulator, normalize_obdm
 import pytest
+
 
 def test():
 
@@ -60,6 +62,7 @@ def test():
     print(obdm_est["obdm_up"].diagonal().round(3))
     print(obdm_est["obdm_down"].diagonal().round(3))
     assert np.mean(np.abs(obdm_est["obdm_up"] + obdm_est["obdm_down"] - mfobdm)) < 0.05
+
 
 @pytest.mark.slow
 def test_pbc():

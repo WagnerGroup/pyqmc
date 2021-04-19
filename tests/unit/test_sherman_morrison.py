@@ -1,5 +1,6 @@
 import numpy as np
 from pyqmc.slater import sherman_morrison_row
+from pyqmc.slater import sherman_morrison_ms
 
 
 def test_sherman_morrison():
@@ -8,30 +9,56 @@ def test_sherman_morrison():
     assert ratio_err < 1e-13, f"ratios don't match {ratio_err}"
     assert inv_err < 1e-13, f"inverses don't match {inv_err}"
 
+    ratio_err, inv_err = run_sherman_morrison(ms=True)
 
-def run_sherman_morrison():
+    assert ratio_err < 1e-13, f"ratios don't match {ratio_err}"
+    assert inv_err < 1e-13, f"inverses don't match {inv_err}"
+
+
+def construct_mat(nconf, n, ndet=None):
+    u, s, v = np.linalg.svd(np.random.randn(n, n))
+    if ndet is None:
+        shape = (nconf, n)
+    else:
+        shape = (nconf, ndet, n)
+    svals = (np.random.rand(*shape) + 1) * np.random.choice([-1, 1], shape)
+    matrix = np.einsum("ij,...hj,jk->...hik", u, svals, v)
+    return matrix
+
+
+def construct_vec(matrix, nconf, n, e, ndet=None):
+    if ndet is None:
+        coef = np.random.randn(nconf, n - 1)
+    else:
+        coef = np.random.randn(nconf, ndet, n - 1)
+    not_e = np.arange(n) != e
+    vec_ = np.einsum("i...j,i...jk->i...k", coef, matrix[..., not_e, :])
+    proj = (np.random.random(nconf) - 1) * 2
+    proj += np.sign(proj) * 0.5
+    vec = vec_ + np.einsum("i...k,i->i...k", matrix[..., e, :], proj)
+    return vec
+
+
+def run_sherman_morrison(ms=False):
     n = 10
     nconf = 4
     e = 2
-    not_e = np.arange(n) != e
+    ndet = 8 if ms else None
 
     # construct matrix that isn't near singular
-    u, s, v = np.linalg.svd(np.random.randn(n, n))
-    svals = (np.random.rand(nconf, n) + 1) * np.random.choice([-1, 1], (nconf, n))
-    matrix = np.einsum("ij,hj,jk->hik", u, svals, v)
+    matrix = construct_mat(nconf, n, ndet=ndet)
     inv = np.linalg.inv(matrix)
 
     # make sure new matrix isn't near singular
-    coef = np.random.randn(nconf, n - 1)
-    vec_ = np.einsum("ij,ijk->ik", coef, matrix[:, not_e])
-    proj = (np.random.random(nconf) - 1) * 2
-    proj += np.sign(proj) * 0.5
-    vec = vec_ + matrix[:, e] * proj[:, np.newaxis]
     newmatrix = matrix.copy()
-    newmatrix[:, e] = vec
+    vec = construct_vec(matrix, nconf, n, e, ndet=ndet)
+    newmatrix[..., e, :] = vec
 
     # compute ratios and inverses directly and by update
-    smratio, sminv = sherman_morrison_row(e, inv, vec)
+    if ndet is None:
+        smratio, sminv = sherman_morrison_row(e, inv, vec)
+    else:
+        smratio, sminv = sherman_morrison_ms(e, inv, vec)
     npratio = np.linalg.det(newmatrix) / np.linalg.det(matrix)
     npinv = np.linalg.inv(newmatrix)
 

@@ -49,6 +49,11 @@ class GaussianFunction:
         v = self.value(x, r)
         return -2 * self.parameters["exponent"] * x * v[..., np.newaxis]
 
+    def gradient_value(self, x, r):
+        v = self.value(x, r)
+        g = -2 * self.parameters["exponent"] * x * v[..., np.newaxis]
+        return g, v
+
     def laplacian(self, x, r):
         """Returns laplacian of function.
         Parameters:
@@ -116,6 +121,13 @@ class PadeFunction:
         """
         a = self.parameters["alphak"] * r[..., np.newaxis]
         return 2 * self.parameters["alphak"] ** 2 / (1 + a) ** 3 * rvec
+
+    def gradient_value(self, rvec, r):
+        a = self.parameters["alphak"] * r
+        value = (a / (1 + a)) ** 2
+        a = a[..., np.newaxis]
+        grad = 2 * self.parameters["alphak"] ** 2 / (1 + a) ** 3 * rvec
+        return grad, value
 
     def laplacian(self, rvec, r):
         """
@@ -188,6 +200,29 @@ class PolyPadeFunction:
         func = np.zeros(r.shape)
         func[mask] = (1 - p) / (1 + self.parameters["beta"] * p)
         return func
+
+    def gradient_value(self, rvec, r):
+        """
+        Parameters:
+          rvec: (nconf,...,3) 
+        Returns:
+          grad: (nconf,...,3)
+          value: (nconf,...)
+        """
+        value = np.zeros(r.shape)
+        grad = np.zeros(rvec.shape)
+        mask = r < self.parameters["rcut"]
+        r = r[mask][..., np.newaxis]
+        rvec = rvec[mask]
+        z = r / self.parameters["rcut"]
+        p = z * z * (6 - 8 * z + 3 * z * z)
+        dpdz = 12 * z * (z * z - 2 * z + 1)
+        dbdp = -(1 + self.parameters["beta"]) / (1 + self.parameters["beta"] * p) ** 2
+        dzdx = rvec / (r * self.parameters["rcut"])
+        grad[mask] = dbdp * dpdz * dzdx
+        p = p[..., 0]
+        value[mask] = (1 - p) / (1 + self.parameters["beta"] * p)
+        return grad, value
 
     def gradient(self, rvec, r):
         """
@@ -318,6 +353,30 @@ class CutoffCuspFunction:
         grad[mask] = -rvec[mask] * a * c * rcut
         return grad
 
+    def gradient_value(self, rvec, r):
+        """
+        Parameters:
+          rvec: (nconf,...,3) vector
+        Returns:
+          grad: has same dimensions as rvec 
+        """
+        grad = np.zeros(rvec.shape)
+        value = np.zeros(r.shape)
+        rcut = self.parameters["rcut"]
+        gamma = self.parameters["gamma"]
+        mask = r < rcut
+        r = r[mask][..., np.newaxis]
+        y = r / rcut
+
+        a = 1 - 2 * y + y * y
+        b = y - y * y + y * y * y / 3
+        c = 1 / (1 + gamma * b) ** 2 / (rcut * r)
+
+        grad[mask] = -rvec[mask] * a * c * rcut
+        b = b[..., 0]
+        value[mask] = -b / (1 + gamma * b) + 1 / (3 + gamma)
+        return grad, value * rcut
+
     def laplacian(self, rvec, r):
         """
         Parameters:
@@ -439,6 +498,17 @@ def test_func3d_gradient_laplacian(bf):
     graderr = np.amax(np.abs(grad - andgrad))
     laperr = np.amax(np.abs(lap - andlap))
     return {"grad": graderr, "lap": laperr}
+
+
+def test_func3d_gradient_value(bf):
+    rvec = np.random.randn(150, 10, 3)
+    r = np.linalg.norm(rvec, axis=-1)
+    grad = bf.gradient(rvec, r)
+    val = bf.value(rvec, r)
+    andgrad, andval = bf.gradient_value(rvec, r)
+    graderr = np.linalg.norm((grad - andgrad))
+    valerr = np.linalg.norm((val - andval))
+    return {"grad": graderr, "val": valerr}
 
 
 def test_func3d_pgradient(bf, delta=1e-5):

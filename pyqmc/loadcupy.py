@@ -1,7 +1,10 @@
 try:
     import cupy as cp
     from cupy import get_array_module, asnumpy, fuse
-except ImportError:
+    cp.array([1.0])
+except Exception as e:
+    print("Caught exception:")
+    print(e)
     print("using numpy instead of cupy")
     import numpy as cp
 

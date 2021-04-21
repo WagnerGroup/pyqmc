@@ -19,6 +19,7 @@ from pyqmc.linemin import line_minimization
 from pyqmc.optimize_ortho import optimize_orthogonal
 from pyqmc.dmc import rundmc
 from pyqmc.reblock import reblock as avg_reblock
+from pyqmc.loadcupy import cp
 import numpy as np
 import h5py
 
@@ -135,8 +136,8 @@ def default_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
     if len(ion_cusp) > 0:
         coefs = mol.atom_charges().copy()
         coefs[[l[0] not in ion_cusp for l in mol._atom]] = 0.0
-        jastrow.parameters["acoeff"][:, 0, :] = coefs[:, None]
-    jastrow.parameters["bcoeff"][0, [0, 1, 2]] = np.array([-0.25, -0.50, -0.25])
+        jastrow.parameters["acoeff"][:, 0, :] = cp.asarray(coefs[:, None])
+    jastrow.parameters["bcoeff"][0, [0, 1, 2]] = cp.array([-0.25, -0.50, -0.25])
 
     to_opt = {}
     to_opt["acoeff"] = np.ones(jastrow.parameters["acoeff"].shape).astype(bool)
@@ -309,7 +310,7 @@ def read_wf(wf, wf_file):
         if "wf" in hdf.keys():
             grp = hdf["wf"]
             for k in grp.keys():
-                new_parms = np.array(grp[k])
+                new_parms = cp.array(grp[k])
                 if wf.parameters[k].shape != new_parms.shape:
                     raise Exception(
                         f"For wave function parameter {k}, shape in {wf_file} is {new_parms.shape}, while current shape is {wf.parameters[k].shape}"

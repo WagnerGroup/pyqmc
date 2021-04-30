@@ -1,5 +1,5 @@
 import numpy as np
-from pyqmc.loadcupy import asnumpy
+from pyqmc.loadcupy import cp, asnumpy
 import pyqmc.energy as energy
 from pyqmc.ewald import Ewald
 
@@ -97,7 +97,7 @@ class LinearTransform:
                 m_p = self.nimag[k]
                 flat_parms[opt_] += parameters[m : m + m_p] * 1j
                 m += m_p
-            d[k] = flat_parms.reshape(self.shapes[k])
+            d[k] = cp.asarray(flat_parms.reshape(self.shapes[k]))
             n += n_p
         return d
 

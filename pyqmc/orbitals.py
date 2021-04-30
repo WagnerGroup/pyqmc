@@ -166,6 +166,8 @@ class PBCOrbitalEvaluatorKpoints:
             twist = np.dot(np.linalg.inv(cell.a), np.mod(twist, 1.0)) * 2 * np.pi
         kinds = list(set(get_k_indices(cell, mf, get_supercell_kpts(cell) + twist)))
         if len(kinds) != cell.scale:
+            print("len kinds", len(kinds))
+            print("cell.scale", cell.scale)
             raise ValueError(
                 "Did not find the right number of k-points for this supercell"
             )

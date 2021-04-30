@@ -1,5 +1,5 @@
 import numpy as np
-from pyqmc.loadcupy import fuse
+from pyqmc.loadcupy import fuse, cp
 
 """ 
 Collection of 3d function objects. Each has a dictionary parameters, which corresponds
@@ -37,7 +37,7 @@ class GaussianFunction:
         Returns:
           func: (nconfig,...) vector
         """
-        return np.exp(-self.parameters["exponent"] * r * r)
+        return cp.exp(-self.parameters["exponent"] * r * r)
 
     def gradient(self, x, r):
         """Returns gradient of function.
@@ -84,7 +84,7 @@ class GaussianFunction:
           pgrad: dictionary {'exponent':d/dexponent}
         """
         r2 = r * r
-        return {"exponent": -r2 * np.exp(-self.parameters["exponent"] * r2)}
+        return {"exponent": -r2 * cp.exp(-self.parameters["exponent"] * r2)}
 
 
 class PadeFunction:
@@ -194,7 +194,7 @@ class PolyPadeFunction:
         #func[z >= 1] = 0.0
         mask = r < self.parameters["rcut"]
         z = r[mask] / self.parameters["rcut"]
-        func = np.zeros(r.shape)
+        func = cp.zeros(r.shape)
         func[mask] = polypadevalue(z, self.parameters["beta"])
         return func
 
@@ -205,7 +205,7 @@ class PolyPadeFunction:
         Returns:
           grad: (nconf,...,3)
         """
-        grad = np.zeros(rvec.shape)
+        grad = cp.zeros(rvec.shape)
         mask = r < self.parameters["rcut"]
         r = r[mask][..., np.newaxis]
         rvec = rvec[mask]
@@ -235,8 +235,12 @@ class PolyPadeFunction:
         Returns:
           grad, lap: (nconfig,...,3) vectors (components of laplacian d^2/dx_i^2 separately)
         """
-        mask = r >= self.parameters["rcut"]
+        grad = cp.zeros(rvec.shape)
+        lap = cp.zeros(rvec.shape)
+        mask = r < self.parameters["rcut"]
         r = r[..., np.newaxis]
+        r = r[mask]
+        rvec = rvec[mask]
         z = r / self.parameters["rcut"]
         beta = self.parameters["beta"]
 
@@ -300,7 +304,7 @@ class CutoffCuspFunction:
         y = r[mask] / self.parameters["rcut"]
         gamma = self.parameters["gamma"]
         p = y - y * y + y * y * y / 3
-        func = np.zeros(r.shape)
+        func = cp.zeros(r.shape)
         func[mask] = -p / (1 + gamma * p) + 1 / (3 + gamma)
         return func * self.parameters["rcut"]
 
@@ -321,6 +325,7 @@ class CutoffCuspFunction:
         b = y - y * y + y * y * y / 3
         c = 1 / (1 + gamma * b) ** 2 / (rcut * r)
 
+        grad = cp.zeros(rvec.shape)
         grad[mask] = -rvec[mask] * a * c * rcut
         return grad
 
@@ -331,6 +336,7 @@ class CutoffCuspFunction:
         Returns:
           lapl: has same dimensions as rvec, because returns components of laplacian d^2/dx_i^2 separately
         """
+        lap = cp.zeros(rvec.shape)
         rcut = self.parameters["rcut"]
         gamma = self.parameters["gamma"]
         mask = r < rcut
@@ -356,6 +362,8 @@ class CutoffCuspFunction:
         Returns:
           grad, lap: (nconfig,...,3) vectors (components of laplacian d^2/dx_i^2 separately)
         """
+        grad = cp.zeros(rvec.shape)
+        lap = cp.zeros(rvec.shape)
         rcut = self.parameters["rcut"]
         gamma = self.parameters["gamma"]
         mask = r < rcut

@@ -19,7 +19,7 @@ from pyqmc.linemin import line_minimization
 from pyqmc.optimize_ortho import optimize_orthogonal
 from pyqmc.dmc import rundmc
 from pyqmc.reblock import reblock as avg_reblock
-from pyqmc.loadcupy import cp
+from pyqmc.loadcupy import cp, asnumpy
 import numpy as np
 import h5py
 
@@ -54,7 +54,7 @@ def default_slater(
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             to_opt[k] = np.ones(wf.parameters[k].shape).astype(bool)
             if not optimize_zeros:
-                to_opt[k][np.abs(wf.parameters[k]) < epsilon] = False
+                to_opt[k][np.abs(asnumpy(wf.parameters[k])) < epsilon] = False
 
     return wf, to_opt
 
@@ -72,7 +72,7 @@ def default_multislater(
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             to_opt[k] = np.ones(wf.parameters[k].shape).astype(bool)
             if not optimize_zeros:
-                to_opt[k][np.abs(wf.parameters[k]) < epsilon] = False
+                to_opt[k][np.abs(asnumpy(wf.parameters[k])) < epsilon] = False
 
     return wf, to_opt
 

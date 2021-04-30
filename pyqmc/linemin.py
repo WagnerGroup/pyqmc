@@ -32,7 +32,7 @@ def opt_hdf(hdf_file, data, attr, configs, parameters):
                 configs.initialize_hdf(hdf)
                 hdf.create_group("wf")
                 for k, it in parameters.items():
-                    hdf.create_dataset("wf/" + k, data=it)
+                    hdf.create_dataset("wf/" + k, data=asnumpy(it))
             hdftools.append_hdf(hdf, data)
             configs.to_hdf(hdf)
             for k, it in parameters.items():
@@ -151,9 +151,7 @@ def line_minimization(
     if update_kws is None:
         update_kws = {}
 
-    for k, v in wf.parameters.items():
-        array_module = get_array_module(v)
-        break
+    array_module = {k: get_array_module(v) for k, v in wf.parameters.items()}
 
     # Restart
     iteration_offset = 0
@@ -162,7 +160,7 @@ def line_minimization(
             if "wf" in hdf.keys():
                 grp = hdf["wf"]
                 for k in grp.keys():
-                    wf.parameters[k] = array_module.array(grp[k])
+                    wf.parameters[k] = array_module[k].array(grp[k])
             if "iteration" in hdf.keys():
                 iteration_offset = np.max(hdf["iteration"][...]) + 1
 
@@ -172,7 +170,7 @@ def line_minimization(
     def gradient_energy_function(x, coords):
         newparms = pgrad_acc.transform.deserialize(x)
         for k in newparms:
-            wf.parameters[k] = array_module.asarray(newparms[k])
+            wf.parameters[k] = array_module[k].asarray(newparms[k])
         df, coords = pyqmc.mc.vmc(
             wf,
             coords,
@@ -210,6 +208,8 @@ def line_minimization(
         npartitions=npartitions,
         **vmcoptions
     )
+    if verbose:
+        print("finished warmup", flush=True)
     df = []
     # Gradient descent cycles
     for it in range(max_iterations):
@@ -260,7 +260,7 @@ def line_minimization(
 
     newparms = pgrad_acc.transform.deserialize(x0)
     for k in newparms:
-        wf.parameters[k] = array_module.asarray(newparms[k])
+        wf.parameters[k] = array_module[k].asarray(newparms[k])
 
     return wf, df
 
@@ -284,14 +284,12 @@ def correlated_compute(wf, configs, params, pgrad_acc):
 
     data = []
     psi0 = wf.recompute(configs)[1]  # recompute gives logdet
-    for k, v in wf.parameters.items():
-        array_module = get_array_module(v)
-        break
+    array_module = {k: get_array_module(v) for k, v in wf.parameters.items()}
 
     for p in params:
         newparms = pgrad_acc.transform.deserialize(p)
         for k in newparms:
-            wf.parameters[k] = array_module.asarray(newparms[k])
+            wf.parameters[k] = array_module[k].asarray(newparms[k])
         psi = wf.recompute(configs)[1]  # recompute gives logdet
         rawweights = np.exp(2 * (psi - psi0))  # convert from log(|psi|) to |psi|**2
         df = pgrad_acc.enacc(configs, wf)

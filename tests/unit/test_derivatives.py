@@ -63,6 +63,18 @@ def test_wfs():
             print(type(wf), fname, min(err))
             assert min(err) < epsilon, "epsilon {0}".format(epsilon)
 
+        for fname, func in zip(
+            ["gradient_value", "gradient_laplacian"],
+            [
+                testwf.test_wf_gradient_value,
+                testwf.test_wf_gradient_laplacian,
+            ],
+        ):
+            d = func(wf, epos)
+            print(type(wf), fname, min(err))
+            for k, v in d.items():
+                assert v < 1e-10, (k, v)
+
 
 def test_pbc_wfs():
     """
@@ -125,6 +137,19 @@ def test_pbc_wfs():
             print(k, item)
             assert item < epsilon
 
+        for fname, func in zip(
+            ["gradient_value", "gradient_laplacian"],
+            [
+                testwf.test_wf_gradient_value,
+                testwf.test_wf_gradient_laplacian,
+            ],
+        ):
+            d = func(wf, epos)
+            print(type(wf), fname, min(err))
+            for k, v in d.items():
+                assert v < 1e-10, (k, v)
+
+
 
 def test_func3d():
     """
@@ -138,6 +163,7 @@ def test_func3d():
         test_func3d_gradient,
         test_func3d_laplacian,
         test_func3d_gradient_laplacian,
+        test_func3d_gradient_value,
         test_func3d_pgradient,
     )
 
@@ -154,6 +180,7 @@ def test_func3d():
         grad = test_func3d_gradient(func, delta=delta)
         lap = test_func3d_laplacian(func, delta=delta)
         gl = test_func3d_gradient_laplacian(func)
+        gv = test_func3d_gradient_value(func)
         pgrad = test_func3d_pgradient(func, delta=1e-9)
         print(name, grad, lap, "both:", gl["grad"], gl["lap"])
         print(name, pgrad)
@@ -161,6 +188,8 @@ def test_func3d():
         assert lap < epsilon
         assert gl["grad"] < epsilon
         assert gl["lap"] < epsilon
+        assert gv["grad"] < epsilon
+        assert gv["val"] < epsilon
         for k, v in pgrad.items():
             assert v < epsilon, (name, k, v)
 

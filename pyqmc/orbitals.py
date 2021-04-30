@@ -47,7 +47,10 @@ def choose_evaluator_from_pyscf(mol, mf, mc=None, twist=None):
 class MoleculeOrbitalEvaluator:
     def __init__(self, mol, mo_coeff):
         self.iscomplex = False
-        self.parameters = {"mo_coeff_alpha": cp.asarray(mo_coeff[0]), "mo_coeff_beta": np.asarray(mo_coeff[1])}
+        self.parameters = {
+            "mo_coeff_alpha": cp.asarray(mo_coeff[0]),
+            "mo_coeff_beta": cp.asarray(mo_coeff[1]),
+        }
         self.parm_names = ["_alpha", "_beta"]
 
         self._mol = mol
@@ -64,8 +67,8 @@ class MoleculeOrbitalEvaluator:
         if mc is not None:
             detcoeff, occup, det_map = pyqmc.determinant_tools.interpret_ci(mc, tol)
         else:
-            detcoeff = np.array([1.0])
-            det_map = np.array([[0], [0]])
+            detcoeff = cp.array([1.0])
+            det_map = cp.array([[0], [0]])
             # occup
             if len(mf.mo_occ.shape) == 2:
                 occup = [
@@ -134,12 +137,13 @@ class PBCOrbitalEvaluatorKpoints:
 
         self._kpts = [0, 0, 0] if kpts is None else kpts
         self.param_split = [
-            cp.cumsum([m.shape[1] for m in mo_coeff[spin]]) for spin in [0, 1]
+            np.cumsum(np.asarray([m.shape[1] for m in mo_coeff[spin]]))
+            for spin in [0, 1]
         ]
         self.parm_names = ["_alpha", "_beta"]
         self.parameters = {
-            "mo_coeff_alpha": cp.concatenate(mo_coeff[0], axis=1),
-            "mo_coeff_beta": cp.concatenate(mo_coeff[1], axis=1),
+            "mo_coeff_alpha": cp.asarray(np.concatenate(mo_coeff[0], axis=1)),
+            "mo_coeff_beta": cp.asarray(np.concatenate(mo_coeff[1], axis=1)),
         }
 
     @classmethod
@@ -162,6 +166,8 @@ class PBCOrbitalEvaluatorKpoints:
             twist = np.dot(np.linalg.inv(cell.a), np.mod(twist, 1.0)) * 2 * np.pi
         kinds = list(set(get_k_indices(cell, mf, get_supercell_kpts(cell) + twist)))
         if len(kinds) != cell.scale:
+            print("len kinds", len(kinds))
+            print("cell.scale", cell.scale)
             raise ValueError(
                 "Did not find the right number of k-points for this supercell"
             )
@@ -259,7 +265,7 @@ class PBCOrbitalEvaluatorKpoints:
             self.param_split[spin],
             axis=-1,
         )
-        return np.concatenate([ak.dot(mok) for ak, mok in zip(ao, p[0:-1])], axis=-1)
+        return cp.concatenate(cp.asarray([ak.dot(mok) for ak, mok in zip(ao, p[0:-1])]), axis=-1)
 
     def pgradient(self, ao, spin):
         """

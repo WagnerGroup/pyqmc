@@ -306,7 +306,7 @@ class JastrowSpin:
             "...jk,jk->...", deltab, self.parameters["bcoeff"][:, edown : edown + 2]
         )
         val = cp.exp(b_val + a_val)
-        return grad, val
+        return asnumpy(grad), asnumpy(val)
 
     def gradient_laplacian(self, e, epos):
         """ """

@@ -251,8 +251,7 @@ class Slater:
 
         mograd_vals = mograd[:, :, self._det_occup[s]]
 
-        ratios = cp.asarray([self._testrow(e, x) for x in mograd_vals])
-        ratios = asnumpy(ratios)
+        ratios = asnumpy(cp.asarray([self._testrow(e, x) for x in mograd_vals]))
         return ratios[1:] / ratios[0], ratios[0]
 
     def laplacian(self, e, epos):

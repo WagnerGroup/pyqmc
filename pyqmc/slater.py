@@ -7,10 +7,10 @@ import pyqmc.orbitals
 
 
 def sherman_morrison_row(e, inv, vec):
-    tmp = np.einsum("ek,ekj->ej", vec, inv)
+    tmp = cp.einsum("ek,ekj->ej", vec, inv)
     ratio = tmp[:, e]
-    inv_ratio = inv[:, :, e] / ratio[:, np.newaxis]
-    invnew = inv - np.einsum("ki,kj->kij", inv_ratio, tmp)
+    inv_ratio = inv[:, :, e] / ratio[:, cp.newaxis]
+    invnew = inv - cp.einsum("ki,kj->kij", inv_ratio, tmp)
     invnew[:, :, e] = inv_ratio
     return ratio, invnew
 
@@ -72,10 +72,10 @@ class JoinParameters:
 
 
 def sherman_morrison_ms(e, inv, vec):
-    tmp = np.einsum("edk,edkj->edj", vec, inv)
+    tmp = cp.einsum("edk,edkj->edj", vec, inv)
     ratio = tmp[:, :, e]
-    inv_ratio = inv[:, :, :, e] / ratio[:, :, np.newaxis]
-    invnew = inv - np.einsum("kdi,kdj->kdij", inv_ratio, tmp)
+    inv_ratio = inv[:, :, :, e] / ratio[:, :, cp.newaxis]
+    invnew = inv - cp.einsum("kdi,kdj->kdij", inv_ratio, tmp)
     invnew[:, :, :, e] = inv_ratio
     return ratio, invnew
 
@@ -251,7 +251,8 @@ class Slater:
 
         mograd_vals = mograd[:, :, self._det_occup[s]]
 
-        ratios = np.asarray([self._testrow(e, x) for x in mograd_vals])
+        ratios = cp.asarray([self._testrow(e, x) for x in mograd_vals])
+        ratios = asnumpy(ratios)
         return ratios[1:] / ratios[0], ratios[0]
 
     def laplacian(self, e, epos):

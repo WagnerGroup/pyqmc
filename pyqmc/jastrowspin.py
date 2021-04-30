@@ -272,40 +272,40 @@ class JastrowSpin:
         not_e = np.arange(nelec) != e
         dnew = epos.dist.dist_i(self._configscurrent.configs[:, not_e], epos.configs)
         dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
-        rnew = np.linalg.norm(dnew, axis=-1)
-        rinew = np.linalg.norm(dinew, axis=-1)
+        rnew = cp.linalg.norm(dnew, axis=-1)
+        rinew = cp.linalg.norm(dinew, axis=-1)
 
-        grad = np.zeros((3, nconf))
+        grad = cp.zeros((3, nconf))
 
         # Check if selected electron is spin up or down
         eup = int(e < nup)
         edown = int(e >= nup)
 
-        b_partial_e = np.zeros((*rnew.shape[:-1], *self._b_partial.shape[2:]))
+        b_partial_e = cp.zeros((*rnew.shape[:-1], *self._b_partial.shape[2:]))
         for l, b in enumerate(self.b_basis):
             c = self.parameters["bcoeff"][l]
             bgrad, bval = b.gradient_value(dnew, rnew)
-            grad += c[edown] * np.sum(bgrad[:, : nup - eup], axis=1).T
-            grad += c[1 + edown] * np.sum(bgrad[:, nup - eup :], axis=1).T
+            grad += c[edown] * cp.sum(bgrad[:, : nup - eup], axis=1).T
+            grad += c[1 + edown] * cp.sum(bgrad[:, nup - eup :], axis=1).T
             b_partial_e[..., l, 0] = bval[..., : nup - eup].sum(axis=-1)
             b_partial_e[..., l, 1] = bval[..., nup - eup :].sum(axis=-1)
 
-        a_partial_e = np.zeros((*rinew.shape, self._a_partial.shape[3]))
+        a_partial_e = cp.zeros((*rinew.shape, self._a_partial.shape[3]))
         for k, a in enumerate(self.a_basis):
             c = self.parameters["acoeff"][:, k, edown]
             agrad, aval = a.gradient_value(dinew, rinew)
-            grad += np.einsum("j,ijk->ki", c, agrad)
+            grad += cp.einsum("j,ijk->ki", c, agrad)
             a_partial_e[..., k] = aval
 
         deltaa = a_partial_e - self._a_partial[e]
-        a_val = np.einsum(
+        a_val = cp.einsum(
             "...jk,jk->...", deltaa, self.parameters["acoeff"][..., edown]
         )
         deltab = b_partial_e - self._b_partial[e]
-        b_val = np.einsum(
+        b_val = cp.einsum(
             "...jk,jk->...", deltab, self.parameters["bcoeff"][:, edown : edown + 2]
         )
-        val = np.exp(b_val + a_val)
+        val = cp.exp(b_val + a_val)
         return grad, val
 
     def gradient_laplacian(self, e, epos):

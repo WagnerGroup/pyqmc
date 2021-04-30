@@ -178,6 +178,18 @@ def polypadevalue(z, beta):
     p = z * z * (6 - 8 * z + 3 * z * z)
     return (1 - p) / (1 + beta * p)
 
+@fuse()
+def polypadegradvalue(rvec, r, beta, rcut):
+    z = r / rcut
+    p = z * z * (6 - 8 * z + 3 * z * z)
+    dpdz = 12 * z * (z * z - 2 * z + 1)
+    dbdp = -(1 + beta) / (1 + beta * p) ** 2
+    dzdx = rvec / (r * rcut)
+    grad = dbdp * dpdz * dzdx
+    p = p[..., 0]
+    value = (1 - p) / (1 + beta * p)
+    return grad, value
+
 
 class PolyPadeFunction:
     """
@@ -218,19 +230,12 @@ class PolyPadeFunction:
           grad: (nconf,...,3)
           value: (nconf,...)
         """
-        value = np.zeros(r.shape)
-        grad = np.zeros(rvec.shape)
+        value = cp.zeros(r.shape)
+        grad = cp.zeros(rvec.shape)
         mask = r < self.parameters["rcut"]
         r = r[mask][..., np.newaxis]
         rvec = rvec[mask]
-        z = r / self.parameters["rcut"]
-        p = z * z * (6 - 8 * z + 3 * z * z)
-        dpdz = 12 * z * (z * z - 2 * z + 1)
-        dbdp = -(1 + self.parameters["beta"]) / (1 + self.parameters["beta"] * p) ** 2
-        dzdx = rvec / (r * self.parameters["rcut"])
-        grad[mask] = dbdp * dpdz * dzdx
-        p = p[..., 0]
-        value[mask] = (1 - p) / (1 + self.parameters["beta"] * p)
+        grad[mask], value[mask] = polypadegradvalue(rvec, r, self.parameters["beta"], self.parameters["rcut"])
         return grad, value
 
     def gradient(self, rvec, r):
@@ -371,8 +376,8 @@ class CutoffCuspFunction:
         Returns:
           grad: has same dimensions as rvec 
         """
-        grad = np.zeros(rvec.shape)
-        value = np.zeros(r.shape)
+        grad = cp.zeros(rvec.shape)
+        value = cp.zeros(r.shape)
         rcut = self.parameters["rcut"]
         gamma = self.parameters["gamma"]
         mask = r < rcut

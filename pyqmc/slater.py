@@ -220,6 +220,46 @@ class Slater:
             denom = denom[:, cp.newaxis]
         return numer / denom
 
+    def _testrowderiv(self, e, vec, spin=None):
+        """vec is a nconfig,nmo vector which replaces row e"""
+        s = int(e >= self._nelec[0]) if spin is None else spin
+
+        ratios = cp.einsum(
+            "ei...dj,idj...->ei...d",
+            vec,
+            self._inverse[s][..., e - s * self._nelec[0]],
+        )
+
+        upref = cp.amax(self._dets[0][1]).real
+        dnref = cp.amax(self._dets[1][1]).real
+
+        det_array = (
+            self._dets[0][0, :, self._det_map[0]]
+            * self._dets[1][0, :, self._det_map[1]]
+            * cp.exp(
+                self._dets[0][1, :, self._det_map[0]]
+                + self._dets[1][1, :, self._det_map[1]]
+                - upref
+                - dnref
+            )
+        )
+        numer = cp.einsum(
+            "ei...d,d,di->ei...",
+            ratios[..., self._det_map[s]],
+            self.parameters["det_coeff"],
+            det_array,
+        )
+        denom = cp.einsum(
+            "d,di->i...",
+            self.parameters["det_coeff"],
+            det_array,
+        )
+        # curr_val = self.value()
+
+        if len(numer.shape) == 3:
+            denom = denom[cp.newaxis, :, cp.newaxis]
+        return numer / denom
+
     def _testcol(self, det, i, s, vec):
         """vec is a nconfig,nmo vector which replaces column i
         of spin s in determinant det"""
@@ -238,7 +278,7 @@ class Slater:
 
         mograd_vals = mograd[:, :, self._det_occup[s]]
 
-        ratios = cp.asarray([self._testrow(e, x) for x in mograd_vals])
+        ratios = self._testrowderiv(e, mograd_vals)
         return asnumpy(ratios[1:] / ratios[0])
 
     def gradient_value(self, e, epos):
@@ -251,7 +291,7 @@ class Slater:
 
         mograd_vals = mograd[:, :, self._det_occup[s]]
 
-        ratios = asnumpy(cp.asarray([self._testrow(e, x) for x in mograd_vals]))
+        ratios = asnumpy(self._testrowderiv(e, mograd_vals))
         return ratios[1:] / ratios[0], ratios[0]
 
     def laplacian(self, e, epos):
@@ -263,7 +303,7 @@ class Slater:
         mos = [
             self.orbitals.mos(x, s)[..., self._det_occup[s]] for x in [ao_val, ao_lap]
         ]
-        ratios = [self._testrow(e, mo) for mo in mos]
+        ratios = self._testrowderiv(e, mos)
         return asnumpy(ratios[1] / ratios[0])
 
     def gradient_laplacian(self, e, epos):
@@ -274,7 +314,7 @@ class Slater:
         )
         mo = self.orbitals.mos(ao, s)
         mo_vals = mo[:, :, self._det_occup[s]]
-        ratios = cp.asarray([self._testrow(e, x) for x in mo_vals])
+        ratios = self._testrowderiv(e, mo_vals)
         ratios = asnumpy(ratios / ratios[:1])
         return ratios[1:-1], ratios[-1]
 

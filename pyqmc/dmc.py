@@ -25,20 +25,15 @@ def limdrift(g, tau, acyrus=0.25):
     taueff[mask] = (np.sqrt(1 + 2 * tau * tot[mask]) - 1) / tot[mask]
     return g * taueff[:, np.newaxis]
 
+def get_V2(configs, wf, acc_out):
+    if 'grad2' in acc_out.keys():
+        return acc_out['grad2']
+    else: 
+        v2 = np.zeros(nconfig)
+        for e in range(nelec):
+            v2 += np.sum(wf.gradient(e,configs.electron(e)).T**2, axis=1)
+        return v2
 
-def limdrift_cutoff(g, tau, cutoff=1):
-    """
-    Limit a vector to have a maximum magnitude of cutoff while maintaining direction
-
-    Args:
-      g: a [nconf,ndim] vector
-
-      cutoff: the maximum magnitude
-
-    Returns:
-      The vector with the cut off applied and multiplied by tau.
-    """
-    return mc.limdrift(g, cutoff) * tau
 
 
 def dmc_propagate(
@@ -48,7 +43,8 @@ def dmc_propagate(
     tstep,
     branchcut_start,
     branchcut_stop,
-    eref,
+    e_trial,
+    e_est,
     nsteps=5,
     accumulators=None,
     ekey=("energy", "total"),
@@ -87,10 +83,16 @@ def dmc_propagate(
     nconfig, nelec = configs.configs.shape[0:2]
     wf.recompute(configs)
 
-    eloc = accumulators[ekey[0]](configs, wf)[ekey[1]].real
+    energy_acc =  accumulators[ekey[0]](configs, wf)
+    eloc = energy_acc[ekey[1]].real
+    v2 = get_V2(configs, wf, energy_acc)
     df = []
+
     for _ in range(nsteps):
         acc = np.zeros(nelec)
+        r2_accepted=np.zeros(nconfig)
+        r2_proposed = np.zeros(nconfig)
+        prob_acceptance = np.zeros(nconfig)
         for e in range(nelec):
             # Propose move
             grad = drift_limiter(np.real(wf.gradient(e, configs.electron(e)).T), tstep)
@@ -117,16 +119,23 @@ def dmc_propagate(
             configs.move(e, newepos, accept)
             wf.updateinternals(e, newepos, mask=accept)
             acc[e] = np.mean(accept)
+            r2 = np.sum((gauss+grad)**2,axis=1)
+            r2_proposed += r2
+            r2_accepted[accept]+=r2[accept]
+            prob_acceptance += accept/nelec
 
         # weights
         elocold = eloc.copy()
+        v2old = v2.copy()
         energydat = accumulators[ekey[0]](configs, wf)
         eloc = energydat[ekey[1]].real
-        tdamp = limit_timestep(
-            weights, eloc, elocold, eref, branchcut_start, branchcut_stop
-        )
-        wmult = np.exp(-tstep * 0.5 * tdamp * (elocold + eloc - 2 * eref))
-        wmult[wmult > 2.0] = 2.0
+        tdamp = r2_accepted/r2_proposed
+        v2 = get_V2(configs, wf, energydat)
+
+        Snew = compute_S(e_trial, e_est, branchcut_start, v2, tstep, eloc, nelec)
+        Sold = compute_S(e_trial, e_est, branchcut_start, v2old, tstep, elocold, nelec)
+        p_av = prob_acceptance*0.5
+        wmult = np.exp(tstep * tdamp * (p_av*Snew + (1.0-p_av)*Sold))
         weights *= wmult
         wavg = np.mean(weights)
 
@@ -150,6 +159,15 @@ def dmc_propagate(
     df_ret["weight"] = np.mean(weight)
 
     return df_ret, configs, weights
+
+
+def compute_S(e_trial, e_est, branchcut, v2, tau, eloc, nelec):
+    e_cut = e_est-eloc
+    mask = np.abs(e_cut) > branchcut
+    e_cut[mask] = branchcut*np.sign(e_cut[mask])
+    denominator = 1+(v2*tau/nelec)**2
+
+    return e_trial - e_est + e_cut/denominator
 
 
 def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **kwargs):
@@ -178,43 +196,6 @@ def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **k
     }
     block_avg["weight"] = np.mean(weight)
     return block_avg, configs, weights
-
-
-def limit_timestep(weights, elocnew, elocold, eref, start, stop):
-    """
-    Stabilizes weights by scaling down the effective tstep if the local energy is too far from eref.
-
-    Args:
-      weights: (nconfigs,) array
-        walker weights
-      elocnew: (nconfigs,) array
-        current local energy of each walker
-      elocold: (nconfigs,) array
-        previous local energy of each walker
-      eref: scalar
-        reference energy that fixes normalization
-      start: scalar
-        number of sigmas to start damping tstep
-      stop: scalar
-        number of sigmas where tstep becomes zero
-
-    Return:
-      tdamp: scalar
-        Damping factor to multiply timestep; always between 0 and 1. The damping factor is
-            1 if eref-eloc < branchcut_start*sigma,
-            0 if eref-eloc > branchcut_stop*sigma,
-            decreases linearly inbetween.
-    """
-    if start is None or stop is None:
-        return 1
-    assert (
-        stop > start
-    ), "stabilize weights requires stop>start. Invalid stop={0}, start={1}".format(
-        stop, start
-    )
-    eloc = np.stack([elocnew, elocold])
-    fbet = np.amax(eref - eloc, axis=0)
-    return np.clip((1 - (fbet - start)) / (stop - start), 0, 1)
 
 
 def branch(configs, weights):
@@ -269,8 +250,8 @@ def rundmc(
     nsteps=1000,
     branchtime=5,
     stepoffset=0,
-    branchcut_start=3,
-    branchcut_stop=6,
+    branchcut_start=10,
+    branchcut_stop=20,
     drift_limiter=limdrift,
     verbose=False,
     accumulators=None,
@@ -321,7 +302,10 @@ def rundmc(
             stepoffset = hdf["step"][-1] + 1
             configs.load_hdf(hdf)
             weights = np.array(hdf["weights"])
-            eref = hdf["eref"][-1]
+            if 'e_trial' not in hdf.keys():
+                raise ValueError("Did not find e_trial in the restart file. This may mean that you are trying to restart from a different version of DMC")
+            e_trial = hdf["e_trial"][-1]
+            e_est = hdf["e_est"][-1]
             esigma = hdf["esigma"][-1]
             if verbose:
                 print("Restarted calculation")
@@ -337,6 +321,8 @@ def rundmc(
         )
         en = df[ekey[0] + ekey[1]][warmup:]
         eref = np.mean(en).real
+        e_trial = eref
+        e_est = eref
         esigma = np.sqrt(np.var(en) * np.mean(df["nconfig"]))
         if verbose:
             print("eref start", eref, "esigma", esigma)
@@ -356,7 +342,8 @@ def rundmc(
                 tstep,
                 branchcut_start * esigma,
                 branchcut_stop * esigma,
-                eref=eref,
+                e_trial=e_trial,
+                e_est = e_est,
                 nsteps=branchtime,
                 accumulators=accumulators,
                 ekey=ekey,
@@ -373,7 +360,8 @@ def rundmc(
                 tstep,
                 branchcut_start * esigma,
                 branchcut_stop * esigma,
-                eref=eref,
+                e_trial=e_trial,
+                e_est = e_est,
                 nsteps=branchtime,
                 accumulators=accumulators,
                 ekey=ekey,
@@ -381,7 +369,8 @@ def rundmc(
                 **kwargs,
             )
 
-        df_["eref"] = eref
+        df_["e_trial"] = e_trial
+        df_["e_est"] = e_est
         df_["step"] = step + stepoffset
         df_["esigma"] = esigma
         df_["tstep"] = tstep
@@ -389,19 +378,34 @@ def rundmc(
         df_["nsteps"] = branchtime
 
         dmc_file(hdf_file, df_, {}, configs, weights)
-        # print(df_)
         df.append(df_)
-        eref = (df_[ekey[0] + ekey[1]] - feedback * np.log(np.mean(weights))).real
+        e_est = estimate_energy(hdf_file, df, ekey)
+        e_trial = e_est - feedback * np.log(np.mean(weights)).real
         configs, weights = branch(configs, weights)
         if verbose:
             print(
                 "energy",
                 df_[ekey[0] + ekey[1]],
-                "eref",
-                df_["eref"],
+                "e_trial", e_trial,
+                'e_est',e_est,
                 "sigma(w)",
                 df_["weight_std"],
             )
 
     df_ret = {k: np.asarray([d[k] for d in df]) for k in df[0].keys()}
     return df_ret, configs, weights
+
+
+def estimate_energy(hdf_file, df, ekey):
+    if hdf_file is not None:
+        with h5py.File(hdf_file,'r') as f:
+            en = f[ekey[0]+ekey[1]][()]
+            wt = f['weight'][()]
+    else:
+        en = np.asarray([d[ekey[0]+ekey[1]] for d in df])
+        wt = np.asarray([d['weight'] for d in df])
+    return np.average(en, weights=wt)
+
+if __name__=="__main__":
+    import run_dmc_shell
+    run_dmc_shell.run_dmc_shell(rundmc, "cyrus_secIIB_with_p",verbose=True)

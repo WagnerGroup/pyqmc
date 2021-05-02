@@ -145,8 +145,8 @@ def runtest(mol, mf, kind=0):
                     print("ecp%s diff" % l, mad, np.linalg.norm(diff))
                     assert mad < 1e-3, diff
         else:
-            assert np.linalg.norm(diff0) < 1e-10, diff0
-            assert np.linalg.norm(difft) < 1e-10, difft
+            assert np.linalg.norm(diff0) < 1e-9, diff0
+            assert np.linalg.norm(difft) < 1e-9, difft
 
 
 if __name__ == "__main__":

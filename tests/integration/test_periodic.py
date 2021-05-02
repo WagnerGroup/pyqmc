@@ -146,6 +146,7 @@ def runtest(mol, mf, kind=0, do_mc=False):
         hdf_file=str(uuid.uuid4()),
     )
     print("VMC time", time.time() - start)
+    
     df = pd.DataFrame(df)
     dfke = reblock(df["energyke"][warmup:], 10)
     dfke /= mol.scale

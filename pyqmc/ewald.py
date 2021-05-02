@@ -414,11 +414,12 @@ class Ewald:
     def compute_total_energy(self, mol, configs, wf, threshold):
         ee, ei, ii = self.energy(configs)
         ecp_val = pyqmc.energy.get_ecp(mol, configs, wf, threshold)
-        ke = pyqmc.energy.kinetic(configs, wf)
+        ke, grad2 = pyqmc.energy.kinetic(configs, wf)
         return {
             "ke": ke,
             "ee": ee,
             "ei": ei,
             "ecp": ecp_val,
+            "grad2": grad2,
             "total": ke + ee + ei + ecp_val + ii,
         }

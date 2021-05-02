@@ -43,9 +43,12 @@ def get_ecp(mol, configs, wf, threshold):
 def kinetic(configs, wf):
     nconf, nelec, ndim = configs.configs.shape
     ke = np.zeros(nconf)
+    grad2 = np.zeros(nconf)
     for e in range(nelec):
-        ke += -0.5 * np.real(wf.laplacian(e, configs.electron(e)))
-    return ke
+        grad, lap = wf.gradient_laplacian(e,configs.electron(e))
+        ke += -0.5 * lap.real
+        grad2 += np.sum(np.abs(grad)**2, axis=0)
+    return ke, grad2
 
 
 def energy(mol, configs, wf, threshold):
@@ -65,12 +68,13 @@ def energy(mol, configs, wf, threshold):
     ei = ei_energy(mol, configs)
     ecp_val = get_ecp(mol, configs, wf, threshold)
     ii = ii_energy(mol)
-    ke = kinetic(configs, wf)
+    ke, grad2 = kinetic(configs, wf)
     # print(ke,ee,ei,ii)
     return {
         "ke": ke,
         "ee": ee,
         "ei": ei,
         "ecp": ecp_val,
+        "grad2": grad2,
         "total": ke + ee + ei + ecp_val + ii,
     }

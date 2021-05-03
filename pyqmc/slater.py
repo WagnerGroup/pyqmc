@@ -386,11 +386,11 @@ class Slater:
             ]
 
             split, aos = self.orbitals.pgradient(ao, s)
-            mos = cp.split(cp.arange(split[-1]), split)
+            mos = cp.split(cp.arange(split[-1]), asnumpy(split).astype(int))
             # Compute dj Diu/Diu
             nao = aos[0].shape[-1]
             nconf = aos[0].shape[0]
-            nmo = split[-1]
+            nmo = int(split[-1])
             deriv = cp.zeros(
                 (len(self._det_occup[s]), nconf, nao, nmo), dtype=curr_val[0].dtype
             )

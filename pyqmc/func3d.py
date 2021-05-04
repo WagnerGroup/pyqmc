@@ -1,5 +1,5 @@
 import numpy as np
-from pyqmc.loadcupy import fuse, cp
+from pyqmc.loadcupy import fuse, cp, asnumpy
 
 """ 
 Collection of 3d function objects. Each has a dictionary parameters, which corresponds
@@ -178,17 +178,17 @@ def polypadevalue(z, beta):
     p = z * z * (6 - 8 * z + 3 * z * z)
     return (1 - p) / (1 + beta * p)
 
+
 @fuse()
-def polypadegradvalue(rvec, r, beta, rcut):
+def polypadegradvalue(r, beta, rcut):
     z = r / rcut
     p = z * z * (6 - 8 * z + 3 * z * z)
     dpdz = 12 * z * (z * z - 2 * z + 1)
     dbdp = -(1 + beta) / (1 + beta * p) ** 2
-    dzdx = rvec / (r * rcut)
-    grad = dbdp * dpdz * dzdx
-    p = p[..., 0]
+    dzdx_rvec = 1 / (r * rcut)
+    grad_rvec = dbdp * dpdz * dzdx_rvec
     value = (1 - p) / (1 + beta * p)
-    return grad, value
+    return grad_rvec, value
 
 
 class PolyPadeFunction:
@@ -202,7 +202,10 @@ class PolyPadeFunction:
     """
 
     def __init__(self, beta, rcut):
-        self.parameters = {"beta": beta, "rcut": rcut}
+        self.parameters = {
+            "beta": cp.asarray(beta),
+            "rcut": cp.asarray(rcut),
+        }
 
     def value(self, rvec, r):
         """Returns
@@ -213,9 +216,6 @@ class PolyPadeFunction:
         Returns:
           func: (1-p(r/rcut))/(1+beta*p(r/rcut))
         """
-        #z = r / self.parameters["rcut"]
-        #func = polypadevalue(z, self.parameters["beta"])
-        #func[z >= 1] = 0.0
         mask = r < self.parameters["rcut"]
         z = r[mask] / self.parameters["rcut"]
         func = cp.zeros(r.shape)
@@ -225,7 +225,7 @@ class PolyPadeFunction:
     def gradient_value(self, rvec, r):
         """
         Parameters:
-          rvec: (nconf,...,3) 
+          rvec: (nconf,...,3)
         Returns:
           grad: (nconf,...,3)
           value: (nconf,...)
@@ -233,9 +233,12 @@ class PolyPadeFunction:
         value = cp.zeros(r.shape)
         grad = cp.zeros(rvec.shape)
         mask = r < self.parameters["rcut"]
-        r = r[mask][..., np.newaxis]
-        rvec = rvec[mask]
-        grad[mask], value[mask] = polypadegradvalue(rvec, r, self.parameters["beta"], self.parameters["rcut"])
+        grad_rvec, value[mask] = polypadegradvalue(
+            r[mask],
+            self.parameters["beta"],
+            self.parameters["rcut"],
+        )
+        grad[mask] = cp.einsum("ij,i->ij", rvec[mask], grad_rvec)
         return grad, value
 
     def gradient(self, rvec, r):
@@ -374,7 +377,7 @@ class CutoffCuspFunction:
         Parameters:
           rvec: (nconf,...,3) vector
         Returns:
-          grad: has same dimensions as rvec 
+          grad: has same dimensions as rvec
         """
         grad = cp.zeros(rvec.shape)
         value = cp.zeros(r.shape)
@@ -474,10 +477,10 @@ class CutoffCuspFunction:
 
 
 def test_func3d_gradient(bf, delta=1e-5):
-    rvec = np.random.randn(150, 5, 10, 3)  # Internal indices irrelevant
-    r = np.linalg.norm(rvec, axis=-1)
+    rvec = cp.asarray(np.random.randn(150, 5, 10, 3))  # Internal indices irrelevant
+    r = cp.linalg.norm(rvec, axis=-1)
     grad = bf.gradient(rvec, r)
-    numeric = np.zeros(rvec.shape)
+    numeric = cp.zeros(rvec.shape)
     for d in range(3):
         pos = rvec.copy()
         pos[..., d] += delta
@@ -486,30 +489,30 @@ def test_func3d_gradient(bf, delta=1e-5):
         minuval = bf.value(pos, np.linalg.norm(pos, axis=-1))
         numeric[..., d] = (plusval - minuval) / (2 * delta)
     maxerror = np.max(np.abs(grad - numeric))
-    return maxerror
+    return asnumpy(maxerror)
 
 
 def test_func3d_laplacian(bf, delta=1e-5):
-    rvec = np.random.randn(150, 5, 10, 3)  # Internal indices irrelevant
-    r = np.linalg.norm(rvec, axis=-1)
+    rvec = cp.asarray(np.random.randn(150, 5, 10, 3))  # Internal indices irrelevant
+    r = cp.linalg.norm(rvec, axis=-1)
     lap = bf.laplacian(rvec, r)
-    numeric = np.zeros(rvec.shape)
+    numeric = cp.zeros(rvec.shape)
     for d in range(3):
         pos = rvec.copy()
         pos[..., d] += delta
-        r = np.linalg.norm(pos, axis=-1)
+        r = cp.linalg.norm(pos, axis=-1)
         plusval = bf.gradient(pos, r)[..., d]
         pos[..., d] -= 2 * delta
-        r = np.linalg.norm(pos, axis=-1)
+        r = cp.linalg.norm(pos, axis=-1)
         minuval = bf.gradient(pos, r)[..., d]
         numeric[..., d] = (plusval - minuval) / (2 * delta)
     maxerror = np.max(np.abs(lap - numeric))
-    return maxerror
+    return asnumpy(maxerror)
 
 
 def test_func3d_gradient_laplacian(bf):
-    rvec = np.random.randn(150, 10, 3)
-    r = np.linalg.norm(rvec, axis=-1)
+    rvec = cp.asarray(np.random.randn(150, 10, 3))
+    r = cp.linalg.norm(rvec, axis=-1)
     grad = bf.gradient(rvec, r)
     lap = bf.laplacian(rvec, r)
     andgrad, andlap = bf.gradient_laplacian(rvec, r)
@@ -519,8 +522,8 @@ def test_func3d_gradient_laplacian(bf):
 
 
 def test_func3d_gradient_value(bf):
-    rvec = np.random.randn(150, 10, 3)
-    r = np.linalg.norm(rvec, axis=-1)
+    rvec = cp.asarray(np.random.randn(150, 10, 3))
+    r = cp.linalg.norm(rvec, axis=-1)
     grad = bf.gradient(rvec, r)
     val = bf.value(rvec, r)
     andgrad, andval = bf.gradient_value(rvec, r)
@@ -530,12 +533,11 @@ def test_func3d_gradient_value(bf):
 
 
 def test_func3d_pgradient(bf, delta=1e-5):
-    rvec = np.random.randn(150, 10, 3)
-    r = np.linalg.norm(rvec, axis=-1)
+    rvec = cp.asarray(np.random.randn(150, 10, 3))
+    r = cp.linalg.norm(rvec, axis=-1)
     pgrad = bf.pgradient(rvec, r)
-    numeric = {k: np.zeros(v.shape) for k, v in pgrad.items()}
+    numeric = {k: cp.zeros(v.shape) for k, v in pgrad.items()}
     maxerror = {k: np.zeros(v.shape) for k, v in pgrad.items()}
-    normerror = {k: np.zeros(v.shape) for k, v in pgrad.items()}
     for k in pgrad.keys():
         bf.parameters[k] += delta
         plusval = bf.value(rvec, r)
@@ -543,7 +545,7 @@ def test_func3d_pgradient(bf, delta=1e-5):
         minuval = bf.value(rvec, r)
         bf.parameters[k] += delta
         numeric[k] = (plusval - minuval) / (2 * delta)
-        maxerror[k] = np.max(np.abs(pgrad[k] - numeric[k]))
+        maxerror[k] = asnumpy(np.max(np.abs(pgrad[k] - numeric[k])))
         if maxerror[k] > 1e-5:
             print(k, "\n", pgrad[k] - numeric[k])
     return maxerror

@@ -7,16 +7,16 @@ import pyqmc.orbitals
 
 
 def sherman_morrison_row(e, inv, vec):
-    tmp = cp.einsum("ek,ekj->ej", vec, inv)
+    tmp = np.einsum("ek,ekj->ej", vec, inv)
     ratio = tmp[:, e]
-    inv_ratio = inv[:, :, e] / ratio[:, cp.newaxis]
-    invnew = inv - cp.einsum("ki,kj->kij", inv_ratio, tmp)
+    inv_ratio = inv[:, :, e] / ratio[:, np.newaxis]
+    invnew = inv - np.einsum("ki,kj->kij", inv_ratio, tmp)
     invnew[:, :, e] = inv_ratio
     return ratio, invnew
 
 
 def get_complex_phase(x):
-    return x / cp.abs(x)
+    return x / np.abs(x)
 
 
 class JoinParameters:
@@ -72,10 +72,10 @@ class JoinParameters:
 
 
 def sherman_morrison_ms(e, inv, vec):
-    tmp = cp.einsum("edk,edkj->edj", vec, inv)
+    tmp = np.einsum("edk,edkj->edj", vec, inv)
     ratio = tmp[:, :, e]
-    inv_ratio = inv[:, :, :, e] / ratio[:, :, cp.newaxis]
-    invnew = inv - cp.einsum("kdi,kdj->kdij", inv_ratio, tmp)
+    inv_ratio = inv[:, :, :, e] / ratio[:, :, np.newaxis]
+    invnew = inv - np.einsum("kdi,kdj->kdij", inv_ratio, tmp)
     invnew[:, :, :, e] = inv_ratio
     return ratio, invnew
 
@@ -300,9 +300,9 @@ class Slater:
         ao = self.orbitals.aos("GTOval_sph_deriv2", epos)
         ao_val = ao[:, 0, :, :]
         ao_lap = cp.sum(ao[:, [4, 7, 9], :, :], axis=1)
-        mos = [
+        mos = cp.stack([
             self.orbitals.mos(x, s)[..., self._det_occup[s]] for x in [ao_val, ao_lap]
-        ]
+        ])
         ratios = self._testrowderiv(e, mos)
         return asnumpy(ratios[1] / ratios[0])
 

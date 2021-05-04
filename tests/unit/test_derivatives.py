@@ -8,6 +8,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 import sys
 import numpy as np
 import pyqmc.testwf as testwf
+from pyqmc.loadcupy import cp, asnumpy
 
 
 def test_wfs():
@@ -40,7 +41,7 @@ def test_wfs():
     ]:
         for k in wf.parameters:
             if k != "mo_coeff":
-                wf.parameters[k] = np.random.rand(*wf.parameters[k].shape)
+                wf.parameters[k] = cp.asarray(np.random.rand(*wf.parameters[k].shape))
         for k, item in testwf.test_updateinternals(wf, epos).items():
             print(k, item)
             assert item < epsilon
@@ -115,7 +116,7 @@ def test_pbc_wfs():
     ]:
         for k in wf.parameters:
             if "mo_coeff" not in k and k != "det_coeff":
-                wf.parameters[k] = np.random.rand(*wf.parameters[k].shape)
+                wf.parameters[k] = cp.asarray(np.random.rand(*wf.parameters[k].shape))
 
         _, epos = pyqmc.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node
 

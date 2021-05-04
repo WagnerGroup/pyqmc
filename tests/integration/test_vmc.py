@@ -6,12 +6,14 @@ os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
 import pandas as pd
 from pyqmc.mc import vmc, initial_guess
-from pyscf import lib, gto, scf
+from pyscf import gto, scf
 from pyqmc.reblock import reblock
-from pyqmc.slater import PySCFSlater
+from pyqmc import Slater
 from pyqmc.accumulators import EnergyAccumulator
+import pytest
 
 
+@pytest.mark.slow
 def test_vmc():
     """
     Test that a VMC calculation of a Slater determinant matches Hartree-Fock within error bars.
@@ -27,8 +29,8 @@ def test_vmc():
     warmup = 30
 
     for wf, mf in [
-        (PySCFSlater(mol, mf_rhf), mf_rhf),
-        (PySCFSlater(mol, mf_uhf), mf_uhf),
+        (Slater(mol, mf_rhf), mf_rhf),
+        (Slater(mol, mf_uhf), mf_uhf),
     ]:
 
         # Without blocks
@@ -68,21 +70,13 @@ def test_vmc():
 
 
 def test_accumulator():
-    """ Tests that the accumulator gets inserted into the data output correctly.
-    """
-    import pandas as pd
-    from pyqmc.mc import vmc, initial_guess
-    from pyscf import gto, scf
-    from pyqmc.energy import energy
-    from pyqmc.slater import PySCFSlater
-    from pyqmc.accumulators import EnergyAccumulator
-
+    """Tests that the accumulator gets inserted into the data output correctly."""
     mol = gto.M(
         atom="Li 0. 0. 0.; Li 0. 0. 1.5", basis="cc-pvtz", unit="bohr", verbose=5
     )
     mf = scf.RHF(mol).run()
     nconf = 5000
-    wf = PySCFSlater(mol, mf)
+    wf = Slater(mol, mf)
     coords = initial_guess(mol, nconf)
 
     df, coords = vmc(

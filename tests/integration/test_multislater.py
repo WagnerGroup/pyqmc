@@ -10,16 +10,16 @@ from pyscf import lib, gto, scf, mcscf
 import pyqmc.testwf as testwf
 from pyqmc.mc import vmc, initial_guess
 from pyqmc.accumulators import EnergyAccumulator
-from pyqmc.multislater import MultiSlater
+from pyqmc import Slater
 from pyqmc.coord import OpenConfigs
 from pyqmc.reblock import reblock
 import pyqmc
 
 
 def test():
-    """ 
-    Tests that the multi-slater wave function value, gradient and 
-    parameter gradient evaluations are working correctly. Also 
+    """
+    Tests that the multi-slater wave function value, gradient and
+    parameter gradient evaluations are working correctly. Also
     checks that VMC energy matches energy calculated in PySCF
     """
     mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="cc-pvtz", unit="bohr", spin=0)
@@ -27,11 +27,13 @@ def test():
     delta = 1e-5
     nsteps = 200
     warmup = 10
-    for mf in [scf.RHF(mol).run(), scf.ROHF(mol).run(), scf.UHF(mol).run()]:
+    for mf in [
+        scf.UHF(mol).run()
+    ]:  # [scf.RHF(mol).run(), scf.ROHF(mol).run(), scf.UHF(mol).run()]:
         # Test same number of elecs
         mc = mcscf.CASCI(mf, ncas=4, nelecas=(1, 1))
         mc.kernel()
-        wf = MultiSlater(mol, mf, mc)
+        wf = Slater(mol, mf, mc)
 
         nconf = 10
 
@@ -40,9 +42,9 @@ def test():
 
         for k, item in testwf.test_updateinternals(wf, epos).items():
             assert item < epsilon
-        assert testwf.test_wf_gradient(wf, epos, delta=delta)[0] < epsilon
-        assert testwf.test_wf_laplacian(wf, epos, delta=delta)[0] < epsilon
-        assert testwf.test_wf_pgradient(wf, epos, delta=delta)[0] < epsilon
+        assert testwf.test_wf_gradient(wf, epos, delta=delta) < epsilon
+        assert testwf.test_wf_laplacian(wf, epos, delta=delta) < epsilon
+        assert testwf.test_wf_pgradient(wf, epos, delta=delta) < epsilon
 
         # Test same number of elecs
         mc = mcscf.CASCI(mf, ncas=4, nelecas=(1, 1))
@@ -54,23 +56,23 @@ def test():
 
         for k, item in testwf.test_updateinternals(wf, epos).items():
             assert item < epsilon
-        assert testwf.test_wf_gradient(wf, epos, delta=delta)[0] < epsilon
-        assert testwf.test_wf_laplacian(wf, epos, delta=delta)[0] < epsilon
-        assert testwf.test_wf_pgradient(wf, epos, delta=delta)[0] < epsilon
+        assert testwf.test_wf_gradient(wf, epos, delta=delta) < epsilon
+        assert testwf.test_wf_laplacian(wf, epos, delta=delta) < epsilon
+        assert testwf.test_wf_pgradient(wf, epos, delta=delta) < epsilon
 
         # Test different number of elecs
         mc = mcscf.CASCI(mf, ncas=4, nelecas=(2, 0))
         mc.kernel()
-        wf = MultiSlater(mol, mf, mc)
+        wf = Slater(mol, mf, mc)
 
         nelec = np.sum(mol.nelec)
         epos = initial_guess(mol, nconf)
 
         for k, item in testwf.test_updateinternals(wf, epos).items():
             assert item < epsilon
-        assert testwf.test_wf_gradient(wf, epos, delta=delta)[0] < epsilon
-        assert testwf.test_wf_laplacian(wf, epos, delta=delta)[0] < epsilon
-        assert testwf.test_wf_pgradient(wf, epos, delta=delta)[0] < epsilon
+        assert testwf.test_wf_gradient(wf, epos, delta=delta) < epsilon
+        assert testwf.test_wf_laplacian(wf, epos, delta=delta) < epsilon
+        assert testwf.test_wf_pgradient(wf, epos, delta=delta) < epsilon
 
         # Quick VMC test
         nconf = 1000

@@ -22,14 +22,14 @@ def ortho_hdf(hdf_file, data, attr, configs, parameters):
 
 
 def collect_overlap_data(wfs, configs, pgrad):
-    r""" Collect the averages assuming that 
-    configs are distributed according to 
-    
+    r"""Collect the averages assuming that
+    configs are distributed according to
+
     .. math:: \rho \propto \sum_i |\Psi_i|^2
 
     The keys 'overlap' and 'overlap_gradient' are
 
-    `overlap` : 
+    `overlap` :
 
     .. math:: \langle \Psi_f | \Psi_i \rangle = \left\langle \frac{\Psi_i^* \Psi_j}{\rho} \right\rangle_{\rho}
 
@@ -52,12 +52,15 @@ def collect_overlap_data(wfs, configs, pgrad):
     node_cut, f = pgrad._node_regr(configs, wfs[-1])
     dppsi_regularized = dppsi * f[:, np.newaxis]
 
-    save_dat["overlap_gradient"] = np.einsum(
-        "km,k,jk->jm",  # shape (wf, param)
-        dppsi_regularized.conj(),
-        normalized_values[-1].conj(),
-        normalized_values / denominator,
-    ) / len(ref)
+    save_dat["overlap_gradient"] = (
+        np.einsum(
+            "km,k,jk->jm",  # shape (wf, param)
+            dppsi_regularized.conj(),
+            normalized_values[-1].conj(),
+            normalized_values / denominator,
+        )
+        / len(ref)
+    )
 
     # Weight for quantities that are evaluated as
     # int( f(X) psi_f^2 dX )
@@ -77,14 +80,14 @@ from pyqmc.mc import limdrift
 
 def construct_rho_gradient(grads, log_values):
     total_grad = np.zeros_like(grads[0])
-    for g, v in zip(grads, values):
+    for g, v in zip(grads, log_values):
         denominator = np.sum(np.exp(2 * np.real(log_values - v)))
         total_grad += g / denominator
     return total_grad
 
 
 def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
-    r""" Run nstep Metropolis steps to sample a distribution proportional to 
+    r"""Run nstep Metropolis steps to sample a distribution proportional to
     :math:`\sum_i |\Psi_i|^2`, where :math:`\Psi_i` = wfs[i]
     """
     nconf, nelec, _ = configs.configs.shape
@@ -142,13 +145,13 @@ def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
 
 def sample_overlap(wfs, configs, pgrad, nblocks=10, nsteps=10, tstep=0.5):
     r"""
-    Sample 
+    Sample
 
     .. math:: \rho(R) = \sum_i |\Psi_i(R)|^2
 
     `pgrad` is expected to be a gradient generator. returns data as follows:
 
-    `overlap` : 
+    `overlap` :
 
     .. math:: \left\langle \frac{\Psi_i^* \Psi_j}{\rho} \right\rangle
 
@@ -223,7 +226,7 @@ def dist_sample_overlap(
 def correlated_sample(wfs, configs, parameters, pgrad):
     r"""
     Given a configs sampled from the distribution
-    
+
     .. math:: \rho = \sum_i \Psi_i^2
 
     Compute properties for replacing the last wave function with each of parameters
@@ -232,19 +235,19 @@ def correlated_sample(wfs, configs, parameters, pgrad):
 
     .. math:: \langle E \rangle = \left\langle \frac{H\Psi}{\Psi} \frac{|\Psi|^2}{\rho}  \right\rangle
 
-    The ratio can be computed as 
+    The ratio can be computed as
 
     .. math:: \frac{|\Psi|^2}{\rho} = \frac{1}{\sum_i e^{2(\alpha_i - \alpha}) }
 
-    Where we write 
+    Where we write
 
-    .. math:: \Psi = e^{i\theta}{e^\alpha} 
+    .. math:: \Psi = e^{i\theta}{e^\alpha}
 
-    We also compute 
+    We also compute
 
     .. math:: \langle S_i \rangle = \left\langle \frac{\Psi_i^* \Psi}{\rho} \right\rangle
 
-    And 
+    And
 
     .. math:: \langle N_i \rangle = \left\langle \frac{|\Psi_i|^2}{\rho} \right\rangle
 
@@ -327,13 +330,13 @@ def renormalize(wfs, N):
     """
     Normalizes the last wave function, given a current value of the normalization. Assumes that we want N to be 0.5
 
-    .. math:: 
-    
+    .. math::
+
         b^2/(a^2 + b^2) = N
 
         b^2 = N a^2 /(1-N)
 
-        f^2 b^2 = 0.5 a^2/0.5 = a^2 
+        f^2 b^2 = 0.5 a^2/0.5 = a^2
 
         f^2 = a^2/b^2 = (1-N)/N
     """
@@ -346,8 +349,8 @@ def renormalize(wfs, N):
 
 
 def evaluate(return_data, warmup):
-    """ 
-    For wave functions wfs and coordinate set coords, evaluate the overlap and energy of the last wave function. 
+    """
+    For wave functions wfs and coordinate set coords, evaluate the overlap and energy of the last wave function.
 
     Returns a dictionary with relevant information.
     """
@@ -403,18 +406,18 @@ def optimize_orthogonal(
     npartitions=None,
 ):
     r"""
-    Minimize 
+    Minimize
 
-    .. math:: f(p_f) = E_f + \sum_i \lambda_{i=0}^{f-1} |S_{fi} - S_{fi}^*|^2 
+    .. math:: f(p_f) = E_f + \sum_i \lambda_{i=0}^{f-1} |S_{fi} - S_{fi}^*|^2
 
-    Where 
+    Where
 
     .. math:: N_i = \langle \Psi_i | \Psi_i \rangle
 
     .. math:: S_{fi} = \frac{\langle \Psi_f | \Psi_i \rangle}{\sqrt{N_f N_i}}
 
     The \*'d and lambda values are respectively targets and forcings. f is the final wave function in the wave function array.
-    We only optimize the parameters of the final wave function, so all 'p' values here represent a parameter in the final wave function. 
+    We only optimize the parameters of the final wave function, so all 'p' values here represent a parameter in the final wave function.
 
     **Important arguments**
 
@@ -446,28 +449,28 @@ def optimize_orthogonal(
 
     .. math:: \partial_p N_f = 2 Re \langle \partial_p \Psi_f | \Psi_f \rangle
 
-    .. math::  \langle \partial_p \Psi_f | \Psi_i \rangle = \int{ \frac{ \Psi_i\partial_p \Psi_f^*}{\rho} \frac{\rho}{\int \rho} } 
+    .. math::  \langle \partial_p \Psi_f | \Psi_i \rangle = \int{ \frac{ \Psi_i\partial_p \Psi_f^*}{\rho} \frac{\rho}{\int \rho} }
 
-    .. math:: \partial_p S_{fi} = \frac{\langle \partial_p \Psi_f | \Psi_i \rangle}{\sqrt{N_f N_i}} - \frac{\langle \Psi_f | \Psi_i \rangle}{2\sqrt{N_f N_i}} \frac{\partial_p N_f}{N_f} 
+    .. math:: \partial_p S_{fi} = \frac{\langle \partial_p \Psi_f | \Psi_i \rangle}{\sqrt{N_f N_i}} - \frac{\langle \Psi_f | \Psi_i \rangle}{2\sqrt{N_f N_i}} \frac{\partial_p N_f}{N_f}
 
-    In this implementation, we set 
+    In this implementation, we set
 
     .. math:: \rho = \sum_i |\Psi_i|^2
 
-    Note that in the definition of N there is an arbitrary normalization of rho. The targets are set relative to the normalization of the reference wave functions. 
+    Note that in the definition of N there is an arbitrary normalization of rho. The targets are set relative to the normalization of the reference wave functions.
 
     Some implementation notes regarding the normalization:
 
-    It's important for the normalization of the wave functions to be similar; otherwise the weights of one dominate and only one of the wave functions gets sampled. 
+    It's important for the normalization of the wave functions to be similar; otherwise the weights of one dominate and only one of the wave functions gets sampled.
     Some notes:
 
      * One could modify the relative weights in the definition of rho, but it's more convenient to output wave functions that are normalized with respect to each other.
-     * Adding a penalty to the normalization turns out to be fairly unstable. 
-     * Moves to reduce the overlap and energy tend to change the normalization a lot (keep in mind that both the determinant and Jastrow parts can have gauge degrees of freedom). This can lead into a tailspin effect pretty quickly. 
-    
+     * Adding a penalty to the normalization turns out to be fairly unstable.
+     * Moves to reduce the overlap and energy tend to change the normalization a lot (keep in mind that both the determinant and Jastrow parts can have gauge degrees of freedom). This can lead into a tailspin effect pretty quickly.
+
     In this implementation, we handle this using three techniques:
 
-     * Most importantly, the cost function derivative is orthogonalized to the derivative of the normalization. 
+     * Most importantly, the cost function derivative is orthogonalized to the derivative of the normalization.
      * In the line minimization, if the normalization deviates too far from 0.5 relative to the reference wave function, we do not consider the move. The correlated sampling is unreliable in that situation anyway.
      * The wave function is renormalized if its normalization deviates too far from 0.5 relative to the first wave function.
     """
@@ -525,7 +528,7 @@ def optimize_orthogonal(
     # warm up to equilibrate the configurations before running optimization
     if warmup_options is None:
         warmup_options = {}
- 
+
     data, coords = pyqmc.mc.vmc(
         wfs[-1],
         coords,
@@ -534,7 +537,6 @@ def optimize_orthogonal(
         npartitions=npartitions,
         **warmup_options
     )
-
 
     # One set of configurations for every wave function
     allcoords = [coords.copy() for _ in wfs[:-1]]

@@ -1,11 +1,11 @@
 import pandas as pd
 from pyqmc.mc import vmc, initial_guess
 from pyscf import gto, scf, mcscf
-from pyqmc.slater import PySCFSlater
-from pyqmc.jastrowspin import JastrowSpin
+from pyqmc import Slater
 from pyqmc.accumulators import EnergyAccumulator
 from pyqmc.multiplywf import MultiplyWF
-from pyqmc.multislater import MultiSlater
+from pyqmc import Slater
+from pyqmc import default_jastrow
 import numpy as np
 import time
 
@@ -25,9 +25,9 @@ def test_ecp():
     label = ["S", "J", "SJ"]
     ind = 0
     for wf in [
-        PySCFSlater(mol, mf),
-        JastrowSpin(mol),
-        MultiplyWF(PySCFSlater(mol, mf), JastrowSpin(mol)),
+        Slater(mol, mf),
+        default_jastrow(mol)[0],
+        MultiplyWF(Slater(mol, mf), default_jastrow(mol)[0]),
     ]:
         wf.recompute(coords)
         print(label[ind])
@@ -43,7 +43,7 @@ def test_ecp():
 
     label = ["MS"]
     ind = 0
-    for wf in [MultiSlater(mol, mf, mc)]:
+    for wf in [Slater(mol, mf, mc)]:
         wf.recompute(coords)
         print(label[ind])
         ind += 1

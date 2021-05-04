@@ -340,7 +340,6 @@ class Slater:
         for spin in [0, 1]:
             ind = s == spin
             mo = self.orbitals.mos(ao, spin)
-            mo = mo.reshape(-1, *epos.configs.shape[1:-1], self._nelec[spin])
             mo_vals = mo[..., self._det_occup[spin]]
             ratios[:, ind] = self._testrow(e[ind], mo_vals, mask, spin=spin)
 

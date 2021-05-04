@@ -186,7 +186,7 @@ def DMC(
     if accumulators is None:
         accumulators = {}
 
-    wf, _ = pyqmc.generate_wf(mol, mf, jastrow_kws=jastrow_kws, slater_kws=slater_kws)
+    wf, _ = pyqmc.generate_wf(mol, mf, mc=mc, jastrow_kws=jastrow_kws, slater_kws=slater_kws)
 
     if start_from is not None:
         pyqmc.read_wf(wf, start_from)

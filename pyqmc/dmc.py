@@ -9,15 +9,10 @@ def limdrift(g, tau, acyrus=0.25):
     """
     Use Cyrus Umrigar's algorithm to limit the drift near nodes.
 
-    Args:
-      g: a [nconf,ndim] vector
-
-      tau: time step
-
-      acyrus: the maximum magnitude
-
-    Returns:
-      The vector with the cut off applied and multiplied by tau.
+    :parameter g: a [nconf,ndim] vector
+    :parameter tau: time step
+    :parameter acyrus: the maximum magnitude
+    :returns: The vector with the cut off applied and multiplied by tau.
     """
     tot = np.linalg.norm(g, axis=1) * acyrus
     mask = tot > 1e-8
@@ -30,13 +25,9 @@ def limdrift_cutoff(g, tau, cutoff=1):
     """
     Limit a vector to have a maximum magnitude of cutoff while maintaining direction
 
-    Args:
-      g: a [nconf,ndim] vector
-
-      cutoff: the maximum magnitude
-
-    Returns:
-      The vector with the cut off applied and multiplied by tau.
+    :parameter g: a [nconf,ndim] vector
+    :parameter cutoff: the maximum magnitude
+    :returns: The vector with the cutoff applied and multiplied by tau.
     """
     return mc.limdrift(g, cutoff) * tau
 
@@ -57,25 +48,15 @@ def dmc_propagate(
     """
     Propagate DMC without branching
 
-    Args:
-      wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as anything (such as laplacian() ) used by accumulators
-
-      configs: Configs object, (nconfig, nelec, 3) - initial coordinates to start calculation.
-
-      weights: (nconfig,) - initial weights to start calculation
-
-      tstep: Time step for move proposals. Introduces time step error.
-
-      nsteps: number of DMC steps to take
-
-      accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
-
-      ekey: tuple of strings; energy is needed for DMC weights. Access total energy by accumulators[ekey[0]](configs, wf)[ekey[1]
-
-      drift_limiter: a function that takes a gradient and a cutoff and returns an adjusted gradient
-
-
-    Returns: (df,coords,weights)
+    :parameter wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as anything (such as laplacian() ) used by accumulators
+    :parameter configs: Configs object, (nconfig, nelec, 3) - initial coordinates to start calculation.
+    :parameter weights: (nconfig,) - initial weights to start calculation
+    :parameter tstep: Time step for move proposals. Introduces time step error.
+    :parameter nsteps: number of DMC steps to take
+    :parameter accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
+    :parameter ekey: tuple of strings; energy is needed for DMC weights. Access total energy by accumulators[ekey[0]](configs, wf)[ekey[1]
+    :parameter drift_limiter: a function that takes a gradient and a cutoff and returns an adjusted gradient
+    :returns: (df,coords,weights)
       df: A list of dictionaries nstep long that contains all results from the accumulators.
 
       coords: The final coordinates from this calculation.
@@ -184,26 +165,25 @@ def limit_timestep(weights, elocnew, elocold, eref, start, stop):
     """
     Stabilizes weights by scaling down the effective tstep if the local energy is too far from eref.
 
-    Args:
-      weights: (nconfigs,) array
+    :parameter ndarray weights: (nconfigs,) array
         walker weights
-      elocnew: (nconfigs,) array
+    :parameter ndarray elocnew: (nconfigs,) array
         current local energy of each walker
-      elocold: (nconfigs,) array
+    :parameter ndarray elocold: (nconfigs,) array
         previous local energy of each walker
-      eref: scalar
+    :parameter float eref: scalar
         reference energy that fixes normalization
-      start: scalar
+    :parameter float start: scalar
         number of sigmas to start damping tstep
-      stop: scalar
+    :parameter float stop: scalar
         number of sigmas where tstep becomes zero
 
-    Return:
-      tdamp: scalar
-        Damping factor to multiply timestep; always between 0 and 1. The damping factor is
-            1 if eref-eloc < branchcut_start*sigma,
-            0 if eref-eloc > branchcut_stop*sigma,
-            decreases linearly inbetween.
+    :return: Damping factor to multiply timestep; always between 0 and 1. The damping factor is
+          * 1 if eref-eloc < branchcut_start*sigma,
+          * 0 if eref-eloc > branchcut_stop*sigma,
+          * decreases linearly inbetween.
+
+    :rtype: float
     """
     if start is None or stop is None:
         return 1
@@ -223,15 +203,9 @@ def branch(configs, weights):
 
     Walkers are resampled with probability proportional to the weights, and the new weights are all set to be equal to the average weight.
 
-    Args:
-      configs: (nconfig,nelec,3) walker coordinates
-
-      weights: (nconfig,) walker weights
-
-    Returns:
-      configs: resampled walker configurations
-
-      weights: (nconfig,) all weights are equal to average weight
+    :parameter configs: (nconfig,nelec,3) walker coordinates
+    :parameter weights: (nconfig,) walker weights
+    :returns: resampled walker configurations and weights all equal to average weight
     """
 
     nconfig = configs.configs.shape[0]
@@ -284,30 +258,18 @@ def rundmc(
     """
     Run DMC
 
-    Args:
-      wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as anything (such as laplacian() ) used by accumulators
-
-      configs: (nconfig, nelec, 3) - initial coordinates to start calculation.
-
-      weights: (nconfig,) - initial weights to start calculation, defaults to uniform.
-
-      nsteps: number of DMC steps to take
-
-      tstep: Time step for move proposals. Introduces time step error.
-
-      branchtime: number of steps to take between branching
-
-      accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
-
-      ekey: tuple of strings; energy is needed for DMC weights. Access total energy by accumulators[ekey[0]](configs, wf)[ekey[1]
-
-      verbose: Print out step information
-
-      drift_limiter: a function that takes a gradient and a cutoff and returns an adjusted gradient
-
-      stepoffset: If continuing a run, what to start the step numbering at.
-
-    Returns: (df,coords,weights)
+    :parameter wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as anything (such as laplacian() ) used by accumulators
+    :parameter configs: (nconfig, nelec, 3) - initial coordinates to start calculation.
+    :parameter weights: (nconfig,) - initial weights to start calculation, defaults to uniform.
+    :parameter nsteps: number of DMC steps to take
+    :parameter tstep: Time step for move proposals. Introduces time step error.
+    :parameter branchtime: number of steps to take between branching
+    :parameter accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
+    :parameter ekey: tuple of strings; energy is needed for DMC weights. Access total energy by accumulators[ekey[0]](configs, wf)[ekey[1]
+    :parameter verbose: Print out step information
+    :parameter drift_limiter: a function that takes a gradient and a cutoff and returns an adjusted gradient
+    :parameter stepoffset: If continuing a run, what to start the step numbering at.
+    :returns: (df,coords,weights)
       df: A list of dictionaries nstep long that contains all results from the accumulators.
 
       coords: The final coordinates from this calculation.

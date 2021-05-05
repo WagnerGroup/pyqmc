@@ -51,15 +51,13 @@ def kinetic(configs, wf):
 def energy(mol, configs, wf, threshold):
     """Compute the local energy of a set of configurations.
 
-    Args:
-      mol: A pyscf-like 'Mole' object. nelec, atom_charges(), atom_coords(), and ._ecp are used.
+    :parameter mol: A pyscf-like 'Mole' object. nelec, atom_charges(), atom_coords(), and ._ecp are used.
+    :parameter configs: electron positions (walkers)
+    :type configs: (nconf, nelec, 3) array
+    :parameter wf: A Wavefunction-like object. Functions used include recompute(), lapacian(), and testvalue()
 
-      configs: a nconfiguration x nelectron x 3 numpy array
-
-      wf: A Wavefunction-like object. Functions used include recompute(), lapacian(), and testvalue()
-
-    Returns:
-      a dictionary with energy components ke, ee, ei, and total
+    :returns: a dictionary with energy components ke, ee, ei, ecp, and total
+    :rtype: dict
     """
     ee = ee_energy(configs)
     ei = ei_energy(mol, configs)

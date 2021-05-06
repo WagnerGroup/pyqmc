@@ -275,7 +275,6 @@ def rundmc(
     verbose=False,
     accumulators=None,
     ekey=("energy", "total"),
-    propagate=dmc_propagate,
     feedback=1.0,
     hdf_file=None,
     client=None,
@@ -404,7 +403,5 @@ def rundmc(
                 df_["weight_std"],
             )
 
-    df_ret = {}
-    for k in df[0].keys():
-        df_ret[k] = np.asarray([d[k] for d in df])
+    df_ret = {k: np.asarray([d[k] for d in df]) for k in df[0].keys()}
     return df_ret, configs, weights

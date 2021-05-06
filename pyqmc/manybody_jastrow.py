@@ -173,7 +173,7 @@ class J3:
             val = ao[0].reshape((nconf, nelec, -1))
             grad = ao[1:4].reshape((3, nconf, nelec, -1))
             lap = ao[[4, 7, 9]].reshape((3, nconf, nelec, -1))
-            return (asnumpy(val), asnumpy(grad), asnumpy(lap))
+            return (val, grad, lap)
 
     def testvalue(self, e, epos, mask=None):
         if mask is None:

@@ -154,7 +154,7 @@ def dmc_propagate(
 
 def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **kwargs):
     config = configs.split(npartitions)
-    weight = np.split(weights, npartitions)
+    weight = np.array_split(weights, npartitions)
     runs = [
         client.submit(dmc_propagate, wf, conf, wt, *args, **kwargs)
         for conf, wt in zip(config, weight)
@@ -164,7 +164,7 @@ def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **k
     weights = np.concatenate(allresults[2])
     confweight = np.array([len(c.configs) for c in config], dtype=float)
     confweight_avg = confweight / (np.mean(confweight) * npartitions)
-    weight = np.array([w["weight"] for w in allresults[0]])
+    weight = np.array([w["weight"] for w in allresults[0]]) * confweight
     weight_avg = weight / np.mean(weight)
     block_avg = {
         k: np.sum(

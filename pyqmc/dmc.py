@@ -153,8 +153,48 @@ def dmc_propagate(
 
 
 def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **kwargs):
+    r"""Parallelizes calls to dmc_propagate by splitting configs
+    
+    If npartitions does not evenly divide nconfigs, we need to reweight the results based on the number of configs per parallel task.
+
+    The final result should be equivalent to the non-parallelized case. 
+    The average weight :math:`w` and the weighted average of observables :math:`\langle O \rangle` are returned.
+    Index :math:`i` refers to walker index.
+
+    .. math:: 
+        w = \sum_i w_i / n_{\rm config}
+        \qquad\quad \langle O \rangle = \sum_i o_{i}  w_i / \sum_i w_i
+
+    Split over parallel tasks, we need to reweight by number of walkers.
+    The average weight :math:`w_p` and weighted average of observables :math:`\langle O\rangle_p` are returned from each task.
+
+    .. math:: 
+        w_p = \sum_j^{{\rm task}\, p} w_j / n_{{\rm config}, p}
+        \qquad\quad \langle O \rangle_p = \frac{\sum_j^{{\rm task}\, p} o_{j}  w_j }{ \sum_j^{{\rm task}\, p} w_j }
+
+
+    The total weight and total average (defined above) are computed from the task weights :math:`w_p` and task averages :math:`\langle O\rangle_p` as
+
+    .. math:: 
+        w = \sum_p w_p n_{{\rm config}, p} /  n_{\rm config},
+        \qquad\quad \langle O \rangle = \frac{ \sum_p \langle O\rangle_p  \sum_j^{{\rm task}\, p} w_j }{ \sum_i w_i}.
+
+    We can rewrite the weights using the equations above
+
+    .. math:: 
+        \langle O \rangle &= \frac{ \sum_p \langle O\rangle_p w_p  n_{{\rm config}, p}  }{ w n_{\rm config} }
+
+        &= \sum_p \langle O\rangle_p \frac{w_p n_{{\rm config}, p}}{\sum_p w_p n_{{\rm config}, p}}
+
+
+    By reweighting the task weights as :math:`\overline{w}_p = w_p n_{{\rm config}, p}`, we can omit the reweighting factor :math:`\frac{n_{{\rm config}, p}}{n_{\rm config}}` (that we use to collect parallel vmc).
+    Instead, we use only the reweighting factor :math:`\overline{w}_p / \sum_p \overline{w}_p`
+
+    .. math:: \langle O \rangle = \sum_p \langle O\rangle_p \frac{\overline{w}_p }{\sum_p \overline{w}_p }
+    """
+
     config = configs.split(npartitions)
-    weight = np.split(weights, npartitions)
+    weight = np.array_split(weights, npartitions)
     runs = [
         client.submit(dmc_propagate, wf, conf, wt, *args, **kwargs)
         for conf, wt in zip(config, weight)
@@ -163,14 +203,13 @@ def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **k
     configs.join(allresults[1])
     weights = np.concatenate(allresults[2])
     confweight = np.array([len(c.configs) for c in config], dtype=float)
-    confweight_avg = confweight / (np.mean(confweight) * npartitions)
-    weight = np.array([w["weight"] for w in allresults[0]])
-    weight_avg = weight / np.mean(weight)
+    weight = np.array([w["weight"] for w in allresults[0]]) * confweight
+    weight_avg = weight / np.sum(weight)
     block_avg = {
         k: np.sum(
             [
-                res[k] * ww * cw
-                for res, cw, ww in zip(allresults[0], confweight_avg, weight_avg)
+                res[k] * ww
+                for res, ww in zip(allresults[0], weight_avg)
             ],
             axis=0,
         )

@@ -39,14 +39,12 @@ def gradient_generator(mol, wf, to_opt=None, **ewald_kwargs):
 def default_slater(
     mol, mf, optimize_orbitals=False, twist=None, optimize_zeros=True, epsilon=1e-8
 ):
-    """
-    Construct a Slater determinant
-    Args:
-      optimize_orbitals (bool): make to_opt true for orbital parameters
-      twist (vector): The twist to extract from the mean-field object
-      optimize_zeros (bool): optimize coefficients that are zero in the mean-field object
-    Returns:
-      slater, to_opt
+    """Construct a Slater determinant
+
+    :parameter boolean optimize_orbitals: make `to_opt` true for orbital parameters
+    :parameter array-like twist: The twist to extract from the mean-field object
+    :parameter boolean optimize_zeros: optimize coefficients that are zero in the mean-field object
+    :returns: slater, to_opt
     """
     wf = Slater(mol, mf, twist=twist)
     to_opt = {}
@@ -78,9 +76,7 @@ def default_multislater(
 
 
 def expand_beta_qwalk(beta0, n):
-    """polypade expansion coefficients
-    for n basis functions with first
-    coeff beta0"""
+    """polypade expansion coefficients for n basis functions with first coeff beta0"""
     if n == 0:
         return np.zeros(0)
     beta = np.zeros(n)
@@ -112,11 +108,10 @@ def default_jastrow_basis(mol, ion_cusp=False, na=4, nb=3, rcut=None):
 
 def default_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
     """
-    Default 2-body jastrow from qwalk,
-    Args:
-      ion_cusp (bool): add an extra term to satisfy electron-ion cusp.
-    Returns:
-      jastrow, to_opt
+    Default 2-body jastrow from QWalk,
+
+    :parameter boolean ion_cusp: add an extra term to satisfy electron-ion cusp.
+    :returns: jastrow, to_opt
     """
     if ion_cusp == False:
         ion_cusp = []
@@ -220,11 +215,11 @@ def recover_pyscf(chkfile, ci_checkfile=None, cancel_outputs=True):
 
     It is recommended to write and recover the objects, rather than trying to use pyscf objects directly when dask parallelization is being used, since by default the pyscf objects contain unserializable objects. (this may be changed in the future)
 
-    cancel_outputs will set the outputs of the objects to None. You may need to make cancel_outputs False if you are using this to input to other pyscf functions.
+    `cancel_outputs` will set the outputs of the objects to None. You may need to set `cancel_outputs=False` if you are using this to input to other pyscf functions.
 
-    Typical usage:
+    Typical usage::
 
-    mol, mf = recover_pyscf("dft.hdf5")
+        mol, mf = recover_pyscf("dft.hdf5")
 
     :param chkfile: The filename to read from.
     :type chkfile: string
@@ -294,12 +289,12 @@ def read_wf(wf, wf_file):
 
     Typical usage:
 
-    .. code-block::python
+    .. code-block:: python
 
-    linemin(wf, coords, ..., hdf_file="linemin.hdf5")
-    read_wf(wf, "linemin.hdf5")
+       linemin(wf, coords, ..., hdf_file="linemin.hdf5")
+       read_wf(wf, "linemin.hdf5")
 
-    :param wf: A pyqmc wave function object. This will
+    :param wf: object to load saved parameters into
     :type wf: wave function object with parameters dictionary
     :param wf_file: A HDF5 file with "wf" key. The parameters in this file will be read into the wave function in-place
     :type wf_file: string

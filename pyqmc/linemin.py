@@ -47,7 +47,7 @@ def polyfit_relative(xfit, yfit, degree):
 
 
 def stable_fit2(xfit, yfit, tolerance=1e-2):
-    """ Try to fit to a quadratic. If the fit is not good, 
+    """Try to fit to a quadratic. If the fit is not good,
     then just take the lowest value of yfit
     """
     steprange = np.max(xfit)
@@ -111,35 +111,19 @@ def line_minimization(
     """Optimizes energy by determining gradients with stochastic reconfiguration
         and minimizing the energy along gradient directions using correlated sampling.
 
-    Args:
-
-      :wf: initial wave function
-
-      :coords: initial configurations
-
-      :pgrad_acc: A PGradAccumulator-like object
-
-      :steprange: How far to search in the line minimization
-
-      :warmup: number of steps to use for vmc warmup
-
-      :max_iterations: (maximum) number of steps in the gradient descent
-
-      :vmcoptions: a dictionary of options for the vmc method
-
-      :lmoptions: a dictionary of options for the lm method
-
-      :update: A function that generates a parameter change 
-
-      :update_kws: Any keywords 
-
-      :npts: number of points to fit to in each line minimization
-
-    Returns:
-
-      :wf: optimized wave function
-
-
+    :parameter wf: initial wave function
+    :parameter coords: initial configurations
+    :parameter pgrad_acc: A PGradAccumulator-like object
+    :parameter float steprange: How far to search in the line minimization
+    :parameter int warmup: number of steps to use for vmc warmup
+    :parameter int max_iterations: (maximum) number of steps in the gradient descent
+    :parameter dict vmcoptions: a dictionary of options for the vmc method
+    :parameter dict lmoptions: a dictionary of options for the lm method
+    :parameter update: A function that generates a parameter change
+    :parameter update_kws: Any keywords
+    :parameter int npts: number of points to fit to in each line minimization
+    :parameter boolean verbose: print output if True
+    :return: optimized wave function
     """
 
     if vmcoptions is None:
@@ -261,24 +245,17 @@ def line_minimization(
 
 
 def correlated_compute(wf, configs, params, pgrad_acc):
-    """ 
+    """
     Evaluates accumulator on the same set of configs for correlated sampling of different wave function parameters
 
-    Args:
-        :wf: wave function object
-        :configs: (nconf, nelec, 3) array
-        :params: (nsteps, nparams) array 
-            list of arrays of parameters (serialized) at each step
-
-        :pgrad_acc: PGradAccumulator 
-
-    Returns:
-        :data: a single dict with indices [parameter, values]
+    :parameter wf: wave function object
+    :parameter configs: (nconf, nelec, 3) array
+    :parameter params: (nsteps, nparams) array
+        list of arrays of parameters (serialized) at each step
+    :parameter pgrad_acc: PGradAccumulator
+    :returns: a single dict with indices [parameter, values]
 
     """
-
-    import copy
-    import numpy as np
 
     data = []
     psi0 = wf.recompute(configs)[1]  # recompute gives logdet

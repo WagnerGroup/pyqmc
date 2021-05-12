@@ -4,7 +4,7 @@ import copy
 
 def ecp(mol, configs, wf, threshold):
     """
-    Returns the ECP value, summed over all the electrons and atoms.
+    :returns: ECP value, summed over all the electrons and atoms.
     """
     nconf, nelec = configs.configs.shape[0:2]
     ecp_tot = np.zeros(nconf, dtype=complex if wf.iscomplex else float)
@@ -17,8 +17,8 @@ def ecp(mol, configs, wf, threshold):
 
 
 def ecp_ea(mol, configs, wf, e, atom, threshold):
-    """ 
-    Returns the ECP value between electron e and atom at, local+nonlocal.
+    """
+    :returns: the ECP value between electron e and atom at, local+nonlocal.
     """
     nconf = configs.configs.shape[0]
     ecp_val = np.zeros(nconf, dtype=complex if wf.iscomplex else float)
@@ -34,6 +34,8 @@ def ecp_ea(mol, configs, wf, e, atom, threshold):
     masked_v_l = v_l[mask]
     masked_v_l[:, :-1] /= prob[mask, np.newaxis]
 
+    # print(np.sum(mask))
+
     # Use masked objects internally
     r_ea = r_ea[mask]
     r_ea_vec = r_ea_vec[mask]
@@ -41,12 +43,12 @@ def ecp_ea(mol, configs, wf, e, atom, threshold):
 
     # Note: epos_rot is not just apos+r_ea_i because of the boundary;
     # positions of the samples are relative to the electron, not atom.
-    epos_rot = (configs.configs[mask, e, :] - r_ea_vec)[:, np.newaxis] + r_ea_i
+    epos_rot = np.repeat(
+        configs.configs[:, e, :][:, np.newaxis, :], P_l.shape[1], axis=1
+    )
+    epos_rot[mask] = (configs.configs[mask, e, :] - r_ea_vec)[:, np.newaxis] + r_ea_i
 
-    # Expand externally
-    expanded_epos_rot = np.zeros((nconf, P_l.shape[1], 3))
-    expanded_epos_rot[mask] = epos_rot
-    epos = configs.make_irreducible(e, expanded_epos_rot)
+    epos = configs.make_irreducible(e, epos_rot, mask)
     ratio = wf.testvalue(e, epos, mask)
 
     # Compute local and non-local parts
@@ -57,8 +59,7 @@ def ecp_ea(mol, configs, wf, e, atom, threshold):
 
 def ecp_mask(v_l, threshold):
     """
-    Returns a mask for configurations sized nconf
-    based on values of v_l. Also returns acceptance probabilities
+    :returns: a mask for configurations sized nconf based on values of v_l. Also returns acceptance probabilities
     """
     l = 2 * np.arange(v_l.shape[1] - 1) + 1
     prob = np.dot(np.abs(v_l[:, :-1]), threshold * (2 * l + 1))
@@ -68,8 +69,8 @@ def ecp_mask(v_l, threshold):
 
 
 def get_v_l(mol, at_name, r_ea):
-    """
-    Returns list of the l's, and a nconf x nl array, v_l values for each l: l= 0,1,2,...,-1
+    r"""
+    :returns: list of the :math:`l`'s, and a nconf x nl array, v_l values for each :math:`l`: l= 0,1,2,...,-1
     """
     vl = generate_ecp_functors(mol._ecp[at_name][1])
     v_l = np.zeros([r_ea.shape[0], len(vl)])
@@ -80,12 +81,9 @@ def get_v_l(mol, at_name, r_ea):
 
 def generate_ecp_functors(coeffs):
     """
-    Returns a functor, with keys as the angular momenta:
-    -1 stands for the nonlocal part, 0,1,2,... are the s,p,d channels, etc.
-    Parameters: 
-      mol._ecp[atom_name][1] (coefficients of the ECP)
-    Returns:
-      v_l function, with key = angular momentum
+    :parameter coeffs: `mol._ecp[atom_name][1]` (coefficients of the ECP)
+    :returns: a functor v_l, with keys as the angular momenta:
+      -1 stands for the nonlocal part, 0,1,2,... are the s,p,d channels, etc.
     """
     d = {}
     for c in coeffs:
@@ -105,7 +103,9 @@ def generate_ecp_functors(coeffs):
 
 class rnExp:
     """
-    v_l object. :math:`c*r^{n-2}*exp(-e*r^2)`
+    v_l object. 
+
+    :math:`cr^{n-2}\cdot\exp(-er^2)`
     """
 
     def __init__(self, n, e, c):
@@ -123,13 +123,13 @@ class rnExp:
 
 
 def P_l(x, l):
-    """
-    Legendre functions,
-    returns a nconf x naip array for a given l, x=r_ea(i)
-    Parameters:
-      x: nconf array, l: integer
-    Returns:
-      P_l values: nconf x naip array
+    r"""Legendre functions,
+
+    :parameter  x: distances x=r_ea(i)
+    :type x: (nconf,) array
+    :parameter int l: angular momentum channel
+    :returns: legendre function P_l values for channel :math:`l`.
+    :rtype: (nconf, naip) array
     """
     if l == 0:
         return np.ones(x.shape)
@@ -146,14 +146,15 @@ def P_l(x, l):
 
 
 def get_P_l(r_ea, r_ea_vec, l_list):
-    """
-    Returns a nconf x naip x nl array, which is the legendre function values for each l channel.
-    The factor (2l+1) and the quadrature weights are included.
-    Parameters:
-      l_list: [-1,0,1,...] list of given angular momenta
-      weights: integration weights
-    Return:
-      P_l values: nconf x naip x nl array  
+    r""" The factor :math:`(2l+1)` and the quadrature weights are included.
+
+    :parameter r_ea: distances of electron e and atom a
+    :type r_ea: (nconf,)
+    :parameter r_ea_vec: displacements of electron e and atom a
+    :type r_ea_vec: (nconf, 3)
+    :parameter list l_list: [-1,0,1,...] list of given angular momenta
+    :returns: legendre function P_l values for each :math:`l` channel.
+    :rtype: (nconf, naip, nl) array
     """
     naip = 6 if len(l_list) <= 2 else 12
     nconf = r_ea.shape[0]
@@ -172,13 +173,10 @@ def get_P_l(r_ea, r_ea_vec, l_list):
 
 def get_rot(nconf, naip):
     """
-    Returns the integration weights (naip), and the positions of the rotated electron e (nconf x naip x 3)
-    Parameters: 
-      configs[:,e,:]: epos of the electron e to be rotated
-    Returns:
-      weights: naip array
-      epos_rot: positions of the rotated electron, nconf x naip x 3
-      
+    :parameter int nconf: number of configurations
+    :parameter int naip: number of auxiliary integration points
+    :returns: the integration weights, and the positions of the rotated electron e
+    :rtype:  ((naip,) array, (nconf, naip, 3) array)
     """
     # t and p are sampled randomly over a sphere around the atom
     t = np.random.uniform(low=0.0, high=np.pi, size=nconf)

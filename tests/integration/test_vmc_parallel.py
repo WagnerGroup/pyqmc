@@ -1,6 +1,7 @@
 import pyqmc.recipes
 import concurrent.futures
 import os
+import pytest
 
 ncore = 2
 nconfig = ncore * 400
@@ -17,6 +18,7 @@ def run_scf(chkfile):
     mf.kernel()
 
 
+@pytest.mark.slow
 def test_parallel():
     run_scf("h2.hdf5")
     with concurrent.futures.ProcessPoolExecutor(max_workers=ncore) as client:

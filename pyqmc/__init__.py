@@ -1,8 +1,7 @@
 name = "pyqmc"
+from pyqmc.recipes import OPTIMIZE, VMC, DMC
 from pyqmc.mc import vmc, initial_guess
-from pyqmc.slater import PySCFSlater
-from pyqmc.multislater import MultiSlater
-
+from pyqmc.slater import Slater
 from pyqmc.multiplywf import MultiplyWF
 from pyqmc.jastrowspin import JastrowSpin
 from pyqmc.manybody_jastrow import J3
@@ -36,53 +35,58 @@ def gradient_generator(mol, wf, to_opt=None, **ewald_kwargs):
     )
 
 
-def default_slater(mol, mf, optimize_orbitals=False, twist=None):
+def default_slater(
+    mol, mf, optimize_orbitals=False, twist=None, optimize_zeros=True, epsilon=1e-8
+):
+    """Construct a Slater determinant
 
-    wf = PySCFSlater(mol, mf, twist=twist)
+    :parameter boolean optimize_orbitals: make `to_opt` true for orbital parameters
+    :parameter array-like twist: The twist to extract from the mean-field object
+    :parameter boolean optimize_zeros: optimize coefficients that are zero in the mean-field object
+    :returns: slater, to_opt
+    """
+    wf = Slater(mol, mf, twist=twist)
     to_opt = {}
     if optimize_orbitals:
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             to_opt[k] = np.ones(wf.parameters[k].shape).astype(bool)
+            if not optimize_zeros:
+                to_opt[k][np.abs(wf.parameters[k]) < epsilon] = False
+
     return wf, to_opt
 
 
-def default_multislater(mol, mf, mc, tol=None, optimize_orbitals=False):
+def default_multislater(
+    mol, mf, mc, tol=None, optimize_orbitals=False, optimize_zeros=True, epsilon=1e-8
+):
     import numpy as np
 
-    wf = MultiSlater(mol, mf, mc, tol)
+    wf = Slater(mol, mf, mc, tol)
     to_opt = ["det_coeff"]
     to_opt = {"det_coeff": np.ones(wf.parameters["det_coeff"].shape).astype(bool)}
     to_opt["det_coeff"][0] = False  # Determinant coefficient pivot
     if optimize_orbitals:
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             to_opt[k] = np.ones(wf.parameters[k].shape).astype(bool)
+            if not optimize_zeros:
+                to_opt[k][np.abs(wf.parameters[k]) < epsilon] = False
 
     return wf, to_opt
 
 
-def default_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
-    """         
-    Default 2-body jastrow from qwalk,
-    Args:
-      ion_cusp (bool): add an extra term to satisfy electron-ion cusp.
-    Returns:
-      jastrow, to_opt
-    """
-    import numpy as np
+def expand_beta_qwalk(beta0, n):
+    """polypade expansion coefficients for n basis functions with first coeff beta0"""
+    if n == 0:
+        return np.zeros(0)
+    beta = np.zeros(n)
+    beta[0] = beta0
+    beta1 = np.log(beta0 + 1.00001)
+    for i in range(1, n):
+        beta[i] = np.exp(beta1 + 1.6 * i) - 1
+    return beta
 
-    def expand_beta_qwalk(beta0, n):
-        """polypade expansion coefficients 
-        for n basis functions with first 
-        coeff beta0"""
-        if n == 0:
-            return np.zeros(0)
-        beta = np.zeros(n)
-        beta[0] = beta0
-        beta1 = np.log(beta0 + 1.00001)
-        for i in range(1, n):
-            beta[i] = np.exp(beta1 + 1.6 * i) - 1
-        return beta
 
+def default_jastrow_basis(mol, ion_cusp=False, na=4, nb=3, rcut=None):
     if rcut is None:
         if hasattr(mol, "a"):
             rcut = np.amin(np.pi / np.linalg.norm(mol.reciprocal_vectors(), axis=1))
@@ -91,6 +95,23 @@ def default_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
 
     beta_abasis = expand_beta_qwalk(0.2, na)
     beta_bbasis = expand_beta_qwalk(0.5, nb)
+    if ion_cusp:
+        abasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
+    else:
+        abasis = []
+    abasis += [PolyPadeFunction(beta=ba, rcut=rcut) for ba in beta_abasis]
+    bbasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
+    bbasis += [PolyPadeFunction(beta=bb, rcut=rcut) for bb in beta_bbasis]
+    return abasis, bbasis
+
+
+def default_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
+    """
+    Default 2-body jastrow from QWalk,
+
+    :parameter boolean ion_cusp: add an extra term to satisfy electron-ion cusp.
+    :returns: jastrow, to_opt
+    """
     if ion_cusp == False:
         ion_cusp = []
         if not mol.has_ecp():
@@ -101,18 +122,10 @@ def default_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
             print("Warning: using both ECP and ion_cusp")
     elif ion_cusp is None:
         ion_cusp = [l for l in mol._basis.keys() if l not in mol._ecp.keys()]
-        print("default ion_cusp:", ion_cusp)
     else:
         assert isinstance(ion_cusp, list)
 
-    if len(ion_cusp) > 0:
-        abasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
-    else:
-        abasis = []
-    abasis += [PolyPadeFunction(beta=ba, rcut=rcut) for ba in beta_abasis]
-    bbasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
-    bbasis += [PolyPadeFunction(beta=bb, rcut=rcut) for bb in beta_bbasis]
-
+    abasis, bbasis = default_jastrow_basis(mol, len(ion_cusp) > 0, na, nb, rcut)
     jastrow = JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
     if len(ion_cusp) > 0:
         coefs = mol.atom_charges().copy()
@@ -153,7 +166,7 @@ def generate_wf(
     mol, mf, jastrow=default_jastrow, jastrow_kws=None, slater_kws=None, mc=None
 ):
     """
-    Generate a wave function from pyscf objects. 
+    Generate a wave function from pyscf objects.
 
     :param mol: The molecule or cell
     :type mol: pyscf Mole or Cell
@@ -167,7 +180,7 @@ def generate_wf(
     :return: wf
     :rtype: A (multi) Slater-Jastrow wave function object
     :return: to_opt
-    :rtype: A dictionary of parameters to optimize, given the settings. 
+    :rtype: A dictionary of parameters to optimize, given the settings.
     """
     if jastrow_kws is None:
         jastrow_kws = {}
@@ -196,67 +209,107 @@ def generate_wf(
     return wf, to_opt
 
 
-def recover_pyscf(chkfile, cancel_outputs=True):
-    """Generate pyscf objects from a pyscf checkfile, in a way that is easy to use for pyqmc. The chkfile should be saved by setting mf.chkfile in a pyscf SCF object. 
-    
-It is recommended to write and recover the objects, rather than trying to use pyscf objects directly when dask parallelization is being used, since by default the pyscf objects 
+def recover_pyscf(chkfile, ci_checkfile=None, cancel_outputs=True):
+    """Generate pyscf objects from a pyscf checkfile, in a way that is easy to use for pyqmc. The chkfile should be saved by setting mf.chkfile in a pyscf SCF object.
 
-cancel_outputs will set the outputs of the objects to None. You may need to make cancel_outputs False if you are using this to input to other pyscf functions.
+    It is recommended to write and recover the objects, rather than trying to use pyscf objects directly when dask parallelization is being used, since by default the pyscf objects contain unserializable objects. (this may be changed in the future)
 
-Typical usage:
+    `cancel_outputs` will set the outputs of the objects to None. You may need to set `cancel_outputs=False` if you are using this to input to other pyscf functions.
 
-mol, mf = recover_pyscf("dft.hdf5")
+    Typical usage::
 
-:param chkfile: The filename to read from. 
-:type chkfile: string
-:return: mol, mf
-:rtype: pyscf Mole, SCF objects
-"""
+        mol, mf = recover_pyscf("dft.hdf5")
+
+    :param chkfile: The filename to read from.
+    :type chkfile: string
+    :return: mol, mf
+    :rtype: pyscf Mole, SCF objects"""
 
     import pyscf
+    import h5py
+    import json
 
-    mol = pyscf.lib.chkfile.load_mol(chkfile)
-    if cancel_outputs:
-        mol.output = None
-        mol.stdout = None
+    with h5py.File(chkfile, "r") as f:
+        periodic = "a" in json.loads(f["mol"][()]).keys()
 
-    if hasattr(mol, "a"):
-        from pyscf import pbc
-
-        mol = pbc.lib.chkfile.load_cell(chkfile)
+    if not periodic:
+        mol = pyscf.lib.chkfile.load_mol(chkfile)
+        with h5py.File(chkfile, "r") as f:
+            mo_occ_shape = f["scf/mo_occ"].shape
         if cancel_outputs:
             mol.output = None
             mol.stdout = None
-        mf = pbc.scf.KRHF(mol)
+        if len(mo_occ_shape) == 2:
+            mf = pyscf.scf.UHF(mol)
+        elif len(mo_occ_shape) == 1:
+            mf = pyscf.scf.ROHF(mol) if mol.spin != 0 else pyscf.scf.RHF(mol)
+        else:
+            raise Exception("Couldn't determine type from chkfile")
     else:
-        # It actually doesn't matter what type of object we make it for
-        # pyqmc. Now if you try to run this, it might cause issues.
-        mf = pyscf.scf.RHF(mol)
+        import pyscf.pbc
 
+        mol = pyscf.pbc.lib.chkfile.load_cell(chkfile)
+        with h5py.File(chkfile, "r") as f:
+            has_kpts = "mo_occ__from_list__" in f["/scf"].keys()
+            if has_kpts:
+                rhf = "000000" in f["/scf/mo_occ__from_list__/"].keys()
+            else:
+                rhf = len(f["/scf/mo_occ"].shape) == 1
+        if cancel_outputs:
+            mol.output = None
+            mol.stdout = None
+        if not rhf and has_kpts:
+            mf = pyscf.pbc.scf.KUHF(mol)
+        elif has_kpts:
+            mf = pyscf.pbc.scf.KROHF(mol) if mol.spin != 0 else pyscf.pbc.scf.KRHF(mol)
+        elif rhf:
+            mf = pyscf.pbc.scf.ROHF(mol) if mol.spin != 0 else pyscf.pbc.scf.RHF(mol)
+        else:
+            mf = pyscf.pbc.scf.UHF(mol)
     mf.__dict__.update(pyscf.scf.chkfile.load(chkfile, "scf"))
+
+    if ci_checkfile is not None:
+        with h5py.File(ci_checkfile, "r") as f:
+            hci = "ci/_strs" in f.keys()
+        if hci:
+            mc = pyscf.hci.SCI(mol)
+        else:
+            import pyscf.casci
+
+            mc = pyscf.casci.CASCI(mol)
+        mc.__dict__.update(pyscf.lib.chkfile.load(ci_checkfile, "ci"))
+
+        return mol, mf, mc
     return mol, mf
 
 
 def read_wf(wf, wf_file):
-    """Read the wave function parameters from wf_file into wf. 
+    """Read the wave function parameters from wf_file into wf.
 
-Typical usage:
+    Typical usage:
 
-.. code-block::python
+    .. code-block:: python
 
-linemin(wf, coords, ..., hdf_file="linemin.hdf5")
-read_wf(wf, "linemin.hdf5")
+       linemin(wf, coords, ..., hdf_file="linemin.hdf5")
+       read_wf(wf, "linemin.hdf5")
 
-:param wf: A pyqmc wave function object. This will 
-:type wf: wave function object with parameters dictionary
-:param wf_file: A HDF5 file with "wf" key. The parameters in this file will be read into the wave function in-place
-:type wf_file: string
+    :param wf: object to load saved parameters into
+    :type wf: wave function object with parameters dictionary
+    :param wf_file: A HDF5 file with "wf" key. The parameters in this file will be read into the wave function in-place
+    :type wf_file: string
 
-:return: nothing
-"""
+    :return: nothing"""
 
     with h5py.File(wf_file, "r") as hdf:
         if "wf" in hdf.keys():
             grp = hdf["wf"]
             for k in grp.keys():
-                wf.parameters[k] = np.array(grp[k])
+                new_parms = np.array(grp[k])
+                if wf.parameters[k].shape != new_parms.shape:
+                    raise Exception(
+                        f"For wave function parameter {k}, shape in {wf_file} is {new_parms.shape}, while current shape is {wf.parameters[k].shape}"
+                    )
+                wf.parameters[k] = new_parms
+        else:
+            raise Exception("Did not find wf in hdf file")
+    return wf

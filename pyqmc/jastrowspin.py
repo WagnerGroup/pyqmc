@@ -7,14 +7,14 @@ class JastrowSpin:
     r"""
     1 body and 2 body jastrow factor
 
-            The Jastrow form is :math:`e^{U(R)}`, where 
+            The Jastrow form is :math:`e^{U(R)}`, where
 
         .. math::  U(R) = \sum_{I, i, k} c^{a}_{Ik\sigma(i)} a_{k}(r_{Ii}) + \sum_{i,j,k} c^{b}_{k\sigma(i)\sigma(j)} b^{l}(r_{ij})
-        
 
-        """
 
-    def __init__(self, mol, a_basis=None, b_basis=None):
+    """
+
+    def __init__(self, mol, a_basis, b_basis):
         r"""
         Args:
 
@@ -25,29 +25,13 @@ class JastrowSpin:
         b_basis : list of func3d objects that comprise the electron-electron basis
 
         """
-        if b_basis is None:
-            nexpand = 5
-            self.b_basis = [
-                GaussianFunction(0.2 * 2 ** n) for n in range(1, nexpand + 1)
-            ]
-        else:
-            nexpand = len(b_basis)
-            self.b_basis = b_basis
-
-        if a_basis is None:
-            aexpand = 4
-            self.a_basis = [
-                GaussianFunction(0.2 * 2 ** n) for n in range(1, aexpand + 1)
-            ]
-        else:
-            aexpand = len(a_basis)
-            self.a_basis = a_basis
-
+        self.a_basis = a_basis
+        self.b_basis = b_basis
         self.parameters = {}
         self._nelec = np.sum(mol.nelec)
         self._mol = mol
-        self.parameters["bcoeff"] = np.zeros((nexpand, 3))
-        self.parameters["acoeff"] = np.zeros((self._mol.natm, aexpand, 2))
+        self.parameters["bcoeff"] = np.zeros((len(b_basis), 3))
+        self.parameters["acoeff"] = np.zeros((self._mol.natm, len(a_basis), 2))
         self.iscomplex = False
 
     def recompute(self, configs):
@@ -55,7 +39,7 @@ class JastrowSpin:
 
         _avalues is the array for current configurations :math:`A_{Iks} = \sum_s a_{k}(r_{Is})` where :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums.
         _bvalues is the array for current configurations :math:`B_{ls} = \sum_s b_{l}(r_{s})` where :math:`s` indexes over :math:`\uparrow\uparrow` (:math:`\alpha_1 < \alpha_2`), :math:`\uparrow\downarrow` (:math:`\alpha, \beta`), and :math:`\downarrow\downarrow` (:math:`\beta_1 < \beta_2`)  sums.
- 
+
         the partial sums store values before summing over electrons
         _a_partial is the array :math:`A^p_{eIk} = a_k(r_{Ie}`, where :math:`e` is any electron
         _b_partial is the array :math:`B^p_{els} = \sum_s b_l(r_{es}`, where :math:`e` is any electron, :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums, not including :math:`e`.
@@ -107,10 +91,10 @@ class JastrowSpin:
         return (np.ones(len(u)), u)
 
     def updateinternals(self, e, epos, wrap=None, mask=None):
-        r""" Update a and b sums. 
+        r"""Update a and b sums.
         _avalues is the array for current configurations :math:`A_{Iks} = \sum_s a_{k}(r_{Is})` where :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums.
         _bvalues is the array for current configurations :math:`B_{ls} = \sum_s b_{l}(r_{s})` where :math:`s` indexes over :math:`\uparrow\uparrow` (:math:`\alpha_1 < \alpha_2`), :math:`\uparrow\downarrow` (:math:`\alpha, \beta`), and :math:`\downarrow\downarrow` (:math:`\beta_1 < \beta_2`)  sums.
-        The update for _avalues and _b_values from moving one electron only requires computing the new sum for that electron. The sums for the electron in the current configuration are stored in _a_partial and _b_partial """
+        The update for _avalues and _b_values from moving one electron only requires computing the new sum for that electron. The sums for the electron in the current configuration are stored in _a_partial and _b_partial"""
         if mask is None:
             mask = [True] * self._configscurrent.configs.shape[0]
         edown = int(e >= self._mol.nelec[0])
@@ -142,7 +126,7 @@ class JastrowSpin:
     def _b_update(self, e, epos, mask):
         r"""
           Calculate b (e-e) partial sums for electron e
-        _b_partial_e is the array :math:`B^p_{ils} = \sum_s b_l(r^i_{es}`, with e fixed; :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums, not including electron e. 
+        _b_partial_e is the array :math:`B^p_{ils} = \sum_s b_l(r^i_{es}`, with e fixed; :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums, not including electron e.
           :math:`i` is the configuration index.
           Args:
               e: fixed electron index
@@ -167,31 +151,38 @@ class JastrowSpin:
 
     def _b_update_many(self, e, epos, mask, spin):
         r"""
+        Compute the update to b for each electron moving to epos.
+
           Calculate b (e-e) partial sums for electron e
-        _b_partial_e is the array :math:`B^p_{ils} = \sum_s b_l(r^i_{es}`, with e fixed; :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums, not including electron e. 
+        _b_partial_e is the array :math:`B^p_{ils} = \sum_s b_l(r^i_{es}`, with e fixed; :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums, not including electron e.
           :math:`i` is the configuration index.
           Args:
               e: fixed electron index
               epos: configs object for electron e
               mask: mask over configs axis, only return values for configs where mask==True. b_partial_e might have a smaller configs axis than epos, _configscurrent, and _b_partial because of the mask.
         """
+        # print(type(epos), epos.configs.shape)
         nup = self._mol.nelec[0]
-        d = epos.dist.dist_i(self._configscurrent.configs[mask], epos.configs[mask])
+        d = epos.dist.dist_i(self._configscurrent.configs[mask], epos.configs[mask, :])
+        # print("d shape", d.shape)
         r = np.linalg.norm(d, axis=-1)
+        # print("electrons", e)
         b_partial_e = np.zeros((e.shape[0], *r.shape[:-1], *self._b_partial.shape[2:]))
-
+        # print('partial', b_partial_e.shape)
         for l, b in enumerate(self.b_basis):
             bval = b.value(d, r)
+            # print("bval", bval.shape, d.shape, r.shape)
             b_partial_e[..., l, 0] = bval[..., :nup].sum(axis=-1)
             b_partial_e[..., l, 1] = bval[..., nup:].sum(axis=-1)
-            b_partial_e[..., l, spin] -= bval[..., e].T
+            # b_partial_e[..., l, spin] -= bval[..., e].T
+            b_partial_e[..., l, spin] -= np.moveaxis(bval[..., e], -1, 0)
 
         return b_partial_e
 
     def _update_b_partial(self, e, epos, mask):
         r"""
           Calculate b (e-e) partial sum contributions from electron e
-        _b_partial_e is the array :math:`B^p_{ils} = \sum_s b_l(r^i_{es}`, with e fixed; :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums, not including electron e. 
+        _b_partial_e is the array :math:`B^p_{ils} = \sum_s b_l(r^i_{es}`, with e fixed; :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums, not including electron e.
           Since :math:`B^p_{ils}` is summed over other electrons, moving electron e will affect other partial sums. This function updates all the necessary partial sums instead of just evaluating the one for electron e.
           :math:`i` is the configuration index.
           Args:
@@ -230,7 +221,7 @@ class JastrowSpin:
 
     def gradient(self, e, epos):
         r"""We compute the gradient for electron e as
-        :math:`\nabla_e \ln \Psi_J = \sum_k c_k \left(\sum_{j > e} \nabla_e b_k(r_{ej}) + \sum_{i < e} \nabla_e b_k(r_{ie})\right)` 
+        :math:`\nabla_e \ln \Psi_J = \sum_k c_k \left(\sum_{j > e} \nabla_e b_k(r_{ej}) + \sum_{i < e} \nabla_e b_k(r_{ie})\right)`
         So we need to compute the gradient of the b's for these indices.
         Note that we need to compute distances between electron position given and the current electron distances.
         We will need this for laplacian() as well"""
@@ -259,6 +250,52 @@ class JastrowSpin:
             grad += np.einsum("j,ijk->ki", c, a.gradient(dinew, rinew))
 
         return grad
+
+    def gradient_value(self, e, epos):
+        r"""
+        """
+        nconf, nelec = self._configscurrent.configs.shape[:2]
+        nup = self._mol.nelec[0]
+
+        # Get e-e and e-ion distances
+        not_e = np.arange(nelec) != e
+        dnew = epos.dist.dist_i(self._configscurrent.configs[:, not_e], epos.configs)
+        dinew = epos.dist.dist_i(self._mol.atom_coords(), epos.configs)
+        rnew = np.linalg.norm(dnew, axis=-1)
+        rinew = np.linalg.norm(dinew, axis=-1)
+
+        grad = np.zeros((3, nconf))
+
+        # Check if selected electron is spin up or down
+        eup = int(e < nup)
+        edown = int(e >= nup)
+
+        b_partial_e = np.zeros((*rnew.shape[:-1], *self._b_partial.shape[2:]))
+        for l, b in enumerate(self.b_basis):
+            c = self.parameters["bcoeff"][l]
+            bgrad, bval = b.gradient_value(dnew, rnew)
+            grad += c[edown] * np.sum(bgrad[:, : nup - eup], axis=1).T
+            grad += c[1 + edown] * np.sum(bgrad[:, nup - eup :], axis=1).T
+            b_partial_e[..., l, 0] = bval[..., : nup - eup].sum(axis=-1)
+            b_partial_e[..., l, 1] = bval[..., nup - eup :].sum(axis=-1)
+
+        a_partial_e = np.zeros((*rinew.shape, self._a_partial.shape[3]))
+        for k, a in enumerate(self.a_basis):
+            c = self.parameters["acoeff"][:, k, edown]
+            agrad, aval = a.gradient_value(dinew, rinew)
+            grad += np.einsum("j,ijk->ki", c, agrad)
+            a_partial_e[..., k] = aval
+
+        deltaa = a_partial_e - self._a_partial[e]
+        a_val = np.einsum(
+            "...jk,jk->...", deltaa, self.parameters["acoeff"][..., edown]
+        )
+        deltab = b_partial_e - self._b_partial[e]
+        b_val = np.einsum(
+            "...jk,jk->...", deltab, self.parameters["bcoeff"][:, edown : edown + 2]
+        )
+        val = np.exp(b_val + a_val)
+        return grad, val
 
     def gradient_laplacian(self, e, epos):
         """ """
@@ -323,7 +360,8 @@ class JastrowSpin:
 
     def testvalue_many(self, e, epos, mask=None):
         r"""
-        Compute the ratio :math:`\Psi_{\rm new}/\Psi_{\rm old}` for moving electron e to epos.
+        Compute the ratio :math:`\Psi_{\rm new}/\Psi_{\rm old}` for moving electrons in e to epos.
+
         _avalues is the array for current configurations :math:`A_{Iks} = \sum_s a_{k}(r_{Is})` where :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums.
         _bvalues is the array for current configurations :math:`B_{ls} = \sum_s b_{l}(r_{s})` where :math:`s` indexes over :math:`\uparrow\uparrow` (:math:`\alpha_1 < \alpha_2`), :math:`\uparrow\downarrow` (:math:`\alpha, \beta`), and :math:`\downarrow\downarrow` (:math:`\beta_1 < \beta_2`)  sums.
         The update for _avalues and _b_values from moving one electron only requires computing the new sum for that electron. The sums for the electron in the current configuration are stored in _a_partial and _b_partial.
@@ -359,14 +397,14 @@ class JastrowSpin:
     def pgradient(self):
         """Given the b sums, this is pretty trivial for the coefficient derivatives.
         For the derivatives of basis functions, we will have to compute the derivative
-        of all the b's and redo the sums, similar to recompute() """
+        of all the b's and redo the sums, similar to recompute()"""
         return {"bcoeff": self._bvalues, "acoeff": self._avalues}
 
     def u_components(self, rvec, r):
-        """Given positions rvec and their magnitudes r, returns 
+        """Given positions rvec and their magnitudes r, returns
         dictionaries of the one-body and two-body Jastrow components.
         Dictionaries are the spin components of U summed across the basis;
-        one-body also returns U for different atoms. """
+        one-body also returns U for different atoms."""
         u_onebody = {"up": [], "dn": []}
         a_value = list(map(lambda x: x.value(rvec, r), self.a_basis))
         u_onebody["up"] = np.einsum(

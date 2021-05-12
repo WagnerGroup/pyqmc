@@ -38,7 +38,7 @@ def _reblock(array, nblocks, weights):
     Helper function to reblock(); this function actually does the reblocking.
     """
     vals = np.array_split(array, nblocks, axis=0)
-    weights = np.array_split(weights, blocks, axis=0)
+    weights = np.array_split(weights, nblocks, axis=0)
     return [(v * w).mean(axis=0) / w.mean(axis=0) for v, w in zip(vals, weights)]
 
 

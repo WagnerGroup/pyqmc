@@ -2,36 +2,41 @@ import pandas as pd
 import numpy as np
 
 
-def reblock(df, nblocks):
+def reblock(df, nblocks, weights=None):
     """
-    Reblock df into nblocks new blocks (nblocks is th length of the returned data)
+    Reblock df into nblocks new blocks (nblocks is the length of the returned data)
 
     :param df: data to reblock
     :type df: pandas DataFrame, Series, or numpy array
     :param nblocks: number of resulting blocks
     :type nblocks: int
+    :param weights: weights used to average data
+    :type weights: array
     :return: reblocked data
     :rtype: same as input df
     """
 
+    if weights is None:
+        weights = np.ones(len(df))
     if isinstance(df, pd.Series):
-        return pd.Series(_reblock(df.values, nblocks))
+        return pd.Series(_reblock(df.values, nblocks, weights))
     elif isinstance(df, pd.DataFrame):
-        rbdf = {col: _reblock(df[col].values, nblocks) for col in df.columns}
+        rbdf = {col: _reblock(df[col].values, nblocks, weights) for col in df.columns}
         return pd.DataFrame(rbdf)
     elif isinstance(df, np.ndarray):
-        return np.stack(_reblock(df, nblocks), axis=0)
+        return np.stack(_reblock(df, nblocks, weights), axis=0)
     else:
         print("WARNING: can't reblock data of type", type(df), "-- not reblocking.")
         return df
 
 
-def _reblock(array, nblocks):
+def _reblock(array, nblocks, weights):
     """
     Helper function to reblock(); this function actually does the reblocking.
     """
     vals = np.array_split(array, nblocks, axis=0)
-    return [v.mean(axis=0) for v in vals]
+    weights = np.array_split(weights, blocks, axis=0)
+    return [(v * w).mean(axis=0) / w.mean(axis=0) for v, w in zip(vals, weights)]
 
 
 def reblock_summary(df, nblocks=(16, 32, 48, 64)):

@@ -11,26 +11,74 @@ def reblock(df, nblocks, weights=None):
     :param nblocks: number of resulting blocks
     :type nblocks: int
     :param weights: weights used to average data
-    :type weights: array
+    :type weights: pandas Series or numpy array
     :return: reblocked data
     :rtype: same as input df
     """
 
+    if isinstance(df, pd.Series):
+        return reblock_series(df, nblocks, weights)
+    elif isinstance(df, pd.DataFrame):
+        return reblock_dataframe(df, nblocks, weights)
+    elif isinstance(df, np.ndarray):
+        return reblock_array(df, nblocks, weights)
+    else:
+        raise TypeError("type {0} not recognized by reblock".format(type(df)))
+
+
+def reblock_array(df, nblocks, weights=None):
+    """
+    Reblock df into nblocks new blocks
+
+    :param df: data to reblock
+    :type df: numpy array-like
+    :param nblocks: number of resulting blocks
+    :type nblocks: int
+    :param weights: weights used to average data
+    :type weights: array
+    :return: reblocked data, length nblocks
+    :rtype: ndarray
+    """
     if weights is None:
         weights = np.ones(len(df))
-    elif hasattr(weights, "values"):
-        weights = weights.values
+    return np.stack(_reblock(df, nblocks, weights), axis=0)
 
-    if isinstance(df, pd.Series):
-        return pd.Series(_reblock(df.values, nblocks, weights))
-    elif isinstance(df, pd.DataFrame):
-        rbdf = {col: _reblock(df[col].values, nblocks, weights) for col in df.columns}
-        return pd.DataFrame(rbdf)
-    elif isinstance(df, np.ndarray):
-        return np.stack(_reblock(df, nblocks, weights), axis=0)
-    else:
-        print("WARNING: can't reblock data of type", type(df), "-- not reblocking.")
-        return df
+
+def reblock_series(df, nblocks, weights=None):
+    """
+    Reblock df into nblocks new blocks
+
+    :param df: data to reblock
+    :type df: pandas Series
+    :param nblocks: number of resulting blocks
+    :type nblocks: int
+    :param weights: weights used to average data
+    :type weights: pandas Series
+    :return: reblocked data, length nblocks
+    :rtype: pandas Series
+    """
+    if weights is None:
+        weights = np.ones(len(df))
+    return pd.Series(_reblock(df.values, nblocks, weights))
+
+
+def reblock_dataframe(df, nblocks, weights=None):
+    """
+    Reblock df into nblocks new blocks
+
+    :param df: data to reblock
+    :type df: pandas DataFrame
+    :param nblocks: number of resulting blocks
+    :type nblocks: int
+    :param weights: weights used to average data
+    :type weights: pandas Series (single column)
+    :return: reblocked data, length nblocks
+    :rtype: pandas DataFrame
+    """
+    if weights is None:
+        weights = np.ones(len(df))
+    rbdf = {col: _reblock(df[col].values, nblocks, weights) for col in df.columns}
+    return pd.DataFrame(rbdf)
 
 
 def _reblock(array, nblocks, weights):

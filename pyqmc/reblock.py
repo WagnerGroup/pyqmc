@@ -18,6 +18,9 @@ def reblock(df, nblocks, weights=None):
 
     if weights is None:
         weights = np.ones(len(df))
+    elif hasattr(weights, "values"):
+        weights = weights.values
+
     if isinstance(df, pd.Series):
         return pd.Series(_reblock(df.values, nblocks, weights))
     elif isinstance(df, pd.DataFrame):
@@ -39,18 +42,18 @@ def _reblock(array, nblocks, weights):
     return [(v * w).mean(axis=0) / w.mean(axis=0) for v, w in zip(vals, weights)]
 
 
-def reblock_summary(df, nblocks=(16, 32, 48, 64)):
+def reblock_summary(df, nblocks=(16, 32, 48, 64), weights=None):
     if hasattr(nblocks, "__iter__"):
         summary_data = [
-            _reblock_summary_single(df, nb) for nb in nblocks if nb < len(df)
+            _reblock_summary_single(df, nb, weights) for nb in nblocks if nb < len(df)
         ]
     else:
-        summary_data = _reblock_summary_single(df, nblocks)
+        summary_data = _reblock_summary_single(df, nblocks, weights)
     return pd.DataFrame(summary_data)
 
 
-def _reblock_summary_single(df, nblocks):
-    rbdf = reblock(df, nblocks)
+def _reblock_summary_single(df, nblocks, weights):
+    rbdf = reblock(df, nblocks, weights)
     if hasattr(rbdf, "values") and not hasattr(rbdf, "columns"):
         rbdf = rbdf.values
     serr = rbdf.std(axis=0) / np.sqrt(len(rbdf) - 1)

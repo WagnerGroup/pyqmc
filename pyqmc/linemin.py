@@ -152,7 +152,7 @@ def line_minimization(
     def gradient_energy_function(x, coords):
         newparms = pgrad_acc.transform.deserialize(x)
         for k in newparms:
-            wf.parameters[k] = cp.asarray(newparms[k])
+            wf.parameters[k] = newparms[k]
         df, coords = pyqmc.mc.vmc(
             wf,
             coords,
@@ -242,7 +242,7 @@ def line_minimization(
 
     newparms = pgrad_acc.transform.deserialize(x0)
     for k in newparms:
-        wf.parameters[k] = cp.asarray(newparms[k])
+        wf.parameters[k] = newparms[k]
 
     return wf, df
 
@@ -266,7 +266,7 @@ def correlated_compute(wf, configs, params, pgrad_acc):
     for p in params:
         newparms = pgrad_acc.transform.deserialize(p)
         for k in newparms:
-            wf.parameters[k] = cp.asarray(newparms[k])
+            wf.parameters[k] = newparms[k]
         psi = wf.recompute(configs)[1]  # recompute gives logdet
         rawweights = np.exp(2 * (psi - psi0))  # convert from log(|psi|) to |psi|**2
         df = pgrad_acc.enacc(configs, wf)

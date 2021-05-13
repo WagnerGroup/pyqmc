@@ -63,7 +63,7 @@ def test():
 
     dfprod = dfdmc[dfdmc.step >= warmup]
 
-    rb_summary = reblock.reblock_summary(dfprod[["energytotal", "energyei"]], 20)
+    rb_summary = reblock.reblock_summary(dfprod[["energytotal", "energyei"]], 20, weights=dfprod["weight"])
     print(rb_summary)
     energy, err = [rb_summary[v]["energytotal"] for v in ("mean", "standard error")]
     assert (

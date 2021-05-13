@@ -80,10 +80,9 @@ class Ewald:
 
     def __init__(self, cell, ewald_gmax=200, nlatvec=1):
         """
-        Inputs:
-            cell: pyscf Cell object (simulation cell)
-            ewald_gmax: int, how far to take reciprocal sum; probably never needs to be changed.
-            nlatvec: int, how far to take real-space sum; probably never needs to be changed.
+        :parameter cell: pyscf Cell object (simulation cell)
+        :parameter int ewald_gmax: how far to take reciprocal sum; probably never needs to be changed.
+        :parameter int nlatvec: how far to take real-space sum; probably never needs to be changed.
         """
         self.nelec = np.array(cell.nelec)
         self.atom_coords, self.atom_charges = cell.atom_coords(), cell.atom_charges()
@@ -93,7 +92,9 @@ class Ewald:
 
     def set_lattice_displacements(self, nlatvec):
         """
-        Generates list of lattice-vector displacements to add together for real-space sum, going from `-nlatvec` to `nlatvec` in each lattice direction.
+        Generates list of lattice-vector displacements to add together for real-space sum
+
+        :parameter int nlatvec: sum goes from `-nlatvec` to `nlatvec` in each lattice direction.
         """
         XYZ = np.meshgrid(*[np.arange(-nlatvec, nlatvec + 1)] * 3, indexing="ij")
         xyz = np.stack(XYZ, axis=-1).reshape((-1, 3))
@@ -109,8 +110,7 @@ class Ewald:
 
         .. math:: W_G = \frac{4\pi}{V |\vec{G}|^2} e^{- \frac{|\vec{G}|^2}{ 4\alpha^2}}
 
-        Inputs:
-            ewald_gmax: int, max number of reciprocal lattice vectors to check away from 0
+        :parameter int ewald_gmax: max number of reciprocal lattice vectors to check away from 0
         """
         cellvolume = np.linalg.det(self.latvec)
         recvec = np.linalg.inv(self.latvec)
@@ -212,8 +212,8 @@ class Ewald:
 
         .. math:: E_{\rm reciprocal\ space}^{\text{ion-ion}} = \sum_{\vec{G} > 0 } W_G \left| \sum_{I=1}^{N_{ion}} Z_I e^{-i\vec{G}\cdot\vec{x}_I} \right|^2
 
-        Returns:
-            ion_ion: float, ion-ion component of Ewald sum
+        :returns: ion-ion component of Ewald sum
+        :rtype: float
         """
         # Real space part
         if len(self.atom_charges) == 1:
@@ -264,11 +264,12 @@ class Ewald:
 
         .. math:: E_{\rm reciprocal\ space}^{e\text{-ion}} = \sum_{\vec{G}>0} W_G {\rm Re} \left[ 2 \sum_{i=1}^{N_e} \sum_{I=1}^{N_{ion}} -Z_I e^{-i\vec{k}\cdot\vec{x}_i} e^{i\vec{k}\cdot\vec{x}_I} \right]
 
-        Inputs:
-            configs: pyqmc PeriodicConfigs object of shape (nconf, nelec, ndim)
-        Returns:
-            ee: electron-electron part
-            ei: electron-ion part
+        :parameter configs: electron positions (walkers)
+        :type configs: (nconf, nelec, 3) PeriodicConfigs object
+        :returns:
+            * ee: electron-electron part
+            * ei: electron-ion part
+        :rtype: float, float
         """
         nconf, nelec, ndim = configs.configs.shape
 
@@ -340,12 +341,13 @@ class Ewald:
                 \\&+ E_{\rm real+reciprocal}^{\text{ion-ion}}
                 + E_{\rm self+charged}^{\text{ion-ion}}
 
-        Inputs:
-            configs: pyqmc PeriodicConfigs object of shape (nconf, nelec, ndim)
-        Returns:
-            ee: electron-electron part
-            ei: electron-ion part
-            ii: ion-ion part
+        :parameter configs: electron positions (walkers)
+        :type configs: (nconf, nelec, 3) PeriodicConfigs object
+        :returns:
+            * ee: electron-electron part
+            * ei: electron-ion part
+            * ii: ion-ion part
+        :rtype: float, float, float
         """
         nelec = configs.configs.shape[1]
         ee, ei = self.ewald_electron(configs)
@@ -360,10 +362,10 @@ class Ewald:
 
         NOTE: energy() needs to be called first to update the separated energy values
 
-        Inputs:
-            configs: pyqmc PeriodicConfigs object of shape (nconf, nelec, ndim)
-        Returns:
-            (nelec,) energies
+        :parameter configs: electron positions (walkers)
+        :type configs: (nconf, nelec, 3) PeriodicConfigs object
+        :returns: energies
+        :rtype: (nelec,) array
         """
         raise NotImplementedError("ewalde_separated is currently not computed anywhere")
         nelec = configs.configs.shape[1]
@@ -373,11 +375,11 @@ class Ewald:
         """
         Compute Coulomb energy of an additional test electron with a set of configs
 
-        Inputs:
-            configs: pyqmc PeriodicConfigs object of shape (nconf, nelec, ndim)
-            epos: pyqmc PeriodicConfigs object of shape (nconf, ndim)
-        Returns:
-            Vtest: (nconf, nelec+1) array. The first nelec columns are Coulomb energies between the test electron and each electron; the last column is the contribution from all the ions.
+        :parameter configs: electron positions (walkers)
+        :type configs: (nconf, nelec, 3) PeriodicConfigs object
+        :parameter epos: pyqmc PeriodicConfigs object of shape (nconf, ndim)
+        :returns: Vtest: The first nelec columns are Coulomb energies between the test electron and each electron; the last column is the contribution from all the ions.
+        :rtype: (nconf, nelec+1) array
         """
         nconf, nelec, ndim = configs.configs.shape
         Vtest = np.zeros((nconf, nelec + 1)) + self.ijconst
@@ -412,6 +414,16 @@ class Ewald:
         return Vtest
 
     def compute_total_energy(self, mol, configs, wf, threshold):
+        """
+        :parameter mol: A pyscf-like 'Mole' object. nelec, atom_charges(), atom_coords(), and ._ecp are used.
+        :parameter configs: electron positions (walkers)
+        :type configs: (nconf, nelec, 3) PeriodicConfigs object
+        :parameter wf: A Wavefunction-like object. Functions used include recompute(), lapacian(), and testvalue()
+        :parameter float threshold: threshold for evaluating ECP
+
+        :returns: a dictionary with energy components ke, ee, ei, ecp, and total
+        :rtype: dict
+        """
         ee, ei, ii = self.energy(configs)
         ecp_val = pyqmc.energy.get_ecp(mol, configs, wf, threshold)
         ke = pyqmc.energy.kinetic(configs, wf)

@@ -3,6 +3,7 @@ import numpy as np
 from copy import copy, deepcopy
 from pyqmc.mc import initial_guess
 from pyqmc.obdm import sample_onebody
+from pyqmc.loadcupy import cp, asnumpy
 from sys import stdout
 from pyqmc.orbitals import MoleculeOrbitalEvaluator, PBCOrbitalEvaluatorKpoints
 import pyqmc.supercell as supercell
@@ -170,15 +171,15 @@ class TBDMAccumulator:
             "acceptance_a": np.mean(aux["acceptance"][0], axis=0),
             "acceptance_b": np.mean(aux["acceptance"][0], axis=0),
         }
-        orb_configs = [orb_configs[s][:, :, self._ijkl[2 * s]] for s in [0, 1]]
+        orb_configs = cp.asarray([orb_configs[s][:, :, self._ijkl[2 * s]] for s in [0, 1]])
 
         down_start = [np.min(self._electrons[s]) for s in [0, 1]]
         for sweep in range(self._nsweeps):
             fsum = [
-                np.sum(np.abs(aux["orbs"][spin][sweep]) ** 2, axis=1) for spin in [0, 1]
+                cp.sum(cp.abs(aux["orbs"][spin][sweep]) ** 2, axis=1) for spin in [0, 1]
             ]
             norm = [
-                np.abs(aux["orbs"][spin][sweep]) ** 2 / fsum[spin][:, np.newaxis]
+                cp.abs(aux["orbs"][spin][sweep]) ** 2 / fsum[spin][:, np.newaxis]
                 for spin in [0, 1]
             ]
 
@@ -207,7 +208,7 @@ class TBDMAccumulator:
             phi_l_r2p = aux["orbs"][1][sweep][..., self._ijkl[3]]
             rho1rho2 = 1.0 / (fsum[0] * fsum[1])
             # n is the walker number, i is the electron pair index, o is the orbital
-            orbratio = np.einsum(
+            orbratio = cp.einsum(
                 "nio,nio,no,no,n ->nio",
                 orb_configs[0][:, electrons_a_ind, :],  # phi_i(r1)
                 orb_configs[1][:, electrons_b_ind, :],  # phi_k(r2)
@@ -216,9 +217,9 @@ class TBDMAccumulator:
                 rho1rho2,
             )
 
-            results["value"] += np.einsum("in,inj->ij", wfratio, orbratio)
-            results["norm_a"] += norm[0]
-            results["norm_b"] += norm[1]
+            results["value"] += asnumpy(cp.einsum("in,inj->ij", wfratio, orbratio))
+            results["norm_a"] += asnumpy(norm[0])
+            results["norm_b"] += asnumpy(norm[1])
 
         results["value"] /= self._nsweeps
         for e in ["a", "b"]:

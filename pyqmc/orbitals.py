@@ -2,6 +2,7 @@ import numpy as np
 from pyqmc.loadcupy import cp, asnumpy
 import pyqmc.pbc as pbc
 from pyqmc.supercell import get_supercell_kpts, get_supercell
+from pyqmc.pbc_eval_gto import get_lattice_Ls, _estimate_rcut, eval_gto
 import pyqmc.determinant_tools
 
 """
@@ -146,6 +147,9 @@ class PBCOrbitalEvaluatorKpoints:
             "mo_coeff_beta": cp.asarray(np.concatenate(mo_coeff[1], axis=1)),
         }
 
+        self.Ls = get_lattice_Ls(self._cell)
+        self.rcut = _estimate_rcut(self._cell)
+
     @classmethod
     def from_mean_field(self, cell, mf, twist=None):
         """
@@ -244,7 +248,14 @@ class PBCOrbitalEvaluatorKpoints:
         wrap_phase = get_wrapphase_complex(kdotR)
         # k,coordinate, orbital
         ao = cp.asarray(
-            self._cell.eval_gto("PBC" + eval_str, mycoords, kpts=self._kpts)
+            eval_gto(
+                self._cell,
+                "PBC" + eval_str,
+                mycoords,
+                kpts=self._kpts,
+                Ls=self.Ls,
+                rcut=self.rcut,
+            )
         )
         ao = cp.einsum("k...,k...a->k...a", wrap_phase, ao)
         if len(ao.shape) == 4:  # if derivatives are included

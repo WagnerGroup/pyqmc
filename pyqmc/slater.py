@@ -346,8 +346,8 @@ class Slater:
         return asnumpy(ratios)
 
     def pgradient(self):
-        r"""Compute the parameter gradient of Psi.
-        Returns $$d_p \Psi/\Psi$$ as a dictionary of numpy arrays,
+        """Compute the parameter gradient of Psi.
+        Returns :math:`\partial_p \Psi/\Psi` as a dictionary of numpy arrays,
         which correspond to the parameter dictionary.
 
         The wave function is given by ci Di, with an implicit sum

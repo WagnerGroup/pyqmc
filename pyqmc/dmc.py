@@ -9,15 +9,10 @@ def limdrift(g, tau, acyrus=0.25):
     """
     Use Cyrus Umrigar's algorithm to limit the drift near nodes.
 
-    Args:
-      g: a [nconf,ndim] vector
-
-      tau: time step
-
-      acyrus: the maximum magnitude
-
-    Returns:
-      The vector with the cut off applied and multiplied by tau.
+    :parameter g: a [nconf,ndim] vector
+    :parameter tau: time step
+    :parameter acyrus: the maximum magnitude
+    :returns: The vector with the cut off applied and multiplied by tau.
     """
     tot = np.linalg.norm(g, axis=1) * acyrus
     mask = tot > 1e-8
@@ -30,13 +25,9 @@ def limdrift_cutoff(g, tau, cutoff=1):
     """
     Limit a vector to have a maximum magnitude of cutoff while maintaining direction
 
-    Args:
-      g: a [nconf,ndim] vector
-
-      cutoff: the maximum magnitude
-
-    Returns:
-      The vector with the cut off applied and multiplied by tau.
+    :parameter g: a [nconf,ndim] vector
+    :parameter cutoff: the maximum magnitude
+    :returns: The vector with the cutoff applied and multiplied by tau.
     """
     return mc.limdrift(g, cutoff) * tau
 
@@ -57,25 +48,15 @@ def dmc_propagate(
     """
     Propagate DMC without branching
 
-    Args:
-      wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as anything (such as laplacian() ) used by accumulators
-
-      configs: Configs object, (nconfig, nelec, 3) - initial coordinates to start calculation.
-
-      weights: (nconfig,) - initial weights to start calculation
-
-      tstep: Time step for move proposals. Introduces time step error.
-
-      nsteps: number of DMC steps to take
-
-      accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
-
-      ekey: tuple of strings; energy is needed for DMC weights. Access total energy by accumulators[ekey[0]](configs, wf)[ekey[1]
-
-      drift_limiter: a function that takes a gradient and a cutoff and returns an adjusted gradient
-
-
-    Returns: (df,coords,weights)
+    :parameter wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as anything (such as laplacian() ) used by accumulators
+    :parameter configs: Configs object, (nconfig, nelec, 3) - initial coordinates to start calculation.
+    :parameter weights: (nconfig,) - initial weights to start calculation
+    :parameter tstep: Time step for move proposals. Introduces time step error.
+    :parameter nsteps: number of DMC steps to take
+    :parameter accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
+    :parameter ekey: tuple of strings; energy is needed for DMC weights. Access total energy by accumulators[ekey[0]](configs, wf)[ekey[1]
+    :parameter drift_limiter: a function that takes a gradient and a cutoff and returns an adjusted gradient
+    :returns: (df,coords,weights)
       df: A list of dictionaries nstep long that contains all results from the accumulators.
 
       coords: The final coordinates from this calculation.
@@ -153,8 +134,48 @@ def dmc_propagate(
 
 
 def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **kwargs):
+    r"""Parallelizes calls to dmc_propagate by splitting configs
+    
+    If npartitions does not evenly divide nconfigs, we need to reweight the results based on the number of configs per parallel task.
+
+    The final result should be equivalent to the non-parallelized case. 
+    The average weight :math:`w` and the weighted average of observables :math:`\langle O \rangle` are returned.
+    Index :math:`i` refers to walker index.
+
+    .. math:: 
+        w = \sum_i w_i / n_{\rm config}
+        \qquad\quad \langle O \rangle = \sum_i o_{i}  w_i / \sum_i w_i
+
+    Split over parallel tasks, we need to reweight by number of walkers.
+    The average weight :math:`w_p` and weighted average of observables :math:`\langle O\rangle_p` are returned from each task.
+
+    .. math:: 
+        w_p = \sum_j^{{\rm task}\, p} w_j / n_{{\rm config}, p}
+        \qquad\quad \langle O \rangle_p = \frac{\sum_j^{{\rm task}\, p} o_{j}  w_j }{ \sum_j^{{\rm task}\, p} w_j }
+
+
+    The total weight and total average (defined above) are computed from the task weights :math:`w_p` and task averages :math:`\langle O\rangle_p` as
+
+    .. math:: 
+        w = \sum_p w_p n_{{\rm config}, p} /  n_{\rm config},
+        \qquad\quad \langle O \rangle = \frac{ \sum_p \langle O\rangle_p  \sum_j^{{\rm task}\, p} w_j }{ \sum_i w_i}.
+
+    We can rewrite the weights using the equations above
+
+    .. math:: 
+        \langle O \rangle &= \frac{ \sum_p \langle O\rangle_p w_p  n_{{\rm config}, p}  }{ w n_{\rm config} }
+
+        &= \sum_p \langle O\rangle_p \frac{w_p n_{{\rm config}, p}}{\sum_p w_p n_{{\rm config}, p}}
+
+
+    By reweighting the task weights as :math:`\overline{w}_p = w_p n_{{\rm config}, p}`, we can omit the reweighting factor :math:`\frac{n_{{\rm config}, p}}{n_{\rm config}}` (that we use to collect parallel vmc).
+    Instead, we use only the reweighting factor :math:`\overline{w}_p / \sum_p \overline{w}_p`
+
+    .. math:: \langle O \rangle = \sum_p \langle O\rangle_p \frac{\overline{w}_p }{\sum_p \overline{w}_p }
+    """
+
     config = configs.split(npartitions)
-    weight = np.split(weights, npartitions)
+    weight = np.array_split(weights, npartitions)
     runs = [
         client.submit(dmc_propagate, wf, conf, wt, *args, **kwargs)
         for conf, wt in zip(config, weight)
@@ -163,14 +184,13 @@ def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **k
     configs.join(allresults[1])
     weights = np.concatenate(allresults[2])
     confweight = np.array([len(c.configs) for c in config], dtype=float)
-    confweight_avg = confweight / (np.mean(confweight) * npartitions)
-    weight = np.array([w["weight"] for w in allresults[0]])
-    weight_avg = weight / np.mean(weight)
+    weight = np.array([w["weight"] for w in allresults[0]]) * confweight
+    weight_avg = weight / np.sum(weight)
     block_avg = {
         k: np.sum(
             [
-                res[k] * ww * cw
-                for res, cw, ww in zip(allresults[0], confweight_avg, weight_avg)
+                res[k] * ww
+                for res, ww in zip(allresults[0], weight_avg)
             ],
             axis=0,
         )
@@ -184,26 +204,25 @@ def limit_timestep(weights, elocnew, elocold, eref, start, stop):
     """
     Stabilizes weights by scaling down the effective tstep if the local energy is too far from eref.
 
-    Args:
-      weights: (nconfigs,) array
+    :parameter ndarray weights: (nconfigs,) array
         walker weights
-      elocnew: (nconfigs,) array
+    :parameter ndarray elocnew: (nconfigs,) array
         current local energy of each walker
-      elocold: (nconfigs,) array
+    :parameter ndarray elocold: (nconfigs,) array
         previous local energy of each walker
-      eref: scalar
+    :parameter float eref: scalar
         reference energy that fixes normalization
-      start: scalar
+    :parameter float start: scalar
         number of sigmas to start damping tstep
-      stop: scalar
+    :parameter float stop: scalar
         number of sigmas where tstep becomes zero
 
-    Return:
-      tdamp: scalar
-        Damping factor to multiply timestep; always between 0 and 1. The damping factor is
-            1 if eref-eloc < branchcut_start*sigma,
-            0 if eref-eloc > branchcut_stop*sigma,
-            decreases linearly inbetween.
+    :return: Damping factor to multiply timestep; always between 0 and 1. The damping factor is
+          * 1 if eref-eloc < branchcut_start*sigma,
+          * 0 if eref-eloc > branchcut_stop*sigma,
+          * decreases linearly inbetween.
+
+    :rtype: float
     """
     if start is None or stop is None:
         return 1
@@ -223,15 +242,9 @@ def branch(configs, weights):
 
     Walkers are resampled with probability proportional to the weights, and the new weights are all set to be equal to the average weight.
 
-    Args:
-      configs: (nconfig,nelec,3) walker coordinates
-
-      weights: (nconfig,) walker weights
-
-    Returns:
-      configs: resampled walker configurations
-
-      weights: (nconfig,) all weights are equal to average weight
+    :parameter configs: (nconfig,nelec,3) walker coordinates
+    :parameter weights: (nconfig,) walker weights
+    :returns: resampled walker configurations and weights all equal to average weight
     """
 
     nconfig = configs.configs.shape[0]
@@ -284,30 +297,18 @@ def rundmc(
     """
     Run DMC
 
-    Args:
-      wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as anything (such as laplacian() ) used by accumulators
-
-      configs: (nconfig, nelec, 3) - initial coordinates to start calculation.
-
-      weights: (nconfig,) - initial weights to start calculation, defaults to uniform.
-
-      nsteps: number of DMC steps to take
-
-      tstep: Time step for move proposals. Introduces time step error.
-
-      branchtime: number of steps to take between branching
-
-      accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
-
-      ekey: tuple of strings; energy is needed for DMC weights. Access total energy by accumulators[ekey[0]](configs, wf)[ekey[1]
-
-      verbose: Print out step information
-
-      drift_limiter: a function that takes a gradient and a cutoff and returns an adjusted gradient
-
-      stepoffset: If continuing a run, what to start the step numbering at.
-
-    Returns: (df,coords,weights)
+    :parameter wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as anything (such as laplacian() ) used by accumulators
+    :parameter configs: (nconfig, nelec, 3) - initial coordinates to start calculation.
+    :parameter weights: (nconfig,) - initial weights to start calculation, defaults to uniform.
+    :parameter nsteps: number of DMC steps to take
+    :parameter tstep: Time step for move proposals. Introduces time step error.
+    :parameter branchtime: number of steps to take between branching
+    :parameter accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
+    :parameter ekey: tuple of strings; energy is needed for DMC weights. Access total energy by accumulators[ekey[0]](configs, wf)[ekey[1]
+    :parameter verbose: Print out step information
+    :parameter drift_limiter: a function that takes a gradient and a cutoff and returns an adjusted gradient
+    :parameter stepoffset: If continuing a run, what to start the step numbering at.
+    :returns: (df,coords,weights)
       df: A list of dictionaries nstep long that contains all results from the accumulators.
 
       coords: The final coordinates from this calculation.

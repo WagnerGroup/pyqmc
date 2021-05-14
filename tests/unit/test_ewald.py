@@ -1,5 +1,5 @@
 import numpy as np
-import pyqmc
+import pyqmc.ewald
 from pyqmc.coord import PeriodicConfigs
 from pyqmc.supercell import get_supercell
 from pyscf.pbc import gto, scf

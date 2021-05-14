@@ -2,6 +2,7 @@ import numpy as np
 import pyqmc.gpu as gpu
 import pyqmc.pbc as pbc
 import pyqmc.supercell as supercell
+import pyqmc.pbc_eval_gto as pbc_eval_gto
 import pyqmc.determinant_tools
 
 """
@@ -146,6 +147,9 @@ class PBCOrbitalEvaluatorKpoints:
             "mo_coeff_beta": gpu.cp.asarray(np.concatenate(mo_coeff[1], axis=1)),
         }
 
+        self.Ls = pbc_eval_gto.get_lattice_Ls(self._cell)
+        self.rcut = pbc_eval_gto._estimate_rcut(self._cell)
+
     @classmethod
     def from_mean_field(self, cell, mf, twist=None):
         """
@@ -244,7 +248,14 @@ class PBCOrbitalEvaluatorKpoints:
         wrap_phase = get_wrapphase_complex(kdotR)
         # k,coordinate, orbital
         ao = gpu.cp.asarray(
-            self._cell.eval_gto("PBC" + eval_str, mycoords, kpts=self._kpts)
+            pbc_eval_gto.eval_gto(
+                self._cell,
+                "PBC" + eval_str,
+                mycoords,
+                kpts=self._kpts,
+                Ls=self.Ls,
+                rcut=self.rcut,
+            )
         )
         ao = gpu.cp.einsum("k...,k...a->k...a", wrap_phase, ao)
         if len(ao.shape) == 4:  # if derivatives are included

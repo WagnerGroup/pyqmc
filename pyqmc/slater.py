@@ -192,15 +192,15 @@ class Slater:
         dnref = gpu.cp.amax(self._dets[1][1]).real
 
         det_array = (
-            self._dets[0][0, :, self._det_map[0]][:, mask]
-            * self._dets[1][0, :, self._det_map[1]][:, mask]
+            self._dets[0][0, mask][:, self._det_map[0]]
+            * self._dets[1][0, mask][:, self._det_map[1]]
             * gpu.cp.exp(
-                self._dets[0][1, :, self._det_map[0]][:, mask]
-                + self._dets[1][1, :, self._det_map[1]][:, mask]
+                self._dets[0][1, mask][:, self._det_map[0]]
+                + self._dets[1][1, mask][:, self._det_map[1]]
                 - upref
                 - dnref
             )
-        )
+        ).T
         numer = gpu.cp.einsum(
             "i...d,d,di->i...",
             ratios[..., self._det_map[s]],

@@ -2,6 +2,7 @@
 from pyqmc.orbitals import MoleculeOrbitalEvaluator, PBCOrbitalEvaluatorKpoints
 import numpy as np
 from pyqmc.mc import initial_guess
+from pyqmc.loadcupy import cp, asnumpy
 
 import pyqmc.supercell as supercell
 
@@ -123,15 +124,15 @@ class OBDMAccumulator:
 
         for conf, assign in zip(extra_configs, auxassignments):
             conf.resample(assign)
-        borb_aux = [orb[assign, ...] for orb, assign in zip(borb_aux, auxassignments)]
+        borb_aux = cp.asarray([orb[assign, ...] for orb, assign in zip(borb_aux, auxassignments)])
 
         results["acceptance"] += np.sum(accept) / naux
 
         borb_configs = self.evaluate_orbitals(configs.electron(self._electrons))
         borb_configs = borb_configs.reshape(nconf, self.nelec, -1)
 
-        bauxsquared = np.abs(borb_aux) ** 2
-        fsum = np.sum(bauxsquared, axis=-1, keepdims=True)
+        bauxsquared = cp.abs(borb_aux) ** 2
+        fsum = cp.sum(bauxsquared, axis=-1, keepdims=True)
         norm = bauxsquared / fsum
         baux_f = borb_aux / fsum
 
@@ -147,8 +148,8 @@ class OBDMAccumulator:
                 optimize=True,
             )
 
-            results["value"] += ratio
-            results["norm"] += norm[sweep, :]
+            results["value"] += asnumpy(ratio)
+            results["norm"] += asnumpy(norm[sweep, :])
 
         results["value"] /= self._nstep
         results["norm"] = results["norm"] / self._nstep
@@ -176,7 +177,7 @@ def sample_onebody(configs, orbitals, spin, nsamples=1, tstep=0.5):
     n = configs.configs.shape[0]
     ao = orbitals.aos("GTOval_sph", configs)
     borb = orbitals.mos(ao, spin=spin)
-    fsum = (np.abs(borb) ** 2).sum(axis=1)
+    fsum = (cp.abs(borb) ** 2).sum(axis=1)
 
     allaccept = np.zeros((nsamples, n))
     allconfigs = []
@@ -186,8 +187,8 @@ def sample_onebody(configs, orbitals, spin, nsamples=1, tstep=0.5):
         newconfigs = configs.make_irreducible(0, configs.configs + shift)
         ao = orbitals.aos("GTOval_sph", newconfigs)
         borbnew = orbitals.mos(ao, spin=spin)
-        fsumnew = (np.abs(borbnew) ** 2).sum(axis=1)
-        accept = fsumnew / fsum > np.random.rand(n)
+        fsumnew = (cp.abs(borbnew) ** 2).sum(axis=1)
+        accept = asnumpy(fsumnew / fsum) > np.random.rand(n)
         configs.move_all(newconfigs, accept)
         borb[accept] = borbnew[accept]
         fsum[accept] = fsumnew[accept]

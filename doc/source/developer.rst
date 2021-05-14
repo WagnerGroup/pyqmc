@@ -6,3 +6,4 @@ Developer information
 
    benchmarking
    api_reference
+   gpu

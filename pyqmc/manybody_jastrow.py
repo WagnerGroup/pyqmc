@@ -1,4 +1,5 @@
 import numpy as np
+from pyqmc.loadcupy import cp, asnumpy
 
 
 class J3:
@@ -41,7 +42,7 @@ class J3:
             optimize=self.optimize,
         )
         signs = np.ones(len(vals))
-        return (signs, vals)
+        return (signs, asnumpy(vals))
 
     def gradient_value(self, e, epos):
         return self.gradient(e, epos), self.testvalue(e, epos)
@@ -62,7 +63,7 @@ class J3:
             e_grad[:, :, 0, :],
             optimize=self.optimize,
         )
-        return grad1 + grad2
+        return asnumpy(grad1 + grad2)
 
     def laplacian(self, e, epos):
         _, e_grad, e_lap = self._get_val_grad_lap(epos)
@@ -98,7 +99,7 @@ class J3:
         grad = grad1 + grad2
 
         lap3 = np.einsum("dc,dc->c", grad, grad)
-        return lap1 + lap2 + lap3
+        return asnumpy(lap1 + lap2 + lap3)
 
     def gradient_laplacian(self, e, epos):
         _, e_grad, e_lap = self._get_val_grad_lap(epos)
@@ -134,7 +135,7 @@ class J3:
         grad = grad1 + grad2
 
         lap3 = np.einsum("dc,dc->c", grad, grad)
-        return grad, lap1 + lap2 + lap3
+        return asnumpy(grad), asnumpy(lap1 + lap2 + lap3)
 
     def pgradient(self):
         mask = np.tril(
@@ -210,4 +211,4 @@ class J3:
             optimize=self.optimize,
         )
 
-        return np.exp((new_val.T - curr_val).T)
+        return asnumpy(np.exp((new_val.T - curr_val).T))

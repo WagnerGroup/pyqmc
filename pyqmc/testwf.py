@@ -166,7 +166,7 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
     for e in range(nelec):
         lap[:, e] = wf.laplacian(e, configs.electron(e))
 
-        for d in range(0, 3):
+        for d in range(3):
             epos = configs.make_irreducible(
                 e, configs.configs[:, e, :] + delta * np.eye(3)[d]
             )
@@ -238,10 +238,10 @@ def test_wf_gradient_value(wf, configs):
         tt1 = time.perf_counter()
         tsep += ts1 - ts0
         ttog += tt1 - tt0
-        rel_grad = np.abs((andgrad - grad) / grad)
-        rel_val = np.abs((andval - val) / val)
-        rmax_grad = np.max(rel_grad)
-        rmax_val = np.max(rel_val)
+    rel_grad = np.abs((andgrad - grad) / grad)
+    rel_val = np.abs((andval - val) / val)
+    rmax_grad = np.max(rel_grad)
+    rmax_val = np.max(rel_val)
 
     print("separate", tsep)
     print("together", ttog)

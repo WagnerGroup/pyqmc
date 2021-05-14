@@ -73,6 +73,13 @@ def OPTIMIZE(
 def generate_accumulators(mol, mf, energy=True, rdm1=False, extra_accumulators=None):
     acc = {} if extra_accumulators is None else extra_accumulators
 
+    if hasattr(mf.mo_coeff, "shape") and len(mf.mo_coeff.shape) == 2:
+        mo_coeff = [mf.mo_coeff, mf.mo_coeff]
+    elif hasattr(mf, "kpts") and len(mf.mo_coeff[0][0].shape) < 2:
+        mo_coeff = [mf.mo_coeff, mf.mo_coeff]
+    else:
+        mo_coeff = mf.mo_coeff
+
     if energy:
         if "energy" in acc.keys():
             raise Exception("Found energy in extra_accumulators and energy is True")

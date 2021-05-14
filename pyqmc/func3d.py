@@ -1,4 +1,5 @@
 import numpy as np
+from pyqmc.loadcupy import fuse, cp, asnumpy
 
 """ 
 Collection of 3d function objects. Each has a dictionary parameters, which corresponds
@@ -40,7 +41,7 @@ class GaussianFunction:
         :returns: function value
         :rtype: (nconfig,...) array
         """
-        return np.exp(-self.parameters["exponent"] * r * r)
+        return cp.exp(-self.parameters["exponent"] * r * r)
 
     def gradient(self, x, r):
         """Returns gradient of function.
@@ -99,7 +100,7 @@ class GaussianFunction:
         :rtype: dictionary
         """
         r2 = r * r
-        return {"exponent": -r2 * np.exp(-self.parameters["exponent"] * r2)}
+        return {"exponent": -r2 * cp.exp(-self.parameters["exponent"] * r2)}
 
 
 class PadeFunction:
@@ -192,6 +193,24 @@ class PadeFunction:
         return {"alphak": akderiv}
 
 
+@fuse()
+def polypadevalue(z, beta):
+    p = z * z * (6 - 8 * z + 3 * z * z)
+    return (1 - p) / (1 + beta * p)
+
+
+@fuse()
+def polypadegradvalue(r, beta, rcut):
+    z = r / rcut
+    p = z * z * (6 - 8 * z + 3 * z * z)
+    dpdz = 12 * z * (z * z - 2 * z + 1)
+    dbdp = -(1 + beta) / (1 + beta * p) ** 2
+    dzdx_rvec = 1 / (r * rcut)
+    grad_rvec = dbdp * dpdz * dzdx_rvec
+    value = (1 - p) / (1 + beta * p)
+    return grad_rvec, value
+
+
 class PolyPadeFunction:
     r"""
     :math:`b(r) = \frac{1-p(z)}{1+\beta p(z)}`
@@ -203,7 +222,10 @@ class PolyPadeFunction:
     """
 
     def __init__(self, beta, rcut):
-        self.parameters = {"beta": beta, "rcut": rcut}
+        self.parameters = {
+            "beta": cp.asarray(beta),
+            "rcut": cp.asarray(rcut),
+        }
 
     def value(self, rvec, r):
         """Returns function (1-p(r/rcut))/(1+beta*p(r/rcut))
@@ -215,9 +237,8 @@ class PolyPadeFunction:
         """
         mask = r < self.parameters["rcut"]
         z = r[mask] / self.parameters["rcut"]
-        p = z * z * (6 - 8 * z + 3 * z * z)
-        func = np.zeros(r.shape)
-        func[mask] = (1 - p) / (1 + self.parameters["beta"] * p)
+        func = cp.zeros(r.shape)
+        func[mask] = polypadevalue(z, self.parameters["beta"])
         return func
 
     def gradient_value(self, rvec, r):
@@ -227,19 +248,15 @@ class PolyPadeFunction:
         :returns: gradient and value
         :rtype: tuple of (nconfig,...,3) arrays
         """
-        value = np.zeros(r.shape)
-        grad = np.zeros(rvec.shape)
+        value = cp.zeros(r.shape)
+        grad = cp.zeros(rvec.shape)
         mask = r < self.parameters["rcut"]
-        r = r[mask][..., np.newaxis]
-        rvec = rvec[mask]
-        z = r / self.parameters["rcut"]
-        p = z * z * (6 - 8 * z + 3 * z * z)
-        dpdz = 12 * z * (z * z - 2 * z + 1)
-        dbdp = -(1 + self.parameters["beta"]) / (1 + self.parameters["beta"] * p) ** 2
-        dzdx = rvec / (r * self.parameters["rcut"])
-        grad[mask] = dbdp * dpdz * dzdx
-        p = p[..., 0]
-        value[mask] = (1 - p) / (1 + self.parameters["beta"] * p)
+        grad_rvec, value[mask] = polypadegradvalue(
+            r[mask],
+            self.parameters["beta"],
+            self.parameters["rcut"],
+        )
+        grad[mask] = cp.einsum("ij,i->ij", rvec[mask], grad_rvec)
         return grad, value
 
     def gradient(self, rvec, r):
@@ -249,7 +266,7 @@ class PolyPadeFunction:
         :returns: gradient
         :rtype: (nconfig,...,3) array
         """
-        grad = np.zeros(rvec.shape)
+        grad = cp.zeros(rvec.shape)
         mask = r < self.parameters["rcut"]
         r = r[mask][..., np.newaxis]
         rvec = rvec[mask]
@@ -279,10 +296,11 @@ class PolyPadeFunction:
         :returns: gradient and laplacian
         :rtype: tuple of two (nconfig,...,3) arrays (components of laplacian d^2/dx_i^2 separately)
         """
-        grad = np.zeros(rvec.shape)
-        lap = np.zeros(rvec.shape)
+        grad = cp.zeros(rvec.shape)
+        lap = cp.zeros(rvec.shape)
         mask = r < self.parameters["rcut"]
-        r = r[mask, np.newaxis]
+        r = r[..., np.newaxis]
+        r = r[mask]
         rvec = rvec[mask]
         z = r / self.parameters["rcut"]
         beta = self.parameters["beta"]
@@ -309,17 +327,18 @@ class PolyPadeFunction:
 
         :return paramderivs: dictionary {'rcut':d/drcut,'beta':d/dbeta}
         """
-        pderiv = {"rcut": np.zeros(r.shape), "beta": np.zeros(r.shape)}
-        mask = r < self.parameters["rcut"]
-        r = r[mask]
+        mask = r >= self.parameters["rcut"]
         z = r / self.parameters["rcut"]
         beta = self.parameters["beta"]
 
         p = z * z * (6 - 8 * z + 3 * z * z)
         dbdp = -(1 + beta) / (1 + beta * p) ** 2
         dpdz = 12 * z * (z * z - 2 * z + 1)
-        pderiv["rcut"][mask] = dbdp * dpdz * (-z / self.parameters["rcut"])
-        pderiv["beta"][mask] = -p * (1 - p) / (1 + beta * p) ** 2
+        derivrcut = dbdp * dpdz * (-z / self.parameters["rcut"])
+        derivbeta = -p * (1 - p) / (1 + beta * p) ** 2
+        derivrcut[mask] = 0.0
+        derivbeta[mask] = 0.0
+        pderiv = {"rcut": derivrcut, "beta": derivbeta}
         return pderiv
 
 
@@ -347,7 +366,7 @@ class CutoffCuspFunction:
         y = r[mask] / self.parameters["rcut"]
         gamma = self.parameters["gamma"]
         p = y - y * y + y * y * y / 3
-        func = np.zeros(r.shape)
+        func = cp.zeros(r.shape)
         func[mask] = -p / (1 + gamma * p) + 1 / (3 + gamma)
         return func * self.parameters["rcut"]
 
@@ -358,7 +377,6 @@ class CutoffCuspFunction:
         :returns: gradient
         :rtype: (nconfig,...,3) array
         """
-        grad = np.zeros(rvec.shape)
         rcut = self.parameters["rcut"]
         gamma = self.parameters["gamma"]
         mask = r < rcut
@@ -369,6 +387,7 @@ class CutoffCuspFunction:
         b = y - y * y + y * y * y / 3
         c = 1 / (1 + gamma * b) ** 2 / (rcut * r)
 
+        grad = cp.zeros(rvec.shape)
         grad[mask] = -rvec[mask] * a * c * rcut
         return grad
 
@@ -379,8 +398,8 @@ class CutoffCuspFunction:
         :returns: gradient and value
         :rtype: tuple of (nconfig,...,3) arrays
         """
-        grad = np.zeros(rvec.shape)
-        value = np.zeros(r.shape)
+        grad = cp.zeros(rvec.shape)
+        value = cp.zeros(r.shape)
         rcut = self.parameters["rcut"]
         gamma = self.parameters["gamma"]
         mask = r < rcut
@@ -403,7 +422,7 @@ class CutoffCuspFunction:
         :returns: laplacian (returns components of laplacian d^2/dx_i^2 separately)
         :rtype: (nconfig,...,3) array
         """
-        lap = np.zeros(rvec.shape)
+        lap = cp.zeros(rvec.shape)
         rcut = self.parameters["rcut"]
         gamma = self.parameters["gamma"]
         mask = r < rcut
@@ -429,8 +448,8 @@ class CutoffCuspFunction:
         :returns: gradient and laplacian
         :rtype: tuple of two (nconfig,...,3) arrays (components of laplacian d^2/dx_i^2 separately)
         """
-        grad = np.zeros(rvec.shape)
-        lap = np.zeros(rvec.shape)
+        grad = cp.zeros(rvec.shape)
+        lap = cp.zeros(rvec.shape)
         rcut = self.parameters["rcut"]
         gamma = self.parameters["gamma"]
         mask = r < rcut
@@ -457,11 +476,10 @@ class CutoffCuspFunction:
         :returns: parameter derivatives {'rcut':d/drcut,'gamma':d/dgamma}
         :rtype: dict
         """
-        func = {"rcut": np.zeros(r.shape), "gamma": np.zeros(r.shape)}
         rcut = self.parameters["rcut"]
         gamma = self.parameters["gamma"]
-        mask = r <= rcut
-        r = r[mask]
+        mask = r > rcut
+        r = r
         y = r / rcut
 
         a = 1 - 2 * y + y * y
@@ -469,17 +487,20 @@ class CutoffCuspFunction:
         c = a / (1 + gamma * b) ** 2 / (rcut * r)
         val = -b / (1 + gamma * b) + 1 / (3 + gamma)
 
-        func["rcut"][mask] = y * a / (1 + gamma * b) ** 2 + val
-        func["gamma"][mask] = ((b / (1 + gamma * b)) ** 2 - 1 / (3 + gamma) ** 2) * rcut
+        dfdrcut = y * a / (1 + gamma * b) ** 2 + val
+        dfdgamma = ((b / (1 + gamma * b)) ** 2 - 1 / (3 + gamma) ** 2) * rcut
+        dfdrcut[mask] = 0.0
+        dfdgamma[mask] = 0.0
+        func = {"rcut": dfdrcut, "gamma": dfdgamma}
 
         return func
 
 
 def test_func3d_gradient(bf, delta=1e-5):
-    rvec = np.random.randn(150, 5, 10, 3)  # Internal indices irrelevant
-    r = np.linalg.norm(rvec, axis=-1)
+    rvec = cp.asarray(np.random.randn(150, 5, 10, 3))  # Internal indices irrelevant
+    r = cp.linalg.norm(rvec, axis=-1)
     grad = bf.gradient(rvec, r)
-    numeric = np.zeros(rvec.shape)
+    numeric = cp.zeros(rvec.shape)
     for d in range(3):
         pos = rvec.copy()
         pos[..., d] += delta
@@ -488,30 +509,30 @@ def test_func3d_gradient(bf, delta=1e-5):
         minuval = bf.value(pos, np.linalg.norm(pos, axis=-1))
         numeric[..., d] = (plusval - minuval) / (2 * delta)
     maxerror = np.max(np.abs(grad - numeric))
-    return maxerror
+    return asnumpy(maxerror)
 
 
 def test_func3d_laplacian(bf, delta=1e-5):
-    rvec = np.random.randn(150, 5, 10, 3)  # Internal indices irrelevant
-    r = np.linalg.norm(rvec, axis=-1)
+    rvec = cp.asarray(np.random.randn(150, 5, 10, 3))  # Internal indices irrelevant
+    r = cp.linalg.norm(rvec, axis=-1)
     lap = bf.laplacian(rvec, r)
-    numeric = np.zeros(rvec.shape)
+    numeric = cp.zeros(rvec.shape)
     for d in range(3):
         pos = rvec.copy()
         pos[..., d] += delta
-        r = np.linalg.norm(pos, axis=-1)
+        r = cp.linalg.norm(pos, axis=-1)
         plusval = bf.gradient(pos, r)[..., d]
         pos[..., d] -= 2 * delta
-        r = np.linalg.norm(pos, axis=-1)
+        r = cp.linalg.norm(pos, axis=-1)
         minuval = bf.gradient(pos, r)[..., d]
         numeric[..., d] = (plusval - minuval) / (2 * delta)
     maxerror = np.max(np.abs(lap - numeric))
-    return maxerror
+    return asnumpy(maxerror)
 
 
 def test_func3d_gradient_laplacian(bf):
-    rvec = np.random.randn(150, 10, 3)
-    r = np.linalg.norm(rvec, axis=-1)
+    rvec = cp.asarray(np.random.randn(150, 10, 3))
+    r = cp.linalg.norm(rvec, axis=-1)
     grad = bf.gradient(rvec, r)
     lap = bf.laplacian(rvec, r)
     andgrad, andlap = bf.gradient_laplacian(rvec, r)
@@ -521,8 +542,8 @@ def test_func3d_gradient_laplacian(bf):
 
 
 def test_func3d_gradient_value(bf):
-    rvec = np.random.randn(150, 10, 3)
-    r = np.linalg.norm(rvec, axis=-1)
+    rvec = cp.asarray(np.random.randn(150, 10, 3))
+    r = cp.linalg.norm(rvec, axis=-1)
     grad = bf.gradient(rvec, r)
     val = bf.value(rvec, r)
     andgrad, andval = bf.gradient_value(rvec, r)
@@ -532,12 +553,11 @@ def test_func3d_gradient_value(bf):
 
 
 def test_func3d_pgradient(bf, delta=1e-5):
-    rvec = np.random.randn(150, 10, 3)
-    r = np.linalg.norm(rvec, axis=-1)
+    rvec = cp.asarray(np.random.randn(150, 10, 3))
+    r = cp.linalg.norm(rvec, axis=-1)
     pgrad = bf.pgradient(rvec, r)
-    numeric = {k: np.zeros(v.shape) for k, v in pgrad.items()}
+    numeric = {k: cp.zeros(v.shape) for k, v in pgrad.items()}
     maxerror = {k: np.zeros(v.shape) for k, v in pgrad.items()}
-    normerror = {k: np.zeros(v.shape) for k, v in pgrad.items()}
     for k in pgrad.keys():
         bf.parameters[k] += delta
         plusval = bf.value(rvec, r)
@@ -545,7 +565,7 @@ def test_func3d_pgradient(bf, delta=1e-5):
         minuval = bf.value(rvec, r)
         bf.parameters[k] += delta
         numeric[k] = (plusval - minuval) / (2 * delta)
-        maxerror[k] = np.max(np.abs(pgrad[k] - numeric[k]))
+        maxerror[k] = asnumpy(np.max(np.abs(pgrad[k] - numeric[k])))
         if maxerror[k] > 1e-5:
             print(k, "\n", pgrad[k] - numeric[k])
     return maxerror

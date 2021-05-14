@@ -1,4 +1,5 @@
 import numpy as np
+from pyqmc.loadcupy import cp, asnumpy
 from pyscf import fci
 
 
@@ -99,14 +100,14 @@ def compute_value(updets, dndets, det_coeffs):
     """
     Given the up and down determinant values, safely compute the total log wave function.
     """
-    upref = np.amax(updets[1]).real
-    dnref = np.amax(dndets[1]).real
+    upref = cp.amax(updets[1]).real
+    dnref = cp.amax(dndets[1]).real
     phases = updets[0] * dndets[0]
     logvals = updets[1] - upref + dndets[1] - dnref
 
     phases = updets[0] * dndets[0]
-    wf_val = np.einsum("d,id->i", det_coeffs, phases * np.exp(logvals))
+    wf_val = cp.einsum("d,id->i", det_coeffs, phases * cp.exp(logvals))
 
-    wf_sign = wf_val / np.abs(wf_val)
-    wf_logval = np.log(np.abs(wf_val)) + upref + dnref
-    return wf_sign, wf_logval
+    wf_sign = wf_val / cp.abs(wf_val)
+    wf_logval = cp.log(cp.abs(wf_val)) + upref + dnref
+    return asnumpy(wf_sign), asnumpy(wf_logval)

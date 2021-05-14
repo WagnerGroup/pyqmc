@@ -1,4 +1,5 @@
 import numpy as np
+from pyqmc.loadcupy import cp, asnumpy
 import pyqmc.energy as energy
 from pyqmc.ewald import Ewald
 
@@ -42,6 +43,7 @@ class LinearTransform:
     """
 
     def __init__(self, parameters, to_opt=None):
+        parameters = {k: asnumpy(v) for k, v in parameters.items()}
         if to_opt is None:
             to_opt = {k: np.ones(p.shape, dtype=bool) for k, p in parameters.items()}
         self.to_opt = {k: o for k, o in to_opt.items() if np.any(o)}
@@ -61,7 +63,9 @@ class LinearTransform:
     def serialize_parameters(self, parameters):
         """Convert the dictionary to a linear list of gradients
         """
-        params = np.concatenate([parameters[k][opt] for k, opt in self.to_opt.items()])
+        params = np.concatenate(
+            [asnumpy(parameters[k])[opt] for k, opt in self.to_opt.items()]
+        )
         return np.concatenate((params.real, params[self.complex_inds].imag))
 
     def serialize_gradients(self, pgrad):
@@ -92,7 +96,7 @@ class LinearTransform:
                 m_p = self.nimag[k]
                 flat_parms[opt_] += parameters[m : m + m_p] * 1j
                 m += m_p
-            d[k] = flat_parms.reshape(self.shapes[k])
+            d[k] = cp.asarray(flat_parms.reshape(self.shapes[k]))
             n += n_p
         return d
 

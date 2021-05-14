@@ -264,7 +264,7 @@ def correlated_sample(wfs, configs, parameters, pgrad):
 
     wt0 = 1.0 / np.sum(np.exp(-2 * (log_values0[:, np.newaxis] - log_values0)), axis=1)
     weight = np.mean(wt0, axis=1)
-    dtype = np.complex if wfs[-1].iscomplex else np.float
+    dtype = complex if wfs[-1].iscomplex else float
 
     data = {
         "total": np.zeros(nparms),

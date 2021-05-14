@@ -1,7 +1,5 @@
 import numpy as np
 from pyqmc.loadcupy import cp, asnumpy
-
-# from pyqmc.slater import sherman_morrison_row, get_complex_phase
 import pyqmc.determinant_tools as determinant_tools
 import pyqmc.orbitals
 

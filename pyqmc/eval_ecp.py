@@ -34,8 +34,6 @@ def ecp_ea(mol, configs, wf, e, atom, threshold):
     masked_v_l = v_l[mask]
     masked_v_l[:, :-1] /= prob[mask, np.newaxis]
 
-    # print(np.sum(mask))
-
     # Use masked objects internally
     r_ea = r_ea[mask]
     r_ea_vec = r_ea_vec[mask]

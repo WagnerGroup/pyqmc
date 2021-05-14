@@ -2,6 +2,7 @@ import numpy as np
 import pyqmc
 from scipy.special import erfc
 import pyqmc.energy
+from pyqmc.loadcupy import cp, asnumpy
 
 
 class Ewald:
@@ -297,14 +298,16 @@ class Ewald:
 
     def reciprocal_space_electron(self, configs):
         # Reciprocal space electron-electron part
-        e_GdotR = np.einsum("hik,jk->hij", configs, self.gpoints)
-        sum_e_sin = np.sin(e_GdotR).sum(axis=1)
-        sum_e_cos = np.cos(e_GdotR).sum(axis=1)
-        ee_recip = np.dot(sum_e_sin ** 2 + sum_e_cos ** 2, self.gweight)
+        gweight = cp.asarray(self.gweight)
+        e_GdotR = cp.einsum("hik,jk->hij", cp.asarray(configs), cp.asarray(self.gpoints))
+        sum_e_sin = cp.sin(e_GdotR).sum(axis=1)
+        sum_e_cos = cp.cos(e_GdotR).sum(axis=1)
+        ee_recip = np.dot(sum_e_sin ** 2 + sum_e_cos ** 2, gweight)
         ## Reciprocal space electron-ion part
-        coscos_sinsin = -self.ion_exp.real * sum_e_cos + self.ion_exp.imag * sum_e_sin
-        ei_recip = 2 * np.dot(coscos_sinsin, self.gweight)
-        return ee_recip, ei_recip
+        ion_exp = cp.asarray(self.ion_exp)
+        coscos_sinsin = -ion_exp.real * sum_e_cos + ion_exp.imag * sum_e_sin
+        ei_recip = 2 * np.dot(coscos_sinsin, gweight)
+        return asnumpy(ee_recip), asnumpy(ei_recip)
 
     def reciprocal_space_electron_separated(self, configs):
         # Reciprocal space electron-electron part

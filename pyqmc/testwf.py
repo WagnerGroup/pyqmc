@@ -24,7 +24,7 @@ def test_updateinternals(wf, configs):
     :rtype: dictionary
 
     """
-    from pyqmc import vmc
+    from pyqmc.mc import vmc
 
     nconf, ne, ndim = configs.configs.shape
     delta = 1e-2

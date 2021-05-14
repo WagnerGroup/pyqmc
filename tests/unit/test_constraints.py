@@ -15,7 +15,7 @@ def test():
     mc = mcscf.CASCI(mf, ncas=2, nelecas=(1, 1))
     mc.kernel()
 
-    wf, to_opt = pyq.generate_wf(mol, mf, mc)
+    wf, to_opt = pyq.generate_wf(mol, mf, mc=mc)
     old_parms = wf.parameters
     lt = LinearTransform(wf.parameters, to_opt)
 

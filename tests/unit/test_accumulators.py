@@ -2,7 +2,7 @@ import numpy as np
 from pyqmc.energy import energy
 from pyqmc.accumulators import EnergyAccumulator, LinearTransform, SqAccumulator
 from pyqmc.obdm import OBDMAccumulator
-import pyqmc
+import pyqmc.api as pyq
 
 
 def test_transform():

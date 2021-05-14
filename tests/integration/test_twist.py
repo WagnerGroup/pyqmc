@@ -1,13 +1,11 @@
 import numpy as np
-import pyqmc
-import pandas as pd
-from pyqmc.reblock import reblock
+import pyqmc.api as pyq
+from pyqmc.slater import Slater
 from pyqmc.pbc import enforce_pbc
 from pyqmc.coord import PeriodicConfigs
 from pyscf.pbc import gto, scf
 from pyscf.pbc.dft.multigrid import multigrid
 from pyscf.scf.addons import remove_linear_dep_
-import pyqmc
 
 
 def test_cubic_with_ecp(kind=1, nk=(2, 2, 2)):
@@ -79,15 +77,15 @@ def runtest(mol, mf, kind=0):
     twist = np.dot(kpt, mol.lattice_vectors().T / (2 * np.pi))
     print("kpt", kpt)
     print("twist", twist)
-    wf0 = pyqmc.Slater(mol, mf)
-    wft = pyqmc.Slater(mol, mf, twist=twist)
+    wf0 = Slater(mol, mf)
+    wft = Slater(mol, mf, twist=twist)
 
     #####################################
     ## compare values across boundary
     ## psi, KE, ecp,
     #####################################
     nconfig = 50
-    coords = pyqmc.initial_guess(mol, nconfig, 1)
+    coords = pyq.initial_guess(mol, nconfig, 1)
     nelec = coords.configs.shape[1]
     epos, wrap = enforce_pbc(coords.lvecs, coords.configs)
     coords = PeriodicConfigs(epos, coords.lvecs)
@@ -103,7 +101,7 @@ def runtest(mol, mf, kind=0):
 
     ph0, val0 = wf0.recompute(coords)
     pht, valt = wft.recompute(coords)
-    enacc = pyqmc.accumulators.EnergyAccumulator(mol, threshold=np.inf)
+    enacc = pyq.EnergyAccumulator(mol, threshold=np.inf)
     np.random.seed(0)
     en0 = enacc(coords, wf0)
     np.random.seed(0)

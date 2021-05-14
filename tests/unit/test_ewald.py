@@ -111,5 +111,5 @@ For CaF2, Madelung constant (per F) is -2.51939, (per Ca is -5.03879)so the ener
 """
 
 if __name__ == "__main__":
-    test_ewald_NaCl()
-    test_ewald_CaF2()
+    import cProfile
+    cProfile.run("test_ewald_NaCl()", "ewaldtest.prof")

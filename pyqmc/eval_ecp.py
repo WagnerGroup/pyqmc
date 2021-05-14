@@ -12,13 +12,45 @@ def ecp(mol, configs, wf, threshold):
         for atom in mol._atom:
             if atom[0] in mol._ecp.keys():
                 for e in range(nelec):
-                    ecp_tot += ecp_ea(mol, configs, wf, e, atom, threshold)
+                    ecp_tot += ecp_ea(mol, configs, wf, e, atom, threshold)['total']
     return ecp_tot
+
+
+def compute_tmoves(mol, configs, wf, e, threshold, tau):
+    """
+
+    """
+    if mol._ecp != {}:
+        data = [
+            ecp_ea(mol, configs, wf, e, atom, threshold)
+            for atom in mol._atom
+            if atom[0] in mol._ecp.keys()
+        ]
+    
+    # we want to make a data set which is a list of possible positions, the wave function
+    # ratio, and the masks for each 
+    summed_data = []
+    nconfig = configs.configs.shape[0]
+    for d in data: 
+        npts = d['ratio'].shape[1]
+        weight = np.zeros((nconfig, npts))
+        ratio = np.ones((nconfig, npts))
+        weight[d['mask']] = np.einsum("ik, ijk -> ij", (np.exp(-tau*d['v_l'])-1), d['P_l'])
+        ratio[d['mask']] = d['ratio']
+        summed_data.append({'weight':weight, 'ratio':ratio, 'epos':d['epos']})
+        
+    ratio = np.concatenate([d['ratio'] for d in summed_data], axis=1)
+    weight = np.concatenate([d['weight'] for d in summed_data], axis=1)
+    configs = copy.copy(configs)
+    configs.join([d['epos'] for d in summed_data], axis=1)
+    return {"ratio": ratio, 'weight':weight, 'configs':configs } 
+
 
 
 def ecp_ea(mol, configs, wf, e, atom, threshold):
     """
     :returns: the ECP value between electron e and atom at, local+nonlocal.
+    TODO: update documentation
     """
     nconf = configs.configs.shape[0]
     ecp_val = np.zeros(nconf, dtype=complex if wf.iscomplex else float)
@@ -52,7 +84,13 @@ def ecp_ea(mol, configs, wf, e, atom, threshold):
     # Compute local and non-local parts
     ecp_val[mask] = np.einsum("ij,ik,ijk->i", ratio, masked_v_l, P_l)
     ecp_val += v_l[:, -1]  # local part
-    return ecp_val
+    return {'total':ecp_val,
+            'v_l':masked_v_l,
+            'local':v_l[:,-1],
+            'P_l':P_l,
+            'ratio':ratio,
+            'epos':epos,
+            'mask':mask } 
 
 
 def ecp_mask(v_l, threshold):
@@ -129,6 +167,8 @@ def P_l(x, l):
     :returns: legendre function P_l values for channel :math:`l`.
     :rtype: (nconf, naip) array
     """
+    if l==-1:
+        return np.zeros(x.shape)
     if l == 0:
         return np.ones(x.shape)
     elif l == 1:
@@ -140,7 +180,7 @@ def P_l(x, l):
     elif l == 4:
         return 0.125 * (35 * x * x * x * x - 30 * x * x + 3)
     else:
-        return np.zeros(x.shape)
+        raise NotImplementedError(f"Legendre functions for l>4 not implemented {l}")
 
 
 def get_P_l(r_ea, r_ea_vec, l_list):

@@ -1,5 +1,4 @@
 import numpy as np
-from pyqmc.energy import energy
 from pyqmc.accumulators import LinearTransform
 from pyqmc.obdm import OBDMAccumulator
 import pyqmc

@@ -1,24 +1,34 @@
 import numpy as np
 from pyqmc.loadcupy import cp, asnumpy
 import pyqmc.energy as energy
-from pyqmc.ewald import Ewald
-
+import pyqmc.ewald  as ewald
+import pyqmc.eval_ecp as eval_ecp
 
 class EnergyAccumulator:
-    """Returns energy of each configuration in a dictionary.
-    Keys and their meanings can be found in energy.energy"""
+    """Returns local energy of each configuration in a dictionary.
+    """
 
     def __init__(self, mol, threshold=10, **kwargs):
         self.mol = mol
         self.threshold = threshold
         if hasattr(mol, "a"):
-            ewald = Ewald(mol, **kwargs)
-            self.compute_energy = ewald.compute_total_energy
+            self.coulomb = ewald.Ewald(mol, **kwargs)
         else:
-            self.compute_energy = energy.energy
+            self.coulomb = energy.OpenCoulomb(mol, **kwargs)
+        
 
     def __call__(self, configs, wf):
-        return self.compute_energy(self.mol, configs, wf, self.threshold)
+        ee, ei, ii = self.coulomb.energy(configs)
+        ecp_val = eval_ecp.ecp(self.mol, configs, wf, self.threshold)
+        ke, grad2 = energy.kinetic(configs, wf)
+        return {
+            "ke": ke,
+            "ee": ee,
+            "ei": ei,
+            "ecp": ecp_val,
+            "grad2": grad2,
+            "total": ke + ee + ei + ecp_val + ii,
+        }
 
     def avg(self, configs, wf):
         return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
@@ -28,6 +38,7 @@ class EnergyAccumulator:
 
     def shapes(self):
         return {"ke": (), "ee": (), "ei": (), "ecp": (), "total": (), "grad2":()}
+
 
 
 class LinearTransform:

@@ -74,7 +74,6 @@ def dmc_propagate(
     df = []
 
     for _ in range(nsteps):
-        acc = np.zeros(nelec)
         r2_accepted=np.zeros(nconfig)
         r2_proposed = np.zeros(nconfig)
         prob_acceptance = np.zeros(nconfig)
@@ -103,7 +102,6 @@ def dmc_propagate(
             # Update wave function
             configs.move(e, newepos, accept)
             wf.updateinternals(e, newepos, mask=accept)
-            acc[e] = np.mean(accept)
             r2 = np.sum((gauss+grad)**2,axis=1)
             r2_proposed += r2
             r2_accepted[accept]+=r2[accept]
@@ -132,7 +130,7 @@ def dmc_propagate(
                     nconfig * wavg
                 )
         avg["weight"] = wavg
-        avg["acceptance"] = np.mean(acc)
+        avg["acceptance"] = np.mean(prob_acceptance)
         df.append(avg)
     weight = np.asarray([d["weight"] for d in df])
     avg_weight = weight / np.mean(weight)

@@ -1,10 +1,8 @@
-from pyqmc.slater import Slater
-from pyqmc.multiplywf import MultiplyWF
-from pyqmc.jastrowspin import JastrowSpin
-from pyqmc.manybody_jastrow import J3
-from pyqmc.supercell import get_supercell
-from pyqmc.func3d import PolyPadeFunction, CutoffCuspFunction
-from pyqmc.gpu import cp, asnumpy
+import pyqmc.slater as slater
+import pyqmc.multiplywf as multiplywf
+import pyqmc.jastrowspin as jastrowspin
+import pyqmc.func3d as func3d
+import pyqmc.gpu as gpu
 import numpy as np
 import h5py
 
@@ -19,13 +17,13 @@ def generate_slater(
     :parameter boolean optimize_zeros: optimize coefficients that are zero in the mean-field object
     :returns: slater, to_opt
     """
-    wf = Slater(mol, mf, twist=twist)
+    wf = slater.Slater(mol, mf, twist=twist)
     to_opt = {}
     if optimize_orbitals:
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             to_opt[k] = np.ones(wf.parameters[k].shape).astype(bool)
             if not optimize_zeros:
-                to_opt[k][np.abs(asnumpy(wf.parameters[k])) < epsilon] = False
+                to_opt[k][np.abs(gpu.asnumpy(wf.parameters[k])) < epsilon] = False
 
     return wf, to_opt
 
@@ -34,7 +32,7 @@ def generate_multislater(
     mol, mf, mc, tol=None, optimize_orbitals=False, optimize_zeros=True, epsilon=1e-8
 ):
 
-    wf = Slater(mol, mf, mc, tol)
+    wf = slater.Slater(mol, mf, mc, tol)
     to_opt = ["det_coeff"]
     to_opt = {"det_coeff": np.ones(wf.parameters["det_coeff"].shape).astype(bool)}
     to_opt["det_coeff"][0] = False  # Determinant coefficient pivot
@@ -42,7 +40,7 @@ def generate_multislater(
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             to_opt[k] = np.ones(wf.parameters[k].shape).astype(bool)
             if not optimize_zeros:
-                to_opt[k][np.abs(asnumpy(wf.parameters[k])) < epsilon] = False
+                to_opt[k][np.abs(gpu.asnumpy(wf.parameters[k])) < epsilon] = False
 
     return wf, to_opt
 
@@ -69,12 +67,12 @@ def default_jastrow_basis(mol, ion_cusp=False, na=4, nb=3, rcut=None):
     beta_abasis = expand_beta_qwalk(0.2, na)
     beta_bbasis = expand_beta_qwalk(0.5, nb)
     if ion_cusp:
-        abasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
+        abasis = [func3d.CutoffCuspFunction(gamma=24, rcut=rcut)]
     else:
         abasis = []
-    abasis += [PolyPadeFunction(beta=ba, rcut=rcut) for ba in beta_abasis]
-    bbasis = [CutoffCuspFunction(gamma=24, rcut=rcut)]
-    bbasis += [PolyPadeFunction(beta=bb, rcut=rcut) for bb in beta_bbasis]
+    abasis += [func3d.PolyPadeFunction(beta=ba, rcut=rcut) for ba in beta_abasis]
+    bbasis = [func3d.CutoffCuspFunction(gamma=24, rcut=rcut)]
+    bbasis += [func3d.PolyPadeFunction(beta=bb, rcut=rcut) for bb in beta_bbasis]
     return abasis, bbasis
 
 
@@ -99,12 +97,12 @@ def generate_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
         assert isinstance(ion_cusp, list)
 
     abasis, bbasis = default_jastrow_basis(mol, len(ion_cusp) > 0, na, nb, rcut)
-    jastrow = JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
+    jastrow = jastrowspin.JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
     if len(ion_cusp) > 0:
         coefs = mol.atom_charges().copy()
         coefs[[l[0] not in ion_cusp for l in mol._atom]] = 0.0
-        jastrow.parameters["acoeff"][:, 0, :] = cp.asarray(coefs[:, None])
-    jastrow.parameters["bcoeff"][0, [0, 1, 2]] = cp.array([-0.25, -0.50, -0.25])
+        jastrow.parameters["acoeff"][:, 0, :] = gpu.cp.asarray(coefs[:, None])
+    jastrow.parameters["bcoeff"][0, [0, 1, 2]] = gpu.cp.array([-0.25, -0.50, -0.25])
 
     to_opt = {}
     to_opt["acoeff"] = np.ones(jastrow.parameters["acoeff"].shape).astype(bool)
@@ -118,7 +116,7 @@ def generate_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
 def generate_msj(mol, mf, mc, tol=None, freeze_orb=None, ion_cusp=False):
     wf1, to_opt1 = generate_multislater(mol, mf, mc, tol, freeze_orb)
     wf2, to_opt2 = generate_jastrow(mol, ion_cusp)
-    wf = MultiplyWF(wf1, wf2)
+    wf = multiplywf.MultiplyWF(wf1, wf2)
     to_opt = {"wf1" + x: opt for x, opt in to_opt1.items()}
     to_opt.update({"wf2" + x: opt for x, opt in to_opt2.items()})
 
@@ -128,7 +126,7 @@ def generate_msj(mol, mf, mc, tol=None, freeze_orb=None, ion_cusp=False):
 def generate_sj(mol, mf, optimize_orbitals=False, twist=None, **jastrow_kws):
     wf1, to_opt1 = generate_slater(mol, mf, optimize_orbitals, twist)
     wf2, to_opt2 = generate_jastrow(mol, **jastrow_kws)
-    wf = MultiplyWF(wf1, wf2)
+    wf = multiplywf.MultiplyWF(wf1, wf2)
     to_opt = {"wf1" + x: opt for x, opt in to_opt1.items()}
     to_opt.update({"wf2" + x: opt for x, opt in to_opt2.items()})
 
@@ -144,7 +142,7 @@ def generate_wf(
     :param mol: The molecule or cell
     :type mol: pyscf Mole or Cell
     :param mf: a pyscf mean-field object
-    :type mf: Any mean-field object that PySCFSlater can read
+    :type mf: Any mean-field object that Slater can read
     :param jastrow: a function that returns wf, to_opt, or a list of such functions.
     :param jastrow_kws: a dictionary of keyword arguments for the jastrow function, or a list of those functions.
     :param slater_kws: a dictionary of keyword arguments for the generate_slater function
@@ -175,7 +173,7 @@ def generate_wf(
     pack = [jast(mol, **kw) for jast, kw in zip(jastrow, jastrow_kws)]
     wfs = [p[0] for p in pack]
     to_opts = [p[1] for p in pack]
-    wf = MultiplyWF(wf1, *wfs)
+    wf = multiplywf.MultiplyWF(wf1, *wfs)
     to_opt = {"wf1" + k: v for k, v in to_opt1.items()}
     for i, to_opt2 in enumerate(to_opts):
         to_opt.update({f"wf{i+2}" + k: v for k, v in to_opt2.items()})
@@ -203,7 +201,7 @@ def read_wf(wf, wf_file):
         if "wf" in hdf.keys():
             grp = hdf["wf"]
             for k in grp.keys():
-                new_parms = cp.array(grp[k])
+                new_parms = gpu.cp.array(grp[k])
                 if wf.parameters[k].shape != new_parms.shape:
                     raise Exception(
                         f"For wave function parameter {k}, shape in {wf_file} is {new_parms.shape}, while current shape is {wf.parameters[k].shape}"

@@ -1,5 +1,5 @@
 import numpy as np
-from pyqmc.gpu import cp, get_array_module, asnumpy
+import pyqmc.gpu as gpu
 import scipy
 import h5py
 import os
@@ -32,11 +32,11 @@ def opt_hdf(hdf_file, data, attr, configs, parameters):
                 configs.initialize_hdf(hdf)
                 hdf.create_group("wf")
                 for k, it in parameters.items():
-                    hdf.create_dataset("wf/" + k, data=asnumpy(it))
+                    hdf.create_dataset("wf/" + k, data=gpu.asnumpy(it))
             hdftools.append_hdf(hdf, data)
             configs.to_hdf(hdf)
             for k, it in parameters.items():
-                hdf["wf/" + k][...] = asnumpy(it.copy())
+                hdf["wf/" + k][...] = gpu.asnumpy(it.copy())
 
 
 def polyfit_relative(xfit, yfit, degree):
@@ -135,7 +135,7 @@ def line_minimization(
     if update_kws is None:
         update_kws = {}
 
-    array_module = {k: get_array_module(v) for k, v in wf.parameters.items()}
+    array_module = {k: gpu.get_array_module(v) for k, v in wf.parameters.items()}
 
     # Restart
     iteration_offset = 0
@@ -264,7 +264,7 @@ def correlated_compute(wf, configs, params, pgrad_acc):
 
     data = []
     psi0 = wf.recompute(configs)[1]  # recompute gives logdet
-    array_module = {k: get_array_module(v) for k, v in wf.parameters.items()}
+    array_module = {k: gpu.get_array_module(v) for k, v in wf.parameters.items()}
 
     for p in params:
         newparms = pgrad_acc.transform.deserialize(p)

@@ -1,7 +1,7 @@
 import numpy as np
-from pyqmc.gpu import cp, asnumpy
+import pyqmc.gpu as gpu
 import pyqmc.energy as energy
-from pyqmc.ewald import Ewald
+import pyqmc.ewald as ewald
 
 
 def gradient_generator(mol, wf, to_opt=None, **ewald_kwargs):
@@ -18,8 +18,8 @@ class EnergyAccumulator:
         self.mol = mol
         self.threshold = threshold
         if hasattr(mol, "a"):
-            ewald = Ewald(mol, **kwargs)
-            self.compute_energy = ewald.compute_total_energy
+            ewald_obj = ewald.Ewald(mol, **kwargs)
+            self.compute_energy = ewald_obj.compute_total_energy
         else:
             self.compute_energy = energy.energy
 
@@ -52,7 +52,7 @@ class LinearTransform:
     """
 
     def __init__(self, parameters, to_opt=None):
-        parameters = {k: asnumpy(v) for k, v in parameters.items()}
+        parameters = {k: gpu.cp.asnumpy(v) for k, v in parameters.items()}
         if to_opt is None:
             to_opt = {k: np.ones(p.shape, dtype=bool) for k, p in parameters.items()}
         self.to_opt = {k: o for k, o in to_opt.items() if np.any(o)}
@@ -73,7 +73,7 @@ class LinearTransform:
         """Convert the dictionary to a linear list of gradients
         """
         params = np.concatenate(
-            [asnumpy(parameters[k])[opt] for k, opt in self.to_opt.items()]
+            [gpu.cp.asnumpy(parameters[k])[opt] for k, opt in self.to_opt.items()]
         )
         return np.concatenate((params.real, params[self.complex_inds].imag))
 
@@ -105,7 +105,7 @@ class LinearTransform:
                 m_p = self.nimag[k]
                 flat_parms[opt_] += parameters[m : m + m_p] * 1j
                 m += m_p
-            d[k] = cp.asarray(flat_parms.reshape(self.shapes[k]))
+            d[k] = gpu.cp.asarray(flat_parms.reshape(self.shapes[k]))
             n += n_p
         return d
 

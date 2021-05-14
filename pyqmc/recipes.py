@@ -1,4 +1,4 @@
-from pyqmc import obdm
+import pyqmc.obdm as obdm
 import pyqmc.api as pyq
 import numpy as np
 import h5py

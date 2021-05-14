@@ -1,7 +1,7 @@
 import numpy as np
-from pyqmc.gpu import cp, asnumpy
+import pyqmc.gpu as gpu
 import pyqmc.pbc as pbc
-from pyqmc.supercell import get_supercell_kpts, get_supercell
+import pyqmc.supercell as supercell
 import pyqmc.determinant_tools
 
 """
@@ -48,8 +48,8 @@ class MoleculeOrbitalEvaluator:
     def __init__(self, mol, mo_coeff):
         self.iscomplex = False
         self.parameters = {
-            "mo_coeff_alpha": cp.asarray(mo_coeff[0]),
-            "mo_coeff_beta": cp.asarray(mo_coeff[1]),
+            "mo_coeff_alpha": gpu.cp.asarray(mo_coeff[0]),
+            "mo_coeff_beta": gpu.cp.asarray(mo_coeff[1]),
         }
         self.parm_names = ["_alpha", "_beta"]
 
@@ -67,8 +67,8 @@ class MoleculeOrbitalEvaluator:
         if mc is not None:
             detcoeff, occup, det_map = pyqmc.determinant_tools.interpret_ci(mc, tol)
         else:
-            detcoeff = cp.array([1.0])
-            det_map = cp.array([[0], [0]])
+            detcoeff = gpu.cp.array([1.0])
+            det_map = gpu.cp.array([[0], [0]])
             # occup
             if len(mf.mo_occ.shape) == 2:
                 occup = [
@@ -97,7 +97,7 @@ class MoleculeOrbitalEvaluator:
         """"""
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
-        aos = cp.asarray([self._mol.eval_gto(eval_str, mycoords)])
+        aos = gpu.cp.asarray([self._mol.eval_gto(eval_str, mycoords)])
         if len(aos.shape) == 4:  # if derivatives are included
             return aos.reshape((1, aos.shape[1], *mycoords.shape[:-1], aos.shape[-1]))
         else:
@@ -108,7 +108,7 @@ class MoleculeOrbitalEvaluator:
 
     def pgradient(self, ao, spin):
         return (
-            cp.array([self.parameters[f"mo_coeff{self.parm_names[spin]}"].shape[1]]),
+            gpu.cp.array([self.parameters[f"mo_coeff{self.parm_names[spin]}"].shape[1]]),
             ao,
         )
 
@@ -142,8 +142,8 @@ class PBCOrbitalEvaluatorKpoints:
         ]
         self.parm_names = ["_alpha", "_beta"]
         self.parameters = {
-            "mo_coeff_alpha": cp.asarray(np.concatenate(mo_coeff[0], axis=1)),
-            "mo_coeff_beta": cp.asarray(np.concatenate(mo_coeff[1], axis=1)),
+            "mo_coeff_alpha": gpu.cp.asarray(np.concatenate(mo_coeff[0], axis=1)),
+            "mo_coeff_beta": gpu.cp.asarray(np.concatenate(mo_coeff[1], axis=1)),
         }
 
     @classmethod
@@ -157,14 +157,14 @@ class PBCOrbitalEvaluatorKpoints:
         cell = (
             cell
             if hasattr(cell, "original_cell")
-            else get_supercell(cell, np.asarray([[1, 0, 0], [0, 1, 0], [0, 0, 1]]))
+            else supercell.get_supercell(cell, np.asarray([[1, 0, 0], [0, 1, 0], [0, 0, 1]]))
         )
 
         if twist is None:
             twist = np.zeros(3)
         else:
             twist = np.dot(np.linalg.inv(cell.a), np.mod(twist, 1.0)) * 2 * np.pi
-        kinds = list(set(get_k_indices(cell, mf, get_supercell_kpts(cell) + twist)))
+        kinds = list(set(get_k_indices(cell, mf, supercell.get_supercell_kpts(cell) + twist)))
         if len(kinds) != cell.scale:
             print("len kinds", len(kinds))
             print("cell.scale", cell.scale)
@@ -243,10 +243,10 @@ class PBCOrbitalEvaluatorKpoints:
         # k, coordinate
         wrap_phase = get_wrapphase_complex(kdotR)
         # k,coordinate, orbital
-        ao = cp.asarray(
+        ao = gpu.cp.asarray(
             self._cell.eval_gto("PBC" + eval_str, mycoords, kpts=self._kpts)
         )
-        ao = cp.einsum("k...,k...a->k...a", wrap_phase, ao)
+        ao = gpu.cp.einsum("k...,k...a->k...a", wrap_phase, ao)
         if len(ao.shape) == 4:  # if derivatives are included
             return ao.reshape(
                 (ao.shape[0], ao.shape[1], *mycoords.shape[:-1], ao.shape[-1])
@@ -265,7 +265,7 @@ class PBCOrbitalEvaluatorKpoints:
             self.param_split[spin],
             axis=-1,
         )
-        return cp.concatenate(cp.asarray([ak.dot(mok) for ak, mok in zip(ao, p[0:-1])]), axis=-1)
+        return gpu.cp.concatenate(gpu.cp.asarray([ak.dot(mok) for ak, mok in zip(ao, p[0:-1])]), axis=-1)
 
     def pgradient(self, ao, spin):
         """

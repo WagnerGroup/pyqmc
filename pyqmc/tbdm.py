@@ -1,11 +1,9 @@
 """ Evaluate the TBDM for a wave function object. """
 import numpy as np
-from copy import copy, deepcopy
-from pyqmc.mc import initial_guess
-from pyqmc.obdm import sample_onebody
-from pyqmc.gpu import cp, asnumpy
-from sys import stdout
-from pyqmc.orbitals import MoleculeOrbitalEvaluator, PBCOrbitalEvaluatorKpoints
+import pyqmc.mc as mc
+import pyqmc.obdm as obdm
+import pyqmc.gpu as gpu
+import pyqmc.orbitals
 import pyqmc.supercell as supercell
 
 
@@ -62,11 +60,11 @@ class TBDMAccumulator:
         self._spin = spin
 
         if kpts is None:
-            self.orbitals = MoleculeOrbitalEvaluator(mol, orb_coeff)
+            self.orbitals = pyqmc.orbitals.MoleculeOrbitalEvaluator(mol, orb_coeff)
         else:
             if not hasattr(mol, "original_cell"):
                 mol = supercell.get_supercell(mol, np.eye(3))
-            self.orbitals = PBCOrbitalEvaluatorKpoints(mol, orb_coeff, kpts)
+            self.orbitals = pyqmc.orbitals.PBCOrbitalEvaluatorKpoints(mol, orb_coeff, kpts)
 
         self._spin_sector = spin
         self._electrons = [
@@ -78,9 +76,9 @@ class TBDMAccumulator:
         nwalkers = int(naux / sum(self._mol.nelec))
         self._aux_configs = []
         for spin in [0, 1]:
-            self._aux_configs.append(initial_guess(mol, nwalkers))
+            self._aux_configs.append(mc.initial_guess(mol, nwalkers))
             self._aux_configs[spin].reshape((-1, 1, 3))
-            _, self._aux_configs[spin], _ = sample_onebody(
+            _, self._aux_configs[spin], _ = obdm.sample_onebody(
                 self._aux_configs[spin], self.orbitals, 0, nsamples=warmup
             )
             self._aux_configs[spin] = self._aux_configs[spin][-1]
@@ -121,7 +119,7 @@ class TBDMAccumulator:
 
         for spin in [0, 1]:
             naux = self._aux_configs[spin].configs.shape[0]
-            accept, tmp_config, tmp_orbs = sample_onebody(
+            accept, tmp_config, tmp_orbs = obdm.sample_onebody(
                 self._aux_configs[spin],
                 self.orbitals,
                 spin,
@@ -171,15 +169,15 @@ class TBDMAccumulator:
             "acceptance_a": np.mean(aux["acceptance"][0], axis=0),
             "acceptance_b": np.mean(aux["acceptance"][0], axis=0),
         }
-        orb_configs = cp.asarray([orb_configs[s][:, :, self._ijkl[2 * s]] for s in [0, 1]])
+        orb_configs = gpu.cp.asarray([orb_configs[s][:, :, self._ijkl[2 * s]] for s in [0, 1]])
 
         down_start = [np.min(self._electrons[s]) for s in [0, 1]]
         for sweep in range(self._nsweeps):
             fsum = [
-                cp.sum(cp.abs(aux["orbs"][spin][sweep]) ** 2, axis=1) for spin in [0, 1]
+                gpu.cp.sum(gpu.cp.abs(aux["orbs"][spin][sweep]) ** 2, axis=1) for spin in [0, 1]
             ]
             norm = [
-                cp.abs(aux["orbs"][spin][sweep]) ** 2 / fsum[spin][:, np.newaxis]
+                gpu.cp.abs(aux["orbs"][spin][sweep]) ** 2 / fsum[spin][:, np.newaxis]
                 for spin in [0, 1]
             ]
 
@@ -208,7 +206,7 @@ class TBDMAccumulator:
             phi_l_r2p = aux["orbs"][1][sweep][..., self._ijkl[3]]
             rho1rho2 = 1.0 / (fsum[0] * fsum[1])
             # n is the walker number, i is the electron pair index, o is the orbital
-            orbratio = cp.einsum(
+            orbratio = gpu.cp.einsum(
                 "nio,nio,no,no,n ->nio",
                 orb_configs[0][:, electrons_a_ind, :],  # phi_i(r1)
                 orb_configs[1][:, electrons_b_ind, :],  # phi_k(r2)
@@ -217,9 +215,9 @@ class TBDMAccumulator:
                 rho1rho2,
             )
 
-            results["value"] += asnumpy(cp.einsum("in,inj->ij", wfratio, orbratio))
-            results["norm_a"] += asnumpy(norm[0])
-            results["norm_b"] += asnumpy(norm[1])
+            results["value"] += gpu.asnumpy(gpu.cp.einsum("in,inj->ij", wfratio, orbratio))
+            results["norm_a"] += gpu.asnumpy(norm[0])
+            results["norm_b"] += gpu.asnumpy(norm[1])
 
         results["value"] /= self._nsweeps
         for e in ["a", "b"]:

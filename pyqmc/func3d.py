@@ -1,5 +1,5 @@
 import numpy as np
-from pyqmc.loadcupy import fuse, cp, asnumpy
+from pyqmc.gpu import fuse, cp, asnumpy
 
 """ 
 Collection of 3d function objects. Each has a dictionary parameters, which corresponds

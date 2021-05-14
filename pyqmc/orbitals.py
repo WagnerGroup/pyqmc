@@ -1,5 +1,5 @@
 import numpy as np
-from pyqmc.loadcupy import cp, asnumpy
+from pyqmc.gpu import cp, asnumpy
 import pyqmc.pbc as pbc
 from pyqmc.supercell import get_supercell_kpts, get_supercell
 import pyqmc.determinant_tools

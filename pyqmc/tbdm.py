@@ -3,7 +3,7 @@ import numpy as np
 from copy import copy, deepcopy
 from pyqmc.mc import initial_guess
 from pyqmc.obdm import sample_onebody
-from pyqmc.loadcupy import cp, asnumpy
+from pyqmc.gpu import cp, asnumpy
 from sys import stdout
 from pyqmc.orbitals import MoleculeOrbitalEvaluator, PBCOrbitalEvaluatorKpoints
 import pyqmc.supercell as supercell

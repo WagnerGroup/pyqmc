@@ -1,5 +1,5 @@
 import numpy as np
-from pyqmc.loadcupy import cp, asnumpy
+from pyqmc.gpu import cp, asnumpy
 from pyscf import fci
 
 

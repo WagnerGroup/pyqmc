@@ -1,6 +1,5 @@
 import numpy as np
-from pyqmc.loadcupy import cp, asnumpy
-from pyqmc.func3d import GaussianFunction
+from pyqmc.gpu import cp, asnumpy
 from pyqmc.distance import RawDistance
 
 

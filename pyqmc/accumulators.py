@@ -1,7 +1,13 @@
 import numpy as np
-from pyqmc.loadcupy import cp, asnumpy
+from pyqmc.gpu import cp, asnumpy
 import pyqmc.energy as energy
 from pyqmc.ewald import Ewald
+
+
+def gradient_generator(mol, wf, to_opt=None, **ewald_kwargs):
+    return PGradTransform(
+        EnergyAccumulator(mol, **ewald_kwargs), LinearTransform(wf.parameters, to_opt)
+    )
 
 
 class EnergyAccumulator:

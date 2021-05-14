@@ -61,9 +61,10 @@ def get_supercell(cell, S):
 
 
 def make_supercell_jastrow(jastrow, S):
+    from pyqmc.jastrowspin import JastrowSpin
     scale = int(np.round(np.linalg.det(S)))
     supercell = get_supercell(jastrow._mol, S)
-    newjast = pyqmc.JastrowSpin(supercell, jastrow.a_basis, jastrow.b_basis)
+    newjast = JastrowSpin(supercell, jastrow.a_basis, jastrow.b_basis)
     newjast.parameters["bcoeff"] = jastrow.parameters["bcoeff"]
     newjast.parameters["acoeff"] = np.repeat(
         jastrow.parameters["acoeff"], scale, axis=0

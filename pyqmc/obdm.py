@@ -2,7 +2,7 @@
 from pyqmc.orbitals import MoleculeOrbitalEvaluator, PBCOrbitalEvaluatorKpoints
 import numpy as np
 from pyqmc.mc import initial_guess
-from pyqmc.loadcupy import cp, asnumpy
+from pyqmc.gpu import cp, asnumpy
 
 import pyqmc.supercell as supercell
 

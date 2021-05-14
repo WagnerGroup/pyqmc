@@ -1,5 +1,5 @@
 import numpy as np
-from pyqmc.loadcupy import cp, get_array_module, asnumpy
+from pyqmc.gpu import cp, get_array_module, asnumpy
 import scipy
 import h5py
 import os

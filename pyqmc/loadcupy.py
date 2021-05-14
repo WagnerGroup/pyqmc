@@ -1,7 +1,12 @@
+class NoGPUFoundError(Exception):
+    pass
+
 try:
     import cupy as cp
     from cupy import get_array_module, asnumpy, fuse
-except ModuleNotFoundError as e:
+    if not cp.cuda.is_available():
+        raise NoGPUFoundError
+except (ModuleNotFoundError, NoGPUFoundError) as e:
     import numpy as cp
 
     def get_array_module(a):

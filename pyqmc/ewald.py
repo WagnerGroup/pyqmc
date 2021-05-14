@@ -374,52 +374,6 @@ class Ewald:
         nelec = configs.configs.shape[1]
         return self.e_single(nelec) + self.ewalde_separated
 
-    def energy_with_test_pos(self, configs, epos):
-        """
-        Compute Coulomb energy of an additional test electron with a set of configs
-
-        :parameter configs: electron positions (walkers)
-        :type configs: (nconf, nelec, 3) PeriodicConfigs object
-        :parameter epos: pyqmc PeriodicConfigs object of shape (nconf, ndim)
-        :returns: Vtest: The first nelec columns are Coulomb energies between the test electron and each electron; the last column is the contribution from all the ions.
-        :rtype: (nconf, nelec+1) array
-        """
-        nconf, nelec, ndim = configs.configs.shape
-        Vtest = cp.zeros((nconf, nelec + 1)) + self.ijconst
-        Vtest[:, -1] = self.e_single_test
-
-        # Real space electron-ion part
-        # ei_distances shape (conf, atom, dim)
-        ei_distances = configs.dist.dist_i(self.atom_coords, epos.configs)
-        ei_distances = cp.asarray(ei_distances)
-        rvec = ei_distances[:, :, np.newaxis, :] + self.lattice_displacements
-        r = cp.linalg.norm(rvec, axis=-1)
-        Vtest[:, -1] += cp.einsum(
-            "k,jkl->j", -self.atom_charges, erfc(self.alpha * r) / r
-        )
-
-        # Real space electron-electron part
-        ee_distances = configs.dist.dist_i(configs.configs, epos.configs)
-        ee_distances = cp.asarray(ee_distances)
-        rvec = ee_distances[:, :, np.newaxis, :] + self.lattice_displacements
-        r = cp.linalg.norm(rvec, axis=-1)
-        Vtest[:, :-1] += cp.sum(erfc(self.alpha * r) / r, axis=-1)
-
-        # Reciprocal space electron-electron part
-        GdotR = cp.dot(cp.asarray(configs.configs), self.gpoints.T)
-        testGdotR = cp.dot(cp.asarray(epos.configs), self.gpoints.T)
-        test_cos = cp.cos(testGdotR)
-        test_sin = cp.sin(testGdotR)
-        coscos_sinsin = cp.cos(GdotR) * test_cos + cp.sin(GdotR) * test_sin
-        ee_recip_separated = cp.dot(coscos_sinsin, self.gweight)
-        Vtest[:, :-1] += 2 * ee_recip_separated
-
-        # Reciprocal space electrin-ion part
-        coscos_sinsin = -self.ion_exp.real * test_cos + self.ion_exp.imag * test_sin
-        ei_recip_separated = cp.dot(coscos_sinsin + 0.5, self.gweight)
-        Vtest[:, -1] += 2 * ei_recip_separated
-
-        return asnumpy(Vtest)
 
     def compute_total_energy(self, mol, configs, wf, threshold):
         """

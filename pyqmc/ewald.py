@@ -305,8 +305,7 @@ class Ewald:
         sum_e_cos = cp.cos(e_GdotR).sum(axis=1)
         ee_recip = cp.dot(sum_e_sin ** 2 + sum_e_cos ** 2, self.gweight)
         ## Reciprocal space electron-ion part
-        ion_exp = cp.asarray(self.ion_exp)
-        coscos_sinsin = -ion_exp.real * sum_e_cos + ion_exp.imag * sum_e_sin
+        coscos_sinsin = -self.ion_exp.real * sum_e_cos + self.ion_exp.imag * sum_e_sin
         ei_recip = 2 * cp.dot(coscos_sinsin, self.gweight)
         return ee_recip, ei_recip
 
@@ -416,7 +415,7 @@ class Ewald:
         Vtest[:, :-1] += 2 * ee_recip_separated
 
         # Reciprocal space electrin-ion part
-        coscos_sinsin = -ion_exp.real * test_cos + ion_exp.imag * test_sin
+        coscos_sinsin = -self.ion_exp.real * test_cos + self.ion_exp.imag * test_sin
         ei_recip_separated = cp.dot(coscos_sinsin + 0.5, self.gweight)
         Vtest[:, -1] += 2 * ei_recip_separated
 

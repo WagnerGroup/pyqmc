@@ -206,3 +206,5 @@ plt.contourf(yzplane,levels=[vmax*x for x in np.logspace(-6,-1,80)], cmap='magma
 plt.xticks([])
 plt.yticks([])
 ```
+
+

@@ -88,7 +88,7 @@ class JastrowSpin:
 
         u = gpu.cp.sum(self._bvalues * self.parameters["bcoeff"], axis=(2, 1))
         u += gpu.cp.einsum("ijkl,jkl->i", self._avalues, self.parameters["acoeff"])
-        return (np.ones(len(u)), asnumpy(u))
+        return (np.ones(len(u)), gpu.asnumpy(u))
 
     def updateinternals(self, e, epos, wrap=None, mask=None):
         r"""Update a and b sums.
@@ -224,7 +224,7 @@ class JastrowSpin:
         """Compute the current log value of the wavefunction"""
         u = gpu.cp.sum(self._bvalues * self.parameters["bcoeff"], axis=(2, 1))
         u += gpu.cp.einsum("ijkl,jkl->i", self._avalues, self.parameters["acoeff"])
-        return (np.ones(len(u)), asnumpy(u))
+        return (np.ones(len(u)), gpu.asnumpy(u))
 
     def gradient(self, e, epos):
         r"""We compute the gradient for electron e as
@@ -258,7 +258,7 @@ class JastrowSpin:
         for c, a in zip(self.parameters["acoeff"].transpose()[edown], self.a_basis):
             grad += gpu.cp.einsum("j,ijk->ki", c, a.gradient(dinew, rinew))
 
-        return asnumpy(grad)
+        return gpu.asnumpy(grad)
 
     def gradient_value(self, e, epos):
         r"""
@@ -304,7 +304,7 @@ class JastrowSpin:
             "...jk,jk->...", deltab, self.parameters["bcoeff"][:, edown : edown + 2]
         )
         val = gpu.cp.exp(b_val + a_val)
-        return asnumpy(grad), asnumpy(val)
+        return gpu.asnumpy(grad), gpu.asnumpy(val)
 
     def gradient_laplacian(self, e, epos):
         """ """
@@ -339,7 +339,7 @@ class JastrowSpin:
             grad += c[1 + edown] * gpu.cp.sum(bgrad[:, nup - eup :], axis=1).T
             lap += c[edown] * gpu.cp.sum(blap[:, : nup - eup], axis=(1, 2))
             lap += c[1 + edown] * gpu.cp.sum(blap[:, nup - eup :], axis=(1, 2))
-        return asnumpy(grad), asnumpy(lap + gpu.cp.sum(grad ** 2, axis=0))
+        return gpu.asnumpy(grad), gpu.asnumpy(lap + gpu.cp.sum(grad ** 2, axis=0))
 
     def laplacian(self, e, epos):
         return self.gradient_laplacian(e, epos)[1]
@@ -367,7 +367,7 @@ class JastrowSpin:
         val = gpu.cp.exp(b_val + a_val)
         if len(val.shape) == 2:
             val = val.T
-        return asnumpy(val)
+        return gpu.asnumpy(val)
 
     def testvalue_many(self, e, epos, mask=None):
         r"""
@@ -403,13 +403,13 @@ class JastrowSpin:
             if len(val.shape) == 2:
                 val = val.T
             ratios[:, ind] = val
-        return asnumpy(ratios)
+        return gpu.asnumpy(ratios)
 
     def pgradient(self):
         """Given the b sums, this is pretty trivial for the coefficient derivatives.
         For the derivatives of basis functions, we will have to compute the derivative
         of all the b's and redo the sums, similar to recompute()"""
-        return {"bcoeff": asnumpy(self._bvalues), "acoeff": asnumpy(self._avalues)}
+        return {"bcoeff": gpu.asnumpy(self._bvalues), "acoeff": gpu.asnumpy(self._avalues)}
 
     def u_components(self, rvec, r):
         """Given positions rvec and their magnitudes r, returns

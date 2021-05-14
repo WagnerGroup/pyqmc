@@ -52,7 +52,7 @@ class LinearTransform:
     """
 
     def __init__(self, parameters, to_opt=None):
-        parameters = {k: gpu.cp.asnumpy(v) for k, v in parameters.items()}
+        parameters = {k: gpu.asnumpy(v) for k, v in parameters.items()}
         if to_opt is None:
             to_opt = {k: np.ones(p.shape, dtype=bool) for k, p in parameters.items()}
         self.to_opt = {k: o for k, o in to_opt.items() if np.any(o)}
@@ -73,7 +73,7 @@ class LinearTransform:
         """Convert the dictionary to a linear list of gradients
         """
         params = np.concatenate(
-            [gpu.cp.asnumpy(parameters[k])[opt] for k, opt in self.to_opt.items()]
+            [gpu.asnumpy(parameters[k])[opt] for k, opt in self.to_opt.items()]
         )
         return np.concatenate((params.real, params[self.complex_inds].imag))
 

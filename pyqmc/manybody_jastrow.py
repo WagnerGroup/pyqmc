@@ -135,7 +135,7 @@ class J3:
         grad = grad1 + grad2
 
         lap3 = np.einsum("dc,dc->c", grad, grad)
-        return gpu.asnumpy(grad), asnumpy(lap1 + lap2 + lap3)
+        return gpu.asnumpy(grad), gpu.asnumpy(lap1 + lap2 + lap3)
 
     def pgradient(self):
         mask = np.tril(

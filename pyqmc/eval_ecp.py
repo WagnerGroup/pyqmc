@@ -32,12 +32,14 @@ def compute_tmoves(mol, configs, wf, e, threshold, tau):
     summed_data = []
     nconfig = configs.configs.shape[0]
     for d in data: 
+        print(d['mask'])
         npts = d['ratio'].shape[1]
         weight = np.zeros((nconfig, npts))
         ratio = np.ones((nconfig, npts))
         weight[d['mask']] = np.einsum("ik, ijk -> ij", (np.exp(-tau*d['v_l'])-1), d['P_l'])
         ratio[d['mask']] = d['ratio']
         summed_data.append({'weight':weight, 'ratio':ratio, 'epos':d['epos']})
+        print(weight)
         
     ratio = np.concatenate([d['ratio'] for d in summed_data], axis=1)
     weight = np.concatenate([d['weight'] for d in summed_data], axis=1)

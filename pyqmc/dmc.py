@@ -23,11 +23,78 @@ def limdrift(g, tau, acyrus=0.25):
 def get_V2(configs, wf, acc_out):
     if 'grad2' in acc_out.keys():
         return acc_out['grad2']
-    else: 
-        v2 = np.zeros(nconfig)
-        for e in range(nelec):
-            v2 += np.sum(wf.gradient(e,configs.electron(e)).T**2, axis=1)
-        return v2
+
+    nconfig, nelec = configs.configs.shape[0:2]
+    v2 = np.zeros(nconfig)
+    for e in range(nelec):
+        v2 += np.sum(wf.gradient(e,configs.electron(e)).T**2, axis=1)
+    return v2
+
+
+def propose_drift_diffusion(wf, configs, tstep, e):
+    nconfig = configs.configs.shape[0]
+    grad = limdrift(np.real(wf.gradient(e, configs.electron(e)).T), tstep)
+    gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconfig, 3))
+    eposnew = configs.configs[:, e, :] + gauss + grad
+    newepos = configs.make_irreducible(e, eposnew)
+
+    # Compute reverse move
+    new_grad = limdrift(np.real(wf.gradient(e, newepos).T), tstep)
+    forward = np.sum(gauss ** 2, axis=1)
+    backward = np.sum((gauss + grad + new_grad) ** 2, axis=1)
+    t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
+
+    # Acceptance -- fixed-node: reject if wf changes sign
+    wfratio = wf.testvalue(e, newepos)
+    ratio = np.abs(wfratio) ** 2 * t_prob
+    if not wf.iscomplex:
+        ratio *= np.sign(wfratio)
+    accept = ratio > np.random.rand(nconfig)
+    r2 = np.sum((gauss+grad)**2,axis=1)
+
+    return {'newepos':newepos,'accept':accept, 'r2': r2}
+
+
+
+def propose_tmoves(wf, configs, energy_accumulator, tstep, e):
+    """
+    No side effect calculation of new t-moves
+
+    Returns: 
+       new proposed positions
+       probability of acceptance
+       sum of weights
+    """
+    moves = energy_accumulator.nonlocal_tmoves(configs, wf, e, tstep)
+    t_amplitudes = moves['ratio']*moves['weight']
+    forward_probability = np.zeros_like(t_amplitudes)
+    forward_probability[t_amplitudes>0] = t_amplitudes[t_amplitudes >0]
+    norm = 1.0 + np.sum(forward_probability, axis=1) #EQN 34
+    #forward_probability/=norm[:,np.newaxis]
+    print("norm", norm)
+    def select_walker(array):
+        print("array", array)
+        r = np.random.rand()
+        return np.searchsorted(array, r)
+    cdf = np.cumsum(forward_probability/norm[:,np.newaxis], axis=1)
+    print("cdf shape", cdf.shape)
+    selected_moves = np.apply_along_axis(select_walker, 1, cdf)
+    print("selected moves", selected_moves.shape)
+    move_selected = selected_moves < norm.shape[0]
+    print("selected moves", np.sum(move_selected))
+    
+    selected_moves[move_selected==False]=0
+    newpos = np.zeros((norm.shape[0],3))
+    for walker, move in enumerate(selected_moves):
+        newpos[walker,:] = moves['configs'].configs[walker,move,:]
+    newpos = configs.make_irreducible(e, newpos)
+    print('selected positions',newpos.configs.shape)
+
+
+    #backward_amplitude = t_amplitudes/ratio[:,selected_walkers]
+
+
+    return {'moves':newpos, 'mask':move_selected}
 
 
 
@@ -37,13 +104,11 @@ def dmc_propagate(
     weights,
     tstep,
     branchcut_start,
-    branchcut_stop,
     e_trial,
     e_est,
     nsteps=5,
     accumulators=None,
     ekey=("energy", "total"),
-    drift_limiter=limdrift,
 ):
     """
     Propagate DMC without branching
@@ -55,7 +120,6 @@ def dmc_propagate(
     :parameter nsteps: number of DMC steps to take
     :parameter accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
     :parameter ekey: tuple of strings; energy is needed for DMC weights. Access total energy by accumulators[ekey[0]](configs, wf)[ekey[1]
-    :parameter drift_limiter: a function that takes a gradient and a cutoff and returns an adjusted gradient
     :returns: (df,coords,weights)
       df: A list of dictionaries nstep long that contains all results from the accumulators.
 
@@ -78,34 +142,13 @@ def dmc_propagate(
         r2_proposed = np.zeros(nconfig)
         prob_acceptance = np.zeros(nconfig)
         for e in range(nelec):
-            # Propose move
-            grad = drift_limiter(np.real(wf.gradient(e, configs.electron(e)).T), tstep)
-            gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconfig, 3))
-            eposnew = configs.configs[:, e, :] + gauss + grad
-            newepos = configs.make_irreducible(e, eposnew)
-
-            # Compute reverse move
-            new_grad = drift_limiter(np.real(wf.gradient(e, newepos).T), tstep)
-            forward = np.sum(gauss ** 2, axis=1)
-            backward = np.sum((gauss + grad + new_grad) ** 2, axis=1)
-            # forward = np.sum((configs[:, e, :] + grad - eposnew) ** 2, axis=1)
-            # backward = np.sum((eposnew + new_grad - configs[:, e, :]) ** 2, axis=1)
-            t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
-
-            # Acceptance -- fixed-node: reject if wf changes sign
-            wfratio = wf.testvalue(e, newepos)
-            ratio = np.abs(wfratio) ** 2 * t_prob
-            if not wf.iscomplex:
-                ratio *= np.sign(wfratio)
-            accept = ratio > np.random.rand(nconfig)
-
+            diff_move = propose_drift_diffusion(wf, configs, tstep, e)
             # Update wave function
-            configs.move(e, newepos, accept)
-            wf.updateinternals(e, newepos, mask=accept)
-            r2 = np.sum((gauss+grad)**2,axis=1)
-            r2_proposed += r2
-            r2_accepted[accept]+=r2[accept]
-            prob_acceptance += accept/nelec
+            configs.move(e, diff_move['newepos'], diff_move['accept'])
+            wf.updateinternals(e, diff_move['newepos'], mask=diff_move['accept'])
+            r2_proposed += diff_move['r2']
+            r2_accepted[diff_move['accept']]+=diff_move['r2'][diff_move['accept']]
+            prob_acceptance += diff_move['accept']/nelec
 
         # weights
         elocold = eloc.copy()
@@ -267,8 +310,6 @@ def rundmc(
     branchtime=5,
     stepoffset=0,
     branchcut_start=10,
-    branchcut_stop=20,
-    drift_limiter=limdrift,
     verbose=False,
     accumulators=None,
     ekey=("energy", "total"),
@@ -290,7 +331,6 @@ def rundmc(
     :parameter accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
     :parameter ekey: tuple of strings; energy is needed for DMC weights. Access total energy by accumulators[ekey[0]](configs, wf)[ekey[1]
     :parameter verbose: Print out step information
-    :parameter drift_limiter: a function that takes a gradient and a cutoff and returns an adjusted gradient
     :parameter stepoffset: If continuing a run, what to start the step numbering at.
     :returns: (df,coords,weights)
       df: A list of dictionaries nstep long that contains all results from the accumulators.
@@ -345,13 +385,11 @@ def rundmc(
                 weights,
                 tstep,
                 branchcut_start * esigma,
-                branchcut_stop * esigma,
                 e_trial=e_trial,
                 e_est = e_est,
                 nsteps=branchtime,
                 accumulators=accumulators,
                 ekey=ekey,
-                drift_limiter=drift_limiter,
                 **kwargs,
             )
         else:
@@ -363,13 +401,11 @@ def rundmc(
                 npartitions,
                 tstep,
                 branchcut_start * esigma,
-                branchcut_stop * esigma,
                 e_trial=e_trial,
                 e_est = e_est,
                 nsteps=branchtime,
                 accumulators=accumulators,
                 ekey=ekey,
-                drift_limiter=drift_limiter,
                 **kwargs,
             )
 

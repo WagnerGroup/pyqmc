@@ -54,7 +54,6 @@ def test():
         accumulators={"energy": EnergyAccumulator(mol)},
         ekey=("energy", "total"),
         tstep=0.01,
-        drift_limiter=limdrift,
         verbose=True,
     )
 

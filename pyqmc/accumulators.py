@@ -33,6 +33,9 @@ class EnergyAccumulator:
     def avg(self, configs, wf):
         return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
 
+    def nonlocal_tmoves(self, configs, wf, e, tau):
+        return eval_ecp.compute_tmoves(self.mol, configs, wf, e,self.threshold, tau)
+
     def keys(self):
         return set(["ke", "ee", "ei", "ecp", "total", "grad2"])
 

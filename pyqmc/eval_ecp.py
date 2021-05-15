@@ -1,6 +1,6 @@
 import numpy as np
 import copy
-
+import scipy.spatial.transform
 
 def ecp(mol, configs, wf, threshold):
     """
@@ -32,14 +32,12 @@ def compute_tmoves(mol, configs, wf, e, threshold, tau):
     summed_data = []
     nconfig = configs.configs.shape[0]
     for d in data: 
-        print(d['mask'])
         npts = d['ratio'].shape[1]
         weight = np.zeros((nconfig, npts))
         ratio = np.ones((nconfig, npts))
-        weight[d['mask']] = np.einsum("ik, ijk -> ij", (np.exp(-tau*d['v_l'])-1), d['P_l'])
+        weight[d['mask']] = np.einsum("ik, ijk -> ij", np.exp(-tau*d['v_l'])-1, d['P_l'])
         ratio[d['mask']] = d['ratio']
         summed_data.append({'weight':weight, 'ratio':ratio, 'epos':d['epos']})
-        print(weight)
         
     ratio = np.concatenate([d['ratio'] for d in summed_data], axis=1)
     weight = np.concatenate([d['weight'] for d in summed_data], axis=1)
@@ -218,19 +216,11 @@ def get_rot(nconf, naip):
     :returns: the integration weights, and the positions of the rotated electron e
     :rtype:  ((naip,) array, (nconf, naip, 3) array)
     """
-    # t and p are sampled randomly over a sphere around the atom
-    t = np.random.uniform(low=0.0, high=np.pi, size=nconf)
-    p = np.random.uniform(low=0.0, high=2 * np.pi, size=nconf)
-
     def sphere(t_, p_):
         s = np.sin(t_)
         return s * np.cos(p_), s * np.sin(p_), np.cos(t_)
 
-    # rotated unit vectors:
-    rot = np.zeros([3, 3, nconf])
-    rot[0, :, :] = sphere(np.zeros(nconf) + np.pi / 2.0, p - np.pi / 2.0)
-    rot[1, :, :] = sphere(t + np.pi / 2.0, p)
-    rot[2, :, :] = sphere(t, p)
+    rot = scipy.spatial.transform.Rotation.random(nconf).as_matrix()
 
     if naip == 6:
         d1 = np.array([0.0, 1.0, 0.5, 0.5, 0.5, 0.5]) * np.pi
@@ -240,7 +230,7 @@ def get_rot(nconf, naip):
         d1 = np.array([0, np.pi] + [tha, np.pi - tha] * 5)
         d2 = np.array([0, 0] + list(range(10))) * np.pi / 5
 
-    rot_vec = np.einsum("ilj,ik->jkl", rot, sphere(d1, d2))
-    weights = 1.0 / naip * np.ones(naip)
+    rot_vec = np.einsum("jil,ik->jkl", rot, sphere(d1, d2))
+    weights = np.ones(naip) / (naip)
 
     return weights, rot_vec

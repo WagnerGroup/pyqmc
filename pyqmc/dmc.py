@@ -52,13 +52,13 @@ def propose_drift_diffusion(wf, configs, tstep, e):
     accept = ratio > np.random.rand(nconfig)
     r2 = np.sum((gauss+grad)**2,axis=1)
 
-    return {'newepos':newepos,'accept':accept, 'r2': r2}
+    return newepos,accept, r2
 
 
 
 def propose_tmoves(wf, configs, energy_accumulator, tstep, e):
     """
-    No side effect calculation of new t-moves
+    No side effect calculation of t-moves
 
     Returns: 
        new proposed positions
@@ -67,34 +67,34 @@ def propose_tmoves(wf, configs, energy_accumulator, tstep, e):
     """
     moves = energy_accumulator.nonlocal_tmoves(configs, wf, e, tstep)
     t_amplitudes = moves['ratio']*moves['weight']
+    #print(moves['ratio'])
     forward_probability = np.zeros_like(t_amplitudes)
     forward_probability[t_amplitudes>0] = t_amplitudes[t_amplitudes >0]
     norm = 1.0 + np.sum(forward_probability, axis=1) #EQN 34
-    #forward_probability/=norm[:,np.newaxis]
-    print("norm", norm)
+
     def select_walker(array):
-        print("array", array)
         r = np.random.rand()
         return np.searchsorted(array, r)
     cdf = np.cumsum(forward_probability/norm[:,np.newaxis], axis=1)
-    print("cdf shape", cdf.shape)
     selected_moves = np.apply_along_axis(select_walker, 1, cdf)
-    print("selected moves", selected_moves.shape)
-    move_selected = selected_moves < norm.shape[0]
-    print("selected moves", np.sum(move_selected))
+    move_selected = selected_moves < t_amplitudes.shape[1]
     
     selected_moves[move_selected==False]=0
     newpos = np.zeros((norm.shape[0],3))
+    reverse_ratio = np.zeros((norm.shape[0]))
     for walker, move in enumerate(selected_moves):
         newpos[walker,:] = moves['configs'].configs[walker,move,:]
+        reverse_ratio[walker] = moves['ratio'][walker, move]
+
     newpos = configs.make_irreducible(e, newpos)
-    print('selected positions',newpos.configs.shape)
+
+    backward_amplitude = t_amplitudes/reverse_ratio[:,np.newaxis]
+    backward_amplitude[backward_amplitude < 0] =0.0
+    back_norm = 1.0 + np.sum(backward_amplitude, axis=1)
+    acceptance = norm/back_norm
 
 
-    #backward_amplitude = t_amplitudes/ratio[:,selected_walkers]
-
-
-    return {'moves':newpos, 'mask':move_selected}
+    return newpos, move_selected, acceptance, np.sum(t_amplitudes)
 
 
 
@@ -141,20 +141,39 @@ def dmc_propagate(
         r2_accepted=np.zeros(nconfig)
         r2_proposed = np.zeros(nconfig)
         prob_acceptance = np.zeros(nconfig)
-        for e in range(nelec):
-            diff_move = propose_drift_diffusion(wf, configs, tstep, e)
-            # Update wave function
-            configs.move(e, diff_move['newepos'], diff_move['accept'])
-            wf.updateinternals(e, diff_move['newepos'], mask=diff_move['accept'])
-            r2_proposed += diff_move['r2']
-            r2_accepted[diff_move['accept']]+=diff_move['r2'][diff_move['accept']]
-            prob_acceptance += diff_move['accept']/nelec
+        tmove_acceptance = np.zeros(nconfig)
+
+        for e in range(nelec):  # T-moves
+            newepos, mask, probability, ecp_totweight = propose_tmoves(wf, configs, accumulators[ekey[0]], tstep, e)
+            accept = mask #& (probability > np.random.rand(nconfig))
+            #print("acceptance", np.sum(accept)/nconfig)
+            #print("old positions", configs.configs[accept,e,:])
+            #print("new positions", newepos.configs[accept])
+            configs.move(e, newepos, accept)
+            wf.updateinternals(e, newepos, mask=accept)
+            tmove_acceptance += accept/nelec
+            #energy = accumulators[ekey[0]](configs, wf)
+            #print("old energies", eloc[accept])
+            #print("new energies", energy[ekey[1]][accept])
+            #for k in energy:
+            #    print(k, energy[k][accept])
+            
+
+
+        for e in range(nelec):  # drift-diffusion
+            newepos, accept, r2 = propose_drift_diffusion(wf, configs, tstep, e)
+            configs.move(e, newepos, accept)
+            wf.updateinternals(e, newepos, mask=accept)
+            r2_proposed += r2
+            r2_accepted[accept]+=r2[accept]
+            prob_acceptance += accept/nelec
 
         # weights
         elocold = eloc.copy()
         v2old = v2.copy()
         energydat = accumulators[ekey[0]](configs, wf)
         eloc = energydat[ekey[1]].real
+
         tdamp = r2_accepted/r2_proposed
         v2 = get_V2(configs, wf, energydat)
 
@@ -174,6 +193,7 @@ def dmc_propagate(
                 )
         avg["weight"] = wavg
         avg["acceptance"] = np.mean(prob_acceptance)
+        avg["tmove_acceptance"] = np.mean(tmove_acceptance)
         df.append(avg)
     weight = np.asarray([d["weight"] for d in df])
     avg_weight = weight / np.mean(weight)

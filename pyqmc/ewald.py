@@ -242,7 +242,7 @@ class Ewald:
         cij = gpu.cp.zeros(r.shape)
         for ld in self.lattice_displacements:
             r[:] = np.linalg.norm(dists + ld, axis=-1)
-            cij += erfc(self.alpha * r) / r
+            cij += gpu.erfc(self.alpha * r) / r
         return cij
 
     def ewald_electron(self, configs):

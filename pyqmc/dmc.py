@@ -145,7 +145,7 @@ def dmc_propagate(
 
         for e in range(nelec):  # T-moves
             newepos, mask, probability, ecp_totweight = propose_tmoves(wf, configs, accumulators[ekey[0]], tstep, e)
-            accept = mask #& (probability > np.random.rand(nconfig))
+            accept = mask & (probability > np.random.rand(nconfig))
             #print("acceptance", np.sum(accept)/nconfig)
             #print("old positions", configs.configs[accept,e,:])
             #print("new positions", newepos.configs[accept])
@@ -464,7 +464,8 @@ def estimate_energy(hdf_file, df, ekey):
     else:
         en = np.asarray([d[ekey[0]+ekey[1]] for d in df])
         wt = np.asarray([d['weight'] for d in df])
-    return np.average(en, weights=wt)
+    warmup = int(len(en)/4)
+    return np.average(en[warmup:], weights=wt[warmup:])
 
 if __name__=="__main__":
     import run_dmc_shell

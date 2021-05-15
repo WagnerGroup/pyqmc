@@ -115,30 +115,38 @@ class Ewald:
         """
         cellvolume = np.linalg.det(self.latvec)
         recvec = np.linalg.inv(self.latvec)
-        crossproduct = recvec.T * cellvolume
 
         # Determine alpha
-        tmpheight_i = np.einsum("ij,ij->i", crossproduct, self.latvec)
-        length_i = np.linalg.norm(crossproduct, axis=1)
-        smallestheight = np.amin(np.abs(tmpheight_i) / length_i)
+        smallestheight = np.amin(1 / np.linalg.norm(recvec.T, axis=1))
         self.alpha = 5.0 / smallestheight
         print("Setting Ewald alpha to ", self.alpha)
 
         # Determine G points to include in reciprocal Ewald sum
-        X, Y, Z = cp.meshgrid(
-            *[cp.arange(-ewald_gmax, ewald_gmax + 1)] * 3, indexing="ij"
+        def select_big(gpts):
+            gpoints = cp.einsum("j...,jk->...k", gpts, recvec) * 2 * np.pi
+            gsquared = cp.einsum("...k,...k->...", gpoints, gpoints)
+            gweight = 4 * np.pi * cp.exp(-gsquared / (4 * self.alpha ** 2))
+            gweight /= cellvolume * gsquared
+            bigweight = gweight > 1e-10
+            return gpoints[bigweight], gweight[bigweight]
+
+        gptsXpos = cp.meshgrid(
+            cp.arange(1, ewald_gmax + 1),
+            *[cp.arange(-ewald_gmax, ewald_gmax + 1)] * 2,
+            indexing="ij"
         )
-        positive_octants = X + 1e-6 * Y + 1e-12 * Z > 0  # assume ewald_gmax < 1e5
-        gpoints = cp.stack(
-            (X[positive_octants], Y[positive_octants], Z[positive_octants]), axis=-1
+        zero = cp.asarray([0])
+        gptsX0Ypos = cp.meshgrid(
+            zero,
+            cp.arange(1, ewald_gmax + 1),
+            cp.arange(-ewald_gmax, ewald_gmax + 1),
+            indexing="ij",
         )
-        gpoints = cp.dot(gpoints, cp.asarray(recvec)) * 2 * np.pi
-        gsquared = cp.sum(gpoints ** 2, axis=1)
-        gweight = 4 * np.pi * cp.exp(-gsquared / (4 * self.alpha ** 2))
-        gweight /= cellvolume * gsquared
-        bigweight = gweight > 1e-10
-        self.gpoints = gpoints[bigweight]
-        self.gweight = gweight[bigweight]
+        gptsX0Y0Zpos = np.meshgrid(
+            zero, zero, cp.arange(1, ewald_gmax + 1), indexing="ij"
+        )
+        gs = zip(*[select_big(x) for x in (gptsXpos, gptsX0Ypos, gptsX0Y0Zpos)])
+        self.gpoints, self.gweight = [cp.concatenate(x, axis=0) for x in gs]
 
         self.set_ewald_constants(cellvolume)
 

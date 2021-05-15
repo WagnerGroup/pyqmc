@@ -122,14 +122,6 @@ class Ewald:
         print("Setting Ewald alpha to ", self.alpha)
 
         # Determine G points to include in reciprocal Ewald sum
-        def select_big(gpts):
-            gpoints = cp.einsum("j...,jk->...k", gpts, recvec) * 2 * np.pi
-            gsquared = cp.einsum("...k,...k->...", gpoints, gpoints)
-            gweight = 4 * np.pi * cp.exp(-gsquared / (4 * self.alpha ** 2))
-            gweight /= cellvolume * gsquared
-            bigweight = gweight > 1e-10
-            return gpoints[bigweight], gweight[bigweight]
-
         gptsXpos = cp.meshgrid(
             cp.arange(1, ewald_gmax + 1),
             *[cp.arange(-ewald_gmax, ewald_gmax + 1)] * 2,
@@ -145,7 +137,12 @@ class Ewald:
         gptsX0Y0Zpos = np.meshgrid(
             zero, zero, cp.arange(1, ewald_gmax + 1), indexing="ij"
         )
-        gs = zip(*[select_big(x) for x in (gptsXpos, gptsX0Ypos, gptsX0Y0Zpos)])
+        gs = zip(
+            *[
+                select_big(x, cellvolume, recvec, self.alpha)
+                for x in (gptsXpos, gptsX0Ypos, gptsX0Y0Zpos)
+            ]
+        )
         self.gpoints, self.gweight = [cp.concatenate(x, axis=0) for x in gs]
 
         self.set_ewald_constants(cellvolume)
@@ -382,7 +379,6 @@ class Ewald:
         nelec = configs.configs.shape[1]
         return self.e_single(nelec) + self.ewalde_separated
 
-
     def compute_total_energy(self, mol, configs, wf, threshold):
         """
         :parameter mol: A pyscf-like 'Mole' object. nelec, atom_charges(), atom_coords(), and ._ecp are used.
@@ -404,3 +400,12 @@ class Ewald:
             "ecp": ecp_val,
             "total": ke + ee + ei + ecp_val + ii,
         }
+
+
+def select_big(gpts, cellvolume, recvec, alpha):
+    gpoints = cp.einsum("j...,jk->...k", gpts, recvec) * 2 * np.pi
+    gsquared = cp.einsum("...k,...k->...", gpoints, gpoints)
+    gweight = 4 * np.pi * cp.exp(-gsquared / (4 * alpha ** 2))
+    gweight /= cellvolume * gsquared
+    bigweight = gweight > 1e-10
+    return gpoints[bigweight], gweight[bigweight]

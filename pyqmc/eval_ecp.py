@@ -103,7 +103,7 @@ def generate_ecp_functors(coeffs):
 
 class rnExp:
     """
-    v_l object. 
+    v_l object.
 
     :math:`cr^{n-2}\cdot\exp(-er^2)`
     """
@@ -146,7 +146,7 @@ def P_l(x, l):
 
 
 def get_P_l(r_ea, r_ea_vec, l_list):
-    r""" The factor :math:`(2l+1)` and the quadrature weights are included.
+    r"""The factor :math:`(2l+1)` and the quadrature weights are included.
 
     :parameter r_ea: distances of electron e and atom a
     :type r_ea: (nconf,)

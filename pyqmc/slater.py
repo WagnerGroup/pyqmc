@@ -300,9 +300,9 @@ class Slater:
         ao = self.orbitals.aos("GTOval_sph_deriv2", epos)
         ao_val = ao[:, 0, :, :]
         ao_lap = cp.sum(ao[:, [4, 7, 9], :, :], axis=1)
-        mos = cp.stack([
-            self.orbitals.mos(x, s)[..., self._det_occup[s]] for x in [ao_val, ao_lap]
-        ])
+        mos = cp.stack(
+            [self.orbitals.mos(x, s)[..., self._det_occup[s]] for x in [ao_val, ao_lap]]
+        )
         ratios = self._testrowderiv(e, mos)
         return asnumpy(ratios[1] / ratios[0])
 

@@ -124,7 +124,9 @@ class OBDMAccumulator:
 
         for conf, assign in zip(extra_configs, auxassignments):
             conf.resample(assign)
-        borb_aux = cp.asarray([orb[assign, ...] for orb, assign in zip(borb_aux, auxassignments)])
+        borb_aux = cp.asarray(
+            [orb[assign, ...] for orb, assign in zip(borb_aux, auxassignments)]
+        )
 
         results["acceptance"] += np.sum(accept) / naux
 

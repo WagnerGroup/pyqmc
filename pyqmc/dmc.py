@@ -135,34 +135,34 @@ def dmc_propagate(
 
 def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **kwargs):
     r"""Parallelizes calls to dmc_propagate by splitting configs
-    
+
     If npartitions does not evenly divide nconfigs, we need to reweight the results based on the number of configs per parallel task.
 
-    The final result should be equivalent to the non-parallelized case. 
+    The final result should be equivalent to the non-parallelized case.
     The average weight :math:`w` and the weighted average of observables :math:`\langle O \rangle` are returned.
     Index :math:`i` refers to walker index.
 
-    .. math:: 
+    .. math::
         w = \sum_i w_i / n_{\rm config}
         \qquad\quad \langle O \rangle = \sum_i o_{i}  w_i / \sum_i w_i
 
     Split over parallel tasks, we need to reweight by number of walkers.
     The average weight :math:`w_p` and weighted average of observables :math:`\langle O\rangle_p` are returned from each task.
 
-    .. math:: 
+    .. math::
         w_p = \sum_j^{{\rm task}\, p} w_j / n_{{\rm config}, p}
         \qquad\quad \langle O \rangle_p = \frac{\sum_j^{{\rm task}\, p} o_{j}  w_j }{ \sum_j^{{\rm task}\, p} w_j }
 
 
     The total weight and total average (defined above) are computed from the task weights :math:`w_p` and task averages :math:`\langle O\rangle_p` as
 
-    .. math:: 
+    .. math::
         w = \sum_p w_p n_{{\rm config}, p} /  n_{\rm config},
         \qquad\quad \langle O \rangle = \frac{ \sum_p \langle O\rangle_p  \sum_j^{{\rm task}\, p} w_j }{ \sum_i w_i}.
 
     We can rewrite the weights using the equations above
 
-    .. math:: 
+    .. math::
         \langle O \rangle &= \frac{ \sum_p \langle O\rangle_p w_p  n_{{\rm config}, p}  }{ w n_{\rm config} }
 
         &= \sum_p \langle O\rangle_p \frac{w_p n_{{\rm config}, p}}{\sum_p w_p n_{{\rm config}, p}}
@@ -188,10 +188,7 @@ def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **k
     weight_avg = weight / np.sum(weight)
     block_avg = {
         k: np.sum(
-            [
-                res[k] * ww
-                for res, ww in zip(allresults[0], weight_avg)
-            ],
+            [res[k] * ww for res, ww in zip(allresults[0], weight_avg)],
             axis=0,
         )
         for k in allresults[0][0].keys()

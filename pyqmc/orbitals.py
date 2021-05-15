@@ -276,7 +276,9 @@ class PBCOrbitalEvaluatorKpoints:
             self.param_split[spin],
             axis=-1,
         )
-        return cp.concatenate(cp.asarray([ak.dot(mok) for ak, mok in zip(ao, p[0:-1])]), axis=-1)
+        return cp.concatenate(
+            cp.asarray([ak.dot(mok) for ak, mok in zip(ao, p[0:-1])]), axis=-1
+        )
 
     def pgradient(self, ao, spin):
         """

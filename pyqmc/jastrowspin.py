@@ -263,14 +263,15 @@ class JastrowSpin:
         return asnumpy(grad)
 
     def gradient_value(self, e, epos):
-        r"""
-        """
+        r""""""
         nconf, nelec = self._configscurrent.configs.shape[:2]
         nup = self._mol.nelec[0]
 
         # Get e-e and e-ion distances
         not_e = np.arange(nelec) != e
-        dnew = cp.asarray(epos.dist.dist_i(self._configscurrent.configs[:, not_e], epos.configs))
+        dnew = cp.asarray(
+            epos.dist.dist_i(self._configscurrent.configs[:, not_e], epos.configs)
+        )
         dinew = cp.asarray(epos.dist.dist_i(self._mol.atom_coords(), epos.configs))
         rnew = cp.linalg.norm(dnew, axis=-1)
         rinew = cp.linalg.norm(dinew, axis=-1)

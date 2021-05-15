@@ -67,7 +67,7 @@ def test_updateinternals(wf, configs):
 
 
 def test_wf_gradient(wf, configs, delta=1e-5):
-    """ Tests wf.gradient(e,configs) against numerical derivatives of wf.testvalue(e,configs)
+    """Tests wf.gradient(e,configs) against numerical derivatives of wf.testvalue(e,configs)
 
     :parameter wf: a wavefunction object with functions wf.recompute(configs), wf.testvalue(e,configs) and wf.gradient(e,configs)
     :parameter configs: positions to set the wf object
@@ -138,7 +138,7 @@ def test_wf_pgradient(wf, configs, delta=1e-5):
 
 
 def test_wf_laplacian(wf, configs, delta=1e-5):
-    """ Tests wf.laplacian(e,epos) against numerical derivatives of wf.gradient(e,epos)
+    """Tests wf.laplacian(e,epos) against numerical derivatives of wf.gradient(e,epos)
 
     :parameter wf: a wavefunction object with functions wf.recompute(configs),
              wf.gradient(e,configs) and wf.laplacian(e,configs)

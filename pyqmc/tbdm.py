@@ -171,7 +171,9 @@ class TBDMAccumulator:
             "acceptance_a": np.mean(aux["acceptance"][0], axis=0),
             "acceptance_b": np.mean(aux["acceptance"][0], axis=0),
         }
-        orb_configs = cp.asarray([orb_configs[s][:, :, self._ijkl[2 * s]] for s in [0, 1]])
+        orb_configs = cp.asarray(
+            [orb_configs[s][:, :, self._ijkl[2 * s]] for s in [0, 1]]
+        )
 
         down_start = [np.min(self._electrons[s]) for s in [0, 1]]
         for sweep in range(self._nsweeps):

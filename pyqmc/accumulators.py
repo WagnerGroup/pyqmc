@@ -36,11 +36,11 @@ class EnergyAccumulator:
 class LinearTransform:
     """
     Linearize a dictionary of wf parameters.
-    
+
     :parameter dict parameters: the wave function parameters
     :parameter dict to_opt: is a dictionary with the keys to optimize, and its values are boolean arrays indicating which specific elements to optimize
 
-    Note: 
+    Note:
         to_opt[k] can't be boolean scalar; it has to be an array with the same dimension as parameters[k].
         to_opt doesn't have to have all the keys of parameters, but all keys of to_opt must be keys of parameters.
     """
@@ -64,16 +64,14 @@ class LinearTransform:
         self.nparams = np.sum([v.sum() for v in self.to_opt.values()])
 
     def serialize_parameters(self, parameters):
-        """Convert the dictionary to a linear list of gradients
-        """
+        """Convert the dictionary to a linear list of gradients"""
         params = np.concatenate(
             [asnumpy(parameters[k])[opt] for k, opt in self.to_opt.items()]
         )
         return np.concatenate((params.real, params[self.complex_inds].imag))
 
     def serialize_gradients(self, pgrad):
-        """Convert the dictionary to a linear list of gradients, mask allows for certain fixed parameters
-        """
+        """Convert the dictionary to a linear list of gradients, mask allows for certain fixed parameters"""
         grads = []
         for k, opt in self.to_opt.items():
             mask = ~np.repeat(opt[np.newaxis, :], pgrad[k].shape[0], axis=0)

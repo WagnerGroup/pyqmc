@@ -35,6 +35,10 @@ class EnergyAccumulator:
 
     def nonlocal_tmoves(self, configs, wf, e, tau):
         return eval_ecp.compute_tmoves(self.mol, configs, wf, e,self.threshold, tau)
+    
+    def has_nonlocal_moves(self):
+        return self.mol._ecp != {}
+
 
     def keys(self):
         return set(["ke", "ee", "ei", "ecp", "total", "grad2"])

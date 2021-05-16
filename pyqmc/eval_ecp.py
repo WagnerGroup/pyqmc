@@ -20,12 +20,17 @@ def compute_tmoves(mol, configs, wf, e, threshold, tau):
     """
 
     """
+    nconfig = configs.configs.shape[0]
     if mol._ecp != {}:
         data = [
             ecp_ea(mol, configs, wf, e, atom, threshold)
             for atom in mol._atom
             if atom[0] in mol._ecp.keys()
         ]
+    else:
+        return {'ratio': np.zeros((nconfig,0)),
+                'weight':np.zeros((nconfig,0)) } 
+
     
     # we want to make a data set which is a list of possible positions, the wave function
     # ratio, and the masks for each 

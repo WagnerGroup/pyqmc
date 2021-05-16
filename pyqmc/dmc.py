@@ -143,20 +143,13 @@ def dmc_propagate(
         prob_acceptance = np.zeros(nconfig)
         tmove_acceptance = np.zeros(nconfig)
 
-        for e in range(nelec):  # T-moves
-            newepos, mask, probability, ecp_totweight = propose_tmoves(wf, configs, accumulators[ekey[0]], tstep, e)
-            accept = mask & (probability > np.random.rand(nconfig))
-            #print("acceptance", np.sum(accept)/nconfig)
-            #print("old positions", configs.configs[accept,e,:])
-            #print("new positions", newepos.configs[accept])
-            configs.move(e, newepos, accept)
-            wf.updateinternals(e, newepos, mask=accept)
-            tmove_acceptance += accept/nelec
-            #energy = accumulators[ekey[0]](configs, wf)
-            #print("old energies", eloc[accept])
-            #print("new energies", energy[ekey[1]][accept])
-            #for k in energy:
-            #    print(k, energy[k][accept])
+        if accumulators[ekey[0]].has_nonlocal_moves():
+            for e in range(nelec):  # T-moves
+                newepos, mask, probability, ecp_totweight = propose_tmoves(wf, configs, accumulators[ekey[0]], tstep, e)
+                accept = mask & (probability > np.random.rand(nconfig))
+                configs.move(e, newepos, accept)
+                wf.updateinternals(e, newepos, mask=accept)
+                tmove_acceptance += accept/nelec
             
 
 

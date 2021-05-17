@@ -1,6 +1,6 @@
 import numpy as np
-from pyqmc.distance import MinimalImageDistance, RawDistance
-from pyqmc.pbc import enforce_pbc
+import pyqmc.distance as distance
+import pyqmc.pbc as pbc
 import copy
 
 
@@ -13,7 +13,7 @@ class OpenElectron:
 class OpenConfigs:
     def __init__(self, configs):
         self.configs = configs
-        self.dist = RawDistance()
+        self.dist = distance.RawDistance()
 
     def electron(self, e):
         return OpenElectron(self.configs[:, e], self.dist)
@@ -117,13 +117,13 @@ class PeriodicElectron:
 
 class PeriodicConfigs:
     def __init__(self, configs, lattice_vectors, wrap=None):
-        configs, wrap_ = enforce_pbc(lattice_vectors, configs)
+        configs, wrap_ = pbc.enforce_pbc(lattice_vectors, configs)
         self.configs = configs
         self.wrap = wrap_
         if wrap is not None:
             self.wrap += wrap
         self.lvecs = lattice_vectors
-        self.dist = MinimalImageDistance(lattice_vectors)
+        self.dist = distance.MinimalImageDistance(lattice_vectors)
 
     def electron(self, e):
         return PeriodicElectron(
@@ -140,7 +140,7 @@ class PeriodicConfigs:
         """
         if mask is None:
             mask = np.ones(vec.shape[0:-1], dtype=bool)
-        epos_, wrap_ = enforce_pbc(self.lvecs, vec[mask])
+        epos_, wrap_ = pbc.enforce_pbc(self.lvecs, vec[mask])
         epos = vec.copy()
         epos[mask] = epos_
         wrap = self.wrap[:, e, :].copy()

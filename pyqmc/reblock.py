@@ -182,7 +182,7 @@ def test_reblocking():
     """
     Tests reblocking against known distribution.
     """
-    from scipy.stats import sem
+    import scipy.stats
 
     def corr_data(N, L):
         """
@@ -200,7 +200,7 @@ def test_reblocking():
     for c in cols:
         row = reblocked_data.loc[c]
         reblocks = reblocked_data["reblocks"].values[0]
-        std_err = sem(reblock_by2(test_data, reblocks, c))
+        std_err = scipy.stats.sem(reblock_by2(test_data, reblocks, c))
         std_err_err = std_err / np.sqrt(2 * (2 ** (n - reblocks) - 1))
 
         assert np.isclose(

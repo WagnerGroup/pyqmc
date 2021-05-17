@@ -100,7 +100,8 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
         acc = 0.0
         for e in range(nelec):
             # Propose move
-            grad = limdrift(np.real(wf.gradient(e, configs.electron(e)).T))
+            g, _ = wf.gradient_value(e, configs.electron(e))
+            grad = limdrift(np.real(g.T))
             gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconf, 3))
             newcoorde = configs.configs[:, e, :] + gauss + grad * tstep
             newcoorde = configs.make_irreducible(e, newcoorde)

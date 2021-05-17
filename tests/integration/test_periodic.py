@@ -1,9 +1,8 @@
 import numpy as np
-import pyqmc
 import pandas as pd
+import pyqmc.api as pyq
+from pyqmc.slater import Slater
 from pyscf.pbc import gto, scf
-from pyqmc.reblock import reblock
-from pyqmc.supercell import get_supercell
 from pyscf.pbc.dft.multigrid import multigrid
 from pyscf.scf.addons import remove_linear_dep_
 import time
@@ -33,7 +32,7 @@ def cubic_with_ecp(kind=0, nk=(1, 1, 1)):
     # mf = mf.density_fit()
     mf = multigrid(mf)
     mf = mf.run()
-    supercell = get_supercell(mol, np.diag(nk))
+    supercell = pyq.get_supercell(mol, np.diag(nk))
     runtest(supercell, mf, kind=kind)
 
 
@@ -58,7 +57,7 @@ def multislater(kind=0, nk=(1, 1, 1)):
     mf.chkfile = "h_bcc.chkfile"
     mf = mf.run()
 
-    supercell = get_supercell(mol, np.diag(nk))
+    supercell = pyq.get_supercell(mol, np.diag(nk))
     runtest(supercell, mf, kind=kind, do_mc=True)
 
 
@@ -76,7 +75,7 @@ def test_RKS(kind=0, nk=(1, 1, 1)):
     # mf = mf.density_fit()
     mf = mf.run()
 
-    supercell = get_supercell(mol, np.diag(nk))
+    supercell = pyq.get_supercell(mol, np.diag(nk))
     runtest(supercell, mf, kind=kind)
 
 
@@ -97,7 +96,7 @@ def noncubic(kind=0, nk=(1, 1, 1)):
     mf.xc = "pbe"
     # mf = mf.density_fit()
     mf = mf.run()
-    supercell = get_supercell(mol, np.diag(nk))
+    supercell = pyq.get_supercell(mol, np.diag(nk))
     runtest(supercell, mf, kind=kind)
 
 
@@ -107,14 +106,14 @@ def runtest(mol, mf, kind=0, do_mc=False):
 
         mc = mcscf.CASCI(mf, ncas=4, nelecas=(1, 1))
         mc.kernel()
-        wf = pyqmc.default_msj(mol, mf, mc)[0]
+        wf = pyq.generate_wf(mol, mf, mc)[0]
         kpt = mf.kpt
         dm = mc.make_rdm1()
         if len(dm.shape) == 4:
             dm = np.sum(dm, axis=0)
     else:
         kpt = mf.kpts[kind]
-        wf = pyqmc.Slater(mol, mf)
+        wf = Slater(mol, mf)
         dm = mf.make_rdm1()
         print("original dm shape", dm.shape)
         if len(dm.shape) == 4:
@@ -133,22 +132,22 @@ def runtest(mol, mf, kind=0, do_mc=False):
     #####################################
     ## evaluate KE integral with VMC
     #####################################
-    coords = pyqmc.initial_guess(mol, 1200, 0.7)
+    coords = pyq.initial_guess(mol, 1200, 0.7)
     warmup = 10
     start = time.time()
-    df, coords = pyqmc.vmc(
+    df, coords = pyq.vmc(
         wf,
         coords,
         nsteps=100 + warmup,
         tstep=1,
-        accumulators={"energy": pyqmc.accumulators.EnergyAccumulator(mol)},
+        accumulators={"energy": pyq.EnergyAccumulator(mol)},
         verbose=False,
         hdf_file=str(uuid.uuid4()),
     )
     print("VMC time", time.time() - start)
     
     df = pd.DataFrame(df)
-    dfke = reblock(df["energyke"][warmup:], 10)
+    dfke = pyq.avg_reblock(df["energyke"][warmup:], 10)
     dfke /= mol.scale
     vmcke, err = dfke.mean(), dfke.sem()
     print("VMC kinetic energy: {0} +- {1}".format(vmcke, err))

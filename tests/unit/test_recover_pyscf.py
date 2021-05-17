@@ -1,6 +1,6 @@
 import pyscf
 import pyscf.pbc
-import pyqmc
+import pyqmc.api as pyq
 import numpy as np
 import os
 
@@ -14,9 +14,10 @@ def test_molecule():
         mf = scf(mol)
         mf.chkfile = chkname
         mf.kernel()
-        mol2, mf2 = pyqmc.recover_pyscf(chkname)
+        mol2, mf2 = pyq.recover_pyscf(chkname)
         print(type(mf2), scf)
         assert isinstance(mf2, scf)
+    os.remove(chkname)
 
 
 def test_pbc():
@@ -34,9 +35,10 @@ def test_pbc():
         mf = scf(mol, mol.make_kpts((2, 1, 1)))
         mf.chkfile = chkname
         mf.kernel()
-        mol2, mf2 = pyqmc.recover_pyscf(chkname)
+        mol2, mf2 = pyq.recover_pyscf(chkname)
         print(type(mf2), scf)
         assert isinstance(mf2, scf)
+    os.remove(chkname)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 import pandas as pd
 import numpy as np
 from pyscf import lib, gto, scf, mcscf
-from pyqmc import default_msj
+import pyqmc.api as pyq
 from pyqmc.accumulators import LinearTransform
 from pyqmc.coord import OpenConfigs
 
@@ -15,7 +15,7 @@ def test():
     mc = mcscf.CASCI(mf, ncas=2, nelecas=(1, 1))
     mc.kernel()
 
-    wf, to_opt = default_msj(mol, mf, mc)
+    wf, to_opt = pyq.generate_wf(mol, mf, mc=mc)
     old_parms = wf.parameters
     lt = LinearTransform(wf.parameters, to_opt)
 

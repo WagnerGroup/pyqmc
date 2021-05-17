@@ -1,6 +1,6 @@
 import numpy as np
 import pyqmc.eval_ecp as eval_ecp
-from pyqmc.distance import RawDistance
+import pyqmc.distance as distance
 
 
 def ee_energy(configs):
@@ -24,7 +24,7 @@ def ei_energy(mol, configs):
 
 def ii_energy(mol):
     ei = 0.0
-    d = RawDistance()
+    d = distance.RawDistance()
     rij, ij = d.dist_matrix(mol.atom_coords()[np.newaxis, :, :])
     if len(ij) == 0:
         return np.array([0.0])

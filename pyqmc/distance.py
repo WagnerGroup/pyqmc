@@ -28,10 +28,10 @@ class RawDistance:
 
           ij : list of size n(n-1)/2 tuples that document i,j
         """
-        n = configs.shape[1]
+        nconf, n = configs.shape[:2]
         npairs = int(n * (n - 1) / 2)
         if npairs == 0:
-            return np.zeros((n, 0, 3)), []
+            return np.zeros((nconf, 0, 3)), []
 
         vs = []
         ij = []

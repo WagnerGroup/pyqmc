@@ -1,8 +1,8 @@
 """ Evaluate the OBDM for a wave function object. """
-from pyqmc.orbitals import MoleculeOrbitalEvaluator, PBCOrbitalEvaluatorKpoints
+import pyqmc.orbitals
 import numpy as np
-from pyqmc.mc import initial_guess
-from pyqmc.loadcupy import cp, asnumpy
+import pyqmc.mc as mc
+from pyqmc.gpu import cp, asnumpy
 
 import pyqmc.supercell as supercell
 
@@ -74,11 +74,13 @@ class OBDMAccumulator:
         self.iscomplex = bool(sum(map(np.iscomplexobj, orb_coeff)))
 
         if kpts is None:
-            self.orbitals = MoleculeOrbitalEvaluator(mol, [orb_coeff, orb_coeff])
+            self.orbitals = pyqmc.orbitals.MoleculeOrbitalEvaluator(
+                mol, [orb_coeff, orb_coeff]
+            )
         else:
             if not hasattr(mol, "original_cell"):
                 mol = supercell.get_supercell(mol, np.eye(3))
-            self.orbitals = PBCOrbitalEvaluatorKpoints(
+            self.orbitals = pyqmc.orbitals.PBCOrbitalEvaluatorKpoints(
                 mol, [orb_coeff, orb_coeff], kpts
             )
 
@@ -88,7 +90,7 @@ class OBDMAccumulator:
         self._nstep = nsweeps * self.nelec
         self.norb = self.orbitals.parameters["mo_coeff_alpha"].shape[-1]
 
-        self._extra_config = initial_guess(mol, int(naux / self.nelec) + 1)
+        self._extra_config = mc.initial_guess(mol, int(naux / self.nelec) + 1)
         self._extra_config.reshape((-1, 1, 3))
 
         accept, extra_configs, _ = sample_onebody(
@@ -124,7 +126,9 @@ class OBDMAccumulator:
 
         for conf, assign in zip(extra_configs, auxassignments):
             conf.resample(assign)
-        borb_aux = cp.asarray([orb[assign, ...] for orb, assign in zip(borb_aux, auxassignments)])
+        borb_aux = cp.asarray(
+            [orb[assign, ...] for orb, assign in zip(borb_aux, auxassignments)]
+        )
 
         results["acceptance"] += np.sum(accept) / naux
 

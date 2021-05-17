@@ -224,8 +224,10 @@ def get_rot(nconf, naip):
     def sphere(t_, p_):
         s = np.sin(t_)
         return s * np.cos(p_), s * np.sin(p_), np.cos(t_)
-
-    rot = scipy.spatial.transform.Rotation.random(nconf).as_matrix()
+    if nconf > 0: # get around a bug(?) when there are zero configurations.
+        rot = scipy.spatial.transform.Rotation.random(nconf).as_matrix()
+    else:
+        rot = np.zeros((0,3,3))
 
     if naip == 6:
         d1 = np.array([0.0, 1.0, 0.5, 0.5, 0.5, 0.5]) * np.pi
@@ -234,6 +236,8 @@ def get_rot(nconf, naip):
         tha = np.arccos(1.0 / np.sqrt(5.0))
         d1 = np.array([0, np.pi] + [tha, np.pi - tha] * 5)
         d2 = np.array([0, 0] + list(range(10))) * np.pi / 5
+    else:
+        raise ValueError("Do not support naip!= 6 or 12")
 
     rot_vec = np.einsum("jil,ik->jkl", rot, sphere(d1, d2))
     weights = np.ones(naip) / (naip)

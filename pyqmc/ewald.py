@@ -115,31 +115,35 @@ class Ewald:
         """
         cellvolume = np.linalg.det(self.latvec)
         recvec = np.linalg.inv(self.latvec)
-        crossproduct = recvec.T * cellvolume
 
         # Determine alpha
-        tmpheight_i = np.einsum("ij,ij->i", crossproduct, self.latvec)
-        length_i = np.linalg.norm(crossproduct, axis=1)
-        smallestheight = np.amin(np.abs(tmpheight_i) / length_i)
+        smallestheight = np.amin(1 / np.linalg.norm(recvec.T, axis=1))
         self.alpha = 5.0 / smallestheight
         print("Setting Ewald alpha to ", self.alpha)
 
         # Determine G points to include in reciprocal Ewald sum
-        X, Y, Z = gpu.cp.meshgrid(
-            *[gpu.cp.arange(-ewald_gmax, ewald_gmax + 1)] * 3, indexing="ij"
+        gptsXpos = gpu.cp.meshgrid(
+            gpu.cp.arange(1, ewald_gmax + 1),
+            *[gpu.cp.arange(-ewald_gmax, ewald_gmax + 1)] * 2,
+            indexing="ij"
         )
-        positive_octants = X + 1e-6 * Y + 1e-12 * Z > 0  # assume ewald_gmax < 1e5
-        gpoints = gpu.cp.stack(
-            (X[positive_octants], Y[positive_octants], Z[positive_octants]), axis=-1
+        zero = gpu.cp.asarray([0])
+        gptsX0Ypos = gpu.cp.meshgrid(
+            zero,
+            gpu.cp.arange(1, ewald_gmax + 1),
+            gpu.cp.arange(-ewald_gmax, ewald_gmax + 1),
+            indexing="ij",
         )
-        gpoints = gpu.cp.dot(gpoints, gpu.cp.asarray(recvec)) * 2 * np.pi
-        gsquared = gpu.cp.sum(gpoints ** 2, axis=1)
-        gweight = 4 * np.pi * gpu.cp.exp(-gsquared / (4 * self.alpha ** 2))
-        gweight /= cellvolume * gsquared
-        bigweight = gweight > 1e-10
-        self.gpoints = gpoints[bigweight]
-        self.gweight = gweight[bigweight]
-
+        gptsX0Y0Zpos = gpu.cp.meshgrid(
+            zero, zero, gpu.cp.arange(1, ewald_gmax + 1), indexing="ij"
+        )
+        gs = zip(
+            *[
+                select_big(x, cellvolume, recvec, self.alpha)
+                for x in (gptsXpos, gptsX0Ypos, gptsX0Y0Zpos)
+            ]
+        )
+        self.gpoints, self.gweight = [gpu.cp.concatenate(x, axis=0) for x in gs]
         self.set_ewald_constants(cellvolume)
 
     def set_ewald_constants(self, cellvolume):
@@ -374,7 +378,6 @@ class Ewald:
         nelec = configs.configs.shape[1]
         return self.e_single(nelec) + self.ewalde_separated
 
-
     def compute_total_energy(self, mol, configs, wf, threshold):
         """
         :parameter mol: A pyscf-like 'Mole' object. nelec, atom_charges(), atom_coords(), and ._ecp are used.
@@ -396,3 +399,12 @@ class Ewald:
             "ecp": ecp_val,
             "total": ke + ee + ei + ecp_val + ii,
         }
+
+
+def select_big(gpts, cellvolume, recvec, alpha):
+    gpoints = gpu.cp.einsum("j...,jk->...k", gpts, recvec) * 2 * np.pi
+    gsquared = gpu.cp.einsum("...k,...k->...", gpoints, gpoints)
+    gweight = 4 * np.pi * gpu.cp.exp(-gsquared / (4 * alpha ** 2))
+    gweight /= cellvolume * gsquared
+    bigweight = gweight > 1e-10
+    return gpoints[bigweight], gweight[bigweight]

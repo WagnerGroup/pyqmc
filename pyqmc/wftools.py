@@ -198,15 +198,14 @@ def read_wf(wf, wf_file):
     :return: nothing"""
 
     with h5py.File(wf_file, "r") as hdf:
-        if "wf" in hdf.keys():
-            grp = hdf["wf"]
-            for k in grp.keys():
-                new_parms = gpu.cp.array(grp[k])
-                if wf.parameters[k].shape != new_parms.shape:
-                    raise Exception(
-                        f"For wave function parameter {k}, shape in {wf_file} is {new_parms.shape}, while current shape is {wf.parameters[k].shape}"
-                    )
-                wf.parameters[k] = new_parms
-        else:
+        if "wf" not in hdf.keys():
             raise Exception("Did not find wf in hdf file")
+        grp = hdf["wf"]
+        for k in grp.keys():
+            new_parms = gpu.cp.array(grp[k])
+            if wf.parameters[k].shape != new_parms.shape:
+                raise Exception(
+                    f"For wave function parameter {k}, shape in {wf_file} is {new_parms.shape}, while current shape is {wf.parameters[k].shape}"
+                )
+            wf.parameters[k] = new_parms
     return wf

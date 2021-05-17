@@ -27,10 +27,7 @@ class EnergyAccumulator:
         return self.compute_energy(self.mol, configs, wf, self.threshold)
 
     def avg(self, configs, wf):
-        d = {}
-        for k, it in self(configs, wf).items():
-            d[k] = np.mean(it, axis=0)
-        return d
+        return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
 
     def keys(self):
         return set(["ke", "ee", "ei", "ecp", "total"])

@@ -23,18 +23,13 @@ def ei_energy(mol, configs):
 
 
 def ii_energy(mol):
-    ei = 0.0
     d = distance.RawDistance()
     rij, ij = d.dist_matrix(mol.atom_coords()[np.newaxis, :, :])
     if len(ij) == 0:
         return np.array([0.0])
     rij = np.linalg.norm(rij, axis=2)[0, :]
-    iitot = 0
     c = mol.atom_charges()
-    for (i, j), r in zip(ij, rij):
-        iitot += c[i] * c[j] / r
-    return iitot
-
+    return sum(c[i] * c[j] / r for (i, j), r in zip(ij, rij))
 
 def get_ecp(mol, configs, wf, threshold):
     return eval_ecp.ecp(mol, configs, wf, threshold)

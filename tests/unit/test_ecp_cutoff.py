@@ -1,11 +1,10 @@
 import pandas as pd
-from pyqmc.mc import vmc, initial_guess
 from pyscf import gto, scf, mcscf
-from pyqmc import Slater
-from pyqmc.accumulators import EnergyAccumulator
+from pyqmc.mc import initial_guess
 from pyqmc.multiplywf import MultiplyWF
-from pyqmc import Slater
-from pyqmc import default_jastrow
+from pyqmc.accumulators import EnergyAccumulator
+from pyqmc.slater import Slater
+from pyqmc.wftools import generate_jastrow 
 import numpy as np
 import time
 
@@ -26,8 +25,8 @@ def test_ecp():
     ind = 0
     for wf in [
         Slater(mol, mf),
-        default_jastrow(mol)[0],
-        MultiplyWF(Slater(mol, mf), default_jastrow(mol)[0]),
+        generate_jastrow(mol)[0],
+        MultiplyWF(Slater(mol, mf), generate_jastrow(mol)[0]),
     ]:
         wf.recompute(coords)
         print(label[ind])

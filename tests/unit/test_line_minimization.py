@@ -7,7 +7,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 import pandas as pd
 from pyscf import lib, gto, scf
-from pyqmc import default_sj, line_minimization, initial_guess, gradient_generator
+from pyqmc.api import generate_wf, line_minimization, initial_guess, gradient_generator
 import pytest
 
 
@@ -18,7 +18,7 @@ def test():
 
     mol = gto.M(atom="He 0. 0. 0.", basis="bfd_vdz", ecp="bfd", unit="bohr")
     mf = scf.RHF(mol).run()
-    wf, to_opt = default_sj(mol, mf)
+    wf, to_opt = generate_wf(mol, mf)
     print(to_opt)
     nconf = 500
     wf, dfgrad = line_minimization(

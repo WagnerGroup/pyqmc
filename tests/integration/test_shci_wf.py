@@ -5,8 +5,9 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
 import pyscf
-import pyqmc
 import pyscf.hci
+import pyqmc.api as pyq
+from pyqmc.slater import Slater
 
 
 def avg(vec):
@@ -38,14 +39,14 @@ def test_shci_wf():
     ci_energy = mf.energy_nuc() + e
 
     tol = 0.0
-    configs = pyqmc.initial_guess(mol, 1000)
-    wf = pyqmc.Slater(mol, mf, cisolver, tol=tol)
-    data, configs = pyqmc.vmc(
+    configs = pyq.initial_guess(mol, 1000)
+    wf = Slater(mol, mf, cisolver, tol=tol)
+    data, configs = pyq.vmc(
         wf,
         configs,
         nblocks=40,
         verbose=True,
-        accumulators={"energy": pyqmc.EnergyAccumulator(mol)},
+        accumulators={"energy": pyq.EnergyAccumulator(mol)},
     )
     en, err = avg(data["energytotal"][1:])
     nsigma = 4

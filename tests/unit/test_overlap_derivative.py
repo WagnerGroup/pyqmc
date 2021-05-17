@@ -1,6 +1,7 @@
 import numpy as np
 from pyscf import gto, scf
-import pyqmc
+import pyqmc.api as pyq
+from pyqmc import wftools, slater
 from pyqmc import optimize_ortho as oo
 
 
@@ -66,12 +67,12 @@ def test():
     mf.stdout = None
 
     print("setting up wfs", flush=True)
-    wf0 = pyqmc.Slater(mol, mf)
+    wf0 = slater.Slater(mol, mf)
     mf.mo_coeff[0][:, 0] = np.mean(mf.mo_coeff[0][:, :2], axis=1)
-    wf1, to_opt = pyqmc.default_slater(mol, mf, optimize_orbitals=True)
+    wf1, to_opt = wftools.generate_slater(mol, mf, optimize_orbitals=True)
 
-    pgrad = pyqmc.gradient_generator(mol, wf1, to_opt)
-    configs = pyqmc.initial_guess(mol, 2000)
+    pgrad = pyq.gradient_generator(mol, wf1, to_opt)
+    configs = pyq.initial_guess(mol, 2000)
 
     wf0.recompute(configs)
     wf1.recompute(configs)

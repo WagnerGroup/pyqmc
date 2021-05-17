@@ -1,7 +1,5 @@
 import numpy as np
-from pyqmc.loadcupy import cp, asnumpy
-
-# from pyqmc.slater import sherman_morrison_row, get_complex_phase
+import pyqmc.gpu as gpu
 import pyqmc.determinant_tools as determinant_tools
 import pyqmc.orbitals
 
@@ -120,9 +118,9 @@ class Slater:
         ) = pyqmc.orbitals.choose_evaluator_from_pyscf(mol, mf, mc, twist=twist)
         self.parameters = JoinParameters([self.myparameters, self.orbitals.parameters])
 
-        self.iscomplex = bool(sum(map(cp.iscomplexobj, self.parameters.values())))
+        self.iscomplex = bool(sum(map(gpu.cp.iscomplexobj, self.parameters.values())))
         self.dtype = complex if self.iscomplex else float
-        self.get_phase = get_complex_phase if self.iscomplex else cp.sign
+        self.get_phase = get_complex_phase if self.iscomplex else gpu.cp.sign
 
     def recompute(self, configs):
         """This computes the value from scratch. Returns the logarithm of the wave function as
@@ -138,12 +136,12 @@ class Slater:
             begin = self._nelec[0] * s
             end = self._nelec[0] + self._nelec[1] * s
             mo = self.orbitals.mos(self._aovals[:, :, begin:end, :], s)
-            mo_vals = cp.swapaxes(mo[:, :, self._det_occup[s]], 1, 2)
+            mo_vals = gpu.cp.swapaxes(mo[:, :, self._det_occup[s]], 1, 2)
             self._dets.append(
-                cp.asarray(np.linalg.slogdet(mo_vals))
+                gpu.cp.asarray(np.linalg.slogdet(mo_vals))
             )  # Spin, (sign, val), nconf, [ndet_up, ndet_dn]
             self._inverse.append(
-                cp.linalg.inv(mo_vals)
+                gpu.cp.linalg.inv(mo_vals)
             )  # spin, Nconf, [ndet_up, ndet_dn], nelec, nelec
         return self.value()
 
@@ -176,7 +174,7 @@ class Slater:
 
     def _updateval(self, ratio, s, mask):
         self._dets[s][0, mask, :] *= self.get_phase(ratio)
-        self._dets[s][1, mask, :] += cp.log(cp.abs(ratio))
+        self._dets[s][1, mask, :] += gpu.cp.log(gpu.cp.abs(ratio))
 
     def _testrow(self, e, vec, mask=None, spin=None):
         """vec is a nconfig,nmo vector which replaces row e"""
@@ -184,32 +182,32 @@ class Slater:
         if mask is None:
             mask = [True] * vec.shape[0]
 
-        ratios = cp.einsum(
+        ratios = gpu.cp.einsum(
             "i...dj,idj...->i...d",
             vec,
             self._inverse[s][mask][..., e - s * self._nelec[0]],
         )
 
-        upref = cp.amax(self._dets[0][1]).real
-        dnref = cp.amax(self._dets[1][1]).real
+        upref = gpu.cp.amax(self._dets[0][1]).real
+        dnref = gpu.cp.amax(self._dets[1][1]).real
 
         det_array = (
             self._dets[0][0, mask][:, self._det_map[0]]
             * self._dets[1][0, mask][:, self._det_map[1]]
-            * cp.exp(
+            * gpu.cp.exp(
                 self._dets[0][1, mask][:, self._det_map[0]]
                 + self._dets[1][1, mask][:, self._det_map[1]]
                 - upref
                 - dnref
             )
         ).T
-        numer = cp.einsum(
+        numer = gpu.cp.einsum(
             "i...d,d,di->i...",
             ratios[..., self._det_map[s]],
             self.parameters["det_coeff"],
             det_array,
         )
-        denom = cp.einsum(
+        denom = gpu.cp.einsum(
             "d,di->i...",
             self.parameters["det_coeff"],
             det_array,
@@ -217,39 +215,39 @@ class Slater:
         # curr_val = self.value()
 
         if len(numer.shape) == 2:
-            denom = denom[:, cp.newaxis]
+            denom = denom[:, gpu.cp.newaxis]
         return numer / denom
 
     def _testrowderiv(self, e, vec, spin=None):
         """vec is a nconfig,nmo vector which replaces row e"""
         s = int(e >= self._nelec[0]) if spin is None else spin
 
-        ratios = cp.einsum(
+        ratios = gpu.cp.einsum(
             "ei...dj,idj...->ei...d",
             vec,
             self._inverse[s][..., e - s * self._nelec[0]],
         )
 
-        upref = cp.amax(self._dets[0][1]).real
-        dnref = cp.amax(self._dets[1][1]).real
+        upref = gpu.cp.amax(self._dets[0][1]).real
+        dnref = gpu.cp.amax(self._dets[1][1]).real
 
         det_array = (
             self._dets[0][0, :, self._det_map[0]]
             * self._dets[1][0, :, self._det_map[1]]
-            * cp.exp(
+            * gpu.cp.exp(
                 self._dets[0][1, :, self._det_map[0]]
                 + self._dets[1][1, :, self._det_map[1]]
                 - upref
                 - dnref
             )
         )
-        numer = cp.einsum(
+        numer = gpu.cp.einsum(
             "ei...d,d,di->ei...",
             ratios[..., self._det_map[s]],
             self.parameters["det_coeff"],
             det_array,
         )
-        denom = cp.einsum(
+        denom = gpu.cp.einsum(
             "d,di->i...",
             self.parameters["det_coeff"],
             det_array,
@@ -257,14 +255,14 @@ class Slater:
         # curr_val = self.value()
 
         if len(numer.shape) == 3:
-            denom = denom[cp.newaxis, :, cp.newaxis]
+            denom = denom[gpu.cp.newaxis, :, gpu.cp.newaxis]
         return numer / denom
 
     def _testcol(self, det, i, s, vec):
         """vec is a nconfig,nmo vector which replaces column i
         of spin s in determinant det"""
 
-        return cp.einsum(
+        return gpu.cp.einsum(
             "ij...,ij->i...", vec, self._inverse[s][:, det, i, :], optimize="greedy"
         )
 
@@ -279,7 +277,7 @@ class Slater:
         mograd_vals = mograd[:, :, self._det_occup[s]]
 
         ratios = self._testrowderiv(e, mograd_vals)
-        return asnumpy(ratios[1:] / ratios[0])
+        return gpu.asnumpy(ratios[1:] / ratios[0])
 
     def gradient_value(self, e, epos):
         """Compute the gradient of the log wave function
@@ -291,7 +289,7 @@ class Slater:
 
         mograd_vals = mograd[:, :, self._det_occup[s]]
 
-        ratios = asnumpy(self._testrowderiv(e, mograd_vals))
+        ratios = gpu.asnumpy(self._testrowderiv(e, mograd_vals))
         return ratios[1:] / ratios[0], ratios[0]
 
     def laplacian(self, e, epos):
@@ -299,23 +297,23 @@ class Slater:
         s = int(e >= self._nelec[0])
         ao = self.orbitals.aos("GTOval_sph_deriv2", epos)
         ao_val = ao[:, 0, :, :]
-        ao_lap = cp.sum(ao[:, [4, 7, 9], :, :], axis=1)
-        mos = cp.stack([
+        ao_lap = gpu.cp.sum(ao[:, [4, 7, 9], :, :], axis=1)
+        mos = gpu.cp.stack([
             self.orbitals.mos(x, s)[..., self._det_occup[s]] for x in [ao_val, ao_lap]
         ])
         ratios = self._testrowderiv(e, mos)
-        return asnumpy(ratios[1] / ratios[0])
+        return gpu.asnumpy(ratios[1] / ratios[0])
 
     def gradient_laplacian(self, e, epos):
         s = int(e >= self._nelec[0])
         ao = self.orbitals.aos("GTOval_sph_deriv2", epos)
-        ao = cp.concatenate(
+        ao = gpu.cp.concatenate(
             [ao[:, 0:4, ...], ao[:, [4, 7, 9], ...].sum(axis=1, keepdims=True)], axis=1
         )
         mo = self.orbitals.mos(ao, s)
         mo_vals = mo[:, :, self._det_occup[s]]
         ratios = self._testrowderiv(e, mo_vals)
-        ratios = asnumpy(ratios / ratios[:1])
+        ratios = gpu.asnumpy(ratios / ratios[:1])
         return ratios[1:-1], ratios[-1]
 
     def testvalue(self, e, epos, mask=None):
@@ -329,21 +327,21 @@ class Slater:
             mo_vals = mo_vals.reshape(
                 -1, epos.configs.shape[1], mo_vals.shape[1], mo_vals.shape[2]
             )
-        return asnumpy(self._testrow(e, mo_vals, mask))
+        return gpu.asnumpy(self._testrow(e, mo_vals, mask))
 
     def testvalue_many(self, e, epos, mask=None):
         """return the ratio between the current wave function and the wave function if
         electron e's position is replaced by epos for each electron"""
         s = (e >= self._nelec[0]).astype(int)
         ao = self.orbitals.aos("GTOval_sph", epos, mask)
-        ratios = cp.zeros((epos.configs.shape[0], e.shape[0]), dtype=self.dtype)
+        ratios = gpu.cp.zeros((epos.configs.shape[0], e.shape[0]), dtype=self.dtype)
         for spin in [0, 1]:
             ind = s == spin
             mo = self.orbitals.mos(ao, spin)
             mo_vals = mo[..., self._det_occup[spin]]
             ratios[:, ind] = self._testrow(e[ind], mo_vals, mask, spin=spin)
 
-        return asnumpy(ratios)
+        return gpu.asnumpy(ratios)
 
     def pgradient(self):
         """Compute the parameter gradient of Psi.
@@ -371,12 +369,12 @@ class Slater:
         d["det_coeff"] = (
             self._dets[0][0, :, self._det_map[0]]
             * self._dets[1][0, :, self._det_map[1]]
-            * cp.exp(
+            * gpu.cp.exp(
                 self._dets[0][1, :, self._det_map[0]]
                 + self._dets[1][1, :, self._det_map[1]]
-                - cp.array(curr_val[1])
+                - gpu.cp.array(curr_val[1])
             )
-            / cp.array(curr_val[0])
+            / gpu.cp.array(curr_val[0])
         ).T
 
         for s, parm in zip([0, 1], ["mo_coeff_alpha", "mo_coeff_beta"]):
@@ -385,12 +383,12 @@ class Slater:
             ]
 
             split, aos = self.orbitals.pgradient(ao, s)
-            mos = cp.split(cp.arange(split[-1]), asnumpy(split).astype(int))
+            mos = gpu.cp.split(gpu.cp.arange(split[-1]), gpu.asnumpy(split).astype(int))
             # Compute dj Diu/Diu
             nao = aos[0].shape[-1]
             nconf = aos[0].shape[0]
             nmo = int(split[-1])
-            deriv = cp.zeros(
+            deriv = gpu.cp.zeros(
                 (len(self._det_occup[s]), nconf, nao, nmo), dtype=curr_val[0].dtype
             )
             for det, occ in enumerate(self._det_occup[s]):
@@ -401,7 +399,7 @@ class Slater:
                             deriv[det, :, :, i] = self._testcol(det, col, s, ao)
 
             # now we reduce over determinants
-            d[parm] = cp.zeros(deriv.shape[1:], dtype=curr_val[0].dtype)
+            d[parm] = gpu.cp.zeros(deriv.shape[1:], dtype=curr_val[0].dtype)
             for di, coeff in enumerate(self.parameters["det_coeff"]):
                 whichdet = self._det_map[s][di]
                 d[parm] += (
@@ -410,5 +408,5 @@ class Slater:
                     * d["det_coeff"][:, di, np.newaxis, np.newaxis]
                 )
         for k, v in d.items():
-            d[k] = asnumpy(v)
+            d[k] = gpu.asnumpy(v)
         return d

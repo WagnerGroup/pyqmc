@@ -8,7 +8,12 @@ os.environ["OMP_NUM_THREADS"] = "1"
 import sys
 import numpy as np
 import pyqmc.testwf as testwf
-from pyqmc.loadcupy import cp, asnumpy
+from pyqmc.gpu import cp, asnumpy
+from pyqmc.slater import Slater
+from pyqmc.multiplywf import MultiplyWF
+from pyqmc.manybody_jastrow import J3
+from pyqmc.wftools import generate_jastrow
+import pyqmc.api as pyq
 
 
 def test_wfs():
@@ -17,11 +22,6 @@ def test_wfs():
     """
 
     from pyscf import lib, gto, scf
-    from pyqmc import Slater
-    from pyqmc.multiplywf import MultiplyWF
-    from pyqmc.manybody_jastrow import J3
-    from pyqmc import default_jastrow
-    import pyqmc
 
     mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="sto-3g", unit="bohr")
     mf = scf.RHF(mol).run()
@@ -29,12 +29,12 @@ def test_wfs():
     mf_uhf = scf.UHF(mol).run()
     epsilon = 1e-5
     nconf = 10
-    epos = pyqmc.initial_guess(mol, nconf)
+    epos = pyq.initial_guess(mol, nconf)
     for wf in [
-        default_jastrow(mol)[0],
+        generate_jastrow(mol)[0],
         J3(mol),
-        MultiplyWF(Slater(mol, mf), default_jastrow(mol)[0]),
-        MultiplyWF(Slater(mol, mf), default_jastrow(mol)[0], J3(mol)),
+        MultiplyWF(Slater(mol, mf), generate_jastrow(mol)[0]),
+        MultiplyWF(Slater(mol, mf), generate_jastrow(mol)[0], J3(mol)),
         Slater(mol, mf_uhf),
         Slater(mol, mf),
         Slater(mol, mf_rohf),
@@ -48,7 +48,7 @@ def test_wfs():
 
         testwf.test_mask(wf, 0, epos)
 
-        _, epos = pyqmc.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node
+        _, epos = pyq.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node
 
         for fname, func in zip(
             ["gradient", "laplacian", "pgradient"],
@@ -83,11 +83,6 @@ def test_pbc_wfs():
     """
 
     from pyscf.pbc import lib, gto, scf
-    from pyqmc.supercell import get_supercell
-    from pyqmc.slater import Slater
-    from pyqmc.multiplywf import MultiplyWF
-    from pyqmc import default_jastrow
-    import pyqmc
 
     mol = gto.M(
         atom="H 0. 0. 0.; H 1. 1. 1.",
@@ -100,8 +95,8 @@ def test_pbc_wfs():
     # mf_uhf = scf.KUKS(mol).run()
     epsilon = 1e-5
     nconf = 10
-    supercell = get_supercell(mol, S=(np.ones((3, 3)) - 2 * np.eye(3)))
-    epos = pyqmc.initial_guess(supercell, nconf)
+    supercell = pyq.get_supercell(mol, S=(np.ones((3, 3)) - 2 * np.eye(3)))
+    epos = pyq.initial_guess(supercell, nconf)
     # For multislaterpbc
     # kinds = 0, 3, 5, 6  # G, X, Y, Z
     # d1 = {kind: [0] for kind in kinds}
@@ -111,14 +106,14 @@ def test_pbc_wfs():
     # occup = [[d1, d2], [d1]]
     # map_dets = [[0, 1], [0, 0]]
     for wf in [
-        MultiplyWF(Slater(supercell, mf), default_jastrow(supercell)[0]),
+        MultiplyWF(Slater(supercell, mf), generate_jastrow(supercell)[0]),
         Slater(supercell, mf),
     ]:
         for k in wf.parameters:
             if "mo_coeff" not in k and k != "det_coeff":
                 wf.parameters[k] = cp.asarray(np.random.rand(*wf.parameters[k].shape))
 
-        _, epos = pyqmc.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node
+        _, epos = pyq.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node
 
         for fname, func in zip(
             ["gradient", "laplacian", "pgradient"],

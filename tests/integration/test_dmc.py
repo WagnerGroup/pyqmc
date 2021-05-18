@@ -45,7 +45,6 @@ def test():
         accumulators={"energy": enacc},
         ekey=("energy", "total"),
         tstep=0.01,
-        drift_limiter=limdrift,
         verbose=True,
     )
 

@@ -71,7 +71,7 @@ class OpenConfigs:
         """
         Merge configs into this object to collect from parallelization
         Args:
-          configslist: list of OpenConfigs objects; total number of configs must match
+          configslist: list of OpenConfigs objects
         """
         self.configs = np.concatenate([c.configs for c in configslist], axis=axis)
 
@@ -195,7 +195,7 @@ class PeriodicConfigs:
         """
         Merge configs into this object to collect from parallelization
         Args:
-          configslist: list of PeriodicConfigs objects; total number of configs must match
+          configslist: list of PeriodicConfigs objects
         """
         self.configs = np.concatenate([c.configs for c in configslist], axis=axis)
         self.wrap = np.concatenate([c.wrap for c in configslist], axis=axis)

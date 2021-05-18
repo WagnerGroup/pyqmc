@@ -1,6 +1,6 @@
 import numpy as np
 import copy
-
+import scipy.spatial.transform
 
 def ecp(mol, configs, wf, threshold):
     """
@@ -20,12 +20,17 @@ def compute_tmoves(mol, configs, wf, e, threshold, tau):
     """
 
     """
+    nconfig = configs.configs.shape[0]
     if mol._ecp != {}:
         data = [
             ecp_ea(mol, configs, wf, e, atom, threshold)
             for atom in mol._atom
             if atom[0] in mol._ecp.keys()
         ]
+    else:
+        return {'ratio': np.zeros((nconfig,0)),
+                'weight':np.zeros((nconfig,0)) } 
+
     
     # we want to make a data set which is a list of possible positions, the wave function
     # ratio, and the masks for each 
@@ -35,7 +40,7 @@ def compute_tmoves(mol, configs, wf, e, threshold, tau):
         npts = d['ratio'].shape[1]
         weight = np.zeros((nconfig, npts))
         ratio = np.ones((nconfig, npts))
-        weight[d['mask']] = np.einsum("ik, ijk -> ij", (np.exp(-tau*d['v_l'])-1), d['P_l'])
+        weight[d['mask']] = np.einsum("ik, ijk -> ij", np.exp(-tau*d['v_l'])-1, d['P_l'])
         ratio[d['mask']] = d['ratio']
         summed_data.append({'weight':weight, 'ratio':ratio, 'epos':d['epos']})
         
@@ -216,19 +221,13 @@ def get_rot(nconf, naip):
     :returns: the integration weights, and the positions of the rotated electron e
     :rtype:  ((naip,) array, (nconf, naip, 3) array)
     """
-    # t and p are sampled randomly over a sphere around the atom
-    t = np.random.uniform(low=0.0, high=np.pi, size=nconf)
-    p = np.random.uniform(low=0.0, high=2 * np.pi, size=nconf)
-
     def sphere(t_, p_):
         s = np.sin(t_)
         return s * np.cos(p_), s * np.sin(p_), np.cos(t_)
-
-    # rotated unit vectors:
-    rot = np.zeros([3, 3, nconf])
-    rot[0, :, :] = sphere(np.zeros(nconf) + np.pi / 2.0, p - np.pi / 2.0)
-    rot[1, :, :] = sphere(t + np.pi / 2.0, p)
-    rot[2, :, :] = sphere(t, p)
+    if nconf > 0: # get around a bug(?) when there are zero configurations.
+        rot = scipy.spatial.transform.Rotation.random(nconf).as_matrix()
+    else:
+        rot = np.zeros((0,3,3))
 
     if naip == 6:
         d1 = np.array([0.0, 1.0, 0.5, 0.5, 0.5, 0.5]) * np.pi
@@ -237,8 +236,10 @@ def get_rot(nconf, naip):
         tha = np.arccos(1.0 / np.sqrt(5.0))
         d1 = np.array([0, np.pi] + [tha, np.pi - tha] * 5)
         d2 = np.array([0, 0] + list(range(10))) * np.pi / 5
+    else:
+        raise ValueError("Do not support naip!= 6 or 12")
 
-    rot_vec = np.einsum("ilj,ik->jkl", rot, sphere(d1, d2))
-    weights = 1.0 / naip * np.ones(naip)
+    rot_vec = np.einsum("jil,ik->jkl", rot, sphere(d1, d2))
+    weights = np.ones(naip) / (naip)
 
     return weights, rot_vec

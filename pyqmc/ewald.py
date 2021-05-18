@@ -378,28 +378,6 @@ class Ewald:
         nelec = configs.configs.shape[1]
         return self.e_single(nelec) + self.ewalde_separated
 
-    def compute_total_energy(self, mol, configs, wf, threshold):
-        """
-        :parameter mol: A pyscf-like 'Mole' object. nelec, atom_charges(), atom_coords(), and ._ecp are used.
-        :parameter configs: electron positions (walkers)
-        :type configs: (nconf, nelec, 3) PeriodicConfigs object
-        :parameter wf: A Wavefunction-like object. Functions used include recompute(), lapacian(), and testvalue()
-        :parameter float threshold: threshold for evaluating ECP
-
-        :returns: a dictionary with energy components ke, ee, ei, ecp, and total
-        :rtype: dict
-        """
-        ee, ei, ii = self.energy(configs)
-        ecp_val = pyqmc.energy.get_ecp(mol, configs, wf, threshold)
-        ke = pyqmc.energy.kinetic(configs, wf)
-        return {
-            "ke": ke,
-            "ee": ee,
-            "ei": ei,
-            "ecp": ecp_val,
-            "total": ke + ee + ei + ecp_val + ii,
-        }
-
 
 def select_big(gpts, cellvolume, recvec, alpha):
     gpoints = gpu.cp.einsum("j...,jk->...k", gpts, recvec) * 2 * np.pi

@@ -1,9 +1,8 @@
 import numpy as np
-from pyscf import gto, scf
 import pyqmc.api as pyq
 from pyqmc import wftools, slater
 from pyqmc import optimize_ortho as oo
-
+import copy
 
 def numerical_gradient(wfs, configs, pgrad, deltas=(1e-5,)):
     wfparms = wfs[-1].parameters
@@ -60,13 +59,10 @@ def get_data(wfs, configs, pgrad):
     return deriv_data
 
 
-def test():
-    print("running scf", flush=True)
-    mol = gto.M(atom="H 0. 0. 0.; H 0. 0. 1.6", basis="ccpvdz", unit="bohr")
-    mf = scf.UHF(mol).run()
-    mf.stdout = None
+def test_overlap_derivative(H2_ccecp_uhf,epsilon = 1e-8):
+    mol, mf = H2_ccecp_uhf
+    mf = copy.copy(mf)
 
-    print("setting up wfs", flush=True)
     wf0 = slater.Slater(mol, mf)
     mf.mo_coeff[0][:, 0] = np.mean(mf.mo_coeff[0][:, :2], axis=1)
     wf1, to_opt = wftools.generate_slater(mol, mf, optimize_orbitals=True)
@@ -100,7 +96,8 @@ def test():
         error[k] = np.amin(er, axis=1)
         print(k)
         print(error[k])
+        assert np.all(error[k] < epsilon)
 
 
 if __name__ == "__main__":
-    test()
+    test_overlap_derivative()

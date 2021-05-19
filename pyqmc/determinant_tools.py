@@ -11,7 +11,7 @@ def binary_to_occ(S, ncore):
     """
     occup = [int(i) for i in range(ncore)]
     occup += [int(i + ncore) for i, c in enumerate(reversed(S)) if c == "1"]
-    max_orb = max(occup)
+    max_orb = max(occup) if occup else 1
     return (occup, max_orb)
 
 

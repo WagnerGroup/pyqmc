@@ -1,30 +1,17 @@
 import numpy as np
 from pyqmc.accumulators import EnergyAccumulator, LinearTransform, SqAccumulator
 from pyqmc.obdm import OBDMAccumulator
+from pyqmc.tbdm import TBDMAccumulator
 import pyqmc.api as pyq
 
 
-def test_transform():
-    """Just prints things out;
-    TODO: figure out a thing to test.
+def test_transform(LiH_sto3g_rhf):
+    """Tests that the shapes are ok
     """
-    from pyscf import gto, scf
-
-    r = 1.54 / 0.529177
-    mol = gto.M(
-        atom="H 0. 0. 0.; H 0. 0. %g" % r,
-        ecp="bfd",
-        basis="bfd_vtz",
-        unit="bohr",
-        verbose=1,
-    )
-    mf = scf.RHF(mol).run()
+    mol, mf = LiH_sto3g_rhf
     wf, to_opt = pyq.generate_wf(mol, mf)
-    enacc = EnergyAccumulator(mol)
-    print(list(wf.parameters.keys()))
     transform = LinearTransform(wf.parameters)
     x = transform.serialize_parameters(wf.parameters)
-
     nconfig = 10
     configs = pyq.initial_guess(mol, nconfig)
     wf.recompute(configs)
@@ -34,18 +21,8 @@ def test_transform():
     assert gradtrans.shape[0] == nconfig
 
 
-def test_info_functions_mol():
-    from pyscf import gto, scf
-    from pyqmc.tbdm import TBDMAccumulator
-
-    mol = gto.Mole()
-    mol.atom = """Li 0.00 0.00 0.00; H 0. 0. 1.5 """
-    mol.basis = "ccpvdz"
-    mol.build()
-
-    mf = scf.RHF(mol)
-    ehf = mf.kernel()
-
+def test_info_functions_mol(LiH_sto3g_rhf):
+    mol, mf = LiH_sto3g_rhf
     wf, to_opt = pyq.generate_wf(mol, mf)
     accumulators = {
         "pgrad": pyq.gradient_generator(mol, wf, to_opt),
@@ -55,20 +32,9 @@ def test_info_functions_mol():
     info_functions(mol, wf, accumulators)
 
 
-def test_info_functions_pbc():
-    from pyscf.pbc import gto, scf
+def test_info_functions_pbc(H_pbc_sto3g_krks):
     from pyqmc.supercell import get_supercell
-
-    mol = gto.Cell(
-        atom="He 0.00 0.00 0.00", basis="gth-szv", pseudo="gth-pade", unit="B"
-    )
-    mol.a = 5.61 * np.eye(3)
-    mol.build()
-
-    mf = scf.KRKS(mol, kpts=mol.make_kpts([2, 2, 2]))  # .density_fit()
-    ehf = mf.kernel()
-
-    supercell = get_supercell(mol, 2 * np.eye(3))
+    mol, mf = H_pbc_sto3g_krks
     kinds = [0, 1]
     dm_orbs = [mf.mo_coeff[i][:, :2] for i in kinds]
     wf, to_opt = pyq.generate_wf(mol, mf)

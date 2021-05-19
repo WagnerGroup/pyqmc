@@ -1,28 +1,15 @@
 import numpy as np
 import os
 import pyqmc.api as pyq
-import pytest
+import copy
+import h5py
 
-
-def run_scf(chkfile):
-    from pyscf import gto, scf
-    from pyscf.scf.addons import remove_linear_dep_
-
-    mol = gto.M(
-        atom="H 0 0 0; H 0 0 1.4", basis="ccecpccpvdz", ecp="ccecp", unit="bohr"
-    )
-    mf = scf.RHF(mol)
-    mf.chkfile = chkfile
-    mf = remove_linear_dep_(mf)
-    energy = mf.kernel()
-
-
-@pytest.mark.slow
-def test():
-    chkfile = "h2.hdf5"
-    optfile = "linemin.hdf5"
-    run_scf(chkfile)
-    mol, mf = pyq.recover_pyscf(chkfile)
+def test_complex_linemin(H2_ccecp_rhf, optfile = "linemin.hdf5"):
+    """ Test linemin for the case of complex orbital coefficients. 
+    We check whether it completes successfully and whether the energy has decreased.
+    """
+    mol, mf = H2_ccecp_rhf
+    mf = copy.copy(mf)
     noise = (np.random.random(mf.mo_coeff.shape) - 0.5) * 0.2
     mf.mo_coeff = mf.mo_coeff * 1j + noise
 
@@ -34,11 +21,8 @@ def test():
     pyq.line_minimization(
         wf, configs, acc, verbose=True, hdf_file=optfile, max_iterations=5
     )
-
     assert os.path.isfile(optfile)
-    os.remove(chkfile)
+    with h5py.File(optfile, 'r') as f:
+        en = f['energy'][()]
+    assert en[0]> en[-1]
     os.remove(optfile)
-
-
-if __name__ == "__main__":
-    test()

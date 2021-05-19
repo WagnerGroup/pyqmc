@@ -17,30 +17,11 @@ def avg(vec):
     return avg, std / np.sqrt(nblock)
 
 
-def test_shci_wf():
-    mol = pyscf.gto.M(
-        atom="O 0. 0. 0.; H 0. 0. 2.0",
-        basis="ccecpccpvtz",
-        ecp="ccecp",
-        unit="bohr",
-        charge=-1,
-    )
-    mf = pyscf.scf.RHF(mol)
-    mf.kernel()
-    e_hf = mf.energy_tot()
-    cisolver = pyscf.hci.SCI(mol)
-    cisolver.select_cutoff = 0.1
-    nmo = mf.mo_coeff.shape[1]
-    nelec = mol.nelec
-    h1 = mf.mo_coeff.T.dot(mf.get_hcore()).dot(mf.mo_coeff)
-    h2 = pyscf.ao2mo.full(mol, mf.mo_coeff)
-    e, civec = cisolver.kernel(h1, h2, nmo, nelec, verbose=4)
-    cisolver.ci = civec[0]
-    ci_energy = mf.energy_nuc() + e
+def test_shci_wf_is_better(H2_ccecp_hci):
+    mol, mf, cisolver = H2_ccecp_hci
 
-    tol = 0.0
     configs = pyq.initial_guess(mol, 1000)
-    wf = Slater(mol, mf, cisolver, tol=tol)
+    wf = Slater(mol, mf, cisolver, tol=0.0)
     data, configs = pyq.vmc(
         wf,
         configs,
@@ -51,9 +32,5 @@ def test_shci_wf():
     en, err = avg(data["energytotal"][1:])
     nsigma = 4
     assert len(wf.parameters["det_coeff"]) == len(cisolver.ci)
-    assert en - nsigma * err < e_hf
-    assert en + nsigma * err > ci_energy
-
-
-if __name__ == "__main__":
-    test_shci_wf()
+    assert en - nsigma * err < mf.e_tot
+    assert en + nsigma * err > cisolver.energy

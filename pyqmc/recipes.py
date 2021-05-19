@@ -1,11 +1,18 @@
-import pyqmc
-import pyqmc.obdm
+import pyqmc.obdm as obdm
+import pyqmc.wftools as wftools
+import pyqmc.pyscftools as pyscftools
+import pyqmc.supercell as supercell
+import pyqmc.linemin as linemin
+import pyqmc.optimize_ortho as optimize_ortho
+import pyqmc.dmc as dmc
+import pyqmc.mc 
+import pyqmc.reblock
 import numpy as np
 import h5py
-import pyqmc.reblock
 import scipy.stats
 import pandas as pd
 import copy
+import pyqmc.accumulators 
 
 
 def OPTIMIZE(
@@ -27,25 +34,25 @@ def OPTIMIZE(
 
     target_root = 0
     if ci_checkfile is None:
-        mol, mf = pyqmc.recover_pyscf(dft_checkfile)
+        mol, mf = pyscftools.recover_pyscf(dft_checkfile)
         mc = None
     else:
-        mol, mf, mc = pyqmc.recover_pyscf(dft_checkfile, ci_checkfile=ci_checkfile)
+        mol, mf, mc = pyscftools.recover_pyscf(dft_checkfile, ci_checkfile=ci_checkfile)
         mc.ci = mc.ci[target_root]
 
     if S is not None:
-        mol = pyqmc.get_supercell(mol, np.asarray(S))
+        mol = supercell.get_supercell(mol, np.asarray(S))
 
-    wf, to_opt = pyqmc.generate_wf(
+    wf, to_opt = wftools.generate_wf(
         mol, mf, mc=mc, jastrow_kws=jastrow_kws, slater_kws=slater_kws
     )
     if start_from is not None:
-        pyqmc.read_wf(wf, start_from)
+        wftools.read_wf(wf, start_from)
 
-    configs = pyqmc.initial_guess(mol, nconfig)
-    acc = pyqmc.gradient_generator(mol, wf, to_opt)
+    configs = pyqmc.mc.initial_guess(mol, nconfig)
+    acc = pyqmc.accumulators.gradient_generator(mol, wf, to_opt)
     if anchors is None:
-        pyqmc.line_minimization(
+        linemin.line_minimization(
             wf,
             configs,
             acc,
@@ -56,9 +63,9 @@ def OPTIMIZE(
             **linemin_kws
         )
     else:
-        wfs = [pyqmc.read_wf(copy.deepcopy(wf), a) for a in anchors]
+        wfs = [wftools.read_wf(copy.deepcopy(wf), a) for a in anchors]
         wfs.append(wf)
-        pyqmc.optimize_orthogonal(
+        optimize_ortho.optimize_orthogonal(
             wfs,
             configs,
             acc,
@@ -83,7 +90,7 @@ def generate_accumulators(mol, mf, energy=True, rdm1=False, extra_accumulators=N
     if energy:
         if "energy" in acc.keys():
             raise Exception("Found energy in extra_accumulators and energy is True")
-        acc["energy"] = pyqmc.EnergyAccumulator(mol)
+        acc["energy"] = pyqmc.accumulators.EnergyAccumulator(mol)
     if rdm1:
         if len(mf.mo_coeff.shape) == 2:
             mo_coeff = [mf.mo_coeff, mf.mo_coeff]
@@ -93,12 +100,8 @@ def generate_accumulators(mol, mf, energy=True, rdm1=False, extra_accumulators=N
             raise Exception(
                 "Found rdm1_up or rdm1_down in extra_accumulators and rdm1 is True"
             )
-        acc["rdm1_up"] = (
-            pyqmc.obdm.OBDMAccumulator(mol, orb_coeff=mo_coeff[0], spin=0),
-        )
-        acc["rdm1_down"] = (
-            pyqmc.obdm.OBDMAccumulator(mol, orb_coeff=mo_coeff[1], spin=1),
-        )
+        acc["rdm1_up"] = obdm.OBDMAccumulator(mol, orb_coeff=mo_coeff[0], spin=0)
+        acc["rdm1_down"] = obdm.OBDMAccumulator(mol, orb_coeff=mo_coeff[1], spin=1)
 
     return acc
 
@@ -122,29 +125,28 @@ def VMC(
 
     target_root = 0
     if ci_checkfile is None:
-        mol, mf = pyqmc.recover_pyscf(dft_checkfile)
+        mol, mf = pyscftools.recover_pyscf(dft_checkfile)
         mc = None
     else:
-        mol, mf, mc = pyqmc.recover_pyscf(dft_checkfile, ci_checkfile=ci_checkfile)
+        mol, mf, mc = pyscftools.recover_pyscf(dft_checkfile, ci_checkfile=ci_checkfile)
         mc.ci = mc.ci[target_root]
 
     if S is not None:
-        print("S", S)
-        mol = pyqmc.get_supercell(mol, np.asarray(S))
+        mol = supercell.get_supercell(mol, np.asarray(S))
 
     if accumulators is None:
         accumulators = {}
 
-    wf, _ = pyqmc.generate_wf(
+    wf, _ = wftools.generate_wf(
         mol, mf, mc=mc, jastrow_kws=jastrow_kws, slater_kws=slater_kws
     )
 
     if start_from is not None:
-        pyqmc.read_wf(wf, start_from)
+        wftools.read_wf(wf, start_from)
 
-    configs = pyqmc.initial_guess(mol, nconfig)
+    configs = pyqmc.mc.initial_guess(mol, nconfig)
 
-    pyqmc.vmc(
+    pyqmc.mc.vmc(
         wf,
         configs,
         accumulators=generate_accumulators(mol, mf, **accumulators),
@@ -175,25 +177,27 @@ def DMC(
 
     target_root = 0
     if ci_checkfile is None:
-        mol, mf = pyqmc.recover_pyscf(dft_checkfile)
+        mol, mf = pyscftools.recover_pyscf(dft_checkfile)
         mc = None
     else:
-        mol, mf, mc = pyqmc.recover_pyscf(dft_checkfile, ci_checkfile=ci_checkfile)
+        mol, mf, mc = pyscftools.recover_pyscf(dft_checkfile, ci_checkfile=ci_checkfile)
         mc.ci = mc.ci[target_root]
 
     if S is not None:
-        mol = pyqmc.get_supercell(mol, np.asarray(S))
+        mol = supercell.get_supercell(mol, np.asarray(S))
     if accumulators is None:
         accumulators = {}
 
-    wf, _ = pyqmc.generate_wf(mol, mf, mc=mc, jastrow_kws=jastrow_kws, slater_kws=slater_kws)
+    wf, _ = wftools.generate_wf(
+        mol, mf, mc=mc, jastrow_kws=jastrow_kws, slater_kws=slater_kws
+    )
 
     if start_from is not None:
-        pyqmc.read_wf(wf, start_from)
+        wftools.read_wf(wf, start_from)
 
-    configs = pyqmc.initial_guess(mol, nconfig)
+    configs = pyqmc.mc.initial_guess(mol, nconfig)
 
-    pyqmc.rundmc(
+    dmc.rundmc(
         wf,
         configs,
         accumulators=generate_accumulators(mol, mf, **accumulators),
@@ -222,7 +226,7 @@ def read_mc_output(fname, warmup=5, reblock=16):
     with h5py.File(fname) as f:
         for k in f.keys():
             if "energy" in k:
-                vals = pyqmc.reblock.reblock(f[k][warmup:], reblock)
+                vals = pyqmc.reblock.avg_reblock(f[k][warmup:], reblock)
                 ret[k] = np.mean(vals)
                 ret[k + "_err"] = scipy.stats.sem(vals)
     return ret

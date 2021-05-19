@@ -1,9 +1,9 @@
-import pandas as pd
-from pyqmc.mc import vmc, initial_guess
 from pyscf import gto, scf
-from pyqmc import Slater
+from pyqmc.mc import vmc, initial_guess
+from pyqmc.slater import Slater
 from pyqmc.accumulators import EnergyAccumulator
 import numpy as np
+import pandas as pd
 
 
 def test_ecp():

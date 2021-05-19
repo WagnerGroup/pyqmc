@@ -5,13 +5,12 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 
 import numpy as np
+from numpy.linalg import solve
 
 np.random.seed(12534234)
 from pyscf import gto, scf, lo
-from numpy.linalg import solve
-from pyqmc import Slater
+from pyqmc.slater import Slater
 from pyqmc.mc import initial_guess, vmc
-from pandas import DataFrame
 from pyqmc.obdm import OBDMAccumulator, normalize_obdm
 import pytest
 

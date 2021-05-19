@@ -8,12 +8,9 @@ import numpy as np
 import pandas as pd
 from pyscf import lib, gto, scf, mcscf
 import pyqmc.testwf as testwf
-from pyqmc.mc import vmc, initial_guess
+import pyqmc.api as pyq
 from pyqmc.accumulators import EnergyAccumulator
-from pyqmc import Slater
-from pyqmc.coord import OpenConfigs
-from pyqmc.reblock import reblock
-import pyqmc
+from pyqmc.slater import Slater
 
 
 def test():
@@ -38,7 +35,7 @@ def test():
         nconf = 10
 
         nelec = np.sum(mol.nelec)
-        epos = initial_guess(mol, nconf)
+        epos = pyq.initial_guess(mol, nconf)
 
         for k, item in testwf.test_updateinternals(wf, epos).items():
             assert item < epsilon
@@ -49,10 +46,10 @@ def test():
         # Test same number of elecs
         mc = mcscf.CASCI(mf, ncas=4, nelecas=(1, 1))
         mc.kernel()
-        wf = pyqmc.default_msj(mol, mf, mc)[0]
+        wf = pyq.generate_wf(mol, mf, mc=mc)[0]
 
         nelec = np.sum(mol.nelec)
-        epos = initial_guess(mol, nconf)
+        epos = pyq.initial_guess(mol, nconf)
 
         for k, item in testwf.test_updateinternals(wf, epos).items():
             assert item < epsilon
@@ -63,10 +60,10 @@ def test():
         # Test different number of elecs
         mc = mcscf.CASCI(mf, ncas=4, nelecas=(2, 0))
         mc.kernel()
-        wf = Slater(mol, mf, mc)
+        wf = Slater(mol, mf, mc=mc)
 
         nelec = np.sum(mol.nelec)
-        epos = initial_guess(mol, nconf)
+        epos = pyq.initial_guess(mol, nconf)
 
         for k, item in testwf.test_updateinternals(wf, epos).items():
             assert item < epsilon
@@ -76,13 +73,13 @@ def test():
 
         # Quick VMC test
         nconf = 1000
-        coords = initial_guess(mol, nconf)
-        df, coords = vmc(
+        coords = pyq.initial_guess(mol, nconf)
+        df, coords = pyq.vmc(
             wf, coords, nsteps=nsteps, accumulators={"energy": EnergyAccumulator(mol)}
         )
 
         df = pd.DataFrame(df)
-        df = reblock(df["energytotal"][warmup:], 20)
+        df = pyq.avg_reblock(df["energytotal"][warmup:], 20)
         en = df.mean()
         err = df.sem()
         assert en - mc.e_tot < 5 * err

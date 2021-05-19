@@ -24,7 +24,7 @@ def test_updateinternals(wf, configs):
     :rtype: dictionary
 
     """
-    from pyqmc import vmc
+    import pyqmc.mc as mc
 
     nconf, ne, ndim = configs.configs.shape
     delta = 1e-2
@@ -53,7 +53,7 @@ def test_updateinternals(wf, configs):
         val1 = recompute
 
     # Test mask and pgrad
-    _, configs = vmc(wf, configs, nblocks=1, nsteps_per_block=1, tstep=2)
+    _, configs = mc.vmc(wf, configs, nblocks=1, nsteps_per_block=1, tstep=2)
     pgradupdate = wf.pgradient()
     wf.recompute(configs)
     pgrad = wf.pgradient()

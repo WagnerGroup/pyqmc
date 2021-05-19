@@ -1,36 +1,58 @@
 import numpy as np
-from pyqmc.loadcupy import cp, asnumpy
+import pyqmc.gpu as gpu
 import pyqmc.energy as energy
-from pyqmc.ewald import Ewald
+import pyqmc.ewald  as ewald
+import pyqmc.eval_ecp as eval_ecp
+
+
+def gradient_generator(mol, wf, to_opt=None, **ewald_kwargs):
+    return PGradTransform(
+        EnergyAccumulator(mol, **ewald_kwargs), LinearTransform(wf.parameters, to_opt)
+    )
 
 
 class EnergyAccumulator:
-    """Returns energy of each configuration in a dictionary.
-    Keys and their meanings can be found in energy.energy"""
+    """Returns local energy of each configuration in a dictionary.
+    """
 
     def __init__(self, mol, threshold=10, **kwargs):
         self.mol = mol
         self.threshold = threshold
         if hasattr(mol, "a"):
-            ewald = Ewald(mol, **kwargs)
-            self.compute_energy = ewald.compute_total_energy
+            self.coulomb = ewald.Ewald(mol, **kwargs)
         else:
-            self.compute_energy = energy.energy
+            self.coulomb = energy.OpenCoulomb(mol, **kwargs)
+        
 
     def __call__(self, configs, wf):
-        return self.compute_energy(self.mol, configs, wf, self.threshold)
+        ee, ei, ii = self.coulomb.energy(configs)
+        ecp_val = eval_ecp.ecp(self.mol, configs, wf, self.threshold)
+        ke, grad2 = energy.kinetic(configs, wf)
+        return {
+            "ke": ke,
+            "ee": ee,
+            "ei": ei,
+            "ecp": ecp_val,
+            "grad2": grad2,
+            "total": ke + ee + ei + ecp_val + ii,
+        }
 
     def avg(self, configs, wf):
-        d = {}
-        for k, it in self(configs, wf).items():
-            d[k] = np.mean(it, axis=0)
-        return d
+        return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
+
+    def nonlocal_tmoves(self, configs, wf, e, tau):
+        return eval_ecp.compute_tmoves(self.mol, configs, wf, e,self.threshold, tau)
+    
+    def has_nonlocal_moves(self):
+        return self.mol._ecp != {}
+
 
     def keys(self):
-        return set(["ke", "ee", "ei", "ecp", "total"])
+        return set(["ke", "ee", "ei", "ecp", "total", "grad2"])
 
     def shapes(self):
-        return {"ke": (), "ee": (), "ei": (), "ecp": (), "total": ()}
+        return {"ke": (), "ee": (), "ei": (), "ecp": (), "total": (), "grad2":()}
+
 
 
 class LinearTransform:
@@ -46,7 +68,7 @@ class LinearTransform:
     """
 
     def __init__(self, parameters, to_opt=None):
-        parameters = {k: asnumpy(v) for k, v in parameters.items()}
+        parameters = {k: gpu.asnumpy(v) for k, v in parameters.items()}
         if to_opt is None:
             to_opt = {k: np.ones(p.shape, dtype=bool) for k, p in parameters.items()}
         self.to_opt = {k: o for k, o in to_opt.items() if np.any(o)}
@@ -67,7 +89,7 @@ class LinearTransform:
         """Convert the dictionary to a linear list of gradients
         """
         params = np.concatenate(
-            [asnumpy(parameters[k])[opt] for k, opt in self.to_opt.items()]
+            [gpu.asnumpy(parameters[k])[opt] for k, opt in self.to_opt.items()]
         )
         return np.concatenate((params.real, params[self.complex_inds].imag))
 
@@ -99,7 +121,7 @@ class LinearTransform:
                 m_p = self.nimag[k]
                 flat_parms[opt_] += parameters[m : m + m_p] * 1j
                 m += m_p
-            d[k] = cp.asarray(flat_parms.reshape(self.shapes[k]))
+            d[k] = gpu.cp.asarray(flat_parms.reshape(self.shapes[k]))
             n += n_p
         return d
 

@@ -29,6 +29,7 @@ def OPTIMIZE(
 ):
     linemin_kws["hdf_file"] = output
     wf, configs, acc = initialize_qmc_objects(
+        dft_checkfile,
         opt_wf=True,
         nconfig=nconfig,
         ci_checkfile=ci_checkfile,
@@ -88,7 +89,7 @@ def VMC(
 ):
     vmc_kws["hdf_file"] = output
     wf, configs, acc = initialize_qmc_objects(
-        opt_wf=True,
+        dft_checkfile,
         nconfig=nconfig,
         ci_checkfile=ci_checkfile,
         start_from=start_from,
@@ -114,7 +115,7 @@ def DMC(
 ):
     dmc_kws["hdf_file"] = output
     wf, configs, acc = initialize_qmc_objects(
-        opt_wf=True,
+        dft_checkfile,
         nconfig=nconfig,
         ci_checkfile=ci_checkfile,
         start_from=start_from,
@@ -127,6 +128,7 @@ def DMC(
 
 
 def initialize_qmc_objects(
+    dft_checkfile,
     nconfig=1000,
     start_from=None,
     ci_checkfile=None,

@@ -87,11 +87,3 @@ def runtest(mol, mf, kind=0):
         else:
             assert np.mean(np.abs(diff0)) < 1e-8, diff0
             assert np.mean(np.abs(difft)) < 1e-8, difft
-
-
-if __name__ == "__main__":
-    kind = 1
-    nk = [2, 2, 2]
-    test_cubic_with_ecp(kind, nk)
-    test_RKS(kind, nk)
-    test_noncubic(kind, nk)

@@ -26,5 +26,3 @@ def test_complex_linemin(H2_ccecp_rhf, optfile = "linemin.hdf5"):
         en = f['energy'][()]
     assert en[0]> en[-1]
     os.remove(optfile)
-
-

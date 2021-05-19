@@ -34,6 +34,3 @@ def test_casci_energy(H2_ccecp_casci_s0):
     err = df.sem()
     assert en - mc.e_tot < 5 * err
 
-
-if __name__ == "__main__":
-    test()

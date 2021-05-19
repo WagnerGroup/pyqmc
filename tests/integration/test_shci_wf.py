@@ -34,7 +34,3 @@ def test_shci_wf_is_better(H2_ccecp_hci):
     assert len(wf.parameters["det_coeff"]) == len(cisolver.ci)
     assert en - nsigma * err < mf.e_tot
     assert en + nsigma * err > cisolver.energy
-
-
-if __name__ == "__main__":
-    test_shci_wf()

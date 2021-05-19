@@ -8,7 +8,7 @@ import pandas as pd
 from pyqmc.mc import vmc, initial_guess
 from pyscf import gto, scf
 from pyqmc.reblock import reblock
-from pyqmc import Slater
+from pyqmc.slater import Slater
 from pyqmc.accumulators import EnergyAccumulator
 import pytest
 

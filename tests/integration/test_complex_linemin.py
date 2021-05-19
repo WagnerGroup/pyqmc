@@ -1,6 +1,6 @@
 import numpy as np
 import os
-import pyqmc
+import pyqmc.api as pyq
 import pytest
 
 
@@ -22,16 +22,16 @@ def test():
     chkfile = "h2.hdf5"
     optfile = "linemin.hdf5"
     run_scf(chkfile)
-    mol, mf = pyqmc.recover_pyscf(chkfile)
+    mol, mf = pyq.recover_pyscf(chkfile)
     noise = (np.random.random(mf.mo_coeff.shape) - 0.5) * 0.2
     mf.mo_coeff = mf.mo_coeff * 1j + noise
 
     slater_kws = {"optimize_orbitals": True}
-    wf, to_opt = pyqmc.generate_wf(mol, mf, slater_kws=slater_kws)
+    wf, to_opt = pyq.generate_wf(mol, mf, slater_kws=slater_kws)
 
-    configs = pyqmc.initial_guess(mol, 100)
-    acc = pyqmc.gradient_generator(mol, wf, to_opt)
-    pyqmc.line_minimization(
+    configs = pyq.initial_guess(mol, 100)
+    acc = pyq.gradient_generator(mol, wf, to_opt)
+    pyq.line_minimization(
         wf, configs, acc, verbose=True, hdf_file=optfile, max_iterations=5
     )
 

@@ -34,8 +34,6 @@ def append_hdf(f, data):
 
 
 if __name__ == "__main__":
-    import numpy as np
-
     f = h5py.File("testfile.hdf5", "a")
     test = {"a": np.arange(1, 5)}
     attr = {"testval": 3.0}

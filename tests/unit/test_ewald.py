@@ -1,5 +1,5 @@
 import numpy as np
-import pyqmc
+import pyqmc.ewald
 from pyqmc.coord import PeriodicConfigs
 from pyqmc.supercell import get_supercell
 from pyscf.pbc import gto, scf
@@ -111,5 +111,5 @@ For CaF2, Madelung constant (per F) is -2.51939, (per Ca is -5.03879)so the ener
 """
 
 if __name__ == "__main__":
-    test_ewald_NaCl()
-    test_ewald_CaF2()
+    import cProfile
+    cProfile.run("test_ewald_NaCl()", "ewaldtest.prof")

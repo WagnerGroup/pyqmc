@@ -5,14 +5,14 @@ import pyqmc.supercell as supercell
 import pyqmc.linemin as linemin
 import pyqmc.optimize_ortho as optimize_ortho
 import pyqmc.dmc as dmc
-import pyqmc.mc 
+import pyqmc.mc
 import pyqmc.reblock
 import numpy as np
 import h5py
 import scipy.stats
 import pandas as pd
 import copy
-import pyqmc.accumulators 
+import pyqmc.accumulators
 
 
 def OPTIMIZE(
@@ -23,58 +23,27 @@ def OPTIMIZE(
     ci_checkfile=None,
     start_from=None,
     S=None,
-    client=None,
-    npartitions=None,
     jastrow_kws=None,
     slater_kws=None,
-    linemin_kws=None,
+    **linemin_kws,
 ):
-    if linemin_kws is None:
-        linemin_kws = {}
-
-    target_root = 0
-    if ci_checkfile is None:
-        mol, mf = pyscftools.recover_pyscf(dft_checkfile)
-        mc = None
-    else:
-        mol, mf, mc = pyscftools.recover_pyscf(dft_checkfile, ci_checkfile=ci_checkfile)
-        mc.ci = mc.ci[target_root]
-
-    if S is not None:
-        mol = supercell.get_supercell(mol, np.asarray(S))
-
-    wf, to_opt = wftools.generate_wf(
-        mol, mf, mc=mc, jastrow_kws=jastrow_kws, slater_kws=slater_kws
+    linemin_kws["hdf_file"] = output
+    wf, configs, acc = initialize_qmc_objects(
+        dft_checkfile,
+        opt_wf=True,
+        nconfig=nconfig,
+        ci_checkfile=ci_checkfile,
+        start_from=start_from,
+        S=S,
+        jastrow_kws=jastrow_kws,
+        slater_kws=slater_kws,
     )
-    if start_from is not None:
-        wftools.read_wf(wf, start_from)
-
-    configs = pyqmc.mc.initial_guess(mol, nconfig)
-    acc = pyqmc.accumulators.gradient_generator(mol, wf, to_opt)
     if anchors is None:
-        linemin.line_minimization(
-            wf,
-            configs,
-            acc,
-            verbose=True,
-            hdf_file=output,
-            client=client,
-            npartitions=npartitions,
-            **linemin_kws
-        )
+        linemin.line_minimization(wf, configs, acc, **linemin_kws)
     else:
         wfs = [wftools.read_wf(copy.deepcopy(wf), a) for a in anchors]
         wfs.append(wf)
-        optimize_ortho.optimize_orthogonal(
-            wfs,
-            configs,
-            acc,
-            # verbose=True,
-            hdf_file=output,
-            client=client,
-            npartitions=npartitions,
-            **linemin_kws
-        )
+        optimize_ortho.optimize_orthogonal(wfs, configs, acc, **linemin_kws)
 
 
 def generate_accumulators(mol, mf, energy=True, rdm1=False, extra_accumulators=None):
@@ -113,68 +82,62 @@ def VMC(
     ci_checkfile=None,
     start_from=None,
     S=None,
-    client=None,
-    npartitions=None,
     jastrow_kws=None,
     slater_kws=None,
-    vmc_kws=None,
     accumulators=None,
+    **vmc_kws,
 ):
-    if vmc_kws is None:
-        vmc_kws = {}
-
-    target_root = 0
-    if ci_checkfile is None:
-        mol, mf = pyscftools.recover_pyscf(dft_checkfile)
-        mc = None
-    else:
-        mol, mf, mc = pyscftools.recover_pyscf(dft_checkfile, ci_checkfile=ci_checkfile)
-        mc.ci = mc.ci[target_root]
-
-    if S is not None:
-        mol = supercell.get_supercell(mol, np.asarray(S))
-
-    if accumulators is None:
-        accumulators = {}
-
-    wf, _ = wftools.generate_wf(
-        mol, mf, mc=mc, jastrow_kws=jastrow_kws, slater_kws=slater_kws
+    vmc_kws["hdf_file"] = output
+    wf, configs, acc = initialize_qmc_objects(
+        dft_checkfile,
+        nconfig=nconfig,
+        ci_checkfile=ci_checkfile,
+        start_from=start_from,
+        S=S,
+        jastrow_kws=jastrow_kws,
+        slater_kws=slater_kws,
     )
 
-    if start_from is not None:
-        wftools.read_wf(wf, start_from)
-
-    configs = pyqmc.mc.initial_guess(mol, nconfig)
-
-    pyqmc.mc.vmc(
-        wf,
-        configs,
-        accumulators=generate_accumulators(mol, mf, **accumulators),
-        verbose=True,
-        hdf_file=output,
-        client=client,
-        npartitions=npartitions,
-        **vmc_kws
-    )
+    pyqmc.mc.vmc(wf, configs, accumulators=acc, **vmc_kws)
 
 
 def DMC(
     dft_checkfile,
     output,
     nconfig=1000,
+    ci_checkfile=None,
+    start_from=None,
+    S=None,
+    jastrow_kws=None,
+    slater_kws=None,
+    accumulators=None,
+    **dmc_kws,
+):
+    dmc_kws["hdf_file"] = output
+    wf, configs, acc = initialize_qmc_objects(
+        dft_checkfile,
+        nconfig=nconfig,
+        ci_checkfile=ci_checkfile,
+        start_from=start_from,
+        S=S,
+        jastrow_kws=jastrow_kws,
+        slater_kws=slater_kws,
+    )
+
+    dmc.rundmc(wf, configs, accumulators=acc, **dmc_kws)
+
+
+def initialize_qmc_objects(
+    dft_checkfile,
+    nconfig=1000,
     start_from=None,
     ci_checkfile=None,
     S=None,
-    client=None,
-    npartitions=None,
     jastrow_kws=None,
     slater_kws=None,
-    dmc_kws=None,
     accumulators=None,
+    opt_wf=False,
 ):
-    if dmc_kws is None:
-        dmc_kws = {}
-
     target_root = 0
     if ci_checkfile is None:
         mol, mf = pyscftools.recover_pyscf(dft_checkfile)
@@ -185,28 +148,22 @@ def DMC(
 
     if S is not None:
         mol = supercell.get_supercell(mol, np.asarray(S))
-    if accumulators is None:
-        accumulators = {}
 
-    wf, _ = wftools.generate_wf(
+    wf, to_opt = wftools.generate_wf(
         mol, mf, mc=mc, jastrow_kws=jastrow_kws, slater_kws=slater_kws
     )
-
     if start_from is not None:
         wftools.read_wf(wf, start_from)
 
     configs = pyqmc.mc.initial_guess(mol, nconfig)
+    if opt_wf:
+        acc = pyqmc.accumulators.gradient_generator(mol, wf, to_opt)
+    else:
+        if accumulators == None:
+            accumulators = {}
+        acc = generate_accumulators(mol, mf, **accumulators)
 
-    dmc.rundmc(
-        wf,
-        configs,
-        accumulators=generate_accumulators(mol, mf, **accumulators),
-        verbose=True,
-        hdf_file=output,
-        client=client,
-        npartitions=npartitions,
-        **dmc_kws
-    )
+    return wf, configs, acc
 
 
 def read_opt(fname):

@@ -57,9 +57,6 @@ def interpret_ci(mc, tol):
     Copies over determinant coefficients and MO occupations
     for a multi-configuration calculation mc.
 
-    This implementation separates the up and down determinants, so that we only have to compute
-
-
     returns:
     detwt: array of weights for each determinant
     occup: which orbitals go in which determinants
@@ -74,7 +71,7 @@ def interpret_ci(mc, tol):
     return create_packed_objects(deters, ncore, tol)
 
 
-def create_packed_objects(deters, ncore=0, tol=0):
+def create_packed_objects(deters, ncore=0, tol=0, format='binary'):
     """
     deters is expected to be an iterable of tuples, each of which is 
     (weight, occupation string up, occupation_string down)
@@ -94,8 +91,14 @@ def create_packed_objects(deters, ncore=0, tol=0):
     for x in deters:
         if np.abs(x[0]) > tol:
             detwt.append(x[0])
-            alpha_occ, __ = binary_to_occ(x[1], ncore)
-            beta_occ, __ = binary_to_occ(x[2], ncore)
+            if format=='binary':
+                alpha_occ, __ = binary_to_occ(x[1], ncore)
+                beta_occ, __ = binary_to_occ(x[2], ncore)
+            elif format=='list':
+                alpha_occ = x[1]
+                beta_occ = x[2]
+            else:
+                raise ValueError("create_packed_objects: Options for format are binary or list")
             if alpha_occ not in occup[0]:
                 map_dets[0].append(len(occup[0]))
                 occup[0].append(alpha_occ)

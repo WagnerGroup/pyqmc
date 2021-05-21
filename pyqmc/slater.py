@@ -102,10 +102,12 @@ class Slater:
 
     def __init__(self, mol, mf, mc=None, tol=None, twist=None, determinants=None):
         """
-        Determinants should be a list of tuples, for example 
+        determinants should be a list of tuples, for example 
         [ (1.0, [0,1],[0,1]),
           (-0.2, [0,2],[0,2]) ] 
         would be a two-determinant wave function with a doubles excitation in the second one. 
+
+        determinants overrides any information in mc, if passed. 
         """
         self.tol = -1 if tol is None else tol
         self._mol = mol
@@ -121,13 +123,7 @@ class Slater:
             self._det_occup,
             self._det_map,
             self.orbitals,
-        ) = pyqmc.orbitals.choose_evaluator_from_pyscf(mol, mf, mc, twist=twist)
-
-        if determinants is not None:
-            (self.myparameters["det_coeff"],
-            self._det_occup,
-            self._det_map ) = pyqmc.determinant_tools.create_packed_objects(determinants, tol, format='list')
-            
+        ) = pyqmc.orbitals.choose_evaluator_from_pyscf(mol, mf, mc, twist=twist, determinants=determinants)           
 
         self.parameters = JoinParameters([self.myparameters, self.orbitals.parameters])
 

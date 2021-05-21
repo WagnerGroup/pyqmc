@@ -28,7 +28,7 @@ def get_complex_phase(x):
     return x / np.abs(x)
 
 
-def choose_evaluator_from_pyscf(mol, mf, mc=None, twist=None):
+def choose_evaluator_from_pyscf(mol, mf, mc=None, twist=None, determinants = None):
     """
     Returns:
     an orbital evaluator chosen based on the inputs.
@@ -39,10 +39,10 @@ def choose_evaluator_from_pyscf(mol, mf, mc=None, twist=None):
             raise NotImplementedError(
                 "Do not support multiple determinants for k-points orbital evaluator"
             )
-        return PBCOrbitalEvaluatorKpoints.from_mean_field(mol, mf, twist)
+        return PBCOrbitalEvaluatorKpoints.from_mean_field(mol, mf, twist, determinants=determinants)
     if mc is None:
-        return MoleculeOrbitalEvaluator.from_pyscf(mol, mf)
-    return MoleculeOrbitalEvaluator.from_pyscf(mol, mf, mc)
+        return MoleculeOrbitalEvaluator.from_pyscf(mol, mf, determinants=determinants)
+    return MoleculeOrbitalEvaluator.from_pyscf(mol, mf, mc, determinants=determinants)
 
 
 class MoleculeOrbitalEvaluator:
@@ -57,7 +57,7 @@ class MoleculeOrbitalEvaluator:
         self._mol = mol
 
     @classmethod
-    def from_pyscf(self, mol, mf, mc=None, tol=-1):
+    def from_pyscf(self, mol, mf, mc=None, tol=-1, determinants = None):
         """
         mol: A Mole object
         mf: An object with mo_coeff and mo_occ.
@@ -67,6 +67,8 @@ class MoleculeOrbitalEvaluator:
         obj = mc if hasattr(mc, "mo_coeff") else mf
         if mc is not None:
             detcoeff, occup, det_map = pyqmc.determinant_tools.interpret_ci(mc, tol)
+        elif determinants is not None:
+            detcoeff, occup, det_map = pyqmc.determinant_tools.create_packed_objects(determinants, tol, format='list')
         else:
             detcoeff = gpu.cp.array([1.0])
             det_map = gpu.cp.array([[0], [0]])
@@ -151,7 +153,7 @@ class PBCOrbitalEvaluatorKpoints:
         self.rcut = pbc_eval_gto._estimate_rcut(self._cell)
 
     @classmethod
-    def from_mean_field(self, cell, mf, twist=None):
+    def from_mean_field(self, cell, mf, twist=None, determinants = None):
         """
         mf is expected to be a KUHF, KRHF, or equivalent DFT objects.
         Selects occupied orbitals from a given twist
@@ -175,6 +177,8 @@ class PBCOrbitalEvaluatorKpoints:
             raise ValueError(
                 "Did not find the right number of k-points for this supercell"
             )
+        if determinants is not None:
+            raise NotImplementedError("do not yet support determinants for PBCs")
 
         detcoeff = np.array([1.0])
         det_map = np.array([[0], [0]])

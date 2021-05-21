@@ -103,3 +103,15 @@ def test_casci_s2(H2_ccecp_casci_s2, epsilon=1e-5):
     configs = pyq.initial_guess(mol, 10)
     wf = Slater(mol, mf, cisolver, tol=0.0)
     run_tests(wf, configs, epsilon)
+
+
+
+def test_manual_slater(H2_ccecp_rhf, epsilon=1e-5):
+    mol, mf = H2_ccecp_rhf
+
+    determinants = [ (1.0, [0],[0]),
+                     (-0.2, [1],[1]) ] 
+    wf = Slater(mol,mf,determinants=determinants)
+    configs = pyq.initial_guess(mol, 10)
+    run_tests(wf, configs, epsilon)
+

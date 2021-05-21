@@ -30,7 +30,6 @@ def determinants_from_mean_field(mf):
         mf.mo_coeff is [spin][k][nao,nmo]
     """
     detwt = np.array([1.0])
-    print(np.nonzero(mf.mo_occ[0] > 0.9))
     occup = [
         [list(np.nonzero(mf.mo_occ[0] > 0.9)[0])],
         [list(np.nonzero(mf.mo_occ[1] > 0.9)[0])],
@@ -38,6 +37,20 @@ def determinants_from_mean_field(mf):
     map_dets = np.array([[0], [0]])
     return detwt, occup, map_dets
 
+
+def deters_from_hci(mc, tol):
+    bigcis = np.abs(mc.ci) > tol
+    nstrs = int(mc._strs.shape[1] / 2)
+    # old code for single strings.
+    # deters = [(c,bin(s[0]), bin(s[1])) for c, s in zip(mc.ci[bigcis],mc._strs[bigcis,:])]
+    deters = []
+    # In pyscf, the first n/2 strings represent the up determinant and the second
+    # represent the down determinant.
+    for c, s in zip(mc.ci[bigcis], mc._strs[bigcis, :]):
+        s1 = "".join(str(bin(p)).replace("0b", "") for p in s[0:nstrs])
+        s2 = "".join(str(bin(p)).replace("0b", "") for p in s[nstrs:])
+        deters.append((c, s1, s2))
+    return deters
 
 def interpret_ci(mc, tol):
     """
@@ -52,27 +65,28 @@ def interpret_ci(mc, tol):
     occup: which orbitals go in which determinants
     map_dets: given a determinant in detwt, which determinant in occup it corresponds to
     """
-    from pyscf import fci
-
     ncore = mc.ncore if hasattr(mc, "ncore") else 0
-
     # find multi slater determinant occupation
-    if hasattr(mc, "_strs"):
-        # if this is a HCI object, it will have _strs
-        bigcis = np.abs(mc.ci) > tol
-        nstrs = int(mc._strs.shape[1] / 2)
-        # old code for single strings.
-        # deters = [(c,bin(s[0]), bin(s[1])) for c, s in zip(mc.ci[bigcis],mc._strs[bigcis,:])]
-        deters = []
-        # In pyscf, the first n/2 strings represent the up determinant and the second
-        # represent the down determinant.
-        for c, s in zip(mc.ci[bigcis], mc._strs[bigcis, :]):
-            s1 = "".join(str(bin(p)).replace("0b", "") for p in s[0:nstrs])
-            s2 = "".join(str(bin(p)).replace("0b", "") for p in s[nstrs:])
-            deters.append((c, s1, s2))
+    if hasattr(mc, "_strs"):     # if this is a HCI object, it will have _strs
+        deters = deters_from_hci(mc, tol)
     else:
         deters = fci.addons.large_ci(mc.ci, mc.ncas, mc.nelecas, tol=-1)
+    return create_packed_objects(deters, ncore, tol)
 
+
+def create_packed_objects(deters, ncore=0, tol=0):
+    """
+    deters is expected to be an iterable of tuples, each of which is 
+    (weight, occupation string up, occupation_string down)
+
+    ncore should be the number of core orbitals not included in the occupation strings.
+    tol is the threshold at which to include the determinants
+
+    returns:
+    detwt: array of weights for each determinant
+    occup: which orbitals go in which determinants
+    map_dets: given a determinant in detwt, which determinant in occup it corresponds to
+    """
     # Create map and occupation objects
     detwt = []
     map_dets = [[], []]

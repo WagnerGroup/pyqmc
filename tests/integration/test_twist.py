@@ -8,75 +8,19 @@ from pyscf.pbc.dft.multigrid import multigrid
 from pyscf.scf.addons import remove_linear_dep_
 
 
-def test_cubic_with_ecp(kind=1, nk=(2, 2, 2)):
-    from pyscf.pbc.dft.multigrid import multigrid
+def test_cubic_with_ecp(li_cubic_ccecp, kind=1):
+    cell, mf = li_cubic_ccecp
+    runtest(cell, mf, kind=kind)
 
-    L = 6.63 * 2
-    cell = gto.Cell(
-        atom="""Li     {0}      {0}      {0}                
-                  Li     {1}      {1}      {1}""".format(
-            0.0, L / 4
-        ),
-        basis="bfd-vdz",
-        ecp={"Li": "bfd"},
-        spin=0,
-        unit="bohr",
-    )
-    cell.exp_to_discard = 0.1
-    cell.build(a=np.eye(3) * L)
-    kpts = cell.make_kpts(nk)
-    mf = scf.KRKS(cell, kpts)
-    mf.xc = "pbe"
-    mf = mf.density_fit()
-    mf = multigrid(mf)
-    mf = mf.run()
+def test_noncubic(h_noncubic_sto3g, kind=1):
+    cell, mf = h_noncubic_sto3g
     runtest(cell, mf, kind=kind)
 
 
-def test_RKS(kind=1, nk=(2, 2, 2)):
-    L = 2
-    mol = gto.M(
-        atom="""He     {0}      {0}      {0}""".format(0.0),
-        basis="sto-3g",
-        a=np.eye(3) * L,
-        unit="bohr",
-    )
-    kpts = mol.make_kpts(nk)
-    mf = scf.KRKS(mol, kpts)
-    mf.xc = "pbe"
-    # mf = mf.density_fit()
-    mf = mf.run()
-
-    runtest(mol, mf, kind=kind)
-
-
-def test_noncubic(kind=1, nk=(2, 2, 2)):
-    L = 3
-    mol = gto.M(
-        atom="""H     {0}      {0}      {0}                
-                  H     {1}      {1}      {1}""".format(
-            0.0, L / 4
-        ),
-        basis="sto-3g",
-        a=(np.ones((3, 3)) - np.eye(3)) * L / 2,
-        spin=0,
-        unit="bohr",
-    )
-    kpts = mol.make_kpts(nk)
-    mf = scf.KRKS(mol, kpts)
-    mf.xc = "pbe"
-    # mf = mf.density_fit()
-    mf = mf.run()
-    runtest(mol, mf, kind=kind)
-
-
 def runtest(mol, mf, kind=0):
-    for k, occ in enumerate(mf.mo_occ):
-        print(k, occ)
     kpt = mf.kpts[kind]
     twist = np.dot(kpt, mol.lattice_vectors().T / (2 * np.pi))
-    print("kpt", kpt)
-    print("twist", twist)
+
     wf0 = Slater(mol, mf)
     wft = Slater(mol, mf, twist=twist)
 
@@ -86,7 +30,6 @@ def runtest(mol, mf, kind=0):
     #####################################
     nconfig = 50
     coords = pyq.initial_guess(mol, nconfig, 1)
-    nelec = coords.configs.shape[1]
     epos, wrap = enforce_pbc(coords.lvecs, coords.configs)
     coords = PeriodicConfigs(epos, coords.lvecs)
 
@@ -133,7 +76,6 @@ def runtest(mol, mf, kind=0):
     assert np.linalg.norm(valt - valtnew) < 1e-11, np.linalg.norm(valt - valtnew)
 
     for k in en0.keys():
-        print(k)
         diff0 = en0[k] - en0new[k]
         difft = ent[k] - entnew[k]
         if k == "ecp":
@@ -143,13 +85,5 @@ def runtest(mol, mf, kind=0):
                     print("ecp%s diff" % l, mad, np.linalg.norm(diff))
                     assert mad < 1e-3, diff
         else:
-            assert np.linalg.norm(diff0) < 1e-9, diff0
-            assert np.linalg.norm(difft) < 1e-9, difft
-
-
-if __name__ == "__main__":
-    kind = 1
-    nk = [2, 2, 2]
-    test_cubic_with_ecp(kind, nk)
-    test_RKS(kind, nk)
-    test_noncubic(kind, nk)
+            assert np.mean(np.abs(diff0)) < 1e-8, diff0
+            assert np.mean(np.abs(difft)) < 1e-8, difft

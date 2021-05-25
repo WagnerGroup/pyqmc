@@ -12,7 +12,6 @@ def test_mask(wf, e, epos, mask=None):
     ratio_ref = wf.testvalue(e, epos)[mask]
     assert np.sum(np.abs(ratio - ratio_ref)) < 1e-10
     print("testcase for test_value() with mask passed")
-    # update internals
 
 
 def test_updateinternals(wf, configs):

@@ -1,10 +1,10 @@
 import numpy as np
 import copy
-
+import scipy.spatial.transform
 
 def ecp(mol, configs, wf, threshold):
     """
-    Returns the ECP value, summed over all the electrons and atoms.
+    :returns: ECP value, summed over all the electrons and atoms.
     """
     nconf, nelec = configs.configs.shape[0:2]
     ecp_tot = np.zeros(nconf, dtype=complex if wf.iscomplex else float)
@@ -12,13 +12,50 @@ def ecp(mol, configs, wf, threshold):
         for atom in mol._atom:
             if atom[0] in mol._ecp.keys():
                 for e in range(nelec):
-                    ecp_tot += ecp_ea(mol, configs, wf, e, atom, threshold)
+                    ecp_tot += ecp_ea(mol, configs, wf, e, atom, threshold)['total']
     return ecp_tot
+
+
+def compute_tmoves(mol, configs, wf, e, threshold, tau):
+    """
+
+    """
+    nconfig = configs.configs.shape[0]
+    if mol._ecp != {}:
+        data = [
+            ecp_ea(mol, configs, wf, e, atom, threshold)
+            for atom in mol._atom
+            if atom[0] in mol._ecp.keys()
+        ]
+    else:
+        return {'ratio': np.zeros((nconfig,0)),
+                'weight':np.zeros((nconfig,0)) } 
+
+    
+    # we want to make a data set which is a list of possible positions, the wave function
+    # ratio, and the masks for each 
+    summed_data = []
+    nconfig = configs.configs.shape[0]
+    for d in data: 
+        npts = d['ratio'].shape[1]
+        weight = np.zeros((nconfig, npts))
+        ratio = np.ones((nconfig, npts))
+        weight[d['mask']] = np.einsum("ik, ijk -> ij", np.exp(-tau*d['v_l'])-1, d['P_l'])
+        ratio[d['mask']] = d['ratio']
+        summed_data.append({'weight':weight, 'ratio':ratio, 'epos':d['epos']})
+        
+    ratio = np.concatenate([d['ratio'] for d in summed_data], axis=1)
+    weight = np.concatenate([d['weight'] for d in summed_data], axis=1)
+    configs = copy.copy(configs)
+    configs.join([d['epos'] for d in summed_data], axis=1)
+    return {"ratio": ratio, 'weight':weight, 'configs':configs } 
+
 
 
 def ecp_ea(mol, configs, wf, e, atom, threshold):
     """
-    Returns the ECP value between electron e and atom at, local+nonlocal.
+    :returns: the ECP value between electron e and atom at, local+nonlocal.
+    TODO: update documentation
     """
     nconf = configs.configs.shape[0]
     ecp_val = np.zeros(nconf, dtype=complex if wf.iscomplex else float)
@@ -33,8 +70,6 @@ def ecp_ea(mol, configs, wf, e, atom, threshold):
     mask, prob = ecp_mask(v_l, threshold)
     masked_v_l = v_l[mask]
     masked_v_l[:, :-1] /= prob[mask, np.newaxis]
-
-    # print(np.sum(mask))
 
     # Use masked objects internally
     r_ea = r_ea[mask]
@@ -54,13 +89,18 @@ def ecp_ea(mol, configs, wf, e, atom, threshold):
     # Compute local and non-local parts
     ecp_val[mask] = np.einsum("ij,ik,ijk->i", ratio, masked_v_l, P_l)
     ecp_val += v_l[:, -1]  # local part
-    return ecp_val
+    return {'total':ecp_val,
+            'v_l':masked_v_l,
+            'local':v_l[:,-1],
+            'P_l':P_l,
+            'ratio':ratio,
+            'epos':epos,
+            'mask':mask } 
 
 
 def ecp_mask(v_l, threshold):
     """
-    Returns a mask for configurations sized nconf
-    based on values of v_l. Also returns acceptance probabilities
+    :returns: a mask for configurations sized nconf based on values of v_l. Also returns acceptance probabilities
     """
     l = 2 * np.arange(v_l.shape[1] - 1) + 1
     prob = np.dot(np.abs(v_l[:, :-1]), threshold * (2 * l + 1))
@@ -70,8 +110,8 @@ def ecp_mask(v_l, threshold):
 
 
 def get_v_l(mol, at_name, r_ea):
-    """
-    Returns list of the l's, and a nconf x nl array, v_l values for each l: l= 0,1,2,...,-1
+    r"""
+    :returns: list of the :math:`l`'s, and a nconf x nl array, v_l values for each :math:`l`: l= 0,1,2,...,-1
     """
     vl = generate_ecp_functors(mol._ecp[at_name][1])
     v_l = np.zeros([r_ea.shape[0], len(vl)])
@@ -82,12 +122,9 @@ def get_v_l(mol, at_name, r_ea):
 
 def generate_ecp_functors(coeffs):
     """
-    Returns a functor, with keys as the angular momenta:
-    -1 stands for the nonlocal part, 0,1,2,... are the s,p,d channels, etc.
-    Parameters:
-      mol._ecp[atom_name][1] (coefficients of the ECP)
-    Returns:
-      v_l function, with key = angular momentum
+    :parameter coeffs: `mol._ecp[atom_name][1]` (coefficients of the ECP)
+    :returns: a functor v_l, with keys as the angular momenta:
+      -1 stands for the nonlocal part, 0,1,2,... are the s,p,d channels, etc.
     """
     d = {}
     for c in coeffs:
@@ -107,7 +144,9 @@ def generate_ecp_functors(coeffs):
 
 class rnExp:
     """
-    v_l object. :math:`c*r^{n-2}*exp(-e*r^2)`
+    v_l object. 
+
+    :math:`cr^{n-2}\cdot\exp(-er^2)`
     """
 
     def __init__(self, n, e, c):
@@ -125,14 +164,16 @@ class rnExp:
 
 
 def P_l(x, l):
+    r"""Legendre functions,
+
+    :parameter  x: distances x=r_ea(i)
+    :type x: (nconf,) array
+    :parameter int l: angular momentum channel
+    :returns: legendre function P_l values for channel :math:`l`.
+    :rtype: (nconf, naip) array
     """
-    Legendre functions,
-    returns a nconf x naip array for a given l, x=r_ea(i)
-    Parameters:
-      x: nconf array, l: integer
-    Returns:
-      P_l values: nconf x naip array
-    """
+    if l==-1:
+        return np.zeros(x.shape)
     if l == 0:
         return np.ones(x.shape)
     elif l == 1:
@@ -144,18 +185,19 @@ def P_l(x, l):
     elif l == 4:
         return 0.125 * (35 * x * x * x * x - 30 * x * x + 3)
     else:
-        return np.zeros(x.shape)
+        raise NotImplementedError(f"Legendre functions for l>4 not implemented {l}")
 
 
 def get_P_l(r_ea, r_ea_vec, l_list):
-    """
-    Returns a nconf x naip x nl array, which is the legendre function values for each l channel.
-    The factor (2l+1) and the quadrature weights are included.
-    Parameters:
-      l_list: [-1,0,1,...] list of given angular momenta
-      weights: integration weights
-    Return:
-      P_l values: nconf x naip x nl array
+    r""" The factor :math:`(2l+1)` and the quadrature weights are included.
+
+    :parameter r_ea: distances of electron e and atom a
+    :type r_ea: (nconf,)
+    :parameter r_ea_vec: displacements of electron e and atom a
+    :type r_ea_vec: (nconf, 3)
+    :parameter list l_list: [-1,0,1,...] list of given angular momenta
+    :returns: legendre function P_l values for each :math:`l` channel.
+    :rtype: (nconf, naip, nl) array
     """
     naip = 6 if len(l_list) <= 2 else 12
     nconf = r_ea.shape[0]
@@ -174,27 +216,18 @@ def get_P_l(r_ea, r_ea_vec, l_list):
 
 def get_rot(nconf, naip):
     """
-    Returns the integration weights (naip), and the positions of the rotated electron e (nconf x naip x 3)
-    Parameters:
-      configs[:,e,:]: epos of the electron e to be rotated
-    Returns:
-      weights: naip array
-      epos_rot: positions of the rotated electron, nconf x naip x 3
-
+    :parameter int nconf: number of configurations
+    :parameter int naip: number of auxiliary integration points
+    :returns: the integration weights, and the positions of the rotated electron e
+    :rtype:  ((naip,) array, (nconf, naip, 3) array)
     """
-    # t and p are sampled randomly over a sphere around the atom
-    t = np.random.uniform(low=0.0, high=np.pi, size=nconf)
-    p = np.random.uniform(low=0.0, high=2 * np.pi, size=nconf)
-
     def sphere(t_, p_):
         s = np.sin(t_)
         return s * np.cos(p_), s * np.sin(p_), np.cos(t_)
-
-    # rotated unit vectors:
-    rot = np.zeros([3, 3, nconf])
-    rot[0, :, :] = sphere(np.zeros(nconf) + np.pi / 2.0, p - np.pi / 2.0)
-    rot[1, :, :] = sphere(t + np.pi / 2.0, p)
-    rot[2, :, :] = sphere(t, p)
+    if nconf > 0: # get around a bug(?) when there are zero configurations.
+        rot = scipy.spatial.transform.Rotation.random(nconf).as_matrix()
+    else:
+        rot = np.zeros((0,3,3))
 
     if naip == 6:
         d1 = np.array([0.0, 1.0, 0.5, 0.5, 0.5, 0.5]) * np.pi
@@ -203,8 +236,10 @@ def get_rot(nconf, naip):
         tha = np.arccos(1.0 / np.sqrt(5.0))
         d1 = np.array([0, np.pi] + [tha, np.pi - tha] * 5)
         d2 = np.array([0, 0] + list(range(10))) * np.pi / 5
+    else:
+        raise ValueError("Do not support naip!= 6 or 12")
 
-    rot_vec = np.einsum("ilj,ik->jkl", rot, sphere(d1, d2))
-    weights = 1.0 / naip * np.ones(naip)
+    rot_vec = np.einsum("jil,ik->jkl", rot, sphere(d1, d2))
+    weights = np.ones(naip) / (naip)
 
     return weights, rot_vec

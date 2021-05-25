@@ -1,7 +1,7 @@
 import numpy as np
 import pyqmc
-from scipy.special import erfc
 import pyqmc.energy
+import pyqmc.gpu as gpu
 
 
 class Ewald:
@@ -80,24 +80,26 @@ class Ewald:
 
     def __init__(self, cell, ewald_gmax=200, nlatvec=1):
         """
-        Inputs:
-            cell: pyscf Cell object (simulation cell)
-            ewald_gmax: int, how far to take reciprocal sum; probably never needs to be changed.
-            nlatvec: int, how far to take real-space sum; probably never needs to be changed.
+        :parameter cell: pyscf Cell object (simulation cell)
+        :parameter int ewald_gmax: how far to take reciprocal sum; probably never needs to be changed.
+        :parameter int nlatvec: how far to take real-space sum; probably never needs to be changed.
         """
         self.nelec = np.array(cell.nelec)
-        self.atom_coords, self.atom_charges = cell.atom_coords(), cell.atom_charges()
+        self.atom_coords = cell.atom_coords()
+        self.atom_charges = gpu.cp.asarray(cell.atom_charges())
         self.latvec = cell.lattice_vectors()
         self.set_lattice_displacements(nlatvec)
         self.set_up_reciprocal_ewald_sum(ewald_gmax)
 
     def set_lattice_displacements(self, nlatvec):
         """
-        Generates list of lattice-vector displacements to add together for real-space sum, going from `-nlatvec` to `nlatvec` in each lattice direction.
+        Generates list of lattice-vector displacements to add together for real-space sum
+
+        :parameter int nlatvec: sum goes from `-nlatvec` to `nlatvec` in each lattice direction.
         """
         XYZ = np.meshgrid(*[np.arange(-nlatvec, nlatvec + 1)] * 3, indexing="ij")
         xyz = np.stack(XYZ, axis=-1).reshape((-1, 3))
-        self.lattice_displacements = np.dot(xyz, self.latvec)
+        self.lattice_displacements = gpu.cp.asarray(np.dot(xyz, self.latvec))
 
     def set_up_reciprocal_ewald_sum(self, ewald_gmax):
         r"""
@@ -109,36 +111,39 @@ class Ewald:
 
         .. math:: W_G = \frac{4\pi}{V |\vec{G}|^2} e^{- \frac{|\vec{G}|^2}{ 4\alpha^2}}
 
-        Inputs:
-            ewald_gmax: int, max number of reciprocal lattice vectors to check away from 0
+        :parameter int ewald_gmax: max number of reciprocal lattice vectors to check away from 0
         """
         cellvolume = np.linalg.det(self.latvec)
         recvec = np.linalg.inv(self.latvec)
-        crossproduct = recvec.T * cellvolume
 
         # Determine alpha
-        tmpheight_i = np.einsum("ij,ij->i", crossproduct, self.latvec)
-        length_i = np.linalg.norm(crossproduct, axis=1)
-        smallestheight = np.amin(np.abs(tmpheight_i) / length_i)
+        smallestheight = np.amin(1 / np.linalg.norm(recvec.T, axis=1))
         self.alpha = 5.0 / smallestheight
         print("Setting Ewald alpha to ", self.alpha)
 
         # Determine G points to include in reciprocal Ewald sum
-        X, Y, Z = np.meshgrid(
-            *[np.arange(-ewald_gmax, ewald_gmax + 1)] * 3, indexing="ij"
+        gptsXpos = gpu.cp.meshgrid(
+            gpu.cp.arange(1, ewald_gmax + 1),
+            *[gpu.cp.arange(-ewald_gmax, ewald_gmax + 1)] * 2,
+            indexing="ij"
         )
-        positive_octants = X + 1e-6 * Y + 1e-12 * Z > 0  # assume ewald_gmax < 1e5
-        gpoints = np.stack(
-            (X[positive_octants], Y[positive_octants], Z[positive_octants]), axis=-1
+        zero = gpu.cp.asarray([0])
+        gptsX0Ypos = gpu.cp.meshgrid(
+            zero,
+            gpu.cp.arange(1, ewald_gmax + 1),
+            gpu.cp.arange(-ewald_gmax, ewald_gmax + 1),
+            indexing="ij",
         )
-        gpoints = np.dot(gpoints, recvec) * 2 * np.pi
-        gsquared = np.sum(gpoints ** 2, axis=1)
-        gweight = 4 * np.pi * np.exp(-gsquared / (4 * self.alpha ** 2))
-        gweight /= cellvolume * gsquared
-        bigweight = gweight > 1e-10
-        self.gpoints = gpoints[bigweight]
-        self.gweight = gweight[bigweight]
-
+        gptsX0Y0Zpos = gpu.cp.meshgrid(
+            zero, zero, gpu.cp.arange(1, ewald_gmax + 1), indexing="ij"
+        )
+        gs = zip(
+            *[
+                select_big(x, cellvolume, recvec, self.alpha)
+                for x in (gptsXpos, gptsX0Ypos, gptsX0Y0Zpos)
+            ]
+        )
+        self.gpoints, self.gweight = [gpu.cp.concatenate(x, axis=0) for x in gs]
         self.set_ewald_constants(cellvolume)
 
     def set_ewald_constants(self, cellvolume):
@@ -212,8 +217,8 @@ class Ewald:
 
         .. math:: E_{\rm reciprocal\ space}^{\text{ion-ion}} = \sum_{\vec{G} > 0 } W_G \left| \sum_{I=1}^{N_{ion}} Z_I e^{-i\vec{G}\cdot\vec{x}_I} \right|^2
 
-        Returns:
-            ion_ion: float, ion-ion component of Ewald sum
+        :returns: ion-ion component of Ewald sum
+        :rtype: float
         """
         # Real space part
         if len(self.atom_charges) == 1:
@@ -221,25 +226,27 @@ class Ewald:
         else:
             dist = pyqmc.distance.MinimalImageDistance(self.latvec)
             ion_distances, ion_inds = dist.dist_matrix(self.atom_coords[np.newaxis])
+            ion_distances = gpu.cp.asarray(ion_distances)
             rvec = ion_distances[:, :, np.newaxis, :] + self.lattice_displacements
-            r = np.linalg.norm(rvec, axis=-1)
-            charge_ij = np.prod(self.atom_charges[np.asarray(ion_inds)], axis=1)
-            ion_ion_real = np.einsum("j,ijk->", charge_ij, erfc(self.alpha * r) / r)
+            r = gpu.cp.linalg.norm(rvec, axis=-1)
+            charge_ij = gpu.cp.prod(self.atom_charges[np.asarray(ion_inds)], axis=1)
+            ion_ion_real = gpu.cp.einsum("j,ijk->", charge_ij, gpu.erfc(self.alpha * r) / r)
 
         # Reciprocal space part
-        GdotR = np.dot(self.gpoints, self.atom_coords.T)
-        self.ion_exp = np.dot(np.exp(1j * GdotR), self.atom_charges)
-        ion_ion_rec = np.dot(self.gweight, np.abs(self.ion_exp) ** 2)
+        GdotR = gpu.cp.dot(self.gpoints, gpu.cp.asarray(self.atom_coords.T))
+        self.ion_exp = gpu.cp.dot(gpu.cp.exp(1j * GdotR), self.atom_charges)
+        ion_ion_rec = gpu.cp.dot(self.gweight, gpu.cp.abs(self.ion_exp) ** 2)
 
         ion_ion = ion_ion_real + ion_ion_rec
         return ion_ion
 
     def _real_cij(self, dists):
-        r = np.zeros(dists.shape[:-1])
-        cij = np.zeros(r.shape)
+        dists = gpu.cp.asarray(dists)
+        r = gpu.cp.zeros(dists.shape[:-1])
+        cij = gpu.cp.zeros(r.shape)
         for ld in self.lattice_displacements:
             r[:] = np.linalg.norm(dists + ld, axis=-1)
-            cij += erfc(self.alpha * r) / r
+            cij += gpu.erfc(self.alpha * r) / r
         return cij
 
     def ewald_electron(self, configs):
@@ -264,11 +271,12 @@ class Ewald:
 
         .. math:: E_{\rm reciprocal\ space}^{e\text{-ion}} = \sum_{\vec{G}>0} W_G {\rm Re} \left[ 2 \sum_{i=1}^{N_e} \sum_{I=1}^{N_{ion}} -Z_I e^{-i\vec{k}\cdot\vec{x}_i} e^{i\vec{k}\cdot\vec{x}_I} \right]
 
-        Inputs:
-            configs: pyqmc PeriodicConfigs object of shape (nconf, nelec, ndim)
-        Returns:
-            ee: electron-electron part
-            ei: electron-ion part
+        :parameter configs: electron positions (walkers)
+        :type configs: (nconf, nelec, 3) PeriodicConfigs object
+        :returns:
+            * ee: electron-electron part
+            * ei: electron-ion part
+        :rtype: float, float
         """
         nconf, nelec, ndim = configs.configs.shape
 
@@ -276,10 +284,10 @@ class Ewald:
         # ei_distances shape (elec, conf, atom, dim)
         ei_distances = configs.dist.dist_i(self.atom_coords, configs.configs)
         ei_cij = self._real_cij(ei_distances)
-        ei_real_separated = np.einsum("k,ijk->ji", -self.atom_charges, ei_cij)
+        ei_real_separated = gpu.cp.einsum("k,ijk->ji", -self.atom_charges, ei_cij)
 
         # Real space electron-electron part
-        ee_real_separated = np.zeros((nconf, nelec))
+        ee_real_separated = gpu.cp.zeros((nconf, nelec))
         if nelec > 1:
             ee_distances, ee_inds = configs.dist.dist_matrix(configs.configs)
             ee_cij = self._real_cij(ee_distances)
@@ -296,18 +304,18 @@ class Ewald:
 
     def reciprocal_space_electron(self, configs):
         # Reciprocal space electron-electron part
-        e_GdotR = np.einsum("hik,jk->hij", configs, self.gpoints)
-        sum_e_sin = np.sin(e_GdotR).sum(axis=1)
-        sum_e_cos = np.cos(e_GdotR).sum(axis=1)
-        ee_recip = np.dot(sum_e_sin ** 2 + sum_e_cos ** 2, self.gweight)
+        e_GdotR = gpu.cp.einsum("hik,jk->hij", gpu.cp.asarray(configs), self.gpoints)
+        sum_e_sin = gpu.cp.sin(e_GdotR).sum(axis=1)
+        sum_e_cos = gpu.cp.cos(e_GdotR).sum(axis=1)
+        ee_recip = gpu.cp.dot(sum_e_sin ** 2 + sum_e_cos ** 2, self.gweight)
         ## Reciprocal space electron-ion part
         coscos_sinsin = -self.ion_exp.real * sum_e_cos + self.ion_exp.imag * sum_e_sin
-        ei_recip = 2 * np.dot(coscos_sinsin, self.gweight)
+        ei_recip = 2 * gpu.cp.dot(coscos_sinsin, self.gweight)
         return ee_recip, ei_recip
 
     def reciprocal_space_electron_separated(self, configs):
         # Reciprocal space electron-electron part
-        e_GdotR = np.einsum("hik,jk->hij", configs, self.gpoints)
+        e_GdotR = np.einsum("hik,jk->hij", gpu.cp.asarray(configs), self.gpoints)
         e_sin = np.sin(e_GdotR)
         e_cos = np.cos(e_GdotR)
         sinsin = e_sin.sum(axis=1, keepdims=True) * e_sin
@@ -340,19 +348,20 @@ class Ewald:
                 \\&+ E_{\rm real+reciprocal}^{\text{ion-ion}}
                 + E_{\rm self+charged}^{\text{ion-ion}}
 
-        Inputs:
-            configs: pyqmc PeriodicConfigs object of shape (nconf, nelec, ndim)
-        Returns:
-            ee: electron-electron part
-            ei: electron-ion part
-            ii: ion-ion part
+        :parameter configs: electron positions (walkers)
+        :type configs: (nconf, nelec, 3) PeriodicConfigs object
+        :returns:
+            * ee: electron-electron part
+            * ei: electron-ion part
+            * ii: ion-ion part
+        :rtype: float, float, float
         """
         nelec = configs.configs.shape[1]
         ee, ei = self.ewald_electron(configs)
         ee += self.ee_const(nelec)
         ei += self.ei_const(nelec)
         ii = self.ion_ion + self.ii_const
-        return ee, ei, ii
+        return gpu.asnumpy(ee), gpu.asnumpy(ei), gpu.asnumpy(ii)
 
     def energy_separated(self, configs):
         """
@@ -360,65 +369,20 @@ class Ewald:
 
         NOTE: energy() needs to be called first to update the separated energy values
 
-        Inputs:
-            configs: pyqmc PeriodicConfigs object of shape (nconf, nelec, ndim)
-        Returns:
-            (nelec,) energies
+        :parameter configs: electron positions (walkers)
+        :type configs: (nconf, nelec, 3) PeriodicConfigs object
+        :returns: energies
+        :rtype: (nelec,) array
         """
         raise NotImplementedError("ewalde_separated is currently not computed anywhere")
         nelec = configs.configs.shape[1]
         return self.e_single(nelec) + self.ewalde_separated
 
-    def energy_with_test_pos(self, configs, epos):
-        """
-        Compute Coulomb energy of an additional test electron with a set of configs
 
-        Inputs:
-            configs: pyqmc PeriodicConfigs object of shape (nconf, nelec, ndim)
-            epos: pyqmc PeriodicConfigs object of shape (nconf, ndim)
-        Returns:
-            Vtest: (nconf, nelec+1) array. The first nelec columns are Coulomb energies between the test electron and each electron; the last column is the contribution from all the ions.
-        """
-        nconf, nelec, ndim = configs.configs.shape
-        Vtest = np.zeros((nconf, nelec + 1)) + self.ijconst
-        Vtest[:, -1] = self.e_single_test
-
-        # Real space electron-ion part
-        # ei_distances shape (conf, atom, dim)
-        ei_distances = configs.dist.dist_i(self.atom_coords, epos.configs)
-        rvec = ei_distances[:, :, np.newaxis, :] + self.lattice_displacements
-        r = np.linalg.norm(rvec, axis=-1)
-        Vtest[:, -1] += np.einsum(
-            "k,jkl->j", -self.atom_charges, erfc(self.alpha * r) / r
-        )
-
-        # Real space electron-electron part
-        ee_distances = configs.dist.dist_i(configs.configs, epos.configs)
-        rvec = ee_distances[:, :, np.newaxis, :] + self.lattice_displacements
-        r = np.linalg.norm(rvec, axis=-1)
-        Vtest[:, :-1] += np.sum(erfc(self.alpha * r) / r, axis=-1)
-
-        # Reciprocal space electron-electron part
-        e_expGdotR = np.exp(1j * np.dot(configs.configs, self.gpoints.T))
-        test_exp = np.exp(1j * np.dot(epos.configs, self.gpoints.T))
-        ee_recip_separated = np.dot(np.real(test_exp.conj() * e_expGdotR), self.gweight)
-        Vtest[:, :-1] += 2 * ee_recip_separated
-
-        # Reciprocal space electrin-ion part
-        coscos_sinsin = np.real(-self.ion_exp.conj() * test_exp)
-        ei_recip_separated = np.dot(coscos_sinsin + 0.5, self.gweight)
-        Vtest[:, -1] += 2 * ei_recip_separated
-
-        return Vtest
-
-    def compute_total_energy(self, mol, configs, wf, threshold):
-        ee, ei, ii = self.energy(configs)
-        ecp_val = pyqmc.energy.get_ecp(mol, configs, wf, threshold)
-        ke = pyqmc.energy.kinetic(configs, wf)
-        return {
-            "ke": ke,
-            "ee": ee,
-            "ei": ei,
-            "ecp": ecp_val,
-            "total": ke + ee + ei + ecp_val + ii,
-        }
+def select_big(gpts, cellvolume, recvec, alpha):
+    gpoints = gpu.cp.einsum("j...,jk->...k", gpts, recvec) * 2 * np.pi
+    gsquared = gpu.cp.einsum("...k,...k->...", gpoints, gpoints)
+    gweight = 4 * np.pi * gpu.cp.exp(-gsquared / (4 * alpha ** 2))
+    gweight /= cellvolume * gsquared
+    bigweight = gweight > 1e-10
+    return gpoints[bigweight], gweight[bigweight]

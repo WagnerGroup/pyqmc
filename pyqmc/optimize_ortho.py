@@ -1,7 +1,8 @@
 import numpy as np
 import h5py
-import pyqmc
+import pyqmc.linemin
 import pyqmc.hdftools as hdftools
+import pyqmc.mc as mc
 import os
 
 
@@ -75,7 +76,6 @@ def collect_overlap_data(wfs, configs, pgrad):
     return save_dat
 
 
-from pyqmc.mc import limdrift
 
 
 def construct_rho_gradient(grads, log_values):
@@ -99,14 +99,14 @@ def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
         for e in range(nelec):  # a sweep
             # Propose move
             grads = [np.real(wf.gradient(e, configs.electron(e)).T) for wf in wfs]
-            grad = limdrift(np.mean(grads, axis=0))
+            grad = mc.limdrift(np.mean(grads, axis=0))
             gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconf, 3))
             newcoorde = configs.configs[:, e, :] + gauss + grad * tstep
             newcoorde = configs.make_irreducible(e, newcoorde)
 
             # Compute reverse move
             grads = [np.real(wf.gradient(e, newcoorde).T) for wf in wfs]
-            new_grad = limdrift(np.mean(grads, axis=0))
+            new_grad = mc.limdrift(np.mean(grads, axis=0))
             forward = np.sum(gauss ** 2, axis=1)
             backward = np.sum((gauss + tstep * (grad + new_grad)) ** 2, axis=1)
 
@@ -264,7 +264,7 @@ def correlated_sample(wfs, configs, parameters, pgrad):
 
     wt0 = 1.0 / np.sum(np.exp(-2 * (log_values0[:, np.newaxis] - log_values0)), axis=1)
     weight = np.mean(wt0, axis=1)
-    dtype = np.complex if wfs[-1].iscomplex else np.float
+    dtype = complex if wfs[-1].iscomplex else float
 
     data = {
         "total": np.zeros(nparms),
@@ -529,7 +529,7 @@ def optimize_orthogonal(
     if warmup_options is None:
         warmup_options = {}
 
-    data, coords = pyqmc.mc.vmc(
+    data, coords = mc.vmc(
         wfs[-1],
         coords,
         accumulators={},

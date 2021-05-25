@@ -1,6 +1,6 @@
 import numpy as np
-from pyqmc.loadcupy import cp, asnumpy
-from pyscf import fci
+import pyqmc.gpu as gpu
+import pyscf.fci as fci
 
 
 def binary_to_occ(S, ncore):
@@ -11,7 +11,7 @@ def binary_to_occ(S, ncore):
     """
     occup = [int(i) for i in range(ncore)]
     occup += [int(i + ncore) for i, c in enumerate(reversed(S)) if c == "1"]
-    max_orb = max(occup)
+    max_orb = max(occup) if occup else 1
     return (occup, max_orb)
 
 
@@ -100,14 +100,14 @@ def compute_value(updets, dndets, det_coeffs):
     """
     Given the up and down determinant values, safely compute the total log wave function.
     """
-    upref = cp.amax(updets[1]).real
-    dnref = cp.amax(dndets[1]).real
+    upref = gpu.cp.amax(updets[1]).real
+    dnref = gpu.cp.amax(dndets[1]).real
     phases = updets[0] * dndets[0]
     logvals = updets[1] - upref + dndets[1] - dnref
 
     phases = updets[0] * dndets[0]
-    wf_val = cp.einsum("d,id->i", det_coeffs, phases * cp.exp(logvals))
+    wf_val = gpu.cp.einsum("d,id->i", det_coeffs, phases * gpu.cp.exp(logvals))
 
-    wf_sign = wf_val / cp.abs(wf_val)
-    wf_logval = cp.log(cp.abs(wf_val)) + upref + dnref
-    return asnumpy(wf_sign), asnumpy(wf_logval)
+    wf_sign = wf_val / gpu.cp.abs(wf_val)
+    wf_logval = gpu.cp.log(gpu.cp.abs(wf_val)) + upref + dnref
+    return gpu.asnumpy(wf_sign), gpu.asnumpy(wf_logval)

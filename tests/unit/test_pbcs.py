@@ -56,8 +56,10 @@ def test_enforce_pbcs():
         np.isclose(final_wrap, check_wrap, rtol=relative_tol, atol=absolute_tol)
     )
     test1 = test1a * test1b
-    print("Test 1 success:", test1)
+    assert test1
 
+
+def test_non_orthogonal():
     # TEST 2: Check if any electron in new config
     #         is out of the simulation box for set
     #         of non-orthogonal lattice vectors.
@@ -76,9 +78,8 @@ def test_enforce_pbcs():
     # Configs in lattice vectors basis
     ff = np.einsum("ij,jk->ik", final_trans, recpvecs)
     test2 = np.all(ff < 1) & np.all(ff >= 0)
-    print("Test 2 success:", test2)
 
-    assert test1 * test2
+    assert test2
 
 
 if __name__ == "__main__":

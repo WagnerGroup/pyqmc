@@ -1,16 +1,15 @@
 import numpy as np
 from pyscf import gto, scf, lo
-from pyqmc import Slater
+from pyqmc.slater import Slater
 from pyqmc.mc import initial_guess, vmc
 from pyqmc.accumulators import EnergyAccumulator
 from pyqmc.tbdm import TBDMAccumulator, normalize_tbdm
 from pyqmc.obdm import OBDMAccumulator, normalize_obdm
-from pandas import DataFrame
 
 
 ###########################################################
 def singledet_tbdm(mf, mfobdm):
-    """Computes the single Sltater determinant tbdm."""
+    """Computes the single Slater determinant tbdm."""
     if isinstance(mf, scf.hf.RHF):
         # norb=mf.mo_energy.size
         norb = mfobdm.shape[1]
@@ -91,6 +90,23 @@ def make_separate_spin_iaos(cell, mf, mos, iao_basis="minao"):
 ###########################################################
 
 
+def create_accumulators(mol, iaos, tbdm_sweeps=4, tbdm_tstep=0.5):
+    return dict(
+        tbdm_upup = TBDMAccumulator(
+            mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin=(0, 0)
+        ),
+        tbdm_updown = TBDMAccumulator(
+            mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin=(0, 1)
+        ),
+        tbdm_downup = TBDMAccumulator(
+            mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin=(1, 0)
+        ),
+        tbdm_downdown = TBDMAccumulator(
+            mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin=(1, 1)
+        ),
+    )
+
+
 ###########################################################
 def reps_combined_spin_iaos(iaos, mf, mos):
     """Representation of MOs in IAO basis.
@@ -106,7 +122,7 @@ def reps_combined_spin_iaos(iaos, mf, mos):
         mos = np.array([mos, mos])
     # Computes MOs passed in array 'mos' in terms of the 'iaos' basis
     if len(iaos.shape) == 2:
-        iao_reps = [
+        return [
             np.dot(
                 np.dot(iaos.T, mf.get_ovlp()),
                 (np.array(mf.mo_coeff)[s, :, mos[s]]).transpose((1, 0)),
@@ -114,7 +130,7 @@ def reps_combined_spin_iaos(iaos, mf, mos):
             for s in range(np.array(mf.mo_coeff).shape[0])
         ]
     else:
-        iao_reps = [
+        return [
             np.dot(
                 np.dot(iaos[s].T, mf.get_ovlp()),
                 (np.array(mf.mo_coeff)[s, :, mos[s]]).transpose((1, 0)),
@@ -122,28 +138,8 @@ def reps_combined_spin_iaos(iaos, mf, mos):
             for s in range(np.array(mf.mo_coeff).shape[0])
         ]
 
-    return iao_reps
 
-
-###########################################################
-
-
-def test(atom="He", total_spin=0, total_charge=0, scf_basis="sto-3g"):
-    mol = gto.M(
-        atom="%s 0. 0. 0.; %s 0. 0. 1.5" % (atom, atom),
-        basis=scf_basis,
-        unit="bohr",
-        verbose=4,
-        spin=total_spin,
-        charge=total_charge,
-    )
-    mf = scf.UHF(mol).run()
-    # Intrinsic Atomic Orbitals
-    iaos = make_separate_spin_iaos(
-        mol, mf, np.array([i for i in range(mol.natm)]), iao_basis="minao"
-    )
-    # iaos=make_combined_spin_iaos(mol,mf,np.array([i for i in range(mol.natm)]),iao_basis='minao')
-    # MOs in the IAO basis
+def tbdm_from_mf(mol, mf, iaos):
     mo = reps_combined_spin_iaos(
         iaos,
         mf,
@@ -152,67 +148,26 @@ def test(atom="He", total_spin=0, total_charge=0, scf_basis="sto-3g"):
     # Mean-field obdm in IAO basis
     mfobdm = mf.make_rdm1(mo, mf.mo_occ)
     # Mean-field tbdm in IAO basis
-    mftbdm = singledet_tbdm(mf, mfobdm)
+    return singledet_tbdm(mf, mfobdm)
 
-    ### Test TBDM calculation.
-    # VMC params
-    nconf = 500
-    n_vmc_steps = 400
-    vmc_tstep = 0.3
-    vmc_warmup = 30
-    # TBDM params
-    tbdm_sweeps = 4
-    tbdm_tstep = 0.5
 
-    wf = Slater(mol, mf)  # Single-Slater (no jastrow) wf
+###########################################################
+def run_vmc_tbdm(mol, mf, iaos, nconf = 500, 
+    n_vmc_steps = 400,
+    vmc_tstep = 0.3,
+    vmc_warmup = 30,
+):
+    """ compute the TBDM using VMC  and orbitals given by iaos """
+
+    wf = Slater(mol, mf)  
     configs = initial_guess(mol, nconf)
-    energy = EnergyAccumulator(mol)
-    obdm_up = OBDMAccumulator(mol=mol, orb_coeff=iaos[0], nsweeps=tbdm_sweeps, spin=0)
-    obdm_down = OBDMAccumulator(mol=mol, orb_coeff=iaos[1], nsweeps=tbdm_sweeps, spin=1)
-    tbdm_upup = TBDMAccumulator(
-        mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin=(0, 0)
-    )
-    tbdm_updown = TBDMAccumulator(
-        mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin=(0, 1)
-    )
-    tbdm_downup = TBDMAccumulator(
-        mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin=(1, 0)
-    )
-    tbdm_downdown = TBDMAccumulator(
-        mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin=(1, 1)
-    )
-
-    print("VMC...")
     df, coords = vmc(
         wf,
         configs,
         nsteps=n_vmc_steps,
         tstep=vmc_tstep,
-        accumulators={
-            "energy": energy,
-            "obdm_up": obdm_up,
-            "obdm_down": obdm_down,
-            "tbdm_upup": tbdm_upup,
-            "tbdm_updown": tbdm_updown,
-            "tbdm_downup": tbdm_downup,
-            "tbdm_downdown": tbdm_downdown,
-        },
-        verbose=True,
+        accumulators=create_accumulators(mol, iaos),
     )
-
-    # Compares obdm from QMC and MF
-    obdm_est = {}
-    for k in ["obdm_up", "obdm_down"]:
-        avg_norm = np.mean(df[k + "norm"][vmc_warmup:], axis=0)
-        avg_obdm = np.mean(df[k + "value"][vmc_warmup:], axis=0)
-        obdm_est[k] = normalize_obdm(avg_obdm, avg_norm)
-    qmcobdm = np.array([obdm_est["obdm_up"], obdm_est["obdm_down"]])
-    print("\nComparing QMC and MF obdm:")
-    for s in [0, 1]:
-        # print('QMC obdm[%d]:\n'%s,qmcobdm[s])
-        # print('MF obdm[%d]:\n'%s,mfobdm[s])
-        print("diff[%d]:\n" % s, qmcobdm[s] - mfobdm[s])
-
     # Compares tbdm from QMC and MF
     avg_norm = {}
     avg_tbdm = {}
@@ -227,24 +182,22 @@ def test(atom="He", total_spin=0, total_charge=0, scf_basis="sto-3g"):
         k: normalize_tbdm(avg_tbdm[k].reshape(2, 2, 2, 2), avg_norm["a"], avg_norm["b"])
         for k in avg_tbdm
     }
-    qmctbdm = np.array(
+    return np.array(
         [
             [tbdm_est["upupvalue"], tbdm_est["updownvalue"]],
             [tbdm_est["downupvalue"], tbdm_est["downdownvalue"]],
         ]
     )
-    print("\nComparing QMC and MF tbdm:")
+
+def test_tbdm_slater(H2_ccecp_uhf):
+    mol, mf = H2_ccecp_uhf
+
+    iaos = make_separate_spin_iaos(
+        mol, mf, np.array([i for i in range(mol.natm)]), iao_basis="minao"
+    )
+    mftbdm = tbdm_from_mf(mol, mf, iaos)
+    qmctbdm = run_vmc_tbdm(mol, mf, iaos)
+
     for sa, sb in [[0, 0], [0, 1], [1, 0], [1, 1]]:
-        print("spins", sa, sb)
-        print("QMC tbdm[%d,%d]:\n" % (sa, sb), qmctbdm[sa, sb].round(3))
-        print("MF tbdm[%d,%d]:\n" % (sa, sb), mftbdm[sa, sb].round(3))
         diff = qmctbdm[sa, sb] - mftbdm[sa, sb]
-        print("diff[%d,%d]:\n" % (sa, sb), diff)
-        assert np.max(np.abs(diff)) < 0.05
-
-
-if __name__ == "__main__":
-    # Tests He2 molecule (Sz=0)
-    test(atom="He", total_spin=0, scf_basis="cc-pvdz")
-    # Tests He2- molecule (Sz=1)
-    test(atom="He", total_spin=1, total_charge=-1, scf_basis="cc-pvdz")
+        assert np.mean(np.abs(diff)) < 0.05

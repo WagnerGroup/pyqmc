@@ -13,6 +13,7 @@ Welcome to pyQMC's documentation!
    install
    tutorial
    snippets
+   common_problems
    specific_instructions
    developer
 

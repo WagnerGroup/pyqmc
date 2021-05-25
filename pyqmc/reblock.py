@@ -2,51 +2,109 @@ import pandas as pd
 import numpy as np
 
 
-def reblock(df, nblocks):
+def reblock(df, nblocks, weights=None):
     """
-    Reblock df into nblocks new blocks (nblocks is th length of the returned data)
+    Reblock df into nblocks new blocks (nblocks is the length of the returned data)
 
     :param df: data to reblock
     :type df: pandas DataFrame, Series, or numpy array
     :param nblocks: number of resulting blocks
     :type nblocks: int
+    :param weights: weights used to average data
+    :type weights: pandas Series or numpy array
     :return: reblocked data
     :rtype: same as input df
     """
 
     if isinstance(df, pd.Series):
-        return pd.Series(_reblock(df.values, nblocks))
+        return reblock_series(df, nblocks, weights)
     elif isinstance(df, pd.DataFrame):
-        rbdf = {col: _reblock(df[col].values, nblocks) for col in df.columns}
-        return pd.DataFrame(rbdf)
+        return reblock_dataframe(df, nblocks, weights)
     elif isinstance(df, np.ndarray):
-        return np.stack(_reblock(df, nblocks), axis=0)
+        return reblock_array(df, nblocks, weights)
     else:
-        print("WARNING: can't reblock data of type", type(df), "-- not reblocking.")
-        return df
+        raise TypeError("type {0} not recognized by reblock".format(type(df)))
 
 
-def _reblock(array, nblocks):
+def reblock_array(df, nblocks, weights=None):
+    """
+    Reblock df into nblocks new blocks
+
+    :param df: data to reblock
+    :type df: numpy array-like
+    :param nblocks: number of resulting blocks
+    :type nblocks: int
+    :param weights: weights used to average data
+    :type weights: array
+    :return: reblocked data, length nblocks
+    :rtype: ndarray
+    """
+    if weights is None:
+        weights = np.ones(len(df))
+    return np.stack(_reblock(df, nblocks, weights), axis=0)
+
+
+def reblock_series(df, nblocks, weights=None):
+    """
+    Reblock df into nblocks new blocks
+
+    :param df: data to reblock
+    :type df: pandas Series
+    :param nblocks: number of resulting blocks
+    :type nblocks: int
+    :param weights: weights used to average data
+    :type weights: pandas Series
+    :return: reblocked data, length nblocks
+    :rtype: pandas Series
+    """
+    if weights is None:
+        weights = np.ones(len(df))
+    return pd.Series(_reblock(df.values, nblocks, weights))
+
+
+def reblock_dataframe(df, nblocks, weights=None):
+    """
+    Reblock df into nblocks new blocks
+
+    :param df: data to reblock
+    :type df: pandas DataFrame
+    :param nblocks: number of resulting blocks
+    :type nblocks: int
+    :param weights: weights used to average data
+    :type weights: pandas Series (single column)
+    :return: reblocked data, length nblocks
+    :rtype: pandas DataFrame
+    """
+    if weights is None:
+        weights = np.ones(len(df))
+    rbdf = {col: _reblock(df[col].values, nblocks, weights) for col in df.columns}
+    return pd.DataFrame(rbdf)
+
+
+def _reblock(array, nblocks, weights):
     """
     Helper function to reblock(); this function actually does the reblocking.
     """
     vals = np.array_split(array, nblocks, axis=0)
-    return [v.mean(axis=0) for v in vals]
+    weights = np.array_split(weights, nblocks, axis=0)
+    return [(v * w).mean(axis=0) / w.mean(axis=0) for v, w in zip(vals, weights)]
 
 
-def reblock_summary(df, nblocks=(16, 32, 48, 64)):
+def reblock_summary(df, nblocks=(16, 32, 48, 64), weights=None):
     if hasattr(nblocks, "__iter__"):
         summary_data = [
-            _reblock_summary_single(df, nb) for nb in nblocks if nb < len(df)
+            _reblock_summary_single(df, nb, weights) for nb in nblocks if nb < len(df)
         ]
     else:
-        summary_data = _reblock_summary_single(df, nblocks)
+        summary_data = _reblock_summary_single(df, nblocks, weights)
     return pd.DataFrame(summary_data)
 
 
-def _reblock_summary_single(df, nblocks):
-    rbdf = reblock(df, nblocks)
-    serr = rbdf.std() / np.sqrt(len(rbdf) - 1)
+def _reblock_summary_single(df, nblocks, weights):
+    rbdf = reblock(df, nblocks, weights)
+    if hasattr(rbdf, "values") and not hasattr(rbdf, "columns"):
+        rbdf = rbdf.values
+    serr = rbdf.std(axis=0) / np.sqrt(len(rbdf) - 1)
     return {
         "mean": rbdf.mean(axis=0),
         "standard error": serr,
@@ -124,7 +182,7 @@ def test_reblocking():
     """
     Tests reblocking against known distribution.
     """
-    from scipy.stats import sem
+    import scipy.stats
 
     def corr_data(N, L):
         """
@@ -142,7 +200,7 @@ def test_reblocking():
     for c in cols:
         row = reblocked_data.loc[c]
         reblocks = reblocked_data["reblocks"].values[0]
-        std_err = sem(reblock_by2(test_data, reblocks, c))
+        std_err = scipy.stats.sem(reblock_by2(test_data, reblocks, c))
         std_err_err = std_err / np.sqrt(2 * (2 ** (n - reblocks) - 1))
 
         assert np.isclose(

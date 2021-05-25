@@ -12,20 +12,18 @@ def test_mask(wf, e, epos, mask=None):
     ratio_ref = wf.testvalue(e, epos)[mask]
     assert np.sum(np.abs(ratio - ratio_ref)) < 1e-10
     print("testcase for test_value() with mask passed")
-    # update internals
 
 
 def test_updateinternals(wf, configs):
     """
-    Parameters:
-    wf: a wave function object to be tested
-    configs: nconf x nelec x 3 position array
-
-    Returns:
-    tuple which
+    :parameter wf: a wave function object to be tested
+    :parameter configs: electron positions
+    :type configs: (nconf, nelec, 3) array
+    :returns: max abs errors
+    :rtype: dictionary
 
     """
-    from pyqmc import vmc
+    import pyqmc.mc as mc
 
     nconf, ne, ndim = configs.configs.shape
     delta = 1e-2
@@ -54,7 +52,7 @@ def test_updateinternals(wf, configs):
         val1 = recompute
 
     # Test mask and pgrad
-    _, configs = vmc(wf, configs, nblocks=1, nsteps_per_block=1, tstep=2)
+    _, configs = mc.vmc(wf, configs, nblocks=1, nsteps_per_block=1, tstep=2)
     pgradupdate = wf.pgradient()
     wf.recompute(configs)
     pgrad = wf.pgradient()
@@ -68,18 +66,22 @@ def test_updateinternals(wf, configs):
 
 
 def test_wf_gradient(wf, configs, delta=1e-5):
-    """
-    Parameters:
-        wf: a wavefunction object with functions wf.recompute(configs), wf.testvalue(e,configs) and wf.gradient(e,configs)
-        configs: nconf x nelec x 3 position array to set the wf object
-        delta: the finite difference step; 1e-5 to 1e-6 seem to be the best compromise between accuracy and machine precision
-    Tests wf.gradient(e,configs) against numerical derivatives of wf.testvalue(e,configs)
+    """ Tests wf.gradient(e,configs) against numerical derivatives of wf.testvalue(e,configs)
+
+    :parameter wf: a wavefunction object with functions wf.recompute(configs), wf.testvalue(e,configs) and wf.gradient(e,configs)
+    :parameter configs: positions to set the wf object
+    :type configs: (nconf, nelec, 3) array
+    :parameter float delta: the finite difference step; 1e-5 to 1e-6 seem to be the best compromise between accuracy and machine precision
+
     For gradient and testvalue:
         e is the electron index
         epos is nconf x 3 positions of electron e
+
     wf.testvalue(e,epos) should return a ratio: the wf value at the position where electron e is moved to epos divided by the current value
     wf.gradient(e,epos) should return grad ln Psi(epos), while keeping all the other electrons at current position. epos may be different from the current position of electron e
 
+    :returns: max abs errors
+    :rtype: dictionary
     """
     nconf, nelec = configs.configs.shape[0:2]
     iscomplex = 1j if wf.iscomplex else 1
@@ -135,18 +137,23 @@ def test_wf_pgradient(wf, configs, delta=1e-5):
 
 
 def test_wf_laplacian(wf, configs, delta=1e-5):
-    """
-    Parameters:
-        wf: a wavefunction object with functions wf.recompute(configs),
+    """ Tests wf.laplacian(e,epos) against numerical derivatives of wf.gradient(e,epos)
+
+    :parameter wf: a wavefunction object with functions wf.recompute(configs),
              wf.gradient(e,configs) and wf.laplacian(e,configs)
-        configs: nconf x nelec x 3 position array to set the wf object
-        delta: the finite difference step; 1e-5 to 1e-6 seem to be the best compromise between accuracy and machine precision
-    Tests wf.laplacian(e,epos) against numerical derivatives of wf.gradient(e,epos)
+    :parameter configs: positions to set the wf object
+    :type configs: (nconf, nelec, 3) array
+    :parameter float delta: the finite difference step; 1e-5 to 1e-6 seem to be the best compromise between accuracy and machine precision
+
     For gradient and laplacian:
         e is the electron index
         epos is nconf x 3 positions of electron e
+
     wf.gradient(e,epos) should return grad ln Psi(epos), while keeping all the other electrons at current position. epos may be different from the current position of electron e
     wf.laplacian(e,epos) should behave the same as gradient, except lap(Psi(epos))/Psi(epos)
+
+    :returns: max abs errors
+    :rtype: dictionary
     """
     nconf, nelec = configs.configs.shape[0:2]
     iscomplex = 1j if wf.iscomplex else 1
@@ -158,7 +165,7 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
     for e in range(nelec):
         lap[:, e] = wf.laplacian(e, configs.electron(e))
 
-        for d in range(0, 3):
+        for d in range(3):
             epos = configs.make_irreducible(
                 e, configs.configs[:, e, :] + delta * np.eye(3)[d]
             )
@@ -230,10 +237,10 @@ def test_wf_gradient_value(wf, configs):
         tt1 = time.perf_counter()
         tsep += ts1 - ts0
         ttog += tt1 - tt0
-        rel_grad = np.abs((andgrad - grad) / grad)
-        rel_val = np.abs((andval - val) / val)
-        rmax_grad = np.max(rel_grad)
-        rmax_val = np.max(rel_val)
+    rel_grad = np.abs((andgrad - grad) / grad)
+    rel_val = np.abs((andval - val) / val)
+    rmax_grad = np.max(rel_grad)
+    rmax_val = np.max(rel_val)
 
     print("separate", tsep)
     print("together", ttog)

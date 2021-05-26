@@ -73,8 +73,12 @@ def interpret_ci(mc, tol):
 
 def create_packed_objects(deters, ncore=0, tol=0, format='binary'):
     """
+    if format == "binary":
     deters is expected to be an iterable of tuples, each of which is 
     (weight, occupation string up, occupation_string down)
+    if format == "list"
+    (weight, occupation)
+    where occupation is a nested list [s][0, 1, 2, 3 ..], for example.
 
     ncore should be the number of core orbitals not included in the occupation strings.
     tol is the threshold at which to include the determinants
@@ -95,8 +99,8 @@ def create_packed_objects(deters, ncore=0, tol=0, format='binary'):
                 alpha_occ, __ = binary_to_occ(x[1], ncore)
                 beta_occ, __ = binary_to_occ(x[2], ncore)
             elif format=='list':
-                alpha_occ = x[1]
-                beta_occ = x[2]
+                alpha_occ = x[1][0]
+                beta_occ = x[1][1]
             else:
                 raise ValueError("create_packed_objects: Options for format are binary or list")
             if alpha_occ not in occup[0]:

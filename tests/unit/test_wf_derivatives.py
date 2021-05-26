@@ -109,8 +109,8 @@ def test_casci_s2(H2_ccecp_casci_s2, epsilon=1e-5):
 def test_manual_slater(H2_ccecp_rhf, epsilon=1e-5):
     mol, mf = H2_ccecp_rhf
 
-    determinants = [ (1.0, [0],[0]),
-                     (-0.2, [1],[1]) ] 
+    determinants = [ (1.0, [[0],[0]]),
+                     (-0.2, [[1],[1]]) ] 
     wf = Slater(mol,mf,determinants=determinants)
     configs = pyq.initial_guess(mol, 10)
     run_tests(wf, configs, epsilon)
@@ -134,22 +134,6 @@ def test_manual_pbcs_fail(H_pbc_sto3g_krks, epsilon=1e-5, nconf=10):
     except:
         pass
 
-def create_determinant(mol, mf, excitations):
-    """
-    excitations should be a list of tuples with 
-    (s,ka,a,ki,i),  
-    s is the spin (0 or 1), 
-    ka, a is the occupied orbital, 
-    and ki, i is the unoccupied orbital.
-    """
-    occupation = [
-        [list(np.nonzero(occ > 0.9)[0]) for occ in mf.mo_occ[s]]
-        for s in range(2)]
-    print(occupation)
-    for s,ka,a,ki,i in excitations:
-        occupation[s][ka].remove(a)
-        occupation[s][ki].append(i)
-    return occupation
     
 
 def test_manual_pbcs_correct(H_pbc_sto3g_kuks, epsilon=1e-5, nconf=10):
@@ -157,13 +141,14 @@ def test_manual_pbcs_correct(H_pbc_sto3g_kuks, epsilon=1e-5, nconf=10):
     This test makes sure that the number of k-points must match the number of k-points 
     in the mf object. 
     """
+    from pyqmc.determinant_tools import create_pbc_determinant
     mol, mf = H_pbc_sto3g_kuks
     supercell = np.identity(3,dtype=int)
     supercell[0,0]=2
     mol = pyq.get_supercell(mol, supercell)
 
-    determinants = [(1.0, create_determinant(mol,mf, [])),
-                     (-0.2, create_determinant(mol, mf, [ (0,0,0,0,1) ] ))
+    determinants = [(1.0, create_pbc_determinant(mol,mf, [])),
+                     (-0.2, create_pbc_determinant(mol, mf, [ (0,0,0,0,1) ] ))
     ]
     wf = Slater(mol, mf, determinants=determinants)
     configs = pyq.initial_guess(mol, 10)

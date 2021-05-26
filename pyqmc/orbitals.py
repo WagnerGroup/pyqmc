@@ -124,9 +124,6 @@ def get_k_indices(cell, mf, kpts, tol=1e-6):
     return np.nonzero(np.linalg.norm(kdiffs, axis=-1) < tol)[1]
 
 
-
-
-
 def pbc_single_determinant(mf, kinds):
     detcoeff = np.array([1.0])
     det_map = np.array([[0], [0]])
@@ -167,7 +164,7 @@ def select_orbitals_kpoints(determinants, mf, kinds):
         for det_s, offset_s in zip(det, orb_offsets):
             flattened=np.array([det_s[k] + offset_s[ki] for ki, k in enumerate(kinds)]).flatten()
             flattened_det.append(list(flattened))
-        determinants_flat.append( (wt, flattened_det[0], flattened_det[1]))
+        determinants_flat.append( (wt, flattened_det))
     return mo_coeff, determinants_flat
 
 class PBCOrbitalEvaluatorKpoints:

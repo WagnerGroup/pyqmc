@@ -143,10 +143,32 @@ def pbc_single_determinant(mf, kinds):
         ]
     return detcoeff, det_map, occup_k
 
-def pbc_occupation_max_orbitals(occup_k):
-    """ occup_k is the 
+def select_orbitals_kpoints(determinants, mf, kinds):
+    """ 
+    Based on the k-point indices in `kinds`, select the MO coefficients that correspond to those k-points, 
+    and the determinants. 
+    The determinant indices are flattened so that the indices refer to the concatenated MO coefficients. 
     """
-    pass
+    max_orb = [[[np.max(orb_k)+1 for orb_k in spin] for spin in det] for wt, det in determinants]
+    max_orb = np.amax(max_orb, axis=0)
+
+    if len(mf.mo_coeff[0][0].shape) == 2:
+        mf_mo_coeff = mf.mo_coeff
+    elif len(mf.mo_coeff[0][0].shape) == 1:
+        mf_mo_coeff = [mf.mo_coeff,mf.mo_coeff]
+    mo_coeff = [[ mf_mo_coeff[s][k][:,0:max_orb[s][k]] for ki, k in enumerate(kinds)] for s in range(2)]
+
+    # and finally, we remove the k-index from determinants
+    determinants_flat=[]
+    orb_offsets = np.cumsum(max_orb[:,kinds], axis=1)
+    orb_offsets= np.pad(orb_offsets[:,:-1],((0,0),(1,0)))
+    for wt, det in determinants: 
+        flattened_det = []
+        for det_s, offset_s in zip(det, orb_offsets):
+            flattened=np.array([det_s[k] + offset_s[ki] for ki, k in enumerate(kinds)]).flatten()
+            flattened_det.append(list(flattened))
+        determinants_flat.append( (wt, flattened_det[0], flattened_det[1]))
+    return mo_coeff, determinants_flat
 
 class PBCOrbitalEvaluatorKpoints:
     """
@@ -183,14 +205,6 @@ class PBCOrbitalEvaluatorKpoints:
         Selects occupied orbitals from a given twist
         If cell is a supercell, will automatically choose the folded k-points that correspond to that twist.
 
-        The remapping is as follows. 
-
-        Suppose that determinants are (in order of spin, k-point, orbital)
-        (1.0, [[0,1],[0,1]], [[0,1],[0,1]]),
-        (1.0, [[0,2],[0,1]], [[0,2],[0,1]]),
-
-        Then we need to compute orbitals [0,1,2] for k-point 1 and [0,1] for k-point 2. These will get mapped into orbitals [0,1,2,3,4]
-        and the occupations will be turned into [0,1,3,4],[0,1,3,4] and [0,2,3,4],[0,2,3,4].
         """
 
         cell = (
@@ -210,26 +224,7 @@ class PBCOrbitalEvaluatorKpoints:
         if determinants is None:
             determinants=[(1.0,pyqmc.determinant_tools.create_pbc_determinant(cell, mf, []))]
 
-        max_orb = [[[np.max(orb_k)+1 for orb_k in spin] for spin in det] for wt, det in determinants]
-        max_orb = np.amax(max_orb, axis=0)
-
-        if len(mf.mo_coeff[0][0].shape) == 2:
-            mf_mo_coeff = mf.mo_coeff
-        elif len(mf.mo_coeff[0][0].shape) == 1:
-            mf_mo_coeff = [mf.mo_coeff,mf.mo_coeff]
-        mo_coeff = [[ mf_mo_coeff[s][k][:,0:max_orb[s][k]] for ki, k in enumerate(kinds)] for s in range(2)]
-
-        # and finally, we remove the k-index from determinants
-        determinants_flat=[]
-        orb_offsets = np.cumsum(max_orb[:,kinds], axis=1)
-        orb_offsets= np.pad(orb_offsets[:,:-1],((0,0),(1,0)))
-        for wt, det in determinants: 
-            flattened_det = []
-            for det_s, offset_s in zip(det, orb_offsets):
-                flattened=np.array([det_s[k] + offset_s[ki] for ki, k in enumerate(kinds)]).flatten()
-                flattened_det.append(list(flattened))
-            determinants_flat.append( (wt, flattened_det[0], flattened_det[1]))
-
+        mo_coeff, determinants_flat = select_orbitals_kpoints(determinants, mf, kinds)
         detcoeff, occup, det_map = pyqmc.determinant_tools.create_packed_objects(determinants_flat, format='list')
 
         return (

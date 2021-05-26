@@ -127,7 +127,7 @@ class Slater:
 
         self.parameters = JoinParameters([self.myparameters, self.orbitals.parameters])
 
-        self.iscomplex = bool(sum(map(gpu.cp.iscomplexobj, self.parameters.values())))
+        self.iscomplex = self.orbitals.iscomplex or bool(sum(map(gpu.cp.iscomplexobj, self.parameters.values())))
         self.dtype = complex if self.iscomplex else float
         self.get_phase = get_complex_phase if self.iscomplex else gpu.cp.sign
 

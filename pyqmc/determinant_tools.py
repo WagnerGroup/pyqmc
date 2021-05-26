@@ -41,8 +41,6 @@ def determinants_from_mean_field(mf):
 def deters_from_hci(mc, tol):
     bigcis = np.abs(mc.ci) > tol
     nstrs = int(mc._strs.shape[1] / 2)
-    # old code for single strings.
-    # deters = [(c,bin(s[0]), bin(s[1])) for c, s in zip(mc.ci[bigcis],mc._strs[bigcis,:])]
     deters = []
     # In pyscf, the first n/2 strings represent the up determinant and the second
     # represent the down determinant.

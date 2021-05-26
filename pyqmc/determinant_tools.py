@@ -113,6 +113,29 @@ def create_packed_objects(deters, ncore=0, tol=0, format='binary'):
     return np.array(detwt), occup, np.array(map_dets)
 
 
+def create_pbc_determinant(mol, mf, excitations):
+    """
+    excitations should be a list of tuples with 
+    (s,ka,a,ki,i),  
+    s is the spin (0 or 1), 
+    ka, a is the occupied orbital, 
+    and ki, i is the unoccupied orbital.
+    """
+    if len(mf.mo_coeff[0][0].shape) == 2:
+        occupation = [
+            [list(np.nonzero(occ > 0.9)[0]) for occ in mf.mo_occ[s]]
+            for s in range(2)]
+    elif len(mf.mo_coeff[0][0].shape) == 1:
+            occupation = [ 
+            [list(np.nonzero(occ > 1.9-s)[0]) for occ in mf.mo_occ]
+            for s in range(2)]
+
+    for s,ka,a,ki,i in excitations:
+        occupation[s][ka].remove(a)
+        occupation[s][ki].append(i)
+    return occupation
+
+
 def compute_value(updets, dndets, det_coeffs):
     """
     Given the up and down determinant values, safely compute the total log wave function.

@@ -556,16 +556,26 @@ def test_func3d_pgradient(bf, delta=1e-5):
     rvec = gpu.cp.asarray(np.random.randn(150, 10, 3))
     r = np.linalg.norm(rvec, axis=-1)
     pgrad = bf.pgradient(rvec, r)
-    numeric = {k: gpu.cp.zeros(v.shape) for k, v in pgrad.items()}
-    maxerror = {k: np.zeros(v.shape) for k, v in pgrad.items()}
+    numeric = {
+        k: gpu.cp.zeros((r.size, np.size(v))) for k, v in bf.parameters.items()
+    }
+    error = {}
     for k in pgrad.keys():
-        bf.parameters[k] += delta
-        plusval = bf.value(rvec, r)
-        bf.parameters[k] -= 2 * delta
-        minuval = bf.value(rvec, r)
-        bf.parameters[k] += delta
-        numeric[k] = (plusval - minuval) / (2 * delta)
-        maxerror[k] = gpu.asnumpy(np.max(np.abs(pgrad[k] - numeric[k])))
-        if maxerror[k] > 1e-5:
-            print(k, "\n", pgrad[k] - numeric[k])
-    return maxerror
+        flt = np.reshape(bf.parameters[k], -1)
+        shape = np.shape(bf.parameters[k])
+        for i, c in enumerate(flt):
+            flt[i] += delta
+            bf.parameters[k] = flt.reshape(shape)
+            plusval = bf.value(rvec, r)
+            flt[i] -= 2 * delta
+            bf.parameters[k] = flt.reshape(shape)
+            minuval = bf.value(rvec, r)
+            flt[i] += delta
+            bf.parameters[k] = flt.reshape(shape)
+            numeric[k][:, i] = (plusval - minuval).ravel() / (2 * delta)
+        pgerr = np.abs(pgrad[k].reshape((-1, len(flt))) - numeric[k])
+        error[k] = gpu.asnumpy(np.amax(pgerr))
+    if len(error) == 0:
+        return (0, 0)
+    return error
+

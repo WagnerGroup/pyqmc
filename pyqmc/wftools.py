@@ -8,7 +8,7 @@ import h5py
 
 
 def generate_slater(
-    mol, mf, optimize_orbitals=False, twist=None, optimize_zeros=True, epsilon=1e-8
+    mol, mf, optimize_orbitals=False, optimize_zeros=True, epsilon=1e-8, **kwargs
 ):
     """Construct a Slater determinant
 
@@ -17,25 +17,8 @@ def generate_slater(
     :parameter boolean optimize_zeros: optimize coefficients that are zero in the mean-field object
     :returns: slater, to_opt
     """
-    wf = slater.Slater(mol, mf, twist=twist)
+    wf = slater.Slater(mol, mf, **kwargs)
     to_opt = {}
-    if optimize_orbitals:
-        for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
-            to_opt[k] = np.ones(wf.parameters[k].shape).astype(bool)
-            if not optimize_zeros:
-                to_opt[k][np.abs(gpu.asnumpy(wf.parameters[k])) < epsilon] = False
-
-    return wf, to_opt
-
-
-def generate_multislater(
-    mol, mf, mc, tol=None, optimize_orbitals=False, optimize_zeros=True, epsilon=1e-8
-):
-
-    wf = slater.Slater(mol, mf, mc, tol)
-    to_opt = ["det_coeff"]
-    to_opt = {"det_coeff": np.ones(wf.parameters["det_coeff"].shape).astype(bool)}
-    to_opt["det_coeff"][0] = False  # Determinant coefficient pivot
     if optimize_orbitals:
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             to_opt[k] = np.ones(wf.parameters[k].shape).astype(bool)
@@ -104,23 +87,13 @@ def generate_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
         jastrow.parameters["acoeff"][:, 0, :] = gpu.cp.asarray(coefs[:, None])
     jastrow.parameters["bcoeff"][0, [0, 1, 2]] = gpu.cp.array([-0.25, -0.50, -0.25])
 
-    to_opt = {}
-    to_opt["acoeff"] = np.ones(jastrow.parameters["acoeff"].shape).astype(bool)
+    to_opt = {"acoeff": np.ones(jastrow.parameters["acoeff"].shape).astype(bool)}
     if len(ion_cusp) > 0:
         to_opt["acoeff"][:, 0, :] = False  # Cusp conditions
     to_opt["bcoeff"] = np.ones(jastrow.parameters["bcoeff"].shape).astype(bool)
     to_opt["bcoeff"][0, [0, 1, 2]] = False  # Cusp conditions
     return jastrow, to_opt
 
-
-def generate_msj(mol, mf, mc, tol=None, freeze_orb=None, ion_cusp=False):
-    wf1, to_opt1 = generate_multislater(mol, mf, mc, tol, freeze_orb)
-    wf2, to_opt2 = generate_jastrow(mol, ion_cusp)
-    wf = multiplywf.MultiplyWF(wf1, wf2)
-    to_opt = {"wf1" + x: opt for x, opt in to_opt1.items()}
-    to_opt.update({"wf2" + x: opt for x, opt in to_opt2.items()})
-
-    return wf, to_opt
 
 
 def generate_sj(mol, mf, optimize_orbitals=False, twist=None, **jastrow_kws):
@@ -163,12 +136,7 @@ def generate_wf(
         jastrow = [jastrow]
         jastrow_kws = [jastrow_kws]
 
-    if mc is None:
-        wf1, to_opt1 = generate_slater(mol, mf, **slater_kws)
-    elif hasattr(mol, "a"):
-        raise NotImplementedError("No defaults for multislater with PBCs")
-    else:
-        wf1, to_opt1 = generate_multislater(mol, mf, mc, **slater_kws)
+    wf1, to_opt1 = generate_slater(mol, mf, mc=mc, **slater_kws)
 
     pack = [jast(mol, **kw) for jast, kw in zip(jastrow, jastrow_kws)]
     wfs = [p[0] for p in pack]

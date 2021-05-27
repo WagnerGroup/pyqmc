@@ -6,7 +6,8 @@ import pyqmc.func3d as func3d
                           [func3d.PadeFunction(0.2),
                            func3d.PolyPadeFunction(2.0, 1.5),
                            func3d.CutoffCuspFunction(2.0, 1.5),
-                           func3d.GaussianFunction(0.4) ])
+                           func3d.GaussianFunction(0.4),
+                           func3d.LPQHI.initialize_random(4, 1.5) ])
 def test_func3d(func, delta=1e-6, epsilon=1e-5):
     """
     Ensure that the 3-dimensional functions correctly compute their gradient and laplacian

@@ -496,6 +496,154 @@ class CutoffCuspFunction:
         return func
 
 
+class LPQHI:
+    r"""A locally piecewise-quintic Hermite interpolant as defined in Natoli and Ceperley, J. Comp. Phys. 117, 171-178, (1995).
+
+    :math:`h_{i\alpha}(r) = (\Delta)^\alpha \sum_{n=0}^5 S_{\alpha n} \left(\frac{r-r_i}{\Delta}\right)^n, \quad r_i < r \le r_{i+1}`
+    :math:`h_{i\alpha}(r) = (-\Delta)^\alpha \sum_{n=0}^5 S_{\alpha n} \left(\frac{r_i-r}{\Delta}\right)^n, \quad r_{i-1} < r \le r_{i}`
+
+    .. math: h_\alpha(r) = \sum_n t_n h_{n\alpha}(r)
+
+    parameter :math:`t_{i\alpha}` is an array of shape ``(n+1, 3)``, where the last row should be zeros for a smooth cutoff
+    parameter :math:`r_{\rm cut}` is the cutoff radius
+    """
+
+    def __init__(self, t, rcut):
+        self.parameters = {"t": gpu.cp.asarray(t), "rcut": gpu.cp.asarray(rcut)}
+        self.S_matrix = gpu.cp.array(
+            [
+                [1, 0, 0.0, -10.0, 15.0, -6.0],  #  0
+                [0, 1, 0.0, -6.0, 8.0, -3.0],  #  1
+                [0, 0, 0.5, -1.5, 1.5, -0.5],  #  2
+            ]
+        )
+        deriv = gpu.cp.diag([1, 2, 3, 4, 5], k=-1)
+        self.S_deriv1 = gpu.cp.dot(self.S_matrix, deriv)
+        self.S_deriv2 = gpu.cp.dot(self.S_deriv1, deriv)
+
+    @classmethod
+    def initialize_random(self, nknots, rcut=7.5):
+        t = np.random.random((nknots + 1, 3)) * 4 - 2
+        t[-1] = 0
+        return LPQHI(t, rcut)
+
+    def value(self, rvec, r):
+        mask = r < self.parameters["rcut"]
+        r_ = r[mask]
+        deltas = _lpqhi_get_deltas(self.parameters)
+
+        m, dr_n = _lpqhi_pack_r(r_, deltas[0, 1])
+        h_pm = gpu.cp.einsum("jik,lj,il->ikl", dr_n, self.S_matrix, deltas)
+        t_pm = _lpqhi_select_t_pm(self.parameters["t"], m)
+
+        f = gpu.cp.zeros(r.shape)
+        f[mask] = gpu.cp.einsum("ikl,ikl->k", t_pm, h_pm)
+        return f
+
+    def gradient(self, rvec, r):
+        mask = r < self.parameters["rcut"]
+        r_ = r[mask]
+        rvec_ = rvec[mask]
+        deltas = _lpqhi_get_deltas(self.parameters)
+
+        m, dr_n = _lpqhi_pack_r(r_, deltas[0, 1])
+        sign = gpu.cp.array([1, -1])
+        h_pm1 = gpu.cp.einsum("jik,lj,il,i->ikl", dr_n, self.S_deriv1, deltas / deltas[0, 1], sign)
+        t_pm = _lpqhi_select_t_pm(self.parameters["t"], m)
+
+        grad = gpu.cp.zeros(rvec.shape)
+        grad[mask] = gpu.cp.einsum(
+            "ikl,ikl,km->km", t_pm, h_pm1, rvec_ / r_[:, np.newaxis]
+        )
+        return grad
+
+    def gradient_value(self, rvec, r):
+        mask = r < self.parameters["rcut"]
+        r_ = r[mask]
+        rvec_ = rvec[mask]
+        deltas = _lpqhi_get_deltas(self.parameters)
+
+        m, dr_n = _lpqhi_pack_r(r_, deltas[0, 1])
+        sign = gpu.cp.array([1, -1])
+        h_pm = gpu.cp.einsum("jik,lj,il->ikl", dr_n, self.S_matrix, deltas)
+        h_pm1 = gpu.cp.einsum("jik,lj,il,i->ikl", dr_n, self.S_deriv1, deltas / deltas[0, 1], sign)
+        t_pm = _lpqhi_select_t_pm(self.parameters["t"], m)
+
+        val = gpu.cp.zeros(r.shape)
+        val[mask] = gpu.cp.einsum("ikl,ikl->k", t_pm, h_pm)
+        grad = gpu.cp.zeros(rvec.shape)
+        grad[mask] = gpu.cp.einsum(
+            "ikl,ikl,km->km", t_pm, h_pm1, rvec_ / r_[:, np.newaxis]
+        )
+        return grad, val
+
+    def laplacian(self, rvec, r):
+        return self.gradient_laplacian(rvec, r)[1]
+
+    def gradient_laplacian(self, rvec, r):
+        mask = r < self.parameters["rcut"]
+        r_ = r[mask]
+        rvec_ = rvec[mask]
+        deltas = _lpqhi_get_deltas(self.parameters)
+
+        m, dr_n = _lpqhi_pack_r(r_, deltas[0, 1])
+        sign = gpu.cp.array([1, -1])
+        h_pm1 = gpu.cp.einsum("jik,lj,il,i->ikl", dr_n, self.S_deriv1, deltas / deltas[0, 1], sign)
+        h_pm2 = gpu.cp.einsum("jik,lj,il->ikl", dr_n, self.S_deriv2, deltas / deltas[0, 1] ** 2)
+        t_pm = _lpqhi_select_t_pm(self.parameters["t"], m)
+
+        dfdr = gpu.cp.einsum("ikl,ikl->k", t_pm, h_pm1)[:, np.newaxis]
+        d2fdr2 = gpu.cp.einsum("ikl,ikl->k", t_pm, h_pm2)[:, np.newaxis]
+        drdx = rvec_ / r_[:, np.newaxis]
+        d2rdx2 = (1 - drdx ** 2) / r_[:, np.newaxis]
+
+        grad = gpu.cp.zeros(rvec.shape)
+        lap = gpu.cp.zeros(rvec.shape)
+        grad[mask] = dfdr * drdx
+        lap[mask] = d2fdr2 * drdx ** 2 + dfdr * d2rdx2
+        return grad, lap
+
+    def pgradient(self, rvec, r):
+        mask = r < self.parameters["rcut"]
+        r_ = r[mask]
+        rvec_ = rvec[mask]
+        deltas = _lpqhi_get_deltas(self.parameters)
+
+        m, dr_n = _lpqhi_pack_r(r_, deltas[0, 1])
+        sign = gpu.cp.array([1, -1])
+        h_pm = gpu.cp.einsum("jik,lj,il->ikl", dr_n, self.S_matrix, deltas)
+
+        pgrad_mask = np.zeros((*r_.shape, *self.parameters["t"].shape))
+        m = m.astype(int)
+        pgrad_mask[np.arange(len(m)), m] = h_pm[0]
+        pgrad_mask[np.arange(len(m)), m + 1] = h_pm[1]
+
+        pgrad = np.zeros((*r.shape, *self.parameters["t"].shape))
+        pgrad[mask] = pgrad_mask
+        return {"t": pgrad}
+
+
+def _lpqhi_select_t_pm(t, m):
+    m = m.astype(int)
+    t_pm = gpu.cp.zeros((2, len(m), 3))
+    t_pm[0] = t[m]
+    t_pm[1] = t[m + 1]
+    return t_pm
+
+
+def _lpqhi_get_deltas(parameters):
+    delta = parameters["rcut"] / (parameters["t"].shape[0] - 1)
+    deltas = gpu.cp.array([[1, delta, delta ** 2], [1, -delta, delta ** 2]])
+    return deltas
+
+
+def _lpqhi_pack_r(r_, delta):
+    m, dr = gpu.cp.divmod(r_ / delta, 1.0)
+    dr_pm = gpu.cp.stack([dr, 1 - dr], axis=0)
+    dr_n = gpu.cp.stack([dr_pm ** n for n in range(6)], axis=0)
+    return m, dr_n
+
+
 def test_func3d_gradient(bf, delta=1e-5):
     rvec = gpu.cp.asarray(np.random.randn(150, 5, 10, 3))  # Internal indices irrelevant
     r = np.linalg.norm(rvec, axis=-1)

@@ -146,7 +146,7 @@ def select_orbitals_kpoints(determinants, mf, kinds):
     and the determinants. 
     The determinant indices are flattened so that the indices refer to the concatenated MO coefficients. 
     """
-    max_orb = [[[np.max(orb_k)+1 for orb_k in spin] for spin in det] for wt, det in determinants]
+    max_orb = [[[np.max(orb_k)+1 if len(orb_k) >0 else 0 for orb_k in spin ] for spin in det] for wt, det in determinants]
     max_orb = np.amax(max_orb, axis=0)
 
     if len(mf.mo_coeff[0][0].shape) == 2:

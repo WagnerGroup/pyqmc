@@ -110,6 +110,29 @@ For CaF2, Madelung constant (per F) is -2.51939, (per Ca is -5.03879)so the ener
     assert np.abs(etot / 4 + caf2_answer) < 1e-4
 
 
+def compute_ewald_shifted(x, delta, L=4.0):
+    cell = gto.Cell(
+        atom="""H     {0}      {0}      {0} """.format(
+            x*L,
+        ),
+        basis="ccecpccpvdz",
+        ecp="ccecp",
+        spin=1,
+        unit="bohr",
+    )
+    cell.exp_to_discard = 0.2
+    cell.build(a=np.eye(3) * L)
+    configs = np.full((1, 1, 3), x * L) + delta
+    configs = PeriodicConfigs(configs, cell.lattice_vectors())
+    evaluator = pyqmc.ewald.Ewald(cell, ewald_gmax=25)
+    return evaluator.energy(configs)
+
+
+def test_ewald_shifted():
+    xvals = [0.1, 0.2]
+    d = [compute_ewald_shifted(x, np.array([0.1,0.2,0.1])) for x in xvals]
+    d = np.asarray(d)
+    assert np.linalg.norm(d[1] - d[0]) < 1e-14
 
 
 if __name__ == "__main__":

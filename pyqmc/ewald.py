@@ -309,7 +309,7 @@ class Ewald:
         sum_e_cos = gpu.cp.cos(e_GdotR).sum(axis=1)
         ee_recip = gpu.cp.dot(sum_e_sin ** 2 + sum_e_cos ** 2, self.gweight)
         ## Reciprocal space electron-ion part
-        coscos_sinsin = -self.ion_exp.real * sum_e_cos + self.ion_exp.imag * sum_e_sin
+        coscos_sinsin = -self.ion_exp.real * sum_e_cos - self.ion_exp.imag * sum_e_sin
         ei_recip = 2 * gpu.cp.dot(coscos_sinsin, self.gweight)
         return ee_recip, ei_recip
 

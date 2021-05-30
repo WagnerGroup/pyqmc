@@ -119,7 +119,6 @@ class Ewald:
         # Determine alpha
         smallestheight = np.amin(1 / np.linalg.norm(recvec.T, axis=1))
         self.alpha = 5.0 / smallestheight
-        print("Setting Ewald alpha to ", self.alpha)
 
         # Determine G points to include in reciprocal Ewald sum
         gptsXpos = gpu.cp.meshgrid(

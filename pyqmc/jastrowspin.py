@@ -51,7 +51,7 @@ class JastrowSpin:
         self._avalues = gpu.cp.zeros((nconf, self._mol.natm, aexpand, 2))
         self._a_partial = gpu.cp.zeros((nelec, nconf, self._mol.natm, aexpand))
         self._b_partial = gpu.cp.zeros((nelec, nconf, nexpand, 2))
-        notmask = [True] * nconf
+        notmask = np.ones(nconf, dtype=bool)
         for e in range(nelec):
             epos = configs.electron(e)
             self._a_partial[e] = self._a_update(e, epos, notmask)
@@ -165,7 +165,6 @@ class JastrowSpin:
               epos: configs object for electron e
               mask: mask over configs axis, only return values for configs where mask==True. b_partial_e might have a smaller configs axis than epos, _configscurrent, and _b_partial because of the mask.
         """
-        # print(type(epos), epos.configs.shape)
         nup = self._mol.nelec[0]
         d = gpu.cp.asarray(
             epos.dist.dist_i(self._configscurrent.configs[mask], epos.configs[mask])
@@ -175,7 +174,6 @@ class JastrowSpin:
 
         for l, b in enumerate(self.b_basis):
             bval = b.value(d, r)
-            # print("bval", bval.shape, d.shape, r.shape)
             b_partial_e[..., l, 0] = bval[..., :nup].sum(axis=-1)
             b_partial_e[..., l, 1] = bval[..., nup:].sum(axis=-1)
             # b_partial_e[..., l, spin] -= bval[..., e].T

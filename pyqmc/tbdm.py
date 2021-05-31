@@ -166,8 +166,6 @@ class TBDMAccumulator:
             "value": np.zeros((nconf, self._ijkl.shape[1]), dtype=self.dtype),
             "norm_a": np.zeros((nconf, orb_configs[0].shape[-1])),
             "norm_b": np.zeros((nconf, orb_configs[1].shape[-1])),
-            "acceptance_a": np.mean(aux["acceptance"][0], axis=0),
-            "acceptance_b": np.mean(aux["acceptance"][0], axis=0),
         }
         orb_configs = gpu.cp.asarray([orb_configs[s][:, :, self._ijkl[2 * s]] for s in [0, 1]])
 
@@ -227,21 +225,18 @@ class TBDMAccumulator:
 
     def keys(self):
         return set(
-            ["value", "norm_a", "norm_b", "acceptance_a", "acceptance_b", "ijkl"]
+            ["value", "norm_a", "norm_b"]
         )
 
     def shapes(self):
-        d = {"value": (self._ijkl.shape[1],), "ijkl": self._ijkl.T.shape}
+        d = {"value": (self._ijkl.shape[1],), }
         nmo = self.orbitals.nmo()
         for e, s in zip(["a", "b"], self._spin_sector):
             d["norm_%s" % e] = (nmo[s],)
-            d["acceptance_%s" % e] = ()
         return d
 
     def avg(self, configs, wf):
-        d = {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
-        d["ijkl"] = self._ijkl.T
-        return d
+        return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
 
 
 def normalize_tbdm(tbdm, norm_a, norm_b):

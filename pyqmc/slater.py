@@ -100,7 +100,15 @@ class Slater:
 
     """
 
-    def __init__(self, mol, mf, mc=None, tol=None, twist=None):
+    def __init__(self, mol, mf, mc=None, tol=None, twist=None, determinants=None):
+        """
+        determinants should be a list of tuples, for example 
+        [ (1.0, [0,1],[0,1]),
+          (-0.2, [0,2],[0,2]) ] 
+        would be a two-determinant wave function with a doubles excitation in the second one. 
+
+        determinants overrides any information in mc, if passed. 
+        """
         self.tol = -1 if tol is None else tol
         self._mol = mol
         if hasattr(mc, "nelecas"):
@@ -115,10 +123,11 @@ class Slater:
             self._det_occup,
             self._det_map,
             self.orbitals,
-        ) = pyqmc.orbitals.choose_evaluator_from_pyscf(mol, mf, mc, twist=twist)
+        ) = pyqmc.orbitals.choose_evaluator_from_pyscf(mol, mf, mc, twist=twist, determinants=determinants)           
+
         self.parameters = JoinParameters([self.myparameters, self.orbitals.parameters])
 
-        self.iscomplex = bool(sum(map(gpu.cp.iscomplexobj, self.parameters.values())))
+        self.iscomplex = self.orbitals.iscomplex or bool(sum(map(gpu.cp.iscomplexobj, self.parameters.values())))
         self.dtype = complex if self.iscomplex else float
         self.get_phase = get_complex_phase if self.iscomplex else gpu.cp.sign
 

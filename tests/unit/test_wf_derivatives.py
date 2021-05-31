@@ -103,3 +103,53 @@ def test_casci_s2(H2_ccecp_casci_s2, epsilon=1e-5):
     configs = pyq.initial_guess(mol, 10)
     wf = Slater(mol, mf, cisolver, tol=0.0)
     run_tests(wf, configs, epsilon)
+
+
+
+def test_manual_slater(H2_ccecp_rhf, epsilon=1e-5):
+    mol, mf = H2_ccecp_rhf
+
+    determinants = [ (1.0, [[0],[0]]),
+                     (-0.2, [[1],[1]]) ] 
+    wf = Slater(mol,mf,determinants=determinants)
+    configs = pyq.initial_guess(mol, 10)
+    run_tests(wf, configs, epsilon)
+
+
+def test_manual_pbcs_fail(H_pbc_sto3g_krks, epsilon=1e-5, nconf=10):
+    """
+    This test makes sure that the number of k-points must match the number of k-points 
+    in the mf object. 
+    """
+    mol, mf = H_pbc_sto3g_krks
+    supercell = np.identity(3,dtype=int)
+    supercell[0,0]=2
+    mol = pyq.get_supercell(mol, supercell)
+    try: 
+        determinants =  [ (1.0,    [[0,1],[0,1]],    [[0,1],[0,1]]  ), # first determinant
+                        (-0.2,   [[0,2],[0,1]],     [[0,2],[0,1]] )  # second determinant
+                        ] 
+        wf = Slater(mol, mf, determinants=determinants)
+        raise Exception("Should have failed here")
+    except:
+        pass
+
+    
+
+def test_manual_pbcs_correct(H_pbc_sto3g_kuks, epsilon=1e-5, nconf=10):
+    """
+    This test makes sure that the number of k-points must match the number of k-points 
+    in the mf object. 
+    """
+    from pyqmc.determinant_tools import create_pbc_determinant
+    mol, mf = H_pbc_sto3g_kuks
+    supercell = np.identity(3,dtype=int)
+    supercell[0,0]=2
+    mol = pyq.get_supercell(mol, supercell)
+
+    determinants = [(1.0, create_pbc_determinant(mol,mf, [])),
+                     (-0.2, create_pbc_determinant(mol, mf, [ (0,0,0,0,1) ] ))
+    ]
+    wf = Slater(mol, mf, determinants=determinants)
+    configs = pyq.initial_guess(mol, 10)
+    run_tests(wf, configs, epsilon)

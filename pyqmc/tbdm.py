@@ -5,7 +5,7 @@ import pyqmc.obdm as obdm
 import pyqmc.gpu as gpu
 import pyqmc.orbitals
 import pyqmc.supercell as supercell
-
+import warnings
 
 class TBDMAccumulator:
     """Returns one spin sector of the tbdm[s1,s2] as an array (norb_s1,norb_s1,norb_s2,norb_s2) with indices (using pySCF's
@@ -50,9 +50,6 @@ class TBDMAccumulator:
         ijkl=None,
         kpts=None,
     ):
-        assert (
-            len(orb_coeff.shape) == 3
-        ), "orb_coeff should be a list of orbital coefficients with size (2,num_mobasis,num_orb)."
 
         self._mol = mol
         self._tstep = tstep
@@ -61,11 +58,14 @@ class TBDMAccumulator:
 
         if kpts is None:
             self.orbitals = pyqmc.orbitals.MoleculeOrbitalEvaluator(mol, orb_coeff)
+            if hasattr(mol,'a'):
+                warnings.warn("Using molecular orbital evaluator for a periodic system. This is likely wrong unless you know what you're doing. Make sure to pass kpts into TBDM if you want to use the periodic orbital evaluator.")
         else:
             if not hasattr(mol, "original_cell"):
                 mol = supercell.get_supercell(mol, np.eye(3))
             self.orbitals = pyqmc.orbitals.PBCOrbitalEvaluatorKpoints(mol, orb_coeff, kpts)
 
+        self.dtype = complex if self.orbitals.iscomplex else float
         self._spin_sector = spin
         self._electrons = [
             np.arange(spin[s] * mol.nelec[0], mol.nelec[0] + spin[s] * mol.nelec[1])
@@ -163,7 +163,7 @@ class TBDMAccumulator:
             for spin in [0, 1]
         ]
         results = {
-            "value": np.zeros((nconf, self._ijkl.shape[1])),
+            "value": np.zeros((nconf, self._ijkl.shape[1]), dtype=self.dtype),
             "norm_a": np.zeros((nconf, orb_configs[0].shape[-1])),
             "norm_b": np.zeros((nconf, orb_configs[1].shape[-1])),
             "acceptance_a": np.mean(aux["acceptance"][0], axis=0),

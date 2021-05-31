@@ -49,9 +49,9 @@ def OPTIMIZE(
 def generate_accumulators(mol, mf, energy=True, rdm1=False, extra_accumulators=None):
     acc = {} if extra_accumulators is None else extra_accumulators
 
-    if hasattr(mf.mo_coeff, "shape") and len(mf.mo_coeff.shape) == 2:
+    if hasattr(mf, "kpts") and len(mf.mo_coeff[0][0].shape) < 2:
         mo_coeff = [mf.mo_coeff, mf.mo_coeff]
-    elif hasattr(mf, "kpts") and len(mf.mo_coeff[0][0].shape) < 2:
+    elif hasattr(mf.mo_coeff, "shape") and len(mf.mo_coeff.shape) == 2:
         mo_coeff = [mf.mo_coeff, mf.mo_coeff]
     else:
         mo_coeff = mf.mo_coeff
@@ -61,10 +61,6 @@ def generate_accumulators(mol, mf, energy=True, rdm1=False, extra_accumulators=N
             raise Exception("Found energy in extra_accumulators and energy is True")
         acc["energy"] = pyqmc.accumulators.EnergyAccumulator(mol)
     if rdm1:
-        if len(mf.mo_coeff.shape) == 2:
-            mo_coeff = [mf.mo_coeff, mf.mo_coeff]
-        else:
-            mo_coeff = mf.mo_coeff
         if "rdm1_up" in acc.keys() or "rdm1_down" in acc.keys():
             raise Exception(
                 "Found rdm1_up or rdm1_down in extra_accumulators and rdm1 is True"

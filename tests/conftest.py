@@ -128,6 +128,18 @@ def H_pbc_sto3g_krks():
 
 
 @pytest.fixture(scope='module')
+def H_pbc_sto3g_kuks():
+    mol = pyscf.pbc.gto.M(
+        atom="H 0. 0. 0.; H 1. 1. 1.",
+        basis="sto-3g",
+        unit="bohr",
+        a=(np.ones((3, 3)) - np.eye(3)) * 4,
+    )
+    mf = pyscf.pbc.scf.KUKS(mol, mol.make_kpts((2, 2, 2))).run()
+    return mol, mf
+
+
+@pytest.fixture(scope='module')
 def li_cubic_ccecp():
     nk = (2,2,2)
     L = 6.63 * 2

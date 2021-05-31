@@ -28,7 +28,7 @@ def get_complex_phase(x):
     return x / np.abs(x)
 
 
-def choose_evaluator_from_pyscf(mol, mf, mc=None, twist=None):
+def choose_evaluator_from_pyscf(mol, mf, mc=None, twist=None, determinants = None):
     """
     Returns:
     an orbital evaluator chosen based on the inputs.
@@ -39,10 +39,10 @@ def choose_evaluator_from_pyscf(mol, mf, mc=None, twist=None):
             raise NotImplementedError(
                 "Do not support multiple determinants for k-points orbital evaluator"
             )
-        return PBCOrbitalEvaluatorKpoints.from_mean_field(mol, mf, twist)
+        return PBCOrbitalEvaluatorKpoints.from_mean_field(mol, mf, twist, determinants=determinants)
     if mc is None:
-        return MoleculeOrbitalEvaluator.from_pyscf(mol, mf)
-    return MoleculeOrbitalEvaluator.from_pyscf(mol, mf, mc)
+        return MoleculeOrbitalEvaluator.from_pyscf(mol, mf, determinants=determinants)
+    return MoleculeOrbitalEvaluator.from_pyscf(mol, mf, mc, determinants=determinants)
 
 
 class MoleculeOrbitalEvaluator:
@@ -57,7 +57,7 @@ class MoleculeOrbitalEvaluator:
         self._mol = mol
 
     @classmethod
-    def from_pyscf(self, mol, mf, mc=None, tol=-1):
+    def from_pyscf(self, mol, mf, mc=None, tol=-1, determinants = None):
         """
         mol: A Mole object
         mf: An object with mo_coeff and mo_occ.
@@ -67,6 +67,8 @@ class MoleculeOrbitalEvaluator:
         obj = mc if hasattr(mc, "mo_coeff") else mf
         if mc is not None:
             detcoeff, occup, det_map = pyqmc.determinant_tools.interpret_ci(mc, tol)
+        elif determinants is not None:
+            detcoeff, occup, det_map = pyqmc.determinant_tools.create_packed_objects(determinants, tol, format='list')
         else:
             detcoeff = gpu.cp.array([1.0])
             det_map = gpu.cp.array([[0], [0]])
@@ -122,6 +124,49 @@ def get_k_indices(cell, mf, kpts, tol=1e-6):
     return np.nonzero(np.linalg.norm(kdiffs, axis=-1) < tol)[1]
 
 
+def pbc_single_determinant(mf, kinds):
+    detcoeff = np.array([1.0])
+    det_map = np.array([[0], [0]])
+
+    if len(mf.mo_coeff[0][0].shape) == 2:
+        occup_k = [
+            [[list(np.argwhere(mf.mo_occ[spin][k] > 0.5)[:, 0])] for k in kinds]
+            for spin in [0, 1]
+        ]
+    elif len(mf.mo_coeff[0][0].shape) == 1:
+        occup_k = [
+            [[list(np.argwhere(mf.mo_occ[k] > 1.5 - spin)[:, 0])] for k in kinds]
+            for spin in [0, 1]
+        ]
+    return detcoeff, det_map, occup_k
+
+def select_orbitals_kpoints(determinants, mf, kinds):
+    """ 
+    Based on the k-point indices in `kinds`, select the MO coefficients that correspond to those k-points, 
+    and the determinants. 
+    The determinant indices are flattened so that the indices refer to the concatenated MO coefficients. 
+    """
+    max_orb = [[[np.max(orb_k)+1 if len(orb_k) >0 else 0 for orb_k in spin ] for spin in det] for wt, det in determinants]
+    max_orb = np.amax(max_orb, axis=0)
+
+    if len(mf.mo_coeff[0][0].shape) == 2:
+        mf_mo_coeff = mf.mo_coeff
+    elif len(mf.mo_coeff[0][0].shape) == 1:
+        mf_mo_coeff = [mf.mo_coeff,mf.mo_coeff]
+    mo_coeff = [[ mf_mo_coeff[s][k][:,0:max_orb[s][k]] for ki, k in enumerate(kinds)] for s in range(2)]
+
+    # and finally, we remove the k-index from determinants
+    determinants_flat=[]
+    orb_offsets = np.cumsum(max_orb[:,kinds], axis=1)
+    orb_offsets= np.pad(orb_offsets[:,:-1],((0,0),(1,0)))
+    for wt, det in determinants: 
+        flattened_det = []
+        for det_s, offset_s in zip(det, orb_offsets):
+            flattened=np.array([det_s[k] + offset_s[ki] for ki, k in enumerate(kinds)]).flatten()
+            flattened_det.append(list(flattened))
+        determinants_flat.append( (wt, flattened_det))
+    return mo_coeff, determinants_flat
+
 class PBCOrbitalEvaluatorKpoints:
     """
     Evaluate orbitals from a PBC object.
@@ -151,11 +196,12 @@ class PBCOrbitalEvaluatorKpoints:
         self.rcut = pbc_eval_gto._estimate_rcut(self._cell)
 
     @classmethod
-    def from_mean_field(self, cell, mf, twist=None):
+    def from_mean_field(self, cell, mf, twist=None, determinants = None):
         """
         mf is expected to be a KUHF, KRHF, or equivalent DFT objects.
         Selects occupied orbitals from a given twist
         If cell is a supercell, will automatically choose the folded k-points that correspond to that twist.
+
         """
 
         cell = (
@@ -163,58 +209,21 @@ class PBCOrbitalEvaluatorKpoints:
             if hasattr(cell, "original_cell")
             else supercell.get_supercell(cell, np.asarray([[1, 0, 0], [0, 1, 0], [0, 0, 1]]))
         )
-
         if twist is None:
             twist = np.zeros(3)
         else:
             twist = np.dot(np.linalg.inv(cell.a), np.mod(twist, 1.0)) * 2 * np.pi
         kinds = list(set(get_k_indices(cell, mf, supercell.get_supercell_kpts(cell) + twist)))
         if len(kinds) != cell.scale:
-            print("len kinds", len(kinds))
-            print("cell.scale", cell.scale)
-            raise ValueError(
-                "Did not find the right number of k-points for this supercell"
-            )
-
-        detcoeff = np.array([1.0])
-        det_map = np.array([[0], [0]])
-
-        if len(mf.mo_coeff[0][0].shape) == 2:
-            occup_k = [
-                [[list(np.argwhere(mf.mo_occ[spin][k] > 0.5)[:, 0])] for k in kinds]
-                for spin in [0, 1]
-            ]
-        elif len(mf.mo_coeff[0][0].shape) == 1:
-            occup_k = [
-                [[list(np.argwhere(mf.mo_occ[k] > 1.5 - spin)[:, 0])] for k in kinds]
-                for spin in [0, 1]
-            ]
-
-        occup = [[], []]
-        for spin in [0, 1]:
-            count = 0
-            for occ_k in occup_k[spin]:
-                occup[spin] += [o + count for o in occ_k[0]]
-                count += len(occ_k[0])
-
+            raise ValueError(f"Found {len(kinds)} k-points but should have found {cell.scale}.")
         kpts = mf.kpts[kinds]
-        if len(mf.mo_coeff[0][0].shape) == 2:
-            mo_coeff = [
-                [
-                    mf.mo_coeff[spin][k][:, occup_k[spin][kinds.index(k)][0]]
-                    for k in kinds
-                ]
-                for spin in [0, 1]
-            ]
-        elif len(mf.mo_coeff[0][0].shape) == 1:
-            mo_coeff = [
-                [mf.mo_coeff[k][:, occup_k[spin][kinds.index(k)][0]] for k in kinds]
-                for spin in [0, 1]
-            ]
-        else:
-            raise ValueError("Did not expect an scf object of type", type(mf))
-        for s in [0, 1]:
-            occup[s] = [occup[s]]
+
+        if determinants is None:
+            determinants=[(1.0,pyqmc.determinant_tools.create_pbc_determinant(cell, mf, []))]
+
+        mo_coeff, determinants_flat = select_orbitals_kpoints(determinants, mf, kinds)
+        detcoeff, occup, det_map = pyqmc.determinant_tools.create_packed_objects(determinants_flat, format='list')
+
         return (
             detcoeff,
             occup,
@@ -276,7 +285,7 @@ class PBCOrbitalEvaluatorKpoints:
             self.param_split[spin],
             axis=-1,
         )
-        return gpu.cp.concatenate(gpu.cp.asarray([ak.dot(mok) for ak, mok in zip(ao, p[0:-1])]), axis=-1)
+        return gpu.cp.concatenate([ak.dot(mok) for ak, mok in zip(ao, p[0:-1])], axis=-1)
 
     def pgradient(self, ao, spin):
         """

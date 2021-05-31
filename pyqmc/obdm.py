@@ -71,18 +71,21 @@ class OBDMAccumulator:
         else:
             self._electrons = np.arange(0, np.sum(mol.nelec))
 
-        self.iscomplex = bool(sum(map(np.iscomplexobj, orb_coeff)))
 
         if kpts is None:
             self.orbitals = pyqmc.orbitals.MoleculeOrbitalEvaluator(
                 mol, [orb_coeff, orb_coeff]
             )
+            if hasattr(mol,"a"):
+                raise ValueError("kpts is required if the system is periodic")
         else:
             if not hasattr(mol, "original_cell"):
                 mol = supercell.get_supercell(mol, np.eye(3))
             self.orbitals = pyqmc.orbitals.PBCOrbitalEvaluatorKpoints(
                 mol, [orb_coeff, orb_coeff], kpts
             )
+
+        self.iscomplex = self.orbitals.iscomplex
 
         self._tstep = tstep
         self.nelec = len(self._electrons)

@@ -356,7 +356,6 @@ def rundmc(
         with h5py.File(hdf_file, "r") as hdf:
             stepoffset = hdf["step"][-1] + 1
             configs.load_hdf(hdf)
-            print(configs.configs)
             weights = np.array(hdf["weights"])
             if 'e_trial' not in hdf.keys():
                 raise ValueError("Did not find e_trial in the restart file. This may mean that you are trying to restart from a different version of DMC")

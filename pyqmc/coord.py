@@ -95,7 +95,9 @@ class OpenConfigs:
 
     def load_hdf(self, hdf):
         """Note that the number of configurations will change to reflect the number in the hdf file."""
-        self.configs = np.array(hdf["configs"])
+        # The ... seems to be necessary to avoid changing the dtype and screwing up 
+        # pyscf's calls. 
+        self.configs[...] = np.array(hdf["configs"])
 
 
 class PeriodicElectron:
@@ -221,9 +223,11 @@ class PeriodicConfigs:
     def to_hdf(self, hdf):
         hdf["configs"].resize(self.configs.shape)
         hdf["configs"].resize(self.wrap.shape)
-        hdf["configs"][:, :, :] = self.configs
-        hdf["wrap"][:, :, :] = self.wrap
+        hdf["configs"][...] = self.configs
+        hdf["wrap"][...] = self.wrap
 
     def load_hdf(self, hdf):
-        self.configs = np.array(hdf["configs"])
-        self.wrap = np.array(hdf["wrap"])
+        # The ... seems to be necessary to avoid changing the dtype and screwing up 
+        # pyscf's calls. 
+        self.configs[...] = hdf["configs"][()]
+        self.wrap[...] = hdf["wrap"][()]

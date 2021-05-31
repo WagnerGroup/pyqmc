@@ -53,7 +53,7 @@ class OBDMAccumulator:
         nsweeps=5,
         tstep=0.50,
         warmup=100,
-        naux=500,
+        naux=None,
         spin=None,
         electrons=None,
         kpts=None,
@@ -91,16 +91,22 @@ class OBDMAccumulator:
         self.nelec = len(self._electrons)
         self._nsweeps = nsweeps
         self._nstep = nsweeps * self.nelec
+        self._warmup = warmup
+        self._naux = naux
+        self._warmed_up = False
+        self._mol = mol
         self.norb = self.orbitals.parameters["mo_coeff_alpha"].shape[-1]
 
-        self._extra_config = mc.initial_guess(mol, int(naux / self.nelec) + 1)
-        self._extra_config.reshape((-1, 1, 3))
 
-        accept, extra_configs, _ = sample_onebody(
+    def warm_up(self, naux):
+        self._extra_config = mc.initial_guess(self._mol, int(naux / self.nelec) + 1)
+        self._extra_config.reshape((-1, 1, 3))
+        self._extra_config.resample(range(naux))
+        _, extra_configs, _ = sample_onebody(
             self._extra_config,
             self.orbitals,
             spin=0,
-            nsamples=warmup,
+            nsamples=self._warmup,
             tstep=self._tstep,
         )
         self._extra_config = extra_configs[-1]
@@ -109,11 +115,15 @@ class OBDMAccumulator:
         """"""
 
         nconf = configs.configs.shape[0]
+        if not self._warmed_up:
+            naux = nconf if self._naux is None else self._naux
+            self.warm_up(naux)
+            self._warmed_up = True
+
         dtype = complex if self.iscomplex else float
         results = {
             "value": np.zeros((nconf, self.norb, self.norb), dtype=dtype),
             "norm": np.zeros((nconf, self.norb)),
-            "acceptance": np.zeros(nconf),
         }
         naux = self._extra_config.configs.shape[0]
 
@@ -132,8 +142,6 @@ class OBDMAccumulator:
         borb_aux = cp.asarray(
             [orb[assign, ...] for orb, assign in zip(borb_aux, auxassignments)]
         )
-
-        results["acceptance"] += np.sum(accept) / naux
 
         borb_configs = self.evaluate_orbitals(configs.electron(self._electrons))
         borb_configs = borb_configs.reshape(nconf, self.nelec, -1)
@@ -160,8 +168,6 @@ class OBDMAccumulator:
 
         results["value"] /= self._nstep
         results["norm"] = results["norm"] / self._nstep
-        results["acceptance"] /= self._nstep
-
         return results
 
     def avg(self, configs, wf):
@@ -172,11 +178,11 @@ class OBDMAccumulator:
         return self.orbitals.mos(ao, spin=0)
 
     def keys(self):
-        return set(["value", "norm", "acceptance"])
+        return set(["value", "norm"],)
 
     def shapes(self):
         norb = self.norb
-        return {"value": (norb, norb), "norm": (norb,), "acceptance": ()}
+        return {"value": (norb, norb), "norm": (norb,),}
 
 
 def sample_onebody(configs, orbitals, spin, nsamples=1, tstep=0.5):

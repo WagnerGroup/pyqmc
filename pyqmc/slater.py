@@ -136,7 +136,6 @@ class Slater:
         (phase,logdet). If the wf is real, phase will be +/- 1."""
 
         nconf, nelec, ndim = configs.configs.shape
-
         aos = self.orbitals.aos("GTOval_sph", configs)
         self._aovals = aos.reshape(-1, nconf, nelec, aos.shape[-1])
         self._dets = []
@@ -221,7 +220,6 @@ class Slater:
             self.parameters["det_coeff"],
             det_array,
         )
-        # curr_val = self.value()
 
         if len(numer.shape) == 2:
             denom = denom[:, gpu.cp.newaxis]

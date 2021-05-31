@@ -150,8 +150,6 @@ def dmc_propagate(
                 configs.move(e, newepos, accept)
                 wf.updateinternals(e, newepos, mask=accept)
                 tmove_acceptance += accept/nelec
-            
-
 
         for e in range(nelec):  # drift-diffusion
             newepos, accept, r2 = propose_drift_diffusion(wf, configs, tstep, e)
@@ -371,7 +369,7 @@ def rundmc(
         df, configs = mc.vmc(
             wf,
             configs,
-            accumulators=accumulators,
+            accumulators={ekey[0]:accumulators[ekey[0]]},
             client=client,
             npartitions=npartitions,
             verbose=verbose,
@@ -458,8 +456,5 @@ def estimate_energy(hdf_file, df, ekey):
         en = np.asarray([d[ekey[0]+ekey[1]] for d in df])
         wt = np.asarray([d['weight'] for d in df])
     warmup = int(len(en)/4)
-    return np.average(en[warmup:], weights=wt[warmup:])
+    return np.average(en[warmup:], weights=wt[warmup:]).real
 
-if __name__=="__main__":
-    import run_dmc_shell
-    run_dmc_shell.run_dmc_shell(rundmc, "cyrus_secIIB_with_p",verbose=True)

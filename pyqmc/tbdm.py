@@ -46,7 +46,7 @@ class TBDMAccumulator:
         nsweeps=4,
         tstep=0.50,
         warmup=200,
-        naux=500,
+        naux=None,
         ijkl=None,
         kpts=None,
     ):
@@ -55,6 +55,8 @@ class TBDMAccumulator:
         self._tstep = tstep
         self._nsweeps = nsweeps
         self._spin = spin
+        self._naux = naux
+        self._warmup = warmup
 
         if kpts is None:
             self.orbitals = pyqmc.orbitals.MoleculeOrbitalEvaluator(mol, orb_coeff)
@@ -72,17 +74,6 @@ class TBDMAccumulator:
             for s in [0, 1]
         ]
 
-        # Initialization and warmup of configurations
-        nwalkers = int(naux / sum(self._mol.nelec))
-        self._aux_configs = []
-        for spin in [0, 1]:
-            self._aux_configs.append(mc.initial_guess(mol, nwalkers))
-            self._aux_configs[spin].reshape((-1, 1, 3))
-            _, self._aux_configs[spin], _ = obdm.sample_onebody(
-                self._aux_configs[spin], self.orbitals, 0, nsamples=warmup
-            )
-            self._aux_configs[spin] = self._aux_configs[spin][-1]
-
         # Default to full 2rdm if ijkl not specified
         if ijkl is None:
             norb_up = orb_coeff[0].shape[1]
@@ -95,6 +86,20 @@ class TBDMAccumulator:
                 for l in range(norb_down)
             ]
         self._ijkl = np.array(ijkl).T
+        self._warmed_up = False
+
+    def warm_up(self, naux):
+        # Initialization and warmup of configurations
+        nwalkers = int(naux / sum(self._mol.nelec))+1
+        self._aux_configs = []
+        for spin in [0, 1]:
+            self._aux_configs.append(mc.initial_guess(self._mol, nwalkers))
+            self._aux_configs[spin].reshape((-1, 1, 3))
+            self._aux_configs[spin].resample(range(naux))
+            _, self._aux_configs[spin], _ = obdm.sample_onebody(
+                self._aux_configs[spin], self.orbitals, 0, nsamples=self._warmup
+            )
+            self._aux_configs[spin] = self._aux_configs[spin][-1]
 
     def get_configurations(self, nconf):
         """
@@ -109,8 +114,6 @@ class TBDMAccumulator:
             orbs: [nsweeps, conf, norb]: orbital values
             configs: [nsweeps] Configuration object with nconf configurations of 1 electron
             acceptance: [nsweeps, naux] acceptance probability for each auxilliary walker
-
-        TODO: Should we just resize the configurations to nconf instead of taking naux as an input?
         """
         configs = []
         assignments = []
@@ -151,6 +154,11 @@ class TBDMAccumulator:
         """
 
         nconf = configs.configs.shape[0]
+        if not self._warmed_up:
+            naux = nconf if self._naux is None else self._naux
+            self.warm_up(naux)
+            self._warmed_up = True
+
         aux = self.get_configurations(nconf)
 
         # Evaluate orbital values for the primary samples
@@ -166,8 +174,6 @@ class TBDMAccumulator:
             "value": np.zeros((nconf, self._ijkl.shape[1]), dtype=self.dtype),
             "norm_a": np.zeros((nconf, orb_configs[0].shape[-1])),
             "norm_b": np.zeros((nconf, orb_configs[1].shape[-1])),
-            "acceptance_a": np.mean(aux["acceptance"][0], axis=0),
-            "acceptance_b": np.mean(aux["acceptance"][0], axis=0),
         }
         orb_configs = gpu.cp.asarray([orb_configs[s][:, :, self._ijkl[2 * s]] for s in [0, 1]])
 
@@ -227,21 +233,18 @@ class TBDMAccumulator:
 
     def keys(self):
         return set(
-            ["value", "norm_a", "norm_b", "acceptance_a", "acceptance_b", "ijkl"]
+            ["value", "norm_a", "norm_b"]
         )
 
     def shapes(self):
-        d = {"value": (self._ijkl.shape[1],), "ijkl": self._ijkl.T.shape}
+        d = {"value": (self._ijkl.shape[1],), }
         nmo = self.orbitals.nmo()
         for e, s in zip(["a", "b"], self._spin_sector):
             d["norm_%s" % e] = (nmo[s],)
-            d["acceptance_%s" % e] = ()
         return d
 
     def avg(self, configs, wf):
-        d = {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
-        d["ijkl"] = self._ijkl.T
-        return d
+        return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
 
 
 def normalize_tbdm(tbdm, norm_a, norm_b):

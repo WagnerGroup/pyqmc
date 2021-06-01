@@ -8,74 +8,43 @@ import pandas as pd
 from pyqmc.mc import vmc, initial_guess
 from pyscf import gto, scf
 from pyqmc.reblock import reblock
-from pyqmc import Slater
+from pyqmc.slater import Slater
 from pyqmc.accumulators import EnergyAccumulator
 import pytest
 
 
 @pytest.mark.slow
-def test_vmc():
+def test_vmc(C2_ccecp_rhf):
     """
     Test that a VMC calculation of a Slater determinant matches Hartree-Fock within error bars.
     """
-    nconf = 1000
-    mol = gto.M(
-        atom="Li 0. 0. 0.; Li 0. 0. 1.5", basis="cc-pvtz", unit="bohr", verbose=1
-    )
-
-    mf_rhf = scf.RHF(mol).run()
-    mf_uhf = scf.UHF(mol).run()
+    mol, mf = C2_ccecp_rhf
+    nconf = 500
     nsteps = 300
     warmup = 30
 
-    for wf, mf in [
-        (Slater(mol, mf_rhf), mf_rhf),
-        (Slater(mol, mf_uhf), mf_uhf),
-    ]:
-
-        # Without blocks
-        coords = initial_guess(mol, nconf)
-        df, coords = vmc(
-            wf,
-            coords,
-            nsteps=nsteps,
-            accumulators={"energy": EnergyAccumulator(mol)},
-            verbose=True,
-        )
-
-        df = pd.DataFrame(df)
-        df = reblock(df["energytotal"][warmup:], 20)
-        en = df.mean()
-        err = df.sem()
-        assert en - mf.energy_tot() < 5 * err, "pyscf {0}, vmc {1}, err {2}".format(
-            mf.energy_tot(), en, err
-        )
-
-        # With blocks
-        coords = initial_guess(mol, nconf)
-        df, coords = vmc(
-            wf,
-            coords,
-            nblocks=int(nsteps / 30),
-            nsteps_per_block=30,
-            accumulators={"energy": EnergyAccumulator(mol)},
-        )
-
-        df = pd.DataFrame(df)["energytotal"][int(warmup / 30) :]
-        en = df.mean()
-        err = df.sem()
-        assert en - mf.energy_tot() < 5 * err, "pyscf {0}, vmc {1}, err {2}".format(
-            mf.energy_tot(), en, err
-        )
-
-
-def test_accumulator():
-    """Tests that the accumulator gets inserted into the data output correctly."""
-    mol = gto.M(
-        atom="Li 0. 0. 0.; Li 0. 0. 1.5", basis="cc-pvtz", unit="bohr", verbose=5
+    wf = Slater(mol,mf)
+    coords = initial_guess(mol, nconf)
+    df, coords = vmc(
+        wf,
+        coords,
+        nblocks=int(nsteps / 30),
+        nsteps_per_block=30,
+        accumulators={"energy": EnergyAccumulator(mol)},
     )
-    mf = scf.RHF(mol).run()
-    nconf = 5000
+
+    df = pd.DataFrame(df)["energytotal"][int(warmup / 30) :]
+    en = df.mean()
+    err = df.sem()
+    assert en - mf.energy_tot() < 5 * err, "pyscf {0}, vmc {1}, err {2}".format(
+        mf.energy_tot(), en, err
+    )
+
+
+def test_accumulator(C2_ccecp_rhf):
+    """Tests that the accumulator gets inserted into the data output correctly."""
+    mol, mf = C2_ccecp_rhf
+    nconf = 500
     wf = Slater(mol, mf)
     coords = initial_guess(mol, nconf)
 
@@ -86,9 +55,9 @@ def test_accumulator():
     eaccum = EnergyAccumulator(mol)
     eaccum_energy = eaccum(coords, wf)
     df = pd.DataFrame(df)
-    print(df["energytotal"][29] == np.average(eaccum_energy["total"]))
+    print(df["energyke"][29] == np.average(eaccum_energy["ke"]))
 
-    assert df["energytotal"][29] == np.average(eaccum_energy["total"])
+    assert df["energyke"][29] == np.average(eaccum_energy["ke"])
 
 
 if __name__ == "__main__":

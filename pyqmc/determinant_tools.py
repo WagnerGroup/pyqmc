@@ -1,6 +1,6 @@
 import numpy as np
-from pyqmc.loadcupy import cp, asnumpy
-from pyscf import fci
+import pyqmc.gpu as gpu
+import pyscf.fci as fci
 
 
 def binary_to_occ(S, ncore):
@@ -11,7 +11,7 @@ def binary_to_occ(S, ncore):
     """
     occup = [int(i) for i in range(ncore)]
     occup += [int(i + ncore) for i, c in enumerate(reversed(S)) if c == "1"]
-    max_orb = max(occup)
+    max_orb = max(occup) if occup else 1
     return (occup, max_orb)
 
 
@@ -30,7 +30,6 @@ def determinants_from_mean_field(mf):
         mf.mo_coeff is [spin][k][nao,nmo]
     """
     detwt = np.array([1.0])
-    print(np.nonzero(mf.mo_occ[0] > 0.9))
     occup = [
         [list(np.nonzero(mf.mo_occ[0] > 0.9)[0])],
         [list(np.nonzero(mf.mo_occ[1] > 0.9)[0])],
@@ -39,40 +38,54 @@ def determinants_from_mean_field(mf):
     return detwt, occup, map_dets
 
 
+def deters_from_hci(mc, tol):
+    bigcis = np.abs(mc.ci) > tol
+    nstrs = int(mc._strs.shape[1] / 2)
+    deters = []
+    # In pyscf, the first n/2 strings represent the up determinant and the second
+    # represent the down determinant.
+    for c, s in zip(mc.ci[bigcis], mc._strs[bigcis, :]):
+        s1 = "".join(str(bin(p)).replace("0b", "") for p in s[0:nstrs])
+        s2 = "".join(str(bin(p)).replace("0b", "") for p in s[nstrs:])
+        deters.append((c, s1, s2))
+    return deters
+
 def interpret_ci(mc, tol):
     """
     Copies over determinant coefficients and MO occupations
     for a multi-configuration calculation mc.
-
-    This implementation separates the up and down determinants, so that we only have to compute
-
 
     returns:
     detwt: array of weights for each determinant
     occup: which orbitals go in which determinants
     map_dets: given a determinant in detwt, which determinant in occup it corresponds to
     """
-    from pyscf import fci
-
     ncore = mc.ncore if hasattr(mc, "ncore") else 0
-
     # find multi slater determinant occupation
-    if hasattr(mc, "_strs"):
-        # if this is a HCI object, it will have _strs
-        bigcis = np.abs(mc.ci) > tol
-        nstrs = int(mc._strs.shape[1] / 2)
-        # old code for single strings.
-        # deters = [(c,bin(s[0]), bin(s[1])) for c, s in zip(mc.ci[bigcis],mc._strs[bigcis,:])]
-        deters = []
-        # In pyscf, the first n/2 strings represent the up determinant and the second
-        # represent the down determinant.
-        for c, s in zip(mc.ci[bigcis], mc._strs[bigcis, :]):
-            s1 = "".join(str(bin(p)).replace("0b", "") for p in s[0:nstrs])
-            s2 = "".join(str(bin(p)).replace("0b", "") for p in s[nstrs:])
-            deters.append((c, s1, s2))
+    if hasattr(mc, "_strs"):     # if this is a HCI object, it will have _strs
+        deters = deters_from_hci(mc, tol)
     else:
         deters = fci.addons.large_ci(mc.ci, mc.ncas, mc.nelecas, tol=-1)
+    return create_packed_objects(deters, ncore, tol)
 
+
+def create_packed_objects(deters, ncore=0, tol=0, format='binary'):
+    """
+    if format == "binary":
+    deters is expected to be an iterable of tuples, each of which is 
+    (weight, occupation string up, occupation_string down)
+    if format == "list"
+    (weight, occupation)
+    where occupation is a nested list [s][0, 1, 2, 3 ..], for example.
+
+    ncore should be the number of core orbitals not included in the occupation strings.
+    tol is the threshold at which to include the determinants
+
+    returns:
+    detwt: array of weights for each determinant
+    occup: which orbitals go in which determinants
+    map_dets: given a determinant in detwt, which determinant in occup it corresponds to
+    """
     # Create map and occupation objects
     detwt = []
     map_dets = [[], []]
@@ -80,8 +93,14 @@ def interpret_ci(mc, tol):
     for x in deters:
         if np.abs(x[0]) > tol:
             detwt.append(x[0])
-            alpha_occ, __ = binary_to_occ(x[1], ncore)
-            beta_occ, __ = binary_to_occ(x[2], ncore)
+            if format=='binary':
+                alpha_occ, __ = binary_to_occ(x[1], ncore)
+                beta_occ, __ = binary_to_occ(x[2], ncore)
+            elif format=='list':
+                alpha_occ = x[1][0]
+                beta_occ = x[1][1]
+            else:
+                raise ValueError("create_packed_objects: Options for format are binary or list")
             if alpha_occ not in occup[0]:
                 map_dets[0].append(len(occup[0]))
                 occup[0].append(alpha_occ)
@@ -96,18 +115,41 @@ def interpret_ci(mc, tol):
     return np.array(detwt), occup, np.array(map_dets)
 
 
+def create_pbc_determinant(mol, mf, excitations):
+    """
+    excitations should be a list of tuples with 
+    (s,ka,a,ki,i),  
+    s is the spin (0 or 1), 
+    ka, a is the occupied orbital, 
+    and ki, i is the unoccupied orbital.
+    """
+    if len(mf.mo_coeff[0][0].shape) == 2:
+        occupation = [
+            [list(np.nonzero(occ > 0.9)[0]) for occ in mf.mo_occ[s]]
+            for s in range(2)]
+    elif len(mf.mo_coeff[0][0].shape) == 1:
+            occupation = [ 
+            [list(np.nonzero(occ > 1.9-s)[0]) for occ in mf.mo_occ]
+            for s in range(2)]
+
+    for s,ka,a,ki,i in excitations:
+        occupation[s][ka].remove(a)
+        occupation[s][ki].append(i)
+    return occupation
+
+
 def compute_value(updets, dndets, det_coeffs):
     """
     Given the up and down determinant values, safely compute the total log wave function.
     """
-    upref = cp.amax(updets[1]).real
-    dnref = cp.amax(dndets[1]).real
+    upref = gpu.cp.amax(updets[1]).real
+    dnref = gpu.cp.amax(dndets[1]).real
     phases = updets[0] * dndets[0]
     logvals = updets[1] - upref + dndets[1] - dnref
 
     phases = updets[0] * dndets[0]
-    wf_val = cp.einsum("d,id->i", det_coeffs, phases * cp.exp(logvals))
+    wf_val = gpu.cp.einsum("d,id->i", det_coeffs, phases * gpu.cp.exp(logvals))
 
-    wf_sign = wf_val / cp.abs(wf_val)
-    wf_logval = cp.log(cp.abs(wf_val)) + upref + dnref
-    return asnumpy(wf_sign), asnumpy(wf_logval)
+    wf_sign = wf_val / gpu.cp.abs(wf_val)
+    wf_logval = gpu.cp.log(gpu.cp.abs(wf_val)) + upref + dnref
+    return gpu.asnumpy(wf_sign), gpu.asnumpy(wf_logval)

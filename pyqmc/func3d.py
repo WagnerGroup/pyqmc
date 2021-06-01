@@ -1,5 +1,5 @@
 import numpy as np
-from pyqmc.loadcupy import fuse, cp, asnumpy
+import pyqmc.gpu as gpu
 
 """ 
 Collection of 3d function objects. Each has a dictionary parameters, which corresponds
@@ -41,7 +41,7 @@ class GaussianFunction:
         :returns: function value
         :rtype: (nconfig,...) array
         """
-        return cp.exp(-self.parameters["exponent"] * r * r)
+        return np.exp(-self.parameters["exponent"] * r * r)
 
     def gradient(self, x, r):
         """Returns gradient of function.
@@ -100,7 +100,7 @@ class GaussianFunction:
         :rtype: dictionary
         """
         r2 = r * r
-        return {"exponent": -r2 * cp.exp(-self.parameters["exponent"] * r2)}
+        return {"exponent": -r2 * np.exp(-self.parameters["exponent"] * r2)}
 
 
 class PadeFunction:
@@ -193,13 +193,13 @@ class PadeFunction:
         return {"alphak": akderiv}
 
 
-@fuse()
+@gpu.fuse()
 def polypadevalue(z, beta):
     p = z * z * (6 - 8 * z + 3 * z * z)
     return (1 - p) / (1 + beta * p)
 
 
-@fuse()
+@gpu.fuse()
 def polypadegradvalue(r, beta, rcut):
     z = r / rcut
     p = z * z * (6 - 8 * z + 3 * z * z)
@@ -223,8 +223,8 @@ class PolyPadeFunction:
 
     def __init__(self, beta, rcut):
         self.parameters = {
-            "beta": cp.asarray(beta),
-            "rcut": cp.asarray(rcut),
+            "beta": gpu.cp.asarray(beta),
+            "rcut": gpu.cp.asarray(rcut),
         }
 
     def value(self, rvec, r):
@@ -237,7 +237,7 @@ class PolyPadeFunction:
         """
         mask = r < self.parameters["rcut"]
         z = r[mask] / self.parameters["rcut"]
-        func = cp.zeros(r.shape)
+        func = gpu.cp.zeros(r.shape)
         func[mask] = polypadevalue(z, self.parameters["beta"])
         return func
 
@@ -248,15 +248,15 @@ class PolyPadeFunction:
         :returns: gradient and value
         :rtype: tuple of (nconfig,...,3) arrays
         """
-        value = cp.zeros(r.shape)
-        grad = cp.zeros(rvec.shape)
+        value = gpu.cp.zeros(r.shape)
+        grad = gpu.cp.zeros(rvec.shape)
         mask = r < self.parameters["rcut"]
         grad_rvec, value[mask] = polypadegradvalue(
             r[mask],
             self.parameters["beta"],
             self.parameters["rcut"],
         )
-        grad[mask] = cp.einsum("ij,i->ij", rvec[mask], grad_rvec)
+        grad[mask] = np.einsum("ij,i->ij", rvec[mask], grad_rvec)
         return grad, value
 
     def gradient(self, rvec, r):
@@ -266,7 +266,7 @@ class PolyPadeFunction:
         :returns: gradient
         :rtype: (nconfig,...,3) array
         """
-        grad = cp.zeros(rvec.shape)
+        grad = gpu.cp.zeros(rvec.shape)
         mask = r < self.parameters["rcut"]
         r = r[mask][..., np.newaxis]
         rvec = rvec[mask]
@@ -296,8 +296,8 @@ class PolyPadeFunction:
         :returns: gradient and laplacian
         :rtype: tuple of two (nconfig,...,3) arrays (components of laplacian d^2/dx_i^2 separately)
         """
-        grad = cp.zeros(rvec.shape)
-        lap = cp.zeros(rvec.shape)
+        grad = gpu.cp.zeros(rvec.shape)
+        lap = gpu.cp.zeros(rvec.shape)
         mask = r < self.parameters["rcut"]
         r = r[..., np.newaxis]
         r = r[mask]
@@ -366,7 +366,7 @@ class CutoffCuspFunction:
         y = r[mask] / self.parameters["rcut"]
         gamma = self.parameters["gamma"]
         p = y - y * y + y * y * y / 3
-        func = cp.zeros(r.shape)
+        func = gpu.cp.zeros(r.shape)
         func[mask] = -p / (1 + gamma * p) + 1 / (3 + gamma)
         return func * self.parameters["rcut"]
 
@@ -387,7 +387,7 @@ class CutoffCuspFunction:
         b = y - y * y + y * y * y / 3
         c = 1 / (1 + gamma * b) ** 2 / (rcut * r)
 
-        grad = cp.zeros(rvec.shape)
+        grad = gpu.cp.zeros(rvec.shape)
         grad[mask] = -rvec[mask] * a * c * rcut
         return grad
 
@@ -398,8 +398,8 @@ class CutoffCuspFunction:
         :returns: gradient and value
         :rtype: tuple of (nconfig,...,3) arrays
         """
-        grad = cp.zeros(rvec.shape)
-        value = cp.zeros(r.shape)
+        grad = gpu.cp.zeros(rvec.shape)
+        value = gpu.cp.zeros(r.shape)
         rcut = self.parameters["rcut"]
         gamma = self.parameters["gamma"]
         mask = r < rcut
@@ -422,7 +422,7 @@ class CutoffCuspFunction:
         :returns: laplacian (returns components of laplacian d^2/dx_i^2 separately)
         :rtype: (nconfig,...,3) array
         """
-        lap = cp.zeros(rvec.shape)
+        lap = gpu.cp.zeros(rvec.shape)
         rcut = self.parameters["rcut"]
         gamma = self.parameters["gamma"]
         mask = r < rcut
@@ -448,8 +448,8 @@ class CutoffCuspFunction:
         :returns: gradient and laplacian
         :rtype: tuple of two (nconfig,...,3) arrays (components of laplacian d^2/dx_i^2 separately)
         """
-        grad = cp.zeros(rvec.shape)
-        lap = cp.zeros(rvec.shape)
+        grad = gpu.cp.zeros(rvec.shape)
+        lap = gpu.cp.zeros(rvec.shape)
         rcut = self.parameters["rcut"]
         gamma = self.parameters["gamma"]
         mask = r < rcut
@@ -497,10 +497,10 @@ class CutoffCuspFunction:
 
 
 def test_func3d_gradient(bf, delta=1e-5):
-    rvec = cp.asarray(np.random.randn(150, 5, 10, 3))  # Internal indices irrelevant
-    r = cp.linalg.norm(rvec, axis=-1)
+    rvec = gpu.cp.asarray(np.random.randn(150, 5, 10, 3))  # Internal indices irrelevant
+    r = np.linalg.norm(rvec, axis=-1)
     grad = bf.gradient(rvec, r)
-    numeric = cp.zeros(rvec.shape)
+    numeric = gpu.cp.zeros(rvec.shape)
     for d in range(3):
         pos = rvec.copy()
         pos[..., d] += delta
@@ -509,30 +509,30 @@ def test_func3d_gradient(bf, delta=1e-5):
         minuval = bf.value(pos, np.linalg.norm(pos, axis=-1))
         numeric[..., d] = (plusval - minuval) / (2 * delta)
     maxerror = np.max(np.abs(grad - numeric))
-    return asnumpy(maxerror)
+    return gpu.asnumpy(maxerror)
 
 
 def test_func3d_laplacian(bf, delta=1e-5):
-    rvec = cp.asarray(np.random.randn(150, 5, 10, 3))  # Internal indices irrelevant
-    r = cp.linalg.norm(rvec, axis=-1)
+    rvec = gpu.cp.asarray(np.random.randn(150, 5, 10, 3))  # Internal indices irrelevant
+    r = np.linalg.norm(rvec, axis=-1)
     lap = bf.laplacian(rvec, r)
-    numeric = cp.zeros(rvec.shape)
+    numeric = gpu.cp.zeros(rvec.shape)
     for d in range(3):
         pos = rvec.copy()
         pos[..., d] += delta
-        r = cp.linalg.norm(pos, axis=-1)
+        r = np.linalg.norm(pos, axis=-1)
         plusval = bf.gradient(pos, r)[..., d]
         pos[..., d] -= 2 * delta
-        r = cp.linalg.norm(pos, axis=-1)
+        r = np.linalg.norm(pos, axis=-1)
         minuval = bf.gradient(pos, r)[..., d]
         numeric[..., d] = (plusval - minuval) / (2 * delta)
     maxerror = np.max(np.abs(lap - numeric))
-    return asnumpy(maxerror)
+    return gpu.asnumpy(maxerror)
 
 
 def test_func3d_gradient_laplacian(bf):
-    rvec = cp.asarray(np.random.randn(150, 10, 3))
-    r = cp.linalg.norm(rvec, axis=-1)
+    rvec = gpu.cp.asarray(np.random.randn(150, 10, 3))
+    r = np.linalg.norm(rvec, axis=-1)
     grad = bf.gradient(rvec, r)
     lap = bf.laplacian(rvec, r)
     andgrad, andlap = bf.gradient_laplacian(rvec, r)
@@ -542,8 +542,8 @@ def test_func3d_gradient_laplacian(bf):
 
 
 def test_func3d_gradient_value(bf):
-    rvec = cp.asarray(np.random.randn(150, 10, 3))
-    r = cp.linalg.norm(rvec, axis=-1)
+    rvec = gpu.cp.asarray(np.random.randn(150, 10, 3))
+    r = np.linalg.norm(rvec, axis=-1)
     grad = bf.gradient(rvec, r)
     val = bf.value(rvec, r)
     andgrad, andval = bf.gradient_value(rvec, r)
@@ -553,10 +553,10 @@ def test_func3d_gradient_value(bf):
 
 
 def test_func3d_pgradient(bf, delta=1e-5):
-    rvec = cp.asarray(np.random.randn(150, 10, 3))
-    r = cp.linalg.norm(rvec, axis=-1)
+    rvec = gpu.cp.asarray(np.random.randn(150, 10, 3))
+    r = np.linalg.norm(rvec, axis=-1)
     pgrad = bf.pgradient(rvec, r)
-    numeric = {k: cp.zeros(v.shape) for k, v in pgrad.items()}
+    numeric = {k: gpu.cp.zeros(v.shape) for k, v in pgrad.items()}
     maxerror = {k: np.zeros(v.shape) for k, v in pgrad.items()}
     for k in pgrad.keys():
         bf.parameters[k] += delta
@@ -565,7 +565,7 @@ def test_func3d_pgradient(bf, delta=1e-5):
         minuval = bf.value(rvec, r)
         bf.parameters[k] += delta
         numeric[k] = (plusval - minuval) / (2 * delta)
-        maxerror[k] = asnumpy(np.max(np.abs(pgrad[k] - numeric[k])))
+        maxerror[k] = gpu.asnumpy(np.max(np.abs(pgrad[k] - numeric[k])))
         if maxerror[k] > 1e-5:
             print(k, "\n", pgrad[k] - numeric[k])
     return maxerror

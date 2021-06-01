@@ -1,5 +1,5 @@
 import numpy as np
-from pyqmc.loadcupy import cp, asnumpy
+import pyqmc.gpu as gpu
 
 
 class J3:
@@ -42,7 +42,7 @@ class J3:
             optimize=self.optimize,
         )
         signs = np.ones(len(vals))
-        return (signs, asnumpy(vals))
+        return (signs, gpu.asnumpy(vals))
 
     def gradient_value(self, e, epos):
         return self.gradient(e, epos), self.testvalue(e, epos)
@@ -63,7 +63,7 @@ class J3:
             e_grad[:, :, 0, :],
             optimize=self.optimize,
         )
-        return asnumpy(grad1 + grad2)
+        return gpu.asnumpy(grad1 + grad2)
 
     def laplacian(self, e, epos):
         _, e_grad, e_lap = self._get_val_grad_lap(epos)
@@ -99,7 +99,7 @@ class J3:
         grad = grad1 + grad2
 
         lap3 = np.einsum("dc,dc->c", grad, grad)
-        return asnumpy(lap1 + lap2 + lap3)
+        return gpu.asnumpy(lap1 + lap2 + lap3)
 
     def gradient_laplacian(self, e, epos):
         _, e_grad, e_lap = self._get_val_grad_lap(epos)
@@ -135,7 +135,7 @@ class J3:
         grad = grad1 + grad2
 
         lap3 = np.einsum("dc,dc->c", grad, grad)
-        return asnumpy(grad), asnumpy(lap1 + lap2 + lap3)
+        return gpu.asnumpy(grad), gpu.asnumpy(lap1 + lap2 + lap3)
 
     def pgradient(self):
         mask = np.tril(
@@ -152,27 +152,27 @@ class J3:
 
         coords = configs.configs[mask].reshape((-1, 3))
         nconf = np.sum(mask)
-        nelec = int(coords.shape[0] / nconf)
+        nelec = configs.configs.shape[1] if len(configs.configs.shape) > 2 else 1
 
         if mode == "val":
             ao = np.real_if_close(self.mol.eval_gto("GTOval_cart", coords), tol=1e4)
             if nelec == 1:
-                return ao.reshape((nconf, -1))
-            return ao.reshape((nconf, nelec, -1))
+                return ao.reshape((nconf, ao.shape[-1]))
+            return ao.reshape((nconf, nelec, ao.shape[-1]))
         elif mode == "grad":
             ao = np.real_if_close(
                 self.mol.eval_gto("GTOval_cart_deriv1", coords), tol=1e4
             )
-            val = ao[0].reshape((nconf, nelec, -1))
-            grad = ao[1:4].reshape((3, nconf, nelec, -1))
+            val = ao[0].reshape((nconf, nelec, ao.shape[-1]))
+            grad = ao[1:4].reshape((3, nconf, nelec, ao.shape[-1]))
             return (val, grad)
         elif mode == "lap":
             ao = np.real_if_close(
                 self.mol.eval_gto("GTOval_cart_deriv2", coords), tol=1e4
             )
-            val = ao[0].reshape((nconf, nelec, -1))
-            grad = ao[1:4].reshape((3, nconf, nelec, -1))
-            lap = ao[[4, 7, 9]].reshape((3, nconf, nelec, -1))
+            val = ao[0].reshape((nconf, nelec, ao.shape[-1]))
+            grad = ao[1:4].reshape((3, nconf, nelec, ao.shape[-1]))
+            lap = ao[[4, 7, 9]].reshape((3, nconf, nelec, ao.shape[-1]))
             return (val, grad, lap)
 
     def testvalue(self, e, epos, mask=None):
@@ -211,4 +211,4 @@ class J3:
             optimize=self.optimize,
         )
 
-        return asnumpy(np.exp((new_val.T - curr_val).T))
+        return gpu.asnumpy(np.exp((new_val.T - curr_val).T))

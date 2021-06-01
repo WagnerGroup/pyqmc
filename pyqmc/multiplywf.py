@@ -118,8 +118,6 @@ class MultiplyWF:
 
 
 def test_parameters():
-    import numpy as np
-
     dicts = [{"coeff" + str(i): np.random.rand(3)} for i in range(10)]
     p = Parameters(dicts)
     # test len

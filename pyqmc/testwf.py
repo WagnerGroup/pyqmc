@@ -12,7 +12,6 @@ def test_mask(wf, e, epos, mask=None):
     ratio_ref = wf.testvalue(e, epos)[mask]
     assert np.sum(np.abs(ratio - ratio_ref)) < 1e-10
     print("testcase for test_value() with mask passed")
-    # update internals
 
 
 def test_updateinternals(wf, configs):
@@ -24,7 +23,7 @@ def test_updateinternals(wf, configs):
     :rtype: dictionary
 
     """
-    from pyqmc import vmc
+    import pyqmc.mc as mc
 
     nconf, ne, ndim = configs.configs.shape
     delta = 1e-2
@@ -53,7 +52,7 @@ def test_updateinternals(wf, configs):
         val1 = recompute
 
     # Test mask and pgrad
-    _, configs = vmc(wf, configs, nblocks=1, nsteps_per_block=1, tstep=2)
+    _, configs = mc.vmc(wf, configs, nblocks=1, nsteps_per_block=1, tstep=2)
     pgradupdate = wf.pgradient()
     wf.recompute(configs)
     pgrad = wf.pgradient()

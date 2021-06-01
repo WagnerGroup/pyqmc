@@ -1,60 +1,37 @@
-# This must be done BEFORE importing numpy or anything else.
-# Therefore it must be in your main script.
 import os
-
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
 from pyqmc import reblock
+import pyqmc.api as pyq
 import pytest
-
+import uuid
 
 @pytest.mark.slow
 def test():
     """ Ensure that DMC obtains the exact result for a hydrogen atom """
     from pyscf import gto, scf
-    from pyqmc.jastrowspin import JastrowSpin
-    from pyqmc.dmc import limdrift, rundmc
-    from pyqmc.mc import vmc
-    from pyqmc.accumulators import EnergyAccumulator
-    from pyqmc.func3d import CutoffCuspFunction
-    from pyqmc.multiplywf import MultiplyWF
-    from pyqmc.coord import OpenConfigs
-    from pyqmc import Slater
+    from pyqmc.dmc import limdrift
     import pandas as pd
 
     mol = gto.M(atom="H 0. 0. 0.", basis="sto-3g", unit="bohr", spin=1)
     mf = scf.UHF(mol).run()
     nconf = 1000
-    configs = OpenConfigs(np.random.randn(nconf, 1, 3))
-    wf1 = Slater(mol, mf)
-    wf = wf1
-    wf2 = JastrowSpin(mol, a_basis=[CutoffCuspFunction(5, 0.2)], b_basis=[])
-    wf2.parameters["acoeff"] = np.asarray([[[1.0, 0]]])
-    wf = MultiplyWF(wf1, wf2)
-
-    dfvmc, configs_ = vmc(
-        wf, configs, nsteps=50, accumulators={"energy": EnergyAccumulator(mol)}
-    )
-    dfvmc = pd.DataFrame(dfvmc)
-    print(
-        "vmc energy",
-        np.mean(dfvmc["energytotal"]),
-        np.std(dfvmc["energytotal"]) / np.sqrt(len(dfvmc)),
-    )
+    configs = pyq.initial_guess(mol, nconf)
+    wf, _ = pyq.generate_wf(mol, mf, jastrow_kws=dict(na=0, nb=0))
+    enacc = pyq.EnergyAccumulator(mol)
 
     warmup = 200
     branchtime = 5
-    dfdmc, configs_, weights_ = rundmc(
+    dfdmc, configs_, weights_ = pyq.rundmc(
         wf,
         configs,
         nsteps=4000 + warmup * branchtime,
         branchtime=branchtime,
-        accumulators={"energy": EnergyAccumulator(mol)},
+        accumulators={"energy": enacc},
         ekey=("energy", "total"),
         tstep=0.01,
-        drift_limiter=limdrift,
         verbose=True,
     )
 
@@ -64,11 +41,25 @@ def test():
     dfprod = dfdmc[dfdmc.step >= warmup]
 
     rb_summary = reblock.reblock_summary(dfprod[["energytotal", "energyei"]], 20, weights=dfprod["weight"])
-    print(rb_summary)
     energy, err = [rb_summary[v]["energytotal"] for v in ("mean", "standard error")]
     assert (
         np.abs(energy + 0.5) < 5 * err
     ), "energy not within {0} of -0.5: energy {1}".format(5 * err, np.mean(energy))
+
+
+def test_dmc_restarts(H_pbc_sto3g_krks, nconf=10):
+    """ For PBCs, check to make sure there are no 
+    errors on restart. """
+    mol, mf = H_pbc_sto3g_krks
+    nconf = 10
+    fname = "test_dmc_restart_"+str(uuid.uuid4())
+
+    configs = pyq.initial_guess(mol, nconf)
+    wf, _ = pyq.generate_wf(mol, mf, jastrow_kws=dict(na=0, nb=0))
+    enacc = pyq.EnergyAccumulator(mol)
+    pyq.rundmc(wf, configs, nsteps = 20, hdf_file = fname, accumulators={'energy':enacc})
+    pyq.rundmc(wf, configs, nsteps = 20, hdf_file = fname, accumulators={'energy':enacc})
+    os.remove(fname)
 
 
 if __name__ == "__main__":

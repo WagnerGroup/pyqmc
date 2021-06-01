@@ -1,6 +1,6 @@
 import numpy as np
-from pyqmc.distance import MinimalImageDistance, RawDistance
-from pyqmc.pbc import enforce_pbc
+import pyqmc.distance as distance
+import pyqmc.pbc as pbc
 import copy
 
 
@@ -13,7 +13,7 @@ class OpenElectron:
 class OpenConfigs:
     def __init__(self, configs):
         self.configs = configs
-        self.dist = RawDistance()
+        self.dist = distance.RawDistance()
 
     def electron(self, e):
         return OpenElectron(self.configs[:, e], self.dist)
@@ -67,13 +67,13 @@ class OpenConfigs:
         """
         return [OpenConfigs(c) for c in np.array_split(self.configs, npartitions)]
 
-    def join(self, configslist):
+    def join(self, configslist, axis=0):
         """
         Merge configs into this object to collect from parallelization
         Args:
-          configslist: list of OpenConfigs objects; total number of configs must match
+          configslist: list of OpenConfigs objects
         """
-        self.configs[:] = np.concatenate([c.configs for c in configslist], axis=0)[:]
+        self.configs = np.concatenate([c.configs for c in configslist], axis=axis)
 
     def copy(self):
         return copy.deepcopy(self)
@@ -95,7 +95,9 @@ class OpenConfigs:
 
     def load_hdf(self, hdf):
         """Note that the number of configurations will change to reflect the number in the hdf file."""
-        self.configs = np.array(hdf["configs"])
+        # The ... seems to be necessary to avoid changing the dtype and screwing up 
+        # pyscf's calls. 
+        self.configs[...] = np.array(hdf["configs"])
 
 
 class PeriodicElectron:
@@ -117,13 +119,13 @@ class PeriodicElectron:
 
 class PeriodicConfigs:
     def __init__(self, configs, lattice_vectors, wrap=None):
-        configs, wrap_ = enforce_pbc(lattice_vectors, configs)
+        configs, wrap_ = pbc.enforce_pbc(lattice_vectors, configs)
         self.configs = configs
         self.wrap = wrap_
         if wrap is not None:
             self.wrap += wrap
         self.lvecs = lattice_vectors
-        self.dist = MinimalImageDistance(lattice_vectors)
+        self.dist = distance.MinimalImageDistance(lattice_vectors)
 
     def electron(self, e):
         return PeriodicElectron(
@@ -140,7 +142,7 @@ class PeriodicConfigs:
         """
         if mask is None:
             mask = np.ones(vec.shape[0:-1], dtype=bool)
-        epos_, wrap_ = enforce_pbc(self.lvecs, vec[mask])
+        epos_, wrap_ = pbc.enforce_pbc(self.lvecs, vec[mask])
         epos = vec.copy()
         epos[mask] = epos_
         wrap = self.wrap[:, e, :].copy()
@@ -191,14 +193,14 @@ class PeriodicConfigs:
         wlist = np.array_split(self.wrap, npartitions)
         return [PeriodicConfigs(c, self.lvecs, w) for c, w in zip(clist, wlist)]
 
-    def join(self, configslist):
+    def join(self, configslist, axis=0):
         """
         Merge configs into this object to collect from parallelization
         Args:
-          configslist: list of PeriodicConfigs objects; total number of configs must match
+          configslist: list of PeriodicConfigs objects
         """
-        self.configs[:] = np.concatenate([c.configs for c in configslist], axis=0)[:]
-        self.wrap[:] = np.concatenate([c.wrap for c in configslist], axis=0)[:]
+        self.configs = np.concatenate([c.configs for c in configslist], axis=axis)
+        self.wrap = np.concatenate([c.wrap for c in configslist], axis=axis)
 
     def copy(self):
         return copy.deepcopy(self)
@@ -221,9 +223,11 @@ class PeriodicConfigs:
     def to_hdf(self, hdf):
         hdf["configs"].resize(self.configs.shape)
         hdf["configs"].resize(self.wrap.shape)
-        hdf["configs"][:, :, :] = self.configs
-        hdf["wrap"][:, :, :] = self.wrap
+        hdf["configs"][...] = self.configs
+        hdf["wrap"][...] = self.wrap
 
     def load_hdf(self, hdf):
-        self.configs = np.array(hdf["configs"])
-        self.wrap = np.array(hdf["wrap"])
+        # The ... seems to be necessary to avoid changing the dtype and screwing up 
+        # pyscf's calls. 
+        self.configs[...] = hdf["configs"][()]
+        self.wrap[...] = hdf["wrap"][()]

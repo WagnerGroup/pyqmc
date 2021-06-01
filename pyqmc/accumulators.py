@@ -1,7 +1,7 @@
 import numpy as np
 import pyqmc.gpu as gpu
 import pyqmc.energy as energy
-import pyqmc.ewald  as ewald
+import pyqmc.ewald as ewald
 import pyqmc.eval_ecp as eval_ecp
 
 
@@ -12,8 +12,7 @@ def gradient_generator(mol, wf, to_opt=None, **ewald_kwargs):
 
 
 class EnergyAccumulator:
-    """Returns local energy of each configuration in a dictionary.
-    """
+    """Returns local energy of each configuration in a dictionary."""
 
     def __init__(self, mol, threshold=10, **kwargs):
         self.mol = mol
@@ -22,7 +21,6 @@ class EnergyAccumulator:
             self.coulomb = ewald.Ewald(mol, **kwargs)
         else:
             self.coulomb = energy.OpenCoulomb(mol, **kwargs)
-        
 
     def __call__(self, configs, wf):
         ee, ei, ii = self.coulomb.energy(configs)
@@ -41,18 +39,16 @@ class EnergyAccumulator:
         return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
 
     def nonlocal_tmoves(self, configs, wf, e, tau):
-        return eval_ecp.compute_tmoves(self.mol, configs, wf, e,self.threshold, tau)
-    
+        return eval_ecp.compute_tmoves(self.mol, configs, wf, e, self.threshold, tau)
+
     def has_nonlocal_moves(self):
         return self.mol._ecp != {}
-
 
     def keys(self):
         return set(["ke", "ee", "ei", "ecp", "total", "grad2"])
 
     def shapes(self):
-        return {"ke": (), "ee": (), "ei": (), "ecp": (), "total": (), "grad2":()}
-
+        return {"ke": (), "ee": (), "ei": (), "ecp": (), "total": (), "grad2": ()}
 
 
 class LinearTransform:

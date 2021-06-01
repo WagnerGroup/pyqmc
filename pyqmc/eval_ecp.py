@@ -2,6 +2,7 @@ import numpy as np
 import copy
 import scipy.spatial.transform
 
+
 def ecp(mol, configs, wf, threshold):
     """
     :returns: ECP value, summed over all the electrons and atoms.
@@ -12,14 +13,12 @@ def ecp(mol, configs, wf, threshold):
         for atom in mol._atom:
             if atom[0] in mol._ecp.keys():
                 for e in range(nelec):
-                    ecp_tot += ecp_ea(mol, configs, wf, e, atom, threshold)['total']
+                    ecp_tot += ecp_ea(mol, configs, wf, e, atom, threshold)["total"]
     return ecp_tot
 
 
 def compute_tmoves(mol, configs, wf, e, threshold, tau):
-    """
-
-    """
+    """"""
     nconfig = configs.configs.shape[0]
     if mol._ecp != {}:
         data = [
@@ -28,28 +27,27 @@ def compute_tmoves(mol, configs, wf, e, threshold, tau):
             if atom[0] in mol._ecp.keys()
         ]
     else:
-        return {'ratio': np.zeros((nconfig,0)),
-                'weight':np.zeros((nconfig,0)) } 
+        return {"ratio": np.zeros((nconfig, 0)), "weight": np.zeros((nconfig, 0))}
 
-    
     # we want to make a data set which is a list of possible positions, the wave function
-    # ratio, and the masks for each 
+    # ratio, and the masks for each
     summed_data = []
     nconfig = configs.configs.shape[0]
-    for d in data: 
-        npts = d['ratio'].shape[1]
+    for d in data:
+        npts = d["ratio"].shape[1]
         weight = np.zeros((nconfig, npts))
         ratio = np.ones((nconfig, npts))
-        weight[d['mask']] = np.einsum("ik, ijk -> ij", np.exp(-tau*d['v_l'])-1, d['P_l'])
-        ratio[d['mask']] = d['ratio']
-        summed_data.append({'weight':weight, 'ratio':ratio, 'epos':d['epos']})
-        
-    ratio = np.concatenate([d['ratio'] for d in summed_data], axis=1)
-    weight = np.concatenate([d['weight'] for d in summed_data], axis=1)
-    configs = copy.copy(configs)
-    configs.join([d['epos'] for d in summed_data], axis=1)
-    return {"ratio": ratio, 'weight':weight, 'configs':configs } 
+        weight[d["mask"]] = np.einsum(
+            "ik, ijk -> ij", np.exp(-tau * d["v_l"]) - 1, d["P_l"]
+        )
+        ratio[d["mask"]] = d["ratio"]
+        summed_data.append({"weight": weight, "ratio": ratio, "epos": d["epos"]})
 
+    ratio = np.concatenate([d["ratio"] for d in summed_data], axis=1)
+    weight = np.concatenate([d["weight"] for d in summed_data], axis=1)
+    configs = copy.copy(configs)
+    configs.join([d["epos"] for d in summed_data], axis=1)
+    return {"ratio": ratio, "weight": weight, "configs": configs}
 
 
 def ecp_ea(mol, configs, wf, e, atom, threshold):
@@ -89,13 +87,15 @@ def ecp_ea(mol, configs, wf, e, atom, threshold):
     # Compute local and non-local parts
     ecp_val[mask] = np.einsum("ij,ik,ijk->i", ratio, masked_v_l, P_l)
     ecp_val += v_l[:, -1]  # local part
-    return {'total':ecp_val,
-            'v_l':masked_v_l,
-            'local':v_l[:,-1],
-            'P_l':P_l,
-            'ratio':ratio,
-            'epos':epos,
-            'mask':mask } 
+    return {
+        "total": ecp_val,
+        "v_l": masked_v_l,
+        "local": v_l[:, -1],
+        "P_l": P_l,
+        "ratio": ratio,
+        "epos": epos,
+        "mask": mask,
+    }
 
 
 def ecp_mask(v_l, threshold):
@@ -172,7 +172,7 @@ def P_l(x, l):
     :returns: legendre function P_l values for channel :math:`l`.
     :rtype: (nconf, naip) array
     """
-    if l==-1:
+    if l == -1:
         return np.zeros(x.shape)
     if l == 0:
         return np.ones(x.shape)
@@ -221,13 +221,15 @@ def get_rot(nconf, naip):
     :returns: the integration weights, and the positions of the rotated electron e
     :rtype:  ((naip,) array, (nconf, naip, 3) array)
     """
+
     def sphere(t_, p_):
         s = np.sin(t_)
         return s * np.cos(p_), s * np.sin(p_), np.cos(t_)
-    if nconf > 0: # get around a bug(?) when there are zero configurations.
+
+    if nconf > 0:  # get around a bug(?) when there are zero configurations.
         rot = scipy.spatial.transform.Rotation.random(nconf).as_matrix()
     else:
-        rot = np.zeros((0,3,3))
+        rot = np.zeros((0, 3, 3))
 
     if naip == 6:
         d1 = np.array([0.0, 1.0, 0.5, 0.5, 0.5, 0.5]) * np.pi

@@ -2,12 +2,13 @@ import numpy as np
 import pyqmc.eval_ecp as eval_ecp
 import pyqmc.distance as distance
 
+
 class OpenCoulomb:
     def __init__(self, mol):
         self.mol = mol
-        self.ii_energy=ii_energy(self.mol)
+        self.ii_energy = ii_energy(self.mol)
 
-    def energy(self,configs):
+    def energy(self, configs):
         return ee_energy(configs), ei_energy(self.mol, configs), self.ii_energy
 
 
@@ -45,7 +46,7 @@ def kinetic(configs, wf):
     ke = np.zeros(nconf)
     grad2 = np.zeros(nconf)
     for e in range(nelec):
-        grad, lap = wf.gradient_laplacian(e,configs.electron(e))
+        grad, lap = wf.gradient_laplacian(e, configs.electron(e))
         ke += -0.5 * lap.real
-        grad2 += np.sum(np.abs(grad)**2, axis=0)
+        grad2 += np.sum(np.abs(grad) ** 2, axis=0)
     return ke, grad2

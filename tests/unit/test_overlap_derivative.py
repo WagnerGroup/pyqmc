@@ -4,6 +4,7 @@ from pyqmc import wftools, slater
 from pyqmc import optimize_ortho as oo
 import copy
 
+
 def numerical_gradient(wfs, configs, pgrad, deltas=(1e-5,)):
     wfparms = wfs[-1].parameters
     transform = pgrad.transform
@@ -59,7 +60,7 @@ def get_data(wfs, configs, pgrad):
     return deriv_data
 
 
-def test_overlap_derivative(H2_ccecp_uhf,epsilon = 1e-8):
+def test_overlap_derivative(H2_ccecp_uhf, epsilon=1e-8):
     mol, mf = H2_ccecp_uhf
     mf = copy.copy(mf)
 

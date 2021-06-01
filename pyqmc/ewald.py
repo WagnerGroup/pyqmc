@@ -229,7 +229,9 @@ class Ewald:
             rvec = ion_distances[:, :, np.newaxis, :] + self.lattice_displacements
             r = gpu.cp.linalg.norm(rvec, axis=-1)
             charge_ij = gpu.cp.prod(self.atom_charges[np.asarray(ion_inds)], axis=1)
-            ion_ion_real = gpu.cp.einsum("j,ijk->", charge_ij, gpu.erfc(self.alpha * r) / r)
+            ion_ion_real = gpu.cp.einsum(
+                "j,ijk->", charge_ij, gpu.erfc(self.alpha * r) / r
+            )
 
         # Reciprocal space part
         GdotR = gpu.cp.dot(self.gpoints, gpu.cp.asarray(self.atom_coords.T))

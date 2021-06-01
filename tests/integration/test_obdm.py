@@ -59,13 +59,13 @@ def test():
 
 @pytest.mark.slow
 def test_pbc(h_noncubic_sto3g):
-    #from pyscf.pbc import gto, scf
+    # from pyscf.pbc import gto, scf
     from pyqmc import supercell
     import scipy
 
     mol, mf = h_noncubic_sto3g
 
-    #S = np.ones((3, 3)) - np.eye(3)
+    # S = np.ones((3, 3)) - np.eye(3)
     S = np.identity(3)
     mol = supercell.get_supercell(mol, S)
     kpts = supercell.get_supercell_kpts(mol)[:2]
@@ -97,12 +97,12 @@ def test_pbc(h_noncubic_sto3g):
         wf,
         configs,
         nsteps=nsteps,
-        accumulators={"obdm": obdm},#, "obdm_up": obdm_up, "obdm_down": obdm_down},
+        accumulators={"obdm": obdm},  # , "obdm_up": obdm_up, "obdm_down": obdm_down},
         verbose=True,
     )
 
     obdm_est = {}
-    for k in ["obdm"]:#, "obdm_up", "obdm_down"]:
+    for k in ["obdm"]:  # , "obdm_up", "obdm_down"]:
         avg_norm = np.mean(df[k + "norm"][warmup:], axis=0)
         avg_obdm = np.mean(df[k + "value"][warmup:], axis=0)
         obdm_est[k] = normalize_obdm(avg_obdm, avg_norm)

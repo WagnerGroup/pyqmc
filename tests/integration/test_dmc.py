@@ -1,4 +1,5 @@
 import os
+
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -7,6 +8,7 @@ from pyqmc import reblock
 import pyqmc.api as pyq
 import pytest
 import uuid
+
 
 @pytest.mark.slow
 def test():
@@ -40,7 +42,9 @@ def test():
 
     dfprod = dfdmc[dfdmc.step >= warmup]
 
-    rb_summary = reblock.reblock_summary(dfprod[["energytotal", "energyei"]], 20, weights=dfprod["weight"])
+    rb_summary = reblock.reblock_summary(
+        dfprod[["energytotal", "energyei"]], 20, weights=dfprod["weight"]
+    )
     energy, err = [rb_summary[v]["energytotal"] for v in ("mean", "standard error")]
     assert (
         np.abs(energy + 0.5) < 5 * err
@@ -48,17 +52,17 @@ def test():
 
 
 def test_dmc_restarts(H_pbc_sto3g_krks, nconf=10):
-    """ For PBCs, check to make sure there are no 
-    errors on restart. """
+    """For PBCs, check to make sure there are no
+    errors on restart."""
     mol, mf = H_pbc_sto3g_krks
     nconf = 10
-    fname = "test_dmc_restart_"+str(uuid.uuid4())
+    fname = "test_dmc_restart_" + str(uuid.uuid4())
 
     configs = pyq.initial_guess(mol, nconf)
     wf, _ = pyq.generate_wf(mol, mf, jastrow_kws=dict(na=0, nb=0))
     enacc = pyq.EnergyAccumulator(mol)
-    pyq.rundmc(wf, configs, nsteps = 20, hdf_file = fname, accumulators={'energy':enacc})
-    pyq.rundmc(wf, configs, nsteps = 20, hdf_file = fname, accumulators={'energy':enacc})
+    pyq.rundmc(wf, configs, nsteps=20, hdf_file=fname, accumulators={"energy": enacc})
+    pyq.rundmc(wf, configs, nsteps=20, hdf_file=fname, accumulators={"energy": enacc})
     os.remove(fname)
 
 

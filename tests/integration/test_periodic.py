@@ -48,7 +48,7 @@ def runtest(mol, mf, kind=0):
         hdf_file=str(uuid.uuid4()),
     )
     print("VMC time", time.time() - start)
-    
+
     df = pd.DataFrame(df)
     dfke = pyq.avg_reblock(df["energyke"][warmup:], 10)
     vmcke, err = dfke.mean(), dfke.sem()
@@ -59,5 +59,3 @@ def runtest(mol, mf, kind=0):
     ), "energy diff not within 5 sigma ({0:.6f}): energies \n{1} \n{2}".format(
         5 * err, vmcke, pyscfke
     )
-
-

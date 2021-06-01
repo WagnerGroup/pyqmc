@@ -12,6 +12,7 @@ def test_cubic_with_ecp(li_cubic_ccecp, kind=1):
     cell, mf = li_cubic_ccecp
     runtest(cell, mf, kind=kind)
 
+
 def test_noncubic(h_noncubic_sto3g, kind=1):
     cell, mf = h_noncubic_sto3g
     runtest(cell, mf, kind=kind)

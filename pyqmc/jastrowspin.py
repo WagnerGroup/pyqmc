@@ -118,7 +118,9 @@ class JastrowSpin:
               epos: configs object for electron e
               mask: mask over configs axis, only return values for configs where mask==True. a_partial_e might have a smaller configs axis than epos, _configscurrent, and _a_partial because of the mask.
         """
-        d = gpu.cp.asarray(epos.dist.dist_i(self._mol.atom_coords(), epos.configs[mask]))
+        d = gpu.cp.asarray(
+            epos.dist.dist_i(self._mol.atom_coords(), epos.configs[mask])
+        )
         r = gpu.cp.linalg.norm(d, axis=-1)
         a_partial_e = gpu.cp.zeros((*r.shape, self._a_partial.shape[3]))
         for k, a in enumerate(self.a_basis):
@@ -170,7 +172,9 @@ class JastrowSpin:
             epos.dist.dist_i(self._configscurrent.configs[mask], epos.configs[mask])
         )
         r = gpu.cp.linalg.norm(d, axis=-1)
-        b_partial_e = gpu.cp.zeros((e.shape[0], *r.shape[:-1], *self._b_partial.shape[2:]))
+        b_partial_e = gpu.cp.zeros(
+            (e.shape[0], *r.shape[:-1], *self._b_partial.shape[2:])
+        )
 
         for l, b in enumerate(self.b_basis):
             bval = b.value(d, r)
@@ -259,14 +263,15 @@ class JastrowSpin:
         return gpu.asnumpy(grad)
 
     def gradient_value(self, e, epos):
-        r"""
-        """
+        r""""""
         nconf, nelec = self._configscurrent.configs.shape[:2]
         nup = self._mol.nelec[0]
 
         # Get e-e and e-ion distances
         not_e = np.arange(nelec) != e
-        dnew = gpu.cp.asarray(epos.dist.dist_i(self._configscurrent.configs[:, not_e], epos.configs))
+        dnew = gpu.cp.asarray(
+            epos.dist.dist_i(self._configscurrent.configs[:, not_e], epos.configs)
+        )
         dinew = gpu.cp.asarray(epos.dist.dist_i(self._mol.atom_coords(), epos.configs))
         rnew = gpu.cp.linalg.norm(dnew, axis=-1)
         rinew = gpu.cp.linalg.norm(dinew, axis=-1)
@@ -407,7 +412,10 @@ class JastrowSpin:
         """Given the b sums, this is pretty trivial for the coefficient derivatives.
         For the derivatives of basis functions, we will have to compute the derivative
         of all the b's and redo the sums, similar to recompute()"""
-        return {"bcoeff": gpu.asnumpy(self._bvalues), "acoeff": gpu.asnumpy(self._avalues)}
+        return {
+            "bcoeff": gpu.asnumpy(self._bvalues),
+            "acoeff": gpu.asnumpy(self._avalues),
+        }
 
     def u_components(self, rvec, r):
         """Given positions rvec and their magnitudes r, returns
@@ -426,7 +434,9 @@ class JastrowSpin:
         )
 
         u_twobody = {"upup": [], "updn": [], "dndn": []}
-        b_value = gpu.cp.asarray(list(map(lambda x: x.value(rvec, r), self.b_basis[1:])))
+        b_value = gpu.cp.asarray(
+            list(map(lambda x: x.value(rvec, r), self.b_basis[1:]))
+        )
         u_twobody["upup"] = gpu.cp.dot(self.parameters["bcoeff"][1:, 0], b_value)
         u_twobody["updn"] = gpu.cp.dot(self.parameters["bcoeff"][1:, 1], b_value)
         u_twobody["dndn"] = gpu.cp.dot(self.parameters["bcoeff"][1:, 2], b_value)

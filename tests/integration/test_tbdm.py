@@ -92,16 +92,16 @@ def make_separate_spin_iaos(cell, mf, mos, iao_basis="minao"):
 
 def create_accumulators(mol, iaos, tbdm_sweeps=4, tbdm_tstep=0.5):
     return dict(
-        tbdm_upup = TBDMAccumulator(
+        tbdm_upup=TBDMAccumulator(
             mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin=(0, 0)
         ),
-        tbdm_updown = TBDMAccumulator(
+        tbdm_updown=TBDMAccumulator(
             mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin=(0, 1)
         ),
-        tbdm_downup = TBDMAccumulator(
+        tbdm_downup=TBDMAccumulator(
             mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin=(1, 0)
         ),
-        tbdm_downdown = TBDMAccumulator(
+        tbdm_downdown=TBDMAccumulator(
             mol=mol, orb_coeff=iaos, nsweeps=tbdm_sweeps, tstep=tbdm_tstep, spin=(1, 1)
         ),
     )
@@ -152,14 +152,18 @@ def tbdm_from_mf(mol, mf, iaos):
 
 
 ###########################################################
-def run_vmc_tbdm(mol, mf, iaos, nconf = 500, 
-    n_vmc_steps = 400,
-    vmc_tstep = 0.3,
-    vmc_warmup = 30,
+def run_vmc_tbdm(
+    mol,
+    mf,
+    iaos,
+    nconf=500,
+    n_vmc_steps=400,
+    vmc_tstep=0.3,
+    vmc_warmup=30,
 ):
     """ compute the TBDM using VMC  and orbitals given by iaos """
 
-    wf = Slater(mol, mf)  
+    wf = Slater(mol, mf)
     configs = initial_guess(mol, nconf)
     df, coords = vmc(
         wf,
@@ -188,6 +192,7 @@ def run_vmc_tbdm(mol, mf, iaos, nconf = 500,
             [tbdm_est["downupvalue"], tbdm_est["downdownvalue"]],
         ]
     )
+
 
 def test_tbdm_slater(H2_ccecp_uhf):
     mol, mf = H2_ccecp_uhf

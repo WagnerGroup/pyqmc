@@ -95,7 +95,6 @@ def generate_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
     return jastrow, to_opt
 
 
-
 def generate_sj(mol, mf, optimize_orbitals=False, twist=None, **jastrow_kws):
     wf1, to_opt1 = generate_slater(mol, mf, optimize_orbitals, twist)
     wf2, to_opt2 = generate_jastrow(mol, **jastrow_kws)

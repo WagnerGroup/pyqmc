@@ -71,12 +71,11 @@ class OBDMAccumulator:
         else:
             self._electrons = np.arange(0, np.sum(mol.nelec))
 
-
         if kpts is None:
             self.orbitals = pyqmc.orbitals.MoleculeOrbitalEvaluator(
                 mol, [orb_coeff, orb_coeff]
             )
-            if hasattr(mol,"a"):
+            if hasattr(mol, "a"):
                 raise ValueError("kpts is required if the system is periodic")
         else:
             if not hasattr(mol, "original_cell"):
@@ -96,7 +95,6 @@ class OBDMAccumulator:
         self._warmed_up = False
         self._mol = mol
         self.norb = self.orbitals.parameters["mo_coeff_alpha"].shape[-1]
-
 
     def warm_up(self, naux):
         self._extra_config = mc.initial_guess(self._mol, int(naux / self.nelec) + 1)
@@ -178,11 +176,16 @@ class OBDMAccumulator:
         return self.orbitals.mos(ao, spin=0)
 
     def keys(self):
-        return set(["value", "norm"],)
+        return set(
+            ["value", "norm"],
+        )
 
     def shapes(self):
         norb = self.norb
-        return {"value": (norb, norb), "norm": (norb,),}
+        return {
+            "value": (norb, norb),
+            "norm": (norb,),
+        }
 
 
 def sample_onebody(configs, orbitals, spin, nsamples=1, tstep=0.5):

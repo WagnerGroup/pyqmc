@@ -6,8 +6,7 @@ import pyqmc.api as pyq
 
 
 def test_transform(LiH_sto3g_rhf):
-    """Tests that the shapes are ok
-    """
+    """Tests that the shapes are ok"""
     mol, mf = LiH_sto3g_rhf
     wf, to_opt = pyq.generate_wf(mol, mf)
     transform = LinearTransform(wf.parameters)
@@ -34,6 +33,7 @@ def test_info_functions_mol(LiH_sto3g_rhf):
 
 def test_info_functions_pbc(H_pbc_sto3g_krks):
     from pyqmc.supercell import get_supercell
+
     mol, mf = H_pbc_sto3g_krks
     kinds = [0, 1]
     dm_orbs = [mf.mo_coeff[i][:, :2] for i in kinds]

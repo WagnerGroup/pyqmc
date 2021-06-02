@@ -45,7 +45,9 @@ def optvariance(energy, wf, coords, params=None, **kwargs):
         print(xk, variance_cost_function(xk))
         return False
 
-    res = scipy.optimize.minimize(variance_cost_function, x0=x0, callback=callback, **kwargs)
+    res = scipy.optimize.minimize(
+        variance_cost_function, x0=x0, callback=callback, **kwargs
+    )
 
     opt_pars = np.split(res.x, slices[:-1])
     for i, k in enumerate(params):

@@ -7,6 +7,7 @@ import pyqmc.orbitals
 import pyqmc.supercell as supercell
 import warnings
 
+
 class TBDMAccumulator:
     """Returns one spin sector of the tbdm[s1,s2] as an array (norb_s1,norb_s1,norb_s2,norb_s2) with indices (using pySCF's
     convention): tbdm[s1,s2][i,j,k,l] = < c^+_{s1,i} c^+_{s2,k} c_{s2,l} c_{s1,j} > = \phi*_{s1,j} \phi*_{s2,l} \phi_{s2,k} \phi_{s1,i}.
@@ -60,12 +61,16 @@ class TBDMAccumulator:
 
         if kpts is None:
             self.orbitals = pyqmc.orbitals.MoleculeOrbitalEvaluator(mol, orb_coeff)
-            if hasattr(mol,'a'):
-                warnings.warn("Using molecular orbital evaluator for a periodic system. This is likely wrong unless you know what you're doing. Make sure to pass kpts into TBDM if you want to use the periodic orbital evaluator.")
+            if hasattr(mol, "a"):
+                warnings.warn(
+                    "Using molecular orbital evaluator for a periodic system. This is likely wrong unless you know what you're doing. Make sure to pass kpts into TBDM if you want to use the periodic orbital evaluator."
+                )
         else:
             if not hasattr(mol, "original_cell"):
                 mol = supercell.get_supercell(mol, np.eye(3))
-            self.orbitals = pyqmc.orbitals.PBCOrbitalEvaluatorKpoints(mol, orb_coeff, kpts)
+            self.orbitals = pyqmc.orbitals.PBCOrbitalEvaluatorKpoints(
+                mol, orb_coeff, kpts
+            )
 
         self.dtype = complex if self.orbitals.iscomplex else float
         self._spin_sector = spin
@@ -90,7 +95,7 @@ class TBDMAccumulator:
 
     def warm_up(self, naux):
         # Initialization and warmup of configurations
-        nwalkers = int(naux / sum(self._mol.nelec))+1
+        nwalkers = int(naux / sum(self._mol.nelec)) + 1
         self._aux_configs = []
         for spin in [0, 1]:
             self._aux_configs.append(mc.initial_guess(self._mol, nwalkers))
@@ -175,12 +180,15 @@ class TBDMAccumulator:
             "norm_a": np.zeros((nconf, orb_configs[0].shape[-1])),
             "norm_b": np.zeros((nconf, orb_configs[1].shape[-1])),
         }
-        orb_configs = gpu.cp.asarray([orb_configs[s][:, :, self._ijkl[2 * s]] for s in [0, 1]])
+        orb_configs = gpu.cp.asarray(
+            [orb_configs[s][:, :, self._ijkl[2 * s]] for s in [0, 1]]
+        )
 
         down_start = [np.min(self._electrons[s]) for s in [0, 1]]
         for sweep in range(self._nsweeps):
             fsum = [
-                gpu.cp.sum(gpu.cp.abs(aux["orbs"][spin][sweep]) ** 2, axis=1) for spin in [0, 1]
+                gpu.cp.sum(gpu.cp.abs(aux["orbs"][spin][sweep]) ** 2, axis=1)
+                for spin in [0, 1]
             ]
             norm = [
                 gpu.cp.abs(aux["orbs"][spin][sweep]) ** 2 / fsum[spin][:, np.newaxis]
@@ -221,7 +229,9 @@ class TBDMAccumulator:
                 rho1rho2,
             )
 
-            results["value"] += gpu.asnumpy(gpu.cp.einsum("in,inj->ij", wfratio, orbratio))
+            results["value"] += gpu.asnumpy(
+                gpu.cp.einsum("in,inj->ij", wfratio, orbratio)
+            )
             results["norm_a"] += gpu.asnumpy(norm[0])
             results["norm_b"] += gpu.asnumpy(norm[1])
 
@@ -232,12 +242,12 @@ class TBDMAccumulator:
         return results
 
     def keys(self):
-        return set(
-            ["value", "norm_a", "norm_b"]
-        )
+        return set(["value", "norm_a", "norm_b"])
 
     def shapes(self):
-        d = {"value": (self._ijkl.shape[1],), }
+        d = {
+            "value": (self._ijkl.shape[1],),
+        }
         nmo = self.orbitals.nmo()
         for e, s in zip(["a", "b"], self._spin_sector):
             d["norm_%s" % e] = (nmo[s],)

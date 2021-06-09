@@ -76,8 +76,6 @@ def collect_overlap_data(wfs, configs, pgrad):
     return save_dat
 
 
-
-
 def construct_rho_gradient(grads, log_values):
     total_grad = np.zeros_like(grads[0])
     for g, v in zip(grads, log_values):

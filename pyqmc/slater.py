@@ -100,7 +100,15 @@ class Slater:
 
     """
 
-    def __init__(self, mol, mf, mc=None, tol=None, twist=None):
+    def __init__(self, mol, mf, mc=None, tol=None, twist=None, determinants=None):
+        """
+        determinants should be a list of tuples, for example
+        [ (1.0, [0,1],[0,1]),
+          (-0.2, [0,2],[0,2]) ]
+        would be a two-determinant wave function with a doubles excitation in the second one.
+
+        determinants overrides any information in mc, if passed.
+        """
         self.tol = -1 if tol is None else tol
         self._mol = mol
         if hasattr(mc, "nelecas"):
@@ -115,10 +123,15 @@ class Slater:
             self._det_occup,
             self._det_map,
             self.orbitals,
-        ) = pyqmc.orbitals.choose_evaluator_from_pyscf(mol, mf, mc, twist=twist)
+        ) = pyqmc.orbitals.choose_evaluator_from_pyscf(
+            mol, mf, mc, twist=twist, determinants=determinants
+        )
+
         self.parameters = JoinParameters([self.myparameters, self.orbitals.parameters])
 
-        self.iscomplex = bool(sum(map(gpu.cp.iscomplexobj, self.parameters.values())))
+        self.iscomplex = self.orbitals.iscomplex or bool(
+            sum(map(gpu.cp.iscomplexobj, self.parameters.values()))
+        )
         self.dtype = complex if self.iscomplex else float
         self.get_phase = get_complex_phase if self.iscomplex else gpu.cp.sign
 
@@ -127,7 +140,6 @@ class Slater:
         (phase,logdet). If the wf is real, phase will be +/- 1."""
 
         nconf, nelec, ndim = configs.configs.shape
-
         aos = self.orbitals.aos("GTOval_sph", configs)
         self._aovals = aos.reshape(-1, nconf, nelec, aos.shape[-1])
         self._dets = []
@@ -212,7 +224,6 @@ class Slater:
             self.parameters["det_coeff"],
             det_array,
         )
-        # curr_val = self.value()
 
         if len(numer.shape) == 2:
             denom = denom[:, gpu.cp.newaxis]
@@ -298,9 +309,9 @@ class Slater:
         ao = self.orbitals.aos("GTOval_sph_deriv2", epos)
         ao_val = ao[:, 0, :, :]
         ao_lap = gpu.cp.sum(ao[:, [4, 7, 9], :, :], axis=1)
-        mos = gpu.cp.stack([
-            self.orbitals.mos(x, s)[..., self._det_occup[s]] for x in [ao_val, ao_lap]
-        ])
+        mos = gpu.cp.stack(
+            [self.orbitals.mos(x, s)[..., self._det_occup[s]] for x in [ao_val, ao_lap]]
+        )
         ratios = self._testrowderiv(e, mos)
         return gpu.asnumpy(ratios[1] / ratios[0])
 

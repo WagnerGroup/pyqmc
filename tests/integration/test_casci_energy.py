@@ -33,4 +33,3 @@ def test_casci_energy(H2_ccecp_casci_s0):
     en = df.mean()
     err = df.sem()
     assert en - mc.e_tot < 5 * err
-

@@ -119,7 +119,6 @@ class Ewald:
         # Determine alpha
         smallestheight = np.amin(1 / np.linalg.norm(recvec.T, axis=1))
         self.alpha = 5.0 / smallestheight
-        print("Setting Ewald alpha to ", self.alpha)
 
         # Determine G points to include in reciprocal Ewald sum
         gptsXpos = gpu.cp.meshgrid(
@@ -230,7 +229,9 @@ class Ewald:
             rvec = ion_distances[:, :, np.newaxis, :] + self.lattice_displacements
             r = gpu.cp.linalg.norm(rvec, axis=-1)
             charge_ij = gpu.cp.prod(self.atom_charges[np.asarray(ion_inds)], axis=1)
-            ion_ion_real = gpu.cp.einsum("j,ijk->", charge_ij, gpu.erfc(self.alpha * r) / r)
+            ion_ion_real = gpu.cp.einsum(
+                "j,ijk->", charge_ij, gpu.erfc(self.alpha * r) / r
+            )
 
         # Reciprocal space part
         GdotR = gpu.cp.dot(self.gpoints, gpu.cp.asarray(self.atom_coords.T))
@@ -309,7 +310,7 @@ class Ewald:
         sum_e_cos = gpu.cp.cos(e_GdotR).sum(axis=1)
         ee_recip = gpu.cp.dot(sum_e_sin ** 2 + sum_e_cos ** 2, self.gweight)
         ## Reciprocal space electron-ion part
-        coscos_sinsin = -self.ion_exp.real * sum_e_cos + self.ion_exp.imag * sum_e_sin
+        coscos_sinsin = -self.ion_exp.real * sum_e_cos - self.ion_exp.imag * sum_e_sin
         ei_recip = 2 * gpu.cp.dot(coscos_sinsin, self.gweight)
         return ee_recip, ei_recip
 

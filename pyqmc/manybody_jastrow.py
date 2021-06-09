@@ -137,15 +137,9 @@ class J3:
             ao = np.real_if_close(
                 self.mol.eval_gto("GTOval_cart_deriv2", coords), tol=1e4
             )
-<<<<<<< HEAD
-            val = ao[0].reshape((nconf, nelec, -1))
-            grad = ao[1:4].reshape((3, nconf, nelec, -1))
-            lap = ao[[4, 7, 9]].reshape((3, nconf, nelec, -1))
-=======
             val = ao[0].reshape((nconf, nelec, ao.shape[-1]))
             grad = ao[1:4].reshape((3, nconf, nelec, ao.shape[-1]))
             lap = ao[[4, 7, 9]].reshape((3, nconf, nelec, ao.shape[-1]))
->>>>>>> master
             return (val, grad, lap)
 
     def testvalue(self, e, epos, mask=None):

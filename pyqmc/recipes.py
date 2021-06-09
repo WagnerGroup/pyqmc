@@ -21,7 +21,7 @@ def OPTIMIZE(
     anchors=None,
     nconfig=1000,
     ci_checkfile=None,
-    start_from=None,
+    starting_wf=None,
     S=None,
     jastrow_kws=None,
     slater_kws=None,
@@ -33,7 +33,7 @@ def OPTIMIZE(
         opt_wf=True,
         nconfig=nconfig,
         ci_checkfile=ci_checkfile,
-        start_from=start_from,
+        starting_wf=starting_wf,
         S=S,
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
@@ -76,7 +76,7 @@ def VMC(
     output,
     nconfig=1000,
     ci_checkfile=None,
-    start_from=None,
+    starting_wf=None,
     S=None,
     jastrow_kws=None,
     slater_kws=None,
@@ -88,7 +88,7 @@ def VMC(
         dft_checkfile,
         nconfig=nconfig,
         ci_checkfile=ci_checkfile,
-        start_from=start_from,
+        starting_wf=starting_wf,
         S=S,
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
@@ -102,7 +102,7 @@ def DMC(
     output,
     nconfig=1000,
     ci_checkfile=None,
-    start_from=None,
+    starting_wf=None,
     S=None,
     jastrow_kws=None,
     slater_kws=None,
@@ -114,7 +114,7 @@ def DMC(
         dft_checkfile,
         nconfig=nconfig,
         ci_checkfile=ci_checkfile,
-        start_from=start_from,
+        starting_wf=starting_wf,
         S=S,
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
@@ -126,7 +126,7 @@ def DMC(
 def initialize_qmc_objects(
     dft_checkfile,
     nconfig=1000,
-    start_from=None,
+    starting_wf=None,
     ci_checkfile=None,
     S=None,
     jastrow_kws=None,
@@ -148,8 +148,8 @@ def initialize_qmc_objects(
     wf, to_opt = wftools.generate_wf(
         mol, mf, mc=mc, jastrow_kws=jastrow_kws, slater_kws=slater_kws
     )
-    if start_from is not None:
-        wftools.read_wf(wf, start_from)
+    if starting_wf is not None:
+        wftools.read_wf(wf, starting_wf)
 
     configs = pyqmc.mc.initial_guess(mol, nconfig)
     if opt_wf:

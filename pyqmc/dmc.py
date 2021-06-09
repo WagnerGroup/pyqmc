@@ -324,6 +324,7 @@ def rundmc(
     ekey=("energy", "total"),
     feedback=1.0,
     hdf_file=None,
+    restart_from=None,
     client=None,
     npartitions=None,
     **kwargs,
@@ -350,8 +351,10 @@ def rundmc(
 
     """
     # Restart from HDF file
-    if hdf_file is not None and os.path.isfile(hdf_file):
-        with h5py.File(hdf_file, "r") as hdf:
+    if restart_from is None:
+        restart_from = hdf_file
+    if restart_from is not None and os.path.isfile(restart_from):
+        with h5py.File(restart_from, "r") as hdf:
             stepoffset = hdf["step"][-1] + 1
             configs.load_hdf(hdf)
             weights = np.array(hdf["weights"])

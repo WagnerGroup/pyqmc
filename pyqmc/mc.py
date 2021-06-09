@@ -165,6 +165,7 @@ def vmc(
     verbose=False,
     stepoffset=0,
     hdf_file=None,
+    restart_from=None,
     client=None,
     npartitions=None,
 ):
@@ -201,8 +202,10 @@ def vmc(
             print("WARNING: running VMC with no accumulators")
 
     # Restart
-    if hdf_file is not None:
-        with h5py.File(hdf_file, "a") as hdf:
+    if restart_from is None:
+        restart_from = hdf_file
+    if restart_from is not None and os.path.isfile(restart_from):
+        with h5py.File(restart_from, "r") as hdf:
             if "configs" in hdf.keys():
                 stepoffset = hdf["block"][-1] + 1
                 configs.load_hdf(hdf)

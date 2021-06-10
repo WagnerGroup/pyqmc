@@ -204,6 +204,8 @@ def vmc(
     # Restart
     if continue_from is None:
         continue_from = hdf_file
+    elif not os.path.isfile(continue_from):
+        raise RuntimeError("cannot continue from {0}; the file does not exist!")
     elif hdf_file is not None and os.path.isfile(hdf_file):
         raise RuntimeError(
             "continue_from is not None but hdf_file={0} already exists! Delete or rename {0} and try again.".format(

@@ -13,6 +13,7 @@ import scipy.stats
 import pandas as pd
 import copy
 import pyqmc.accumulators
+import os
 
 
 def OPTIMIZE(
@@ -21,19 +22,25 @@ def OPTIMIZE(
     anchors=None,
     nconfig=1000,
     ci_checkfile=None,
-    starting_wf=None,
+    load_parameters=None,
     S=None,
     jastrow_kws=None,
     slater_kws=None,
     **linemin_kws,
 ):
     linemin_kws["hdf_file"] = output
+    if load_parameters is not None and output is not None and os.path.isfile(output):
+        raise RuntimeError(
+            "load_parameters is not None and output={0} already exists! Delete or rename {0} and try again.".format(
+                output
+            )
+        )
     wf, configs, acc = initialize_qmc_objects(
         dft_checkfile,
         opt_wf=True,
         nconfig=nconfig,
         ci_checkfile=ci_checkfile,
-        starting_wf=starting_wf,
+        load_parameters=load_parameters,
         S=S,
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
@@ -76,7 +83,7 @@ def VMC(
     output,
     nconfig=1000,
     ci_checkfile=None,
-    starting_wf=None,
+    load_parameters=None,
     S=None,
     jastrow_kws=None,
     slater_kws=None,
@@ -88,7 +95,7 @@ def VMC(
         dft_checkfile,
         nconfig=nconfig,
         ci_checkfile=ci_checkfile,
-        starting_wf=starting_wf,
+        load_parameters=load_parameters,
         S=S,
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
@@ -102,7 +109,7 @@ def DMC(
     output,
     nconfig=1000,
     ci_checkfile=None,
-    starting_wf=None,
+    load_parameters=None,
     S=None,
     jastrow_kws=None,
     slater_kws=None,
@@ -114,7 +121,7 @@ def DMC(
         dft_checkfile,
         nconfig=nconfig,
         ci_checkfile=ci_checkfile,
-        starting_wf=starting_wf,
+        load_parameters=load_parameters,
         S=S,
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
@@ -126,7 +133,7 @@ def DMC(
 def initialize_qmc_objects(
     dft_checkfile,
     nconfig=1000,
-    starting_wf=None,
+    load_parameters=None,
     ci_checkfile=None,
     S=None,
     jastrow_kws=None,
@@ -148,8 +155,8 @@ def initialize_qmc_objects(
     wf, to_opt = wftools.generate_wf(
         mol, mf, mc=mc, jastrow_kws=jastrow_kws, slater_kws=slater_kws
     )
-    if starting_wf is not None:
-        wftools.read_wf(wf, starting_wf)
+    if load_parameters is not None:
+        wftools.read_wf(wf, load_parameters)
 
     configs = pyqmc.mc.initial_guess(mol, nconfig)
     if opt_wf:

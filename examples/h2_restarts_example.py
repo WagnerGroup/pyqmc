@@ -24,7 +24,7 @@ def run_restarts(ntimes=5):
         pyqmc.recipes.OPTIMIZE(
             chkfile,
             f"h2_opt{i}.hdf",
-            starting_wf=f"h2_opt{i-1}.hdf" if i > 0 else None,
+            load_parameters=f"h2_opt{i-1}.hdf" if i > 0 else None,
             slater_kws=dict(optimize_orbitals=True, optimize_zeros=False),
             max_iterations=2,
             **common_args,
@@ -34,7 +34,7 @@ def run_restarts(ntimes=5):
         pyqmc.recipes.VMC(
             chkfile,
             f"h2_vmc{i}.hdf",
-            starting_wf=f"h2_opt{ntimes-1}.hdf",
+            load_parameters=f"h2_opt{ntimes-1}.hdf",
             restart_from=f"h2_vmc{i-1}.hdf" if i > 0 else None,
             **common_args,
             nblocks=2,
@@ -44,7 +44,7 @@ def run_restarts(ntimes=5):
         pyqmc.recipes.DMC(
             chkfile,
             f"h2_dmc{i}.hdf",
-            starting_wf=f"h2_opt{ntimes-1}.hdf",
+            load_parameters=f"h2_opt{ntimes-1}.hdf",
             restart_from=f"h2_dmc{i-1}.hdf" if i > 0 else None,
             **common_args,
             nsteps=10,

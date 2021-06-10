@@ -165,7 +165,7 @@ def vmc(
     verbose=False,
     stepoffset=0,
     hdf_file=None,
-    restart_from=None,
+    continue_from=None,
     client=None,
     npartitions=None,
 ):
@@ -202,15 +202,23 @@ def vmc(
             print("WARNING: running VMC with no accumulators")
 
     # Restart
-    if restart_from is None:
-        restart_from = hdf_file
-    if restart_from is not None and os.path.isfile(restart_from):
-        with h5py.File(restart_from, "r") as hdf:
+    if continue_from is None:
+        continue_from = hdf_file
+    elif hdf_file is not None and os.path.isfile(hdf_file):
+        raise RuntimeError(
+            "continue_from is not None but hdf_file={0} already exists! Delete or rename {0} and try again.".format(
+                hdf_file
+            )
+        )
+    if continue_from is not None and os.path.isfile(continue_from):
+        with h5py.File(continue_from, "r") as hdf:
             if "configs" in hdf.keys():
                 stepoffset = hdf["block"][-1] + 1
                 configs.load_hdf(hdf)
                 if verbose:
-                    print("Restarting calculation from step", stepoffset)
+                    print(
+                        f"Restarting calculation {continue_from} from step {stepoffset}"
+                    )
 
     df = []
 

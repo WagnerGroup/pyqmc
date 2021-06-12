@@ -66,40 +66,7 @@ class J3:
         return gpu.asnumpy(grad1 + grad2)
 
     def laplacian(self, e, epos):
-        _, e_grad, e_lap = self._get_val_grad_lap(epos)
-        lap1 = np.einsum(
-            "mn, dcm, cjn-> c",
-            self.parameters["gcoeff"],
-            e_lap[:, :, 0, :],
-            self.ao_val[:, :e, :],
-            optimize=self.optimize,
-        )
-        lap2 = np.einsum(
-            "mn, cim, dcn -> c",
-            self.parameters["gcoeff"],
-            self.ao_val[:, e + 1 :, :],
-            e_lap[:, :, 0, :],
-            optimize=self.optimize,
-        )
-
-        grad1 = np.einsum(
-            "mn, dcm, cjn -> dc",
-            self.parameters["gcoeff"],
-            e_grad[:, :, 0, :],
-            self.ao_val[:, :e, :],
-            optimize=self.optimize,
-        )
-        grad2 = np.einsum(
-            "mn, cim, dcn -> dc",
-            self.parameters["gcoeff"],
-            self.ao_val[:, e + 1 :, :],
-            e_grad[:, :, 0, :],
-            optimize=self.optimize,
-        )
-        grad = grad1 + grad2
-
-        lap3 = np.einsum("dc,dc->c", grad, grad)
-        return gpu.asnumpy(lap1 + lap2 + lap3)
+        return self.gradient_laplacian(e, epos)[1]
 
     def gradient_laplacian(self, e, epos):
         _, e_grad, e_lap = self._get_val_grad_lap(epos)

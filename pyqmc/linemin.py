@@ -97,8 +97,8 @@ def line_minimization(
     coords,
     pgrad_acc,
     steprange=0.2,
-    warmup=0,
     max_iterations=30,
+    warmup_options=None,
     vmcoptions=None,
     lmoptions=None,
     update=sr_update,
@@ -134,6 +134,10 @@ def line_minimization(
         lmoptions = {}
     if update_kws is None:
         update_kws = {}
+    if warmup_options is None:
+        warmup_options = dict(nblocks=1, nsteps_per_block=10, verbose=verbose)
+    if "tstep" not in warmup_options and "tstep" in vmcoptions:
+        warmup_options["tstep"] = vmcoptions["tstep"]
 
     # Restart
     iteration_offset = 0
@@ -188,7 +192,7 @@ def line_minimization(
         accumulators={},
         client=client,
         npartitions=npartitions,
-        **vmcoptions
+        **warmup_options
     )
     if verbose:
         print("finished warmup", flush=True)

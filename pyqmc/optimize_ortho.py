@@ -389,7 +389,7 @@ def optimize_orthogonal(
     forcing=None,
     tstep=0.1,
     max_iterations=30,
-    warmup=5,
+    warmup=1,
     warmup_options=None,
     Ntarget=0.5,
     max_step=10.0,
@@ -525,7 +525,9 @@ def optimize_orthogonal(
 
     # warm up to equilibrate the configurations before running optimization
     if warmup_options is None:
-        warmup_options = {}
+        warmup_options = dict(nblocks=1, nsteps=10)
+    if "tstep" not in warmup_options and "tstep" in sample_options:
+        warmup_options["tstep"] = sample_options["tstep"]
 
     data, coords = mc.vmc(
         wfs[-1],

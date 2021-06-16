@@ -28,7 +28,7 @@ def get_V2(configs, wf, acc_out):
     nconfig, nelec = configs.configs.shape[0:2]
     v2 = np.zeros(nconfig)
     for e in range(nelec):
-        v2 += np.sum(wf.gradient(e, configs.electron(e)).T ** 2, axis=1)
+        v2 += np.sum(np.abs(wf.gradient(e, configs.electron(e))).T ** 2, axis=1)
     return v2
 
 

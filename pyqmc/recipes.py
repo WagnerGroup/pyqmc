@@ -92,6 +92,7 @@ def VMC(
         S=S,
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
+        accumulators=accumulators
     )
 
     pyqmc.mc.vmc(wf, configs, accumulators=acc, **vmc_kws)

@@ -118,6 +118,7 @@ def DMC(
         S=S,
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
+        accumulators=accumulators
     )
 
     dmc.rundmc(wf, configs, accumulators=acc, **dmc_kws)

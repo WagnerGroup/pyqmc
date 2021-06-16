@@ -36,7 +36,7 @@ def compute_tmoves(mol, configs, wf, e, threshold, tau):
     for d in data:
         npts = d["ratio"].shape[1]
         weight = np.zeros((nconfig, npts))
-        ratio = np.ones((nconfig, npts))
+        ratio = np.ones((nconfig, npts), dtype=d["ratio"].dtype)
         weight[d["mask"]] = np.einsum(
             "ik, ijk -> ij", np.exp(-tau * d["v_l"]) - 1, d["P_l"]
         )

@@ -86,9 +86,9 @@ class MinimalImageDistance(RawDistance):
             self.dist_i = self.diagonal_dist_i
         else:
             orthogonal = (
-                np.dot(latvec[0], latvec[1]) < ortho_tol
-                and np.dot(latvec[1], latvec[2]) < ortho_tol
-                and np.dot(latvec[2], latvec[0]) < ortho_tol
+                np.abs(np.dot(latvec[0], latvec[1])) < ortho_tol
+                and np.abs(np.dot(latvec[1], latvec[2])) < ortho_tol
+                and np.abs(np.dot(latvec[2], latvec[0])) < ortho_tol
             )
             if orthogonal:
                 self.dist_i = self.orthogonal_dist_i

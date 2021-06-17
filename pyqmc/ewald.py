@@ -114,10 +114,10 @@ class Ewald:
         :parameter int ewald_gmax: max number of reciprocal lattice vectors to check away from 0
         """
         cellvolume = np.linalg.det(self.latvec)
-        recvec = np.linalg.inv(self.latvec)
+        recvec = np.linalg.inv(self.latvec).T
 
         # Determine alpha
-        smallestheight = np.amin(1 / np.linalg.norm(recvec.T, axis=1))
+        smallestheight = np.amin(1 / np.linalg.norm(recvec, axis=1))
         self.alpha = 5.0 / smallestheight
 
         # Determine G points to include in reciprocal Ewald sum

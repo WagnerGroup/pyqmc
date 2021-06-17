@@ -133,7 +133,7 @@ class PGradTransform:
         Return true if a given configuration is within nodal_cutoff
         of the node
         Also return the regularization polynomial if true,
-        f = a * r ** 2 + b * r ** 4 + c * r ** 3
+        f = a * r ** 2 + b * r ** 4 + c * r ** 6
         """
         r = 1.0 / grad2
         mask = r < self.nodal_cutoff ** 2

@@ -8,7 +8,7 @@ import h5py
 
 
 def generate_slater(
-    mol, mf, optimize_orbitals=False, optimize_zeros=True, epsilon=1e-8, **kwargs
+    mol, mf, optimize_determinants=False, optimize_orbitals=False, optimize_zeros=True, epsilon=1e-8, **kwargs
 ):
     """Construct a Slater determinant
 
@@ -19,9 +19,12 @@ def generate_slater(
     """
     wf = slater.Slater(mol, mf, **kwargs)
     to_opt = {}
+    if optimize_determinants:
+        to_opt['det_coeff'] = np.ones_like(wf.parameters['det_coeff'], dtype=bool)
+        to_opt['det_coeff'][np.argmax(wf.parameters['det_coeff'])]=False
     if optimize_orbitals:
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
-            to_opt[k] = np.ones(wf.parameters[k].shape).astype(bool)
+            to_opt[k] = np.ones(wf.parameters[k].shape, dtype=bool)
             if not optimize_zeros:
                 to_opt[k][np.abs(gpu.asnumpy(wf.parameters[k])) < epsilon] = False
 
@@ -93,7 +96,6 @@ def generate_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
     to_opt["bcoeff"] = np.ones(jastrow.parameters["bcoeff"].shape).astype(bool)
     to_opt["bcoeff"][0, [0, 1, 2]] = False  # Cusp conditions
     return jastrow, to_opt
-
 
 
 def generate_sj(mol, mf, optimize_orbitals=False, twist=None, **jastrow_kws):

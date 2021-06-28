@@ -50,6 +50,7 @@ def deters_from_hci(mc, tol):
         deters.append((c, s1, s2))
     return deters
 
+
 def interpret_ci(mc, tol):
     """
     Copies over determinant coefficients and MO occupations
@@ -62,17 +63,17 @@ def interpret_ci(mc, tol):
     """
     ncore = mc.ncore if hasattr(mc, "ncore") else 0
     # find multi slater determinant occupation
-    if hasattr(mc, "_strs"):     # if this is a HCI object, it will have _strs
+    if hasattr(mc, "_strs"):  # if this is a HCI object, it will have _strs
         deters = deters_from_hci(mc, tol)
     else:
         deters = fci.addons.large_ci(mc.ci, mc.ncas, mc.nelecas, tol=-1)
     return create_packed_objects(deters, ncore, tol)
 
 
-def create_packed_objects(deters, ncore=0, tol=0, format='binary'):
+def create_packed_objects(deters, ncore=0, tol=0, format="binary"):
     """
     if format == "binary":
-    deters is expected to be an iterable of tuples, each of which is 
+    deters is expected to be an iterable of tuples, each of which is
     (weight, occupation string up, occupation_string down)
     if format == "list"
     (weight, occupation)
@@ -93,14 +94,16 @@ def create_packed_objects(deters, ncore=0, tol=0, format='binary'):
     for x in deters:
         if np.abs(x[0]) > tol:
             detwt.append(x[0])
-            if format=='binary':
+            if format == "binary":
                 alpha_occ, __ = binary_to_occ(x[1], ncore)
                 beta_occ, __ = binary_to_occ(x[2], ncore)
-            elif format=='list':
+            elif format == "list":
                 alpha_occ = x[1][0]
                 beta_occ = x[1][1]
             else:
-                raise ValueError("create_packed_objects: Options for format are binary or list")
+                raise ValueError(
+                    "create_packed_objects: Options for format are binary or list"
+                )
             if alpha_occ not in occup[0]:
                 map_dets[0].append(len(occup[0]))
                 occup[0].append(alpha_occ)
@@ -117,22 +120,22 @@ def create_packed_objects(deters, ncore=0, tol=0, format='binary'):
 
 def create_pbc_determinant(mol, mf, excitations):
     """
-    excitations should be a list of tuples with 
-    (s,ka,a,ki,i),  
-    s is the spin (0 or 1), 
-    ka, a is the occupied orbital, 
+    excitations should be a list of tuples with
+    (s,ka,a,ki,i),
+    s is the spin (0 or 1),
+    ka, a is the occupied orbital,
     and ki, i is the unoccupied orbital.
     """
     if len(mf.mo_coeff[0][0].shape) == 2:
         occupation = [
-            [list(np.nonzero(occ > 0.9)[0]) for occ in mf.mo_occ[s]]
-            for s in range(2)]
+            [list(np.nonzero(occ > 0.9)[0]) for occ in mf.mo_occ[s]] for s in range(2)
+        ]
     elif len(mf.mo_coeff[0][0].shape) == 1:
-            occupation = [ 
-            [list(np.nonzero(occ > 1.9-s)[0]) for occ in mf.mo_occ]
-            for s in range(2)]
+        occupation = [
+            [list(np.nonzero(occ > 1.9 - s)[0]) for occ in mf.mo_occ] for s in range(2)
+        ]
 
-    for s,ka,a,ki,i in excitations:
+    for s, ka, a, ki, i in excitations:
         occupation[s][ka].remove(a)
         occupation[s][ki].append(i)
     return occupation

@@ -86,9 +86,9 @@ class MinimalImageDistance(RawDistance):
             self.dist_i = self.diagonal_dist_i
         else:
             orthogonal = (
-                np.dot(latvec[0], latvec[1]) < ortho_tol
-                and np.dot(latvec[1], latvec[2]) < ortho_tol
-                and np.dot(latvec[2], latvec[0]) < ortho_tol
+                np.abs(np.dot(latvec[0], latvec[1])) < ortho_tol
+                and np.abs(np.dot(latvec[1], latvec[2])) < ortho_tol
+                and np.abs(np.dot(latvec[2], latvec[0])) < ortho_tol
             )
             if orthogonal:
                 self.dist_i = self.orthogonal_dist_i
@@ -136,7 +136,7 @@ class MinimalImageDistance(RawDistance):
 
     def diagonal_dist_i(self, configs, vec):
         """Like dist_i, but assuming lattice vectors are orthogonal
-           It's about 10x faster than the general one checking all 27 lattice points
+        It's about 10x faster than the general one checking all 27 lattice points
         """
         if len(vec.shape) == 3:
             v = vec.transpose((1, 0, 2))[:, :, np.newaxis]
@@ -145,5 +145,5 @@ class MinimalImageDistance(RawDistance):
         d1 = v - configs
         for i in range(3):
             L = self._latvec[i, i]
-            d1[..., i] = (d1[..., i] + L /2) % L - L/2
+            d1[..., i] = (d1[..., i] + L / 2) % L - L / 2
         return d1

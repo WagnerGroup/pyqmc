@@ -20,14 +20,15 @@ def limdrift(g, tau, acyrus=0.25):
     taueff[mask] = (np.sqrt(1 + 2 * tau * tot[mask]) - 1) / tot[mask]
     return g * taueff[:, np.newaxis]
 
+
 def get_V2(configs, wf, acc_out):
-    if 'grad2' in acc_out.keys():
-        return acc_out['grad2']
+    if "grad2" in acc_out.keys():
+        return acc_out["grad2"]
 
     nconfig, nelec = configs.configs.shape[0:2]
     v2 = np.zeros(nconfig)
     for e in range(nelec):
-        v2 += np.sum(wf.gradient(e,configs.electron(e)).T**2, axis=1)
+        v2 += np.sum(np.abs(wf.gradient(e, configs.electron(e))).T ** 2, axis=1)
     return v2
 
 
@@ -50,52 +51,50 @@ def propose_drift_diffusion(wf, configs, tstep, e):
     if not wf.iscomplex:
         ratio *= np.sign(wfratio)
     accept = ratio > np.random.rand(nconfig)
-    r2 = np.sum((gauss+grad)**2,axis=1)
+    r2 = np.sum((gauss + grad) ** 2, axis=1)
 
-    return newepos,accept, r2
-
+    return newepos, accept, r2
 
 
 def propose_tmoves(wf, configs, energy_accumulator, tstep, e):
     """
     No side effect calculation of t-moves
 
-    Returns: 
+    Returns:
        new proposed positions
        probability of acceptance
        sum of weights
     """
     moves = energy_accumulator.nonlocal_tmoves(configs, wf, e, tstep)
-    t_amplitudes = moves['ratio']*moves['weight']
-    #print(moves['ratio'])
+    t_amplitudes = moves["ratio"] * moves["weight"]
+    # print(moves['ratio'])
     forward_probability = np.zeros_like(t_amplitudes)
-    forward_probability[t_amplitudes>0] = t_amplitudes[t_amplitudes >0]
-    norm = 1.0 + np.sum(forward_probability, axis=1) #EQN 34
+    forward_probability[t_amplitudes > 0] = t_amplitudes[t_amplitudes > 0]
+    norm = 1.0 + np.sum(forward_probability, axis=1)  # EQN 34
 
     def select_walker(array):
         r = np.random.rand()
         return np.searchsorted(array, r)
-    cdf = np.cumsum(forward_probability/norm[:,np.newaxis], axis=1)
+
+    cdf = np.cumsum(forward_probability / norm[:, np.newaxis], axis=1)
     selected_moves = np.apply_along_axis(select_walker, 1, cdf)
     move_selected = selected_moves < t_amplitudes.shape[1]
-    
-    selected_moves[move_selected==False]=0
-    newpos = np.zeros((norm.shape[0],3))
+
+    selected_moves[move_selected == False] = 0
+    newpos = np.zeros((norm.shape[0], 3))
     reverse_ratio = np.zeros((norm.shape[0]))
     for walker, move in enumerate(selected_moves):
-        newpos[walker,:] = moves['configs'].configs[walker,move,:]
-        reverse_ratio[walker] = moves['ratio'][walker, move]
+        newpos[walker, :] = moves["configs"].configs[walker, move, :]
+        reverse_ratio[walker] = moves["ratio"][walker, move]
 
     newpos = configs.make_irreducible(e, newpos)
 
-    backward_amplitude = t_amplitudes/reverse_ratio[:,np.newaxis]
-    backward_amplitude[backward_amplitude < 0] =0.0
+    backward_amplitude = t_amplitudes / reverse_ratio[:, np.newaxis]
+    backward_amplitude[backward_amplitude < 0] = 0.0
     back_norm = 1.0 + np.sum(backward_amplitude, axis=1)
-    acceptance = norm/back_norm
-
+    acceptance = norm / back_norm
 
     return newpos, move_selected, acceptance, np.sum(t_amplitudes)
-
 
 
 def dmc_propagate(
@@ -132,32 +131,34 @@ def dmc_propagate(
     nconfig, nelec = configs.configs.shape[0:2]
     wf.recompute(configs)
 
-    energy_acc =  accumulators[ekey[0]](configs, wf)
+    energy_acc = accumulators[ekey[0]](configs, wf)
     eloc = energy_acc[ekey[1]].real
     v2 = get_V2(configs, wf, energy_acc)
     df = []
 
     for _ in range(nsteps):
-        r2_accepted=np.zeros(nconfig)
+        r2_accepted = np.zeros(nconfig)
         r2_proposed = np.zeros(nconfig)
         prob_acceptance = np.zeros(nconfig)
         tmove_acceptance = np.zeros(nconfig)
 
         if accumulators[ekey[0]].has_nonlocal_moves():
             for e in range(nelec):  # T-moves
-                newepos, mask, probability, ecp_totweight = propose_tmoves(wf, configs, accumulators[ekey[0]], tstep, e)
+                newepos, mask, probability, ecp_totweight = propose_tmoves(
+                    wf, configs, accumulators[ekey[0]], tstep, e
+                )
                 accept = mask & (probability > np.random.rand(nconfig))
                 configs.move(e, newepos, accept)
                 wf.updateinternals(e, newepos, mask=accept)
-                tmove_acceptance += accept/nelec
+                tmove_acceptance += accept / nelec
 
         for e in range(nelec):  # drift-diffusion
             newepos, accept, r2 = propose_drift_diffusion(wf, configs, tstep, e)
             configs.move(e, newepos, accept)
             wf.updateinternals(e, newepos, mask=accept)
             r2_proposed += r2
-            r2_accepted[accept]+=r2[accept]
-            prob_acceptance += accept/nelec
+            r2_accepted[accept] += r2[accept]
+            prob_acceptance += accept / nelec
 
         # weights
         elocold = eloc.copy()
@@ -165,13 +166,13 @@ def dmc_propagate(
         energydat = accumulators[ekey[0]](configs, wf)
         eloc = energydat[ekey[1]].real
 
-        tdamp = r2_accepted/r2_proposed
+        tdamp = r2_accepted / r2_proposed
         v2 = get_V2(configs, wf, energydat)
 
         Snew = compute_S(e_trial, e_est, branchcut_start, v2, tstep, eloc, nelec)
         Sold = compute_S(e_trial, e_est, branchcut_start, v2old, tstep, elocold, nelec)
-        p_av = prob_acceptance*0.5
-        wmult = np.exp(tstep * tdamp * (p_av*Snew + (1.0-p_av)*Sold))
+        p_av = prob_acceptance * 0.5
+        wmult = np.exp(tstep * tdamp * (p_av * Snew + (1.0 - p_av) * Sold))
         weights *= wmult
         wavg = np.mean(weights)
 
@@ -199,44 +200,44 @@ def dmc_propagate(
 
 
 def compute_S(e_trial, e_est, branchcut, v2, tau, eloc, nelec):
-    e_cut = e_est-eloc
+    e_cut = e_est - eloc
     mask = np.abs(e_cut) > branchcut
-    e_cut[mask] = branchcut*np.sign(e_cut[mask])
-    denominator = 1+(v2*tau/nelec)**2
+    e_cut[mask] = branchcut * np.sign(e_cut[mask])
+    denominator = 1 + (v2 * tau / nelec) ** 2
 
-    return e_trial - e_est + e_cut/denominator
+    return e_trial - e_est + e_cut / denominator
 
 
 def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **kwargs):
     r"""Parallelizes calls to dmc_propagate by splitting configs
-    
+
     If npartitions does not evenly divide nconfigs, we need to reweight the results based on the number of configs per parallel task.
 
-    The final result should be equivalent to the non-parallelized case. 
+    The final result should be equivalent to the non-parallelized case.
     The average weight :math:`w` and the weighted average of observables :math:`\langle O \rangle` are returned.
     Index :math:`i` refers to walker index.
 
-    .. math:: 
+    .. math::
         w = \sum_i w_i / n_{\rm config}
         \qquad\quad \langle O \rangle = \sum_i o_{i}  w_i / \sum_i w_i
 
     Split over parallel tasks, we need to reweight by number of walkers.
     The average weight :math:`w_p` and weighted average of observables :math:`\langle O\rangle_p` are returned from each task.
 
-    .. math:: 
+    .. math::
         w_p = \sum_j^{{\rm task}\, p} w_j / n_{{\rm config}, p}
         \qquad\quad \langle O \rangle_p = \frac{\sum_j^{{\rm task}\, p} o_{j}  w_j }{ \sum_j^{{\rm task}\, p} w_j }
 
 
     The total weight and total average (defined above) are computed from the task weights :math:`w_p` and task averages :math:`\langle O\rangle_p` as
 
-    .. math:: 
+    .. math::
         w = \sum_p w_p n_{{\rm config}, p} /  n_{\rm config},
         \qquad\quad \langle O \rangle = \frac{ \sum_p \langle O\rangle_p  \sum_j^{{\rm task}\, p} w_j }{ \sum_i w_i}.
 
     We can rewrite the weights using the equations above
 
-    .. math:: 
+    .. math::
         \langle O \rangle &= \frac{ \sum_p \langle O\rangle_p w_p  n_{{\rm config}, p}  }{ w n_{\rm config} }
 
         &= \sum_p \langle O\rangle_p \frac{w_p n_{{\rm config}, p}}{\sum_p w_p n_{{\rm config}, p}}
@@ -262,10 +263,7 @@ def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **k
     weight_avg = weight / np.sum(weight)
     block_avg = {
         k: np.sum(
-            [
-                res[k] * ww
-                for res, ww in zip(allresults[0], weight_avg)
-            ],
+            [res[k] * ww for res, ww in zip(allresults[0], weight_avg)],
             axis=0,
         )
         for k in allresults[0][0].keys()
@@ -357,8 +355,10 @@ def rundmc(
             stepoffset = hdf["step"][-1] + 1
             configs.load_hdf(hdf)
             weights = np.array(hdf["weights"])
-            if 'e_trial' not in hdf.keys():
-                raise ValueError("Did not find e_trial in the restart file. This may mean that you are trying to restart from a different version of DMC")
+            if "e_trial" not in hdf.keys():
+                raise ValueError(
+                    "Did not find e_trial in the restart file. This may mean that you are trying to restart from a different version of DMC"
+                )
             e_trial = hdf["e_trial"][-1]
             e_est = hdf["e_est"][-1]
             esigma = hdf["esigma"][-1]
@@ -369,7 +369,7 @@ def rundmc(
         df, configs = mc.vmc(
             wf,
             configs,
-            accumulators={ekey[0]:accumulators[ekey[0]]},
+            accumulators={ekey[0]: accumulators[ekey[0]]},
             client=client,
             npartitions=npartitions,
             verbose=verbose,
@@ -397,7 +397,7 @@ def rundmc(
                 tstep,
                 branchcut_start * esigma,
                 e_trial=e_trial,
-                e_est = e_est,
+                e_est=e_est,
                 nsteps=branchtime,
                 accumulators=accumulators,
                 ekey=ekey,
@@ -413,7 +413,7 @@ def rundmc(
                 tstep,
                 branchcut_start * esigma,
                 e_trial=e_trial,
-                e_est = e_est,
+                e_est=e_est,
                 nsteps=branchtime,
                 accumulators=accumulators,
                 ekey=ekey,
@@ -437,8 +437,10 @@ def rundmc(
             print(
                 "energy",
                 df_[ekey[0] + ekey[1]],
-                "e_trial", e_trial,
-                'e_est',e_est,
+                "e_trial",
+                e_trial,
+                "e_est",
+                e_est,
                 "sigma(w)",
                 df_["weight_std"],
             )
@@ -449,12 +451,11 @@ def rundmc(
 
 def estimate_energy(hdf_file, df, ekey):
     if hdf_file is not None:
-        with h5py.File(hdf_file,'r') as f:
-            en = f[ekey[0]+ekey[1]][()]
-            wt = f['weight'][()]
+        with h5py.File(hdf_file, "r") as f:
+            en = f[ekey[0] + ekey[1]][()]
+            wt = f["weight"][()]
     else:
-        en = np.asarray([d[ekey[0]+ekey[1]] for d in df])
-        wt = np.asarray([d['weight'] for d in df])
-    warmup = int(len(en)/4)
+        en = np.asarray([d[ekey[0] + ekey[1]] for d in df])
+        wt = np.asarray([d["weight"] for d in df])
+    warmup = int(len(en) / 4)
     return np.average(en[warmup:], weights=wt[warmup:]).real
-

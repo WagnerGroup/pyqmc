@@ -66,7 +66,7 @@ def test_updateinternals(wf, configs):
 
 
 def test_wf_gradient(wf, configs, delta=1e-5):
-    """ Tests wf.gradient(e,configs) against numerical derivatives of wf.testvalue(e,configs)
+    """Tests wf.gradient(e,configs) against numerical derivatives of wf.testvalue(e,configs)
 
     :parameter wf: a wavefunction object with functions wf.recompute(configs), wf.testvalue(e,configs) and wf.gradient(e,configs)
     :parameter configs: positions to set the wf object
@@ -106,7 +106,7 @@ def test_wf_gradient(wf, configs, delta=1e-5):
 
 
 def test_wf_pgradient(wf, configs, delta=1e-5):
-    iscomplex = 1j if wf.iscomplex else 1
+    dtype = complex if wf.iscomplex else float
     baseval = wf.recompute(configs)
     gradient = wf.pgradient()
     error = {}
@@ -114,7 +114,8 @@ def test_wf_pgradient(wf, configs, delta=1e-5):
         flt = wf.parameters[k].reshape(-1)
         # print(flt.shape,wf.parameters[k].shape,gradient[k].shape)
         nparms = len(flt)
-        numgrad = np.zeros((configs.configs.shape[0], nparms)) * iscomplex
+        numgrad = np.zeros((configs.configs.shape[0], nparms), dtype=dtype) 
+        print(numgrad.dtype)
         for i, c in enumerate(flt):
             flt[i] += delta
             wf.parameters[k] = flt.reshape(wf.parameters[k].shape)
@@ -123,21 +124,22 @@ def test_wf_pgradient(wf, configs, delta=1e-5):
             wf.parameters[k] = flt.reshape(wf.parameters[k].shape)
             minuval = wf.recompute(configs)
             numgrad[:, i] = (
-                plusval[0] * baseval[0] * np.exp(plusval[1] - baseval[1])
-                - minuval[0] * baseval[0] * np.exp(minuval[1] - baseval[1])
+                plusval[0] / baseval[0] * np.exp(plusval[1] - baseval[1])
+                - minuval[0] / baseval[0] * np.exp(minuval[1] - baseval[1])
             ) / (2 * delta)
             flt[i] += delta
             wf.parameters[k] = flt.reshape(wf.parameters[k].shape)
 
         pgerr = np.abs(gradient[k].reshape((-1, nparms)) - numgrad)
         error[k] = np.amax(pgerr)
+
     if len(error) == 0:
         return (0, 0)
     return error[max(error)]  # Return maximum coefficient error
 
 
 def test_wf_laplacian(wf, configs, delta=1e-5):
-    """ Tests wf.laplacian(e,epos) against numerical derivatives of wf.gradient(e,epos)
+    """Tests wf.laplacian(e,epos) against numerical derivatives of wf.gradient(e,epos)
 
     :parameter wf: a wavefunction object with functions wf.recompute(configs),
              wf.gradient(e,configs) and wf.laplacian(e,configs)
@@ -176,7 +178,7 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
             )
             minuval = wf.testvalue(e, epos)
             minugrad = wf.gradient(e, epos)[d] * minuval
-            numeric[:, e] += np.real(plusgrad - minugrad) / (2 * delta)
+            numeric[:, e] += (plusgrad - minugrad) / (2 * delta)
 
     maxerror = np.amax(np.abs(lap - numeric))
     return maxerror

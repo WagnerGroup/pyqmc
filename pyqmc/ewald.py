@@ -114,10 +114,10 @@ class Ewald:
         :parameter int ewald_gmax: max number of reciprocal lattice vectors to check away from 0
         """
         cellvolume = np.linalg.det(self.latvec)
-        recvec = np.linalg.inv(self.latvec)
+        recvec = np.linalg.inv(self.latvec).T
 
         # Determine alpha
-        smallestheight = np.amin(1 / np.linalg.norm(recvec.T, axis=1))
+        smallestheight = np.amin(1 / np.linalg.norm(recvec, axis=1))
         self.alpha = 5.0 / smallestheight
 
         # Determine G points to include in reciprocal Ewald sum
@@ -229,7 +229,9 @@ class Ewald:
             rvec = ion_distances[:, :, np.newaxis, :] + self.lattice_displacements
             r = gpu.cp.linalg.norm(rvec, axis=-1)
             charge_ij = gpu.cp.prod(self.atom_charges[np.asarray(ion_inds)], axis=1)
-            ion_ion_real = gpu.cp.einsum("j,ijk->", charge_ij, gpu.erfc(self.alpha * r) / r)
+            ion_ion_real = gpu.cp.einsum(
+                "j,ijk->", charge_ij, gpu.erfc(self.alpha * r) / r
+            )
 
         # Reciprocal space part
         GdotR = gpu.cp.dot(self.gpoints, gpu.cp.asarray(self.atom_coords.T))

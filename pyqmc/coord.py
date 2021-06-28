@@ -95,8 +95,8 @@ class OpenConfigs:
 
     def load_hdf(self, hdf):
         """Note that the number of configurations will change to reflect the number in the hdf file."""
-        # The ... seems to be necessary to avoid changing the dtype and screwing up 
-        # pyscf's calls. 
+        # The ... seems to be necessary to avoid changing the dtype and screwing up
+        # pyscf's calls.
         self.configs[...] = np.array(hdf["configs"])
 
 
@@ -227,7 +227,7 @@ class PeriodicConfigs:
         hdf["wrap"][...] = self.wrap
 
     def load_hdf(self, hdf):
-        # The ... seems to be necessary to avoid changing the dtype and screwing up 
-        # pyscf's calls. 
+        # The ... seems to be necessary to avoid changing the dtype and screwing up
+        # pyscf's calls.
         self.configs[...] = hdf["configs"][()]
         self.wrap[...] = hdf["wrap"][()]

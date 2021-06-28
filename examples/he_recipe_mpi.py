@@ -33,9 +33,9 @@ if __name__ == "__main__":
             accumulators={"rdm1": True},
             jastrow_kws=jastrow_kws,
             slater_kws=slater_kws,
-            vmc_kws={"nblocks": 40},
             client=client,
             npartitions=npartitions,
+            **{"nblocks": 40},
         )
 
         pyqmc.recipes.DMC(
@@ -45,7 +45,7 @@ if __name__ == "__main__":
             accumulators={"rdm1": True},
             jastrow_kws=jastrow_kws,
             slater_kws=slater_kws,
-            dmc_kws={"nsteps": 4000, "tstep": 0.02},
             client=client,
             npartitions=npartitions,
+            **{"nsteps": 4000, "tstep": 0.02},
         )

@@ -28,16 +28,16 @@ import pyqmc.recipes
 pyqmc.recipes.OPTIMIZE("h2o.hdf5",
                        "h2o_sj_200.hdf5",
                        nconfig=200, 
-                       linemin_kws={'max_iterations':10})
-```
+                       max_iterations=10)
+=```
 
 And then do a more precise optimization starting from the previous iteration by setting `start_from`.
 ```
 pyqmc.recipes.OPTIMIZE("h2o.hdf5",
                        "h2o_sj_800.hdf5", 
-                       start_from="h2o_sj_200.hdf5", 
-                       nconfig=800, 
-                       linemin_kws={'max_iterations':10})
+                       load_parameters="h2o_sj_200.hdf5", 
+                       nconfig=800,
+                       max_iterations=10) 
 ```
 
 ### Check on optimization
@@ -68,8 +68,8 @@ import pyqmc.recipes
 for n in [200,800]:
     pyqmc.recipes.VMC("h2o.hdf5",
                       f"h2o_sj_vmc_{n}.hdf5", 
-                      start_from=f"h2o_sj_{n}.hdf5", 
-                      vmc_kws=dict(nblocks=100))
+                      load_parameters=f"h2o_sj_{n}.hdf5", 
+                      nblocks=100)
 ```
 
 This will save two evaluations in `h2o_sj_vmc_200.hdf5` and `h2o_sj_vmc_800.hdf5`.
@@ -94,7 +94,7 @@ plt.savefig("energy.pdf", bbox_inches='tight')
 
 ```
 import pyqmc.recipes
-pyqmc.recipes.DMC("h2o.hdf5",f"h2o_sj_dmc_800.hdf5", start_from=f"h2o_sj_800.hdf5")
+pyqmc.recipes.DMC("h2o.hdf5",f"h2o_sj_dmc_800.hdf5", load_parameters=f"h2o_sj_800.hdf5")
 ```
 
 ### Check DMC warmup

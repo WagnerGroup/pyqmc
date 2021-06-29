@@ -350,18 +350,17 @@ def rundmc(
       weights: The final weights from this calculation
 
     """
-    # Restart from HDF file
-    if continue_from is None:
+    #Don't continue onto a file that's already there.
+    if continue_from is not None and hdf_file is not None and os.path.isfile(hdf_file):
+        raise RuntimeError(f"continue_from is set but hdf_file={hdf_file} already exists! Delete or rename {hdf_file} and try again.")
+
+    # Restart if hdf_file is there
+    if continue_from is None and os.path.isfile(hdf_file):
         continue_from = hdf_file
-    elif not os.path.isfile(continue_from):
-        raise RuntimeError("cannot continue from {0}; the file does not exist!")
-    elif hdf_file is not None and os.path.isfile(hdf_file):
-        raise RuntimeError(
-            "continue_from is not None but hdf_file={0} already exists! Delete or rename {0} and try again.".format(
-                hdf_file
-            )
-        )
-    if continue_from is not None and os.path.isfile(continue_from):
+
+    # Now we should be sure that there is a file 
+    # to continue from, if given.
+    if continue_from is not None:
         with h5py.File(continue_from, "r") as hdf:
             stepoffset = hdf["step"][-1] + 1
             configs.load_hdf(hdf)

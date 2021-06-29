@@ -114,7 +114,7 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
 
             # Acceptance
             t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
-            ratio = new_val ** 2 * t_prob
+            ratio = np.abs(new_val) ** 2 * t_prob
             accept = ratio > np.random.rand(nconf)
 
             # Update wave function

@@ -183,12 +183,14 @@ def read_opt(fname):
         )
 
 
-def read_mc_output(fname, warmup=5, reblock=16):
+def read_mc_output(fname, warmup=1, reblock=None):
     ret = {"fname": fname, "warmup": warmup, "reblock": reblock}
     with h5py.File(fname) as f:
         for k in f.keys():
             if "energy" in k:
-                vals = pyqmc.reblock.reblock(f[k][warmup:], reblock)
+                vals = f[k][warmup:]
+                if reblock is not None: 
+                    vals = pyqmc.reblock.reblock(vals, reblock)
                 ret[k] = np.mean(vals)
                 ret[k + "_err"] = scipy.stats.sem(vals)
     return ret

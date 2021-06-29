@@ -324,6 +324,7 @@ def rundmc(
     ekey=("energy", "total"),
     feedback=1.0,
     hdf_file=None,
+    continue_from=None,
     client=None,
     npartitions=None,
     **kwargs,
@@ -350,8 +351,18 @@ def rundmc(
 
     """
     # Restart from HDF file
-    if hdf_file is not None and os.path.isfile(hdf_file):
-        with h5py.File(hdf_file, "r") as hdf:
+    if continue_from is None:
+        continue_from = hdf_file
+    elif not os.path.isfile(continue_from):
+        raise RuntimeError("cannot continue from {0}; the file does not exist!")
+    elif hdf_file is not None and os.path.isfile(hdf_file):
+        raise RuntimeError(
+            "continue_from is not None but hdf_file={0} already exists! Delete or rename {0} and try again.".format(
+                hdf_file
+            )
+        )
+    if continue_from is not None and os.path.isfile(continue_from):
+        with h5py.File(continue_from, "r") as hdf:
             stepoffset = hdf["step"][-1] + 1
             configs.load_hdf(hdf)
             weights = np.array(hdf["weights"])
@@ -363,7 +374,7 @@ def rundmc(
             e_est = hdf["e_est"][-1]
             esigma = hdf["esigma"][-1]
             if verbose:
-                print("Restarted calculation")
+                print(f"Restarting calculation {continue_from} from step {stepoffset}")
     else:
         warmup = 2
         df, configs = mc.vmc(

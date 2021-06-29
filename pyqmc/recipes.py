@@ -181,7 +181,7 @@ def read_mc_output(fname, warmup=5, reblock=16):
     with h5py.File(fname) as f:
         for k in f.keys():
             if "energy" in k:
-                vals = pyqmc.reblock.avg_reblock(f[k][warmup:], reblock)
+                vals = pyqmc.reblock.reblock(f[k][warmup:], reblock)
                 ret[k] = np.mean(vals)
                 ret[k + "_err"] = scipy.stats.sem(vals)
     return ret

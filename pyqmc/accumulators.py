@@ -128,18 +128,14 @@ class PGradTransform:
         self.transform = transform
         self.nodal_cutoff = nodal_cutoff
 
-    def _node_regr(self, configs, wf):
+    def _node_regr(self, configs, grad2):
         """
         Return true if a given configuration is within nodal_cutoff
         of the node
         Also return the regularization polynomial if true,
-        f = a * r ** 2 + b * r ** 4 + c * r ** 3
+        f = a * r ** 2 + b * r ** 4 + c * r ** 6
         """
-        ne = configs.configs.shape[1]
-        d2 = 0.0
-        for e in range(ne):
-            d2 += np.sum(np.abs(wf.gradient(e, configs.electron(e))) ** 2, axis=0)
-        r = 1.0 / d2
+        r = 1.0 / grad2
         mask = r < self.nodal_cutoff ** 2
 
         c = 7.0 / (self.nodal_cutoff ** 6)
@@ -157,7 +153,7 @@ class PGradTransform:
         energy = d["total"]
         dp = self.transform.serialize_gradients(pgrad)
 
-        node_cut, f = self._node_regr(configs, wf)
+        node_cut, f = self._node_regr(configs, d["grad2"])
         dp_regularized = dp * f[:, np.newaxis]
 
         d["dpH"] = np.einsum("i,ij->ij", energy, dp_regularized)
@@ -181,7 +177,7 @@ class PGradTransform:
         energy = den["total"]
         dp = self.transform.serialize_gradients(pgrad)
 
-        node_cut, f = self._node_regr(configs, wf)
+        node_cut, f = self._node_regr(configs, den["grad2"])
 
         dp_regularized = dp * f[:, np.newaxis]
 

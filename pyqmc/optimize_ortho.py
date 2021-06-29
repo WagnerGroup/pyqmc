@@ -50,13 +50,10 @@ def collect_overlap_data(wfs, configs, pgrad):
     ) / len(ref)
 
     dppsi = pgrad.transform.serialize_gradients(wfs[-1].pgradient())
-    node_cut, f = pgrad._node_regr(configs, wfs[-1])
-    dppsi_regularized = dppsi * f[:, np.newaxis]
-
     save_dat["overlap_gradient"] = (
         np.einsum(
             "km,k,jk->jm",  # shape (wf, param)
-            dppsi_regularized.conj(),
+            dppsi,
             normalized_values[-1].conj(),
             normalized_values / denominator,
         )

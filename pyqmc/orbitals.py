@@ -4,6 +4,7 @@ import pyqmc.pbc as pbc
 import pyqmc.supercell as supercell
 import pyqmc.pbc_eval_gto as pbc_eval_gto
 import pyqmc.determinant_tools
+import pyscf.pbc.dft.gen_grid 
 
 """
 The evaluators have the concept of a 'set' of atomic orbitals, that may apply to 
@@ -271,6 +272,8 @@ class PBCOrbitalEvaluatorKpoints:
         """
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
+        non0tab = pyscf.pbc.dft.gen_grid.make_mask(self._cell, mycoords)
+
         # coordinate, dimension
         wrap = configs.wrap if mask is None else configs.wrap[mask]
         wrap = np.dot(wrap, self.S)
@@ -289,6 +292,7 @@ class PBCOrbitalEvaluatorKpoints:
                 kpts=self._kpts,
                 Ls=self.Ls,
                 rcut=self.rcut,
+                non0tab=non0tab
             )
         )
         ao = gpu.cp.einsum("k...,k...a->k...a", wrap_phase, ao)

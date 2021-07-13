@@ -65,7 +65,11 @@ def recover_pyscf(chkfile, ci_checkfile=None, cancel_outputs=True):
         if hci:
             mc = pyscf.hci.SCI(mol)
         else:
-            mc = casci.CASCI(mol)
+            with h5py.File(ci_checkfile, "r") as f:
+                nmo=f['ci/nmo'][()]
+                nelec = f['ci/nelec'][()]
+
+            mc = casci.CASCI(mol, nmo, nelec)
         mc.__dict__.update(pyscf.lib.chkfile.load(ci_checkfile, "ci"))
 
         return mol, mf, mc

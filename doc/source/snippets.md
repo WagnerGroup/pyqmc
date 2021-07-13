@@ -31,7 +31,7 @@ def run_si_qmc(chkfile="si_scf.chk"):
     conventional_S = np.ones((3, 3)) - 2 * np.eye(3)
     S = 2 * conventional_S
     pyqmc.recipes.OPTIMIZE(chkfile, "si_opt.chk", S=S)
-    pyqmc.recipes.DMC(chkfile, "si_dmc.chk", start_from="si_opt.chk", S=S)
+    pyqmc.recipes.DMC(chkfile, "si_dmc.chk", load_parameters="si_opt.chk", S=S)
 ```
 
 ### Orbital optimization

@@ -3,6 +3,22 @@ Real space quantum Monte Carlo calculations using pyscf
 '''
 import setuptools
 from distutils.core import setup
+import codecs
+import os.path
+
+
+def read(rel_path):
+    here = os.path.abspath(os.path.dirname(__file__))
+    with codecs.open(os.path.join(here, rel_path), 'r') as fp:
+        return fp.read()
+
+def get_version(rel_path):
+    for line in read(rel_path).splitlines():
+        if line.startswith('__version__'):
+            delim = '"' if '"' in line else "'"
+            return line.split(delim)[1]
+    else:
+        raise RuntimeError("Unable to find version string.")
 
 
 def setup_pyqmc():
@@ -10,8 +26,8 @@ def setup_pyqmc():
         name='pyqmc',
         maintainer='Lucas Wagner',
         maintainer_email='lkwagner@illinois.edu',
-        version=open("VERSION").read().strip(),
         packages=['pyqmc'],
+        version=get_version("pyqmc/__init__.py"),
         package_data={'pyqmc': ['data/*.pkl']},
         license='MIT License',
         url='https://github.com/WagnerGroup/pyqmc',

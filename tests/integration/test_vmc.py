@@ -23,7 +23,7 @@ def test_vmc(C2_ccecp_rhf):
     nsteps = 300
     warmup = 30
 
-    wf = Slater(mol,mf)
+    wf = Slater(mol, mf)
     coords = initial_guess(mol, nconf)
     df, coords = vmc(
         wf,

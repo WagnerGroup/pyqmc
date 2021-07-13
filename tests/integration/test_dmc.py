@@ -1,5 +1,3 @@
-# This must be done BEFORE importing numpy or anything else.
-# Therefore it must be in your main script.
 import os
 
 os.environ["MKL_NUM_THREADS"] = "1"
@@ -9,6 +7,7 @@ import numpy as np
 from pyqmc import reblock
 import pyqmc.api as pyq
 import pytest
+import uuid
 
 
 @pytest.mark.slow
@@ -24,16 +23,6 @@ def test():
     configs = pyq.initial_guess(mol, nconf)
     wf, _ = pyq.generate_wf(mol, mf, jastrow_kws=dict(na=0, nb=0))
     enacc = pyq.EnergyAccumulator(mol)
-
-    dfvmc, configs_ = pyq.vmc(
-        wf, configs, nsteps=50, accumulators={"energy": enacc}
-    )
-    dfvmc = pd.DataFrame(dfvmc)
-    print(
-        "vmc energy",
-        np.mean(dfvmc["energytotal"]),
-        np.std(dfvmc["energytotal"]) / np.sqrt(len(dfvmc)),
-    )
 
     warmup = 200
     branchtime = 5
@@ -53,12 +42,28 @@ def test():
 
     dfprod = dfdmc[dfdmc.step >= warmup]
 
-    rb_summary = reblock.reblock_summary(dfprod[["energytotal", "energyei"]], 20, weights=dfprod["weight"])
-    print(rb_summary)
+    rb_summary = reblock.reblock_summary(
+        dfprod[["energytotal", "energyei"]], 20, weights=dfprod["weight"]
+    )
     energy, err = [rb_summary[v]["energytotal"] for v in ("mean", "standard error")]
     assert (
         np.abs(energy + 0.5) < 5 * err
     ), "energy not within {0} of -0.5: energy {1}".format(5 * err, np.mean(energy))
+
+
+def test_dmc_restarts(H_pbc_sto3g_krks, nconf=10):
+    """For PBCs, check to make sure there are no
+    errors on restart."""
+    mol, mf = H_pbc_sto3g_krks
+    nconf = 10
+    fname = "test_dmc_restart_" + str(uuid.uuid4())
+
+    configs = pyq.initial_guess(mol, nconf)
+    wf, _ = pyq.generate_wf(mol, mf, jastrow_kws=dict(na=0, nb=0))
+    enacc = pyq.EnergyAccumulator(mol)
+    pyq.rundmc(wf, configs, nsteps=20, hdf_file=fname, accumulators={"energy": enacc})
+    pyq.rundmc(wf, configs, nsteps=20, hdf_file=fname, accumulators={"energy": enacc})
+    os.remove(fname)
 
 
 if __name__ == "__main__":

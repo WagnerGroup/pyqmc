@@ -50,13 +50,10 @@ def collect_overlap_data(wfs, configs, pgrad):
     ) / len(ref)
 
     dppsi = pgrad.transform.serialize_gradients(wfs[-1].pgradient())
-    node_cut, f = pgrad._node_regr(configs, wfs[-1])
-    dppsi_regularized = dppsi * f[:, np.newaxis]
-
     save_dat["overlap_gradient"] = (
         np.einsum(
             "km,k,jk->jm",  # shape (wf, param)
-            dppsi_regularized.conj(),
+            dppsi,
             normalized_values[-1].conj(),
             normalized_values / denominator,
         )
@@ -74,8 +71,6 @@ def collect_overlap_data(wfs, configs, pgrad):
         save_dat[k] = dat[k]
     save_dat["weight_final"] = np.mean(weight[-1])
     return save_dat
-
-
 
 
 def construct_rho_gradient(grads, log_values):
@@ -390,7 +385,7 @@ def optimize_orthogonal(
     forcing=None,
     tstep=0.1,
     max_iterations=30,
-    warmup=5,
+    warmup=1,
     warmup_options=None,
     Ntarget=0.5,
     max_step=10.0,
@@ -526,7 +521,9 @@ def optimize_orthogonal(
 
     # warm up to equilibrate the configurations before running optimization
     if warmup_options is None:
-        warmup_options = {}
+        warmup_options = dict(nblocks=1, nsteps=10)
+    if "tstep" not in warmup_options and "tstep" in sample_options:
+        warmup_options["tstep"] = sample_options["tstep"]
 
     data, coords = mc.vmc(
         wfs[-1],

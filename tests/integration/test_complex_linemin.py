@@ -4,8 +4,9 @@ import pyqmc.api as pyq
 import copy
 import h5py
 
-def test_complex_linemin(H2_ccecp_rhf, optfile = "linemin.hdf5"):
-    """ Test linemin for the case of complex orbital coefficients. 
+
+def test_complex_linemin(H2_ccecp_rhf, optfile="linemin.hdf5"):
+    """Test linemin for the case of complex orbital coefficients.
     We check whether it completes successfully and whether the energy has decreased.
     """
     mol, mf = H2_ccecp_rhf
@@ -22,7 +23,7 @@ def test_complex_linemin(H2_ccecp_rhf, optfile = "linemin.hdf5"):
         wf, configs, acc, verbose=True, hdf_file=optfile, max_iterations=5
     )
     assert os.path.isfile(optfile)
-    with h5py.File(optfile, 'r') as f:
-        en = f['energy'][()]
-    assert en[0]> en[-1]
+    with h5py.File(optfile, "r") as f:
+        en = f["energy"][()]
+    assert en[0] > en[-1]
     os.remove(optfile)

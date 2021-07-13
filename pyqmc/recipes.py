@@ -13,6 +13,7 @@ import scipy.stats
 import pandas as pd
 import copy
 import pyqmc.accumulators
+import os
 
 
 def OPTIMIZE(
@@ -21,19 +22,25 @@ def OPTIMIZE(
     anchors=None,
     nconfig=1000,
     ci_checkfile=None,
-    start_from=None,
+    load_parameters=None,
     S=None,
     jastrow_kws=None,
     slater_kws=None,
     **linemin_kws,
 ):
     linemin_kws["hdf_file"] = output
+    if load_parameters is not None and output is not None and os.path.isfile(output):
+        raise RuntimeError(
+            "load_parameters is not None and output={0} already exists! Delete or rename {0} and try again.".format(
+                output
+            )
+        )
     wf, configs, acc = initialize_qmc_objects(
         dft_checkfile,
         opt_wf=True,
         nconfig=nconfig,
         ci_checkfile=ci_checkfile,
-        start_from=start_from,
+        load_parameters=load_parameters,
         S=S,
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
@@ -49,9 +56,9 @@ def OPTIMIZE(
 def generate_accumulators(mol, mf, energy=True, rdm1=False, extra_accumulators=None):
     acc = {} if extra_accumulators is None else extra_accumulators
 
-    if hasattr(mf.mo_coeff, "shape") and len(mf.mo_coeff.shape) == 2:
+    if hasattr(mf, "kpts") and len(mf.mo_coeff[0][0].shape) < 2:
         mo_coeff = [mf.mo_coeff, mf.mo_coeff]
-    elif hasattr(mf, "kpts") and len(mf.mo_coeff[0][0].shape) < 2:
+    elif hasattr(mf.mo_coeff, "shape") and len(mf.mo_coeff.shape) == 2:
         mo_coeff = [mf.mo_coeff, mf.mo_coeff]
     else:
         mo_coeff = mf.mo_coeff
@@ -61,10 +68,6 @@ def generate_accumulators(mol, mf, energy=True, rdm1=False, extra_accumulators=N
             raise Exception("Found energy in extra_accumulators and energy is True")
         acc["energy"] = pyqmc.accumulators.EnergyAccumulator(mol)
     if rdm1:
-        if len(mf.mo_coeff.shape) == 2:
-            mo_coeff = [mf.mo_coeff, mf.mo_coeff]
-        else:
-            mo_coeff = mf.mo_coeff
         if "rdm1_up" in acc.keys() or "rdm1_down" in acc.keys():
             raise Exception(
                 "Found rdm1_up or rdm1_down in extra_accumulators and rdm1 is True"
@@ -80,7 +83,7 @@ def VMC(
     output,
     nconfig=1000,
     ci_checkfile=None,
-    start_from=None,
+    load_parameters=None,
     S=None,
     jastrow_kws=None,
     slater_kws=None,
@@ -92,10 +95,11 @@ def VMC(
         dft_checkfile,
         nconfig=nconfig,
         ci_checkfile=ci_checkfile,
-        start_from=start_from,
+        load_parameters=load_parameters,
         S=S,
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
+        accumulators=accumulators
     )
 
     pyqmc.mc.vmc(wf, configs, accumulators=acc, **vmc_kws)
@@ -106,7 +110,7 @@ def DMC(
     output,
     nconfig=1000,
     ci_checkfile=None,
-    start_from=None,
+    load_parameters=None,
     S=None,
     jastrow_kws=None,
     slater_kws=None,
@@ -118,10 +122,11 @@ def DMC(
         dft_checkfile,
         nconfig=nconfig,
         ci_checkfile=ci_checkfile,
-        start_from=start_from,
+        load_parameters=load_parameters,
         S=S,
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
+        accumulators=accumulators
     )
 
     dmc.rundmc(wf, configs, accumulators=acc, **dmc_kws)
@@ -130,7 +135,7 @@ def DMC(
 def initialize_qmc_objects(
     dft_checkfile,
     nconfig=1000,
-    start_from=None,
+    load_parameters=None,
     ci_checkfile=None,
     S=None,
     jastrow_kws=None,
@@ -152,8 +157,8 @@ def initialize_qmc_objects(
     wf, to_opt = wftools.generate_wf(
         mol, mf, mc=mc, jastrow_kws=jastrow_kws, slater_kws=slater_kws
     )
-    if start_from is not None:
-        wftools.read_wf(wf, start_from)
+    if load_parameters is not None:
+        wftools.read_wf(wf, load_parameters)
 
     configs = pyqmc.mc.initial_guess(mol, nconfig)
     if opt_wf:
@@ -178,12 +183,14 @@ def read_opt(fname):
         )
 
 
-def read_mc_output(fname, warmup=5, reblock=16):
+def read_mc_output(fname, warmup=1, reblock=None):
     ret = {"fname": fname, "warmup": warmup, "reblock": reblock}
     with h5py.File(fname) as f:
         for k in f.keys():
             if "energy" in k:
-                vals = pyqmc.reblock.avg_reblock(f[k][warmup:], reblock)
+                vals = f[k][warmup:]
+                if reblock is not None: 
+                    vals = pyqmc.reblock.reblock(vals, reblock)
                 ret[k] = np.mean(vals)
                 ret[k + "_err"] = scipy.stats.sem(vals)
     return ret

@@ -4,6 +4,7 @@ import pyqmc.pbc as pbc
 import pyqmc.supercell as supercell
 import pyqmc.pbc_eval_gto as pbc_eval_gto
 import pyqmc.determinant_tools
+import pyscf.pbc.dft.gen_grid 
 
 """
 The evaluators have the concept of a 'set' of atomic orbitals, that may apply to 

@@ -171,8 +171,7 @@ def dmc_propagate(
 
         Snew = compute_S(e_trial, e_est, branchcut_start, v2, tstep, eloc, nelec)
         Sold = compute_S(e_trial, e_est, branchcut_start, v2old, tstep, elocold, nelec)
-        p_av = prob_acceptance * 0.5
-        wmult = np.exp(tstep * tdamp * (p_av * Snew + (1.0 - p_av) * Sold))
+        wmult = np.exp(tstep * tdamp * (0.5 * Snew + 0.5 * Sold))
         weights *= wmult
         wavg = np.mean(weights)
 

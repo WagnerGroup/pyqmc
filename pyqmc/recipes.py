@@ -185,7 +185,7 @@ def read_opt(fname):
 
 def read_mc_output(fname, warmup=1, reblock=None):
     ret = {"fname": fname, "warmup": warmup, "reblock": reblock}
-    with h5py.File(fname) as f:
+    with h5py.File(fname,'r') as f:
         for k in f.keys():
             if "energy" in k:
                 vals = f[k][warmup:]

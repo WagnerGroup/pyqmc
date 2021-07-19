@@ -29,7 +29,7 @@ pyqmc.recipes.OPTIMIZE("h2o.hdf5",
                        "h2o_sj_200.hdf5",
                        nconfig=200, 
                        max_iterations=10)
-=```
+```
 
 And then do a more precise optimization starting from the previous iteration by setting `start_from`.
 ```

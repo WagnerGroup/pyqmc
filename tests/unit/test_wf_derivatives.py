@@ -89,6 +89,13 @@ def test_hci_wf(H2_ccecp_hci, epsilon=1e-5):
     run_tests(wf, configs, epsilon)
 
 
+def test_rohf(C_ccecp_rohf, epsilon=1e-5):
+    mol, mf = C_ccecp_rohf
+    configs = pyq.initial_guess(mol, 10)
+    wf = Slater(mol, mf)
+    run_tests(wf, configs, epsilon)
+
+
 def test_casci_s0(H2_ccecp_casci_s0, epsilon=1e-5):
     mol, mf, cisolver = H2_ccecp_casci_s0
     configs = pyq.initial_guess(mol, 10)

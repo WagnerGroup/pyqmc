@@ -114,6 +114,18 @@ def C2_ccecp_rhf():
     return mol, mf
 
 
+@pytest.fixture(scope="module")
+def C_ccecp_rohf():
+    mol = gto.M(
+                atom="""C 0 0 0 
+                C 1 0 0  """,
+                ecp="ccecp",
+                basis="ccecpccpvdz",
+                spin=2
+                )
+    mf = scf.RHF(mol).run()
+    return mol, mf
+
 
 @pytest.fixture(scope='module')
 def H_pbc_sto3g_krks():

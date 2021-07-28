@@ -1,6 +1,6 @@
 import pyqmc.slater as slater
 import pyqmc.multiplywf as multiplywf
-import pyqmc.superposwf as superposwf
+import pyqmc.superposewf as superposewf
 import pyqmc.jastrowspin as jastrowspin
 import pyqmc.func3d as func3d
 import pyqmc.gpu as gpu
@@ -182,7 +182,7 @@ def read_wf(wf, wf_file):
     return wf
 
 
-def generate_superposwf(mol, mf, wf_files, coeffs, mc=None):
+def generate_superposewf(mol, mf, wf_files, coeffs, mc=None):
     """Generate a wf that is a linear superposition of the given wfs with the given coefficients (which needs to be normalized)
 
     Typical usage:
@@ -191,7 +191,7 @@ def generate_superposwf(mol, mf, wf_files, coeffs, mc=None):
        
        wf_coeffs = 1/np.sqrt(2)*np.ones(2)
        wf_files = ["wf1.chk", "wf2.chk"]
-       wf, to_opt = pyqmc.wftools.generate_superposwf(mol, mf, wf_files, wf_coeffs, mc)
+       wf, to_opt = pyqmc.wftools.generate_superposewf(mol, mf, wf_files, wf_coeffs, mc)
 
     :param mol: The molecule or cell
     :type mol: pyscf Mole or Cell
@@ -210,6 +210,6 @@ def generate_superposwf(mol, mf, wf_files, coeffs, mc=None):
         wf_tmp, to_opt = generate_wf(mol, mf, mc=mc)
         wf_tmp  = read_wf(wf_tmp, wf_file)
         wfs.append(wf_tmp)
-    wf = superposwf.SuperposWF(coeffs, wfs)
+    wf = superposewf.SuperposeWF(coeffs, wfs)
     return wf, to_opt
 

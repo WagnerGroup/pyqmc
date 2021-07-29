@@ -206,10 +206,14 @@ def generate_superposewf(mol, mf, wf_files, coeffs, mc=None):
     :return: to_opt"""
 
     wfs = []
-    for wf_file in wf_files:
-        wf_tmp, to_opt = generate_wf(mol, mf, mc=mc)
+    to_opt = {}
+    for iwf, wf_file in enumerate(wf_files):
+        wf_tmp, to_opt_tmp = generate_wf(mol, mf, mc=mc)
         wf_tmp  = read_wf(wf_tmp, wf_file)
         wfs.append(wf_tmp)
+        for k, v in to_opt_tmp.items():
+            to_opt[f"wf{iwf}"+k] = v
     wf = superposewf.SuperposeWF(coeffs, wfs)
+    print(to_opt)
     return wf, to_opt
 

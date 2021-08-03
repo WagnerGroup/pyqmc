@@ -32,7 +32,6 @@ GitHub
     export PYTHONPATH:$PYTHONPATH:/path/to/pyqmc
 
 
-`specific_instructions`
 
 
 

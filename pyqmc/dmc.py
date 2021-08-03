@@ -354,7 +354,7 @@ def rundmc(
         raise RuntimeError(f"continue_from is set but hdf_file={hdf_file} already exists! Delete or rename {hdf_file} and try again.")
 
     # Restart if hdf_file is there
-    if continue_from is None and os.path.isfile(hdf_file):
+    if continue_from is None and hdf_file is not None and os.path.isfile(hdf_file):
         continue_from = hdf_file
 
     # Now we should be sure that there is a file 

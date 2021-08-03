@@ -4,8 +4,7 @@ HOWTOs
 ### Periodic systems
 
 ```
-def run_si_scf(chkfile="si_scf.chk"):
-    a = 5.43
+def run_si_scf(chkfile="si_scf.chk", a=5.43):
     cell = gto.Cell(
         atom="Si 0. 0. 0.; Si {0} {0} {0}".format(a / 4),
         unit="angstrom",
@@ -22,14 +21,15 @@ def run_si_scf(chkfile="si_scf.chk"):
     mf.run()
 ```
 
+Run QMC on `n_conventional` conventional unit cells of silicon.
 ```
 import pyqmc.recipes
 import numpy as np
 
-def run_si_qmc(chkfile="si_scf.chk"):
+def run_si_qmc(chkfile="si_scf.chk", n_conventional=2):
     # Define periodic supercell in PyQMC
     conventional_S = np.ones((3, 3)) - 2 * np.eye(3)
-    S = 2 * conventional_S
+    S = n_conventional * conventional_S
     pyqmc.recipes.OPTIMIZE(chkfile, "si_opt.chk", S=S)
     pyqmc.recipes.DMC(chkfile, "si_dmc.chk", load_parameters="si_opt.chk", S=S)
 ```

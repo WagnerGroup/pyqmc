@@ -33,7 +33,7 @@ class SuperposeWF:
         wf_val = np.log(np.abs(wf_val))+ref
         return wf_sign, wf_val
 
-    def ratio_old(self, mask):
+    def ratio_old(self, mask=None):
         wf_vals = np.array([wf.value() for wf in self.wf_components])
         ref = np.amax(wf_vals[:,1,:]).real
         wf_val = np.einsum('i,ij,ij->j',self.coeffs,wf_vals[:,0,:],np.exp(wf_vals[:,1,:] - ref))
@@ -70,7 +70,9 @@ class SuperposeWF:
         grad_vals = [wf.gradient_value(e, epos) for wf in self.wf_components]
         grads, vals = list(zip(*grad_vals))
         ratio = self.ratio(e, epos)
-        return np.einsum('ijk,ik->jk',grads, ratio), np.einsum('ij,ij->j', vals, ratio)
+        grad = np.einsum('ijk,ik->jk',grads, ratio)
+        val = np.einsum('ij,ij->j', vals, self.ratio_old())
+        return grad, val
 
     def gradient_laplacian(self, e, epos):
         grad_laps = [wf.gradient_laplacian(e, epos) for wf in self.wf_components]

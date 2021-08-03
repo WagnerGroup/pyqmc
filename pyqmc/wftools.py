@@ -214,6 +214,5 @@ def generate_superposewf(mol, mf, wf_files, coeffs, mc=None):
         for k, v in to_opt_tmp.items():
             to_opt[f"wf{iwf}"+k] = v
     wf = superposewf.SuperposeWF(coeffs, wfs)
-    print(to_opt)
     return wf, to_opt
 

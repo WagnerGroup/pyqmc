@@ -183,11 +183,11 @@ def read_opt(fname):
         )
 
 
-def read_mc_output(fname, warmup=1, reblock=None):
+def read_mc_output(fname, warmup=1, reblock=None, exclude_keys=('configs','weights','block', 'nconfig')):
     ret = {"fname": fname, "warmup": warmup, "reblock": reblock}
     with h5py.File(fname,'r') as f:
         for k in f.keys():
-            if "energy" in k:
+            if k not in exclude_keys:
                 vals = f[k][warmup:]
                 if reblock is not None: 
                     vals = pyqmc.reblock.reblock(vals, reblock)

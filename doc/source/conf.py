@@ -30,7 +30,8 @@ author = 'pyQMC authors'
 extensions = [    'sphinx.ext.autodoc',
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
-    'recommonmark'
+    'recommonmark',
+    'nbsphinx',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -51,8 +52,7 @@ master_doc = 'index'
 #extensions.append("faculty_sphinx_theme")
 #html_theme = "faculty-sphinx-theme"
 
-#html_theme = 'alabaster'
-html_theme = 'sphinx_rtd_theme'
+html_theme = 'classic'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,

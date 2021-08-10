@@ -1,4 +1,4 @@
-Specific instructions for HPC machines
+Installation instructions for HPC machines
 --------------------------------------------------------------
 
 

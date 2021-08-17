@@ -11,10 +11,11 @@ Welcome to pyQMC's documentation!
    :caption: Contents:
 
    install
+   specific_instructions
    tutorial
+   tutorial_full_control
    snippets
    common_problems
-   specific_instructions
    developer
 
 Indices and tables

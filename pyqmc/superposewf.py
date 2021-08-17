@@ -10,7 +10,7 @@ class SuperposeWF:
         self.coeffs = coeffs 
         self.wf_components = wf_components
         self.parameters = Parameters([wf.parameters for wf in wf_components])
-        self.iscomplex = bool(sum(wf.iscomplex for wf in wf_components))
+        self.iscomplex = bool(sum(wf.iscomplex for wf in wf_components)+sum([isinstance(c, complex)*1 for c in coeffs]))
         self.dtype = complex if self.iscomplex else float
 
     def recompute(self, configs):
@@ -86,5 +86,11 @@ class SuperposeWF:
         return np.einsum('ij,ij->j', laps, self.ratio(e, epos))
 
     def pgradient(self):
-        return Parameters([wf.pgradient() for wf in self.wf_components])
-
+        ratio = self.ratio_old()
+        pgrad = []
+        for iwf, wf in enumerate(self.wf_components):
+            pgrad_tmp = wf.pgradient()
+            for k in wf.pgradient().keys():
+                pgrad_tmp[k] = np.einsum('i...,i->i...', pgrad_tmp[k], ratio[iwf,:])
+            pgrad.append(pgrad_tmp)
+        return Parameters(pgrad)

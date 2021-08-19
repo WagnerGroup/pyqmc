@@ -3,6 +3,7 @@ import pyqmc.testwf as testwf
 from pyqmc.gpu import cp, asnumpy
 from pyqmc.slater import Slater
 from pyqmc.multiplywf import MultiplyWF
+from pyqmc.superposewf import SuperposeWF
 from pyqmc.manybody_jastrow import J3
 from pyqmc.wftools import generate_jastrow
 import pyqmc.api as pyq
@@ -158,3 +159,25 @@ def test_manual_pbcs_correct(H_pbc_sto3g_kuks, epsilon=1e-5, nconf=10):
     wf = Slater(mol, mf, determinants=determinants)
     configs = pyq.initial_guess(mol, 10)
     run_tests(wf, configs, epsilon)
+
+def test_superpose_wf(H2_casci, coeffs=[1/np.sqrt(2),1/np.sqrt(2)], epsilon=1e-5, nconf=10):
+    """
+    This test makes sure that the superposewf passes all the wftests, when adding two casci wave functions.
+    """
+
+    mol, mf, mc = H2_casci
+    ci0, ci1 = mc.ci[0], mc.ci[1]
+
+    mc.ci = ci0
+    wf0 = Slater(mol, mf, mc, tol=0.0)
+
+    mc.ci = ci1
+    wf1 = Slater(mol, mf, mc, tol=0.0)
+   
+    wfs = [wf0, wf1]
+    wf = SuperposeWF(coeffs, wfs)
+    configs = pyq.initial_guess(mol, nconf)
+    run_tests(wf, configs, epsilon)
+
+    
+    

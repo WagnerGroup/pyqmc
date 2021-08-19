@@ -1,5 +1,6 @@
 import pyqmc.slater as slater
 import pyqmc.multiplywf as multiplywf
+import pyqmc.superposewf as superposewf
 import pyqmc.jastrowspin as jastrowspin
 import pyqmc.func3d as func3d
 import pyqmc.gpu as gpu
@@ -179,3 +180,39 @@ def read_wf(wf, wf_file):
                 )
             wf.parameters[k] = new_parms
     return wf
+
+
+def generate_superposewf(mol, mf, wf_files, coeffs, mc=None):
+    """Generate a wf that is a linear superposition of the given wfs with the given coefficients (which needs to be normalized)
+
+    Typical usage:
+
+    .. code-block:: python
+       
+       wf_coeffs = 1/np.sqrt(2)*np.ones(2)
+       wf_files = ["wf1.chk", "wf2.chk"]
+       wf, to_opt = pyqmc.wftools.generate_superposewf(mol, mf, wf_files, wf_coeffs, mc)
+
+    :param mol: The molecule or cell
+    :type mol: pyscf Mole or Cell
+    :param mf: a pyscf mean-field object
+    :type mf: Any mean-field object that Slater can read
+    :param mc: A CAS object (optional) for multideterminant wave functions.
+    :param wf_files: A list of HDF5 files with "wf" key. The parameters in this file will be read into the wave function in-place
+    :param coefs: A list of superposition coefficients
+    :type coefs: list of complex
+    :type wf_files: list of string
+    :rtype: A superposition of (multi) Slater-Jastrow wave functions object
+    :return: to_opt"""
+
+    wfs = []
+    to_opt = {}
+    for iwf, wf_file in enumerate(wf_files):
+        wf_tmp, to_opt_tmp = generate_wf(mol, mf, mc=mc)
+        wf_tmp  = read_wf(wf_tmp, wf_file)
+        wfs.append(wf_tmp)
+        for k, v in to_opt_tmp.items():
+            to_opt[f"wf{iwf}"+k] = v
+    wf = superposewf.SuperposeWF(coeffs, wfs)
+    return wf, to_opt
+

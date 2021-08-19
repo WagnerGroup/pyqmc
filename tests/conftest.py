@@ -103,6 +103,20 @@ def H2_ccecp_uhf():
     return mol, mf
 
 @pytest.fixture(scope="module")
+def H2_casci():
+    mol = gto.M(atom="H 0. 0. 0.0; H 0. 0. 2.4",
+            basis=f"ccpvtz",  
+            unit="bohr", 
+            charge=0, 
+            spin=0, 
+            verbose=1)  
+    mf = scf.ROHF(mol).run()
+    mc = pyscf.mcscf.CASCI(mf, 2, 2)
+    mc.fcisolver.nroots = 4
+    mc.kernel()
+    return mol, mf, mc
+
+@pytest.fixture(scope="module")
 def C2_ccecp_rhf():
     mol = gto.M(
                 atom="""C 0 0 0 

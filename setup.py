@@ -41,7 +41,7 @@ def setup_pyqmc():
             "h5py"
         ],
         classifiers=[
-            'Development Status :: 3 - Alpha',
+            'Development Status :: 4 - Beta',
             'Intended Audience :: Science/Research',
             'Programming Language :: Python',
             'License :: OSI Approved :: MIT License',

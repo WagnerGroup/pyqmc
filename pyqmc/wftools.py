@@ -1,6 +1,6 @@
 import pyqmc.slater as slater
 import pyqmc.multiplywf as multiplywf
-import pyqmc.superposewf as superposewf
+import pyqmc.addwf as addwf
 import pyqmc.jastrowspin as jastrowspin
 import pyqmc.func3d as func3d
 import pyqmc.gpu as gpu
@@ -182,8 +182,8 @@ def read_wf(wf, wf_file):
     return wf
 
 
-def generate_superposewf(mol, mf, wf_files, coeffs, mc=None):
-    """Generate a wf that is a linear superposition of the given wfs with the given coefficients (which needs to be normalized)
+def read_superposition(mol, mf, wf_files, coeffs, mc=None):
+    """Generate a wf that is a linear superposition of the given wfs with the given coefficients 
 
     Typical usage:
 
@@ -213,6 +213,6 @@ def generate_superposewf(mol, mf, wf_files, coeffs, mc=None):
         wfs.append(wf_tmp)
         for k, v in to_opt_tmp.items():
             to_opt[f"wf{iwf}"+k] = v
-    wf = superposewf.SuperposeWF(coeffs, wfs)
+    wf = addwf.AddWF(coeffs, wfs)
     return wf, to_opt
 

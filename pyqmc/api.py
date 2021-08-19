@@ -12,3 +12,4 @@ from pyqmc.pyscftools import recover_pyscf
 from pyqmc.slater import Slater
 from pyqmc.jastrowspin import JastrowSpin
 from pyqmc.multiplywf import MultiplyWF
+from pyqmc.addwf import AddWF

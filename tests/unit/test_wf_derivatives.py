@@ -3,7 +3,7 @@ import pyqmc.testwf as testwf
 from pyqmc.gpu import cp, asnumpy
 from pyqmc.slater import Slater
 from pyqmc.multiplywf import MultiplyWF
-from pyqmc.superposewf import SuperposeWF
+from pyqmc.addwf import AddWF
 from pyqmc.manybody_jastrow import J3
 from pyqmc.wftools import generate_jastrow
 import pyqmc.api as pyq
@@ -175,7 +175,7 @@ def test_superpose_wf(H2_casci, coeffs=[1/np.sqrt(2),1/np.sqrt(2)], epsilon=1e-5
     wf1 = Slater(mol, mf, mc, tol=0.0)
    
     wfs = [wf0, wf1]
-    wf = SuperposeWF(coeffs, wfs)
+    wf = AddWF(coeffs, wfs)
     configs = pyq.initial_guess(mol, nconf)
     run_tests(wf, configs, epsilon)
 

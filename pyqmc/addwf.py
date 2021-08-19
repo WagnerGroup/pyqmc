@@ -1,12 +1,15 @@
 import numpy as np
 from pyqmc.multiplywf import Parameters
 
-class SuperposeWF:
+class AddWF:
     """
-    A general representation of a wavefunction as a superposition of multiple wfs
+    A general representation of a wavefunction as a superposition of multiple wave function object
     """
 
     def __init__(self, coeffs, wf_components):
+        """
+        The wave function is sum coeffs[i] wf_components[i].
+        """
         self.coeffs = coeffs 
         self.wf_components = wf_components
         self.parameters = Parameters([wf.parameters for wf in wf_components])

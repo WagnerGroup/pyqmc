@@ -64,8 +64,6 @@ def stable_fit(xfit, yfit, tolerance=1e-2):
     a = np.argmin(yfit)
     pq, relative_errq = polyfit_relative(xfit, yfit, 2)
     pl, relative_errl = polyfit_relative(xfit, yfit, 1)
-    if 0. not in xfit:
-        print("Warning: potential instability in optimization; 0 not in xfit \n{xfit}")
 
     if relative_errl / relative_errq < 2:  # If a linear fit is about as good..
         if pl[0] < 0:

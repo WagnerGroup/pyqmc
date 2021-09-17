@@ -672,7 +672,7 @@ def optimize_orthogonal(
 
         print("|total_derivative|", np.linalg.norm(total_derivative))
         if len(xfit) > 2:
-            min_tstep = pyqmc.linemin.stable_fit2(xfit, yfit)
+            min_tstep = pyqmc.linemin.stable_fit(xfit, yfit)
             print("chose to move", min_tstep, flush=True)
             parameters = parameters + conditioner(
                 total_derivative, condition, min_tstep

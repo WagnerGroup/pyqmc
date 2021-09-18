@@ -47,48 +47,42 @@ def polyfit_relative(xfit, yfit, degree):
     return p, relative_error
 
 
-def stable_fit2(xfit, yfit, tolerance=1e-2):
-    """Try to fit to a quadratic. If the fit is not good,
-    then just take the lowest value of yfit
+def stable_fit(xfit, yfit, tolerance=1e-2):
+    """Fit a line and quadratic to xfit and yfit. 
+    1. If the linear fit is as good as the quadriatic, choose the lower endpoint.
+    2. If the curvature is positive, estimate the minimum x value.
+    3. If the lowest yfit is less than the new guess, use that xfit instead.
+
+    :parameter list xfit: scalar step sizes along line
+    :parameter list yfit: estimated energies at xfit points
+    :parameter float tolerance: how good the quadratic fit needs to be
+    :returns: estimated x-value of minimum
+    :rtype: float
     """
     steprange = np.max(xfit)
     minstep = np.min(xfit)
+    a = np.argmin(yfit)
     pq, relative_errq = polyfit_relative(xfit, yfit, 2)
     pl, relative_errl = polyfit_relative(xfit, yfit, 1)
 
-    print("relative errors in fit", relative_errq, relative_errl)
     if relative_errl / relative_errq < 2:  # If a linear fit is about as good..
         if pl[0] < 0:
-            return steprange
+            est_min = steprange
         else:
-            return minstep
-    elif relative_errq < tolerance and pq[0] > 0:
+            est_min = minstep
+        out_y = np.polyval(pl, est_min)
+    elif relative_errq < tolerance and pq[0] > 0: # If quadratic fit is good
         est_min = -pq[1] / (2 * pq[0])
         if est_min > steprange:
             est_min = steprange
         if est_min < minstep:
             est_min = minstep
-        return est_min
+        out_y = np.polyval(pq, est_min)
     else:
-        return xfit[np.argmin(yfit)]
-
-
-def stable_fit(xfit, yfit):
-    p = np.polyfit(xfit, yfit, 2)
-    steprange = np.max(xfit)
-    minstep = np.min(xfit)
-    est_min = -p[1] / (2 * p[0])
-    if est_min > steprange and p[0] > 0:  # minimum past the search radius
-        est_min = steprange
-    if est_min < minstep and p[0] > 0:  # mimimum behind the search radius
-        est_min = minstep
-    if p[0] < 0:
-        plin = np.polyfit(xfit, yfit, 1)
-        if plin[0] < 0:
-            est_min = steprange
-        if plin[0] > 0:
-            est_min = minstep
-    # print("estimated minimum adjusted", est_min, flush=True)
+        est_min = xfit[a]
+        out_y = yfit[a]
+    if out_y > yfit[a]: # If min(yfit) has a lower energy than the guess, use it instead
+        est_min = xfit[a]
     return est_min
 
 
@@ -138,6 +132,7 @@ def line_minimization(
         warmup_options = dict(nblocks=1, nsteps_per_block=10, verbose=verbose)
     if "tstep" not in warmup_options and "tstep" in vmcoptions:
         warmup_options["tstep"] = vmcoptions["tstep"]
+    assert npts >= 3, f"linemin npts={npts}; need npts >= 3 for correlated sampling"
 
     # Restart
     iteration_offset = 0
@@ -220,7 +215,7 @@ def line_minimization(
         # include near zero in the fit, and go backwards as well
         # We don't use the above computed value because we are
         # doing correlated sampling.
-        steps = np.linspace(-steprange / npts, steprange, npts)
+        steps = np.linspace(-steprange / (npts - 2), steprange, npts)
         params = [x0 + update(pgrad, Sij, step, **update_kws) for step in steps]
         if client is None:
             stepsdata = correlated_compute(wf, coords, params, pgrad_acc)

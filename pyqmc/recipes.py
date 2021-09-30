@@ -26,6 +26,7 @@ def OPTIMIZE(
     S=None,
     jastrow_kws=None,
     slater_kws=None,
+    target_root=None,
     **linemin_kws,
 ):
     linemin_kws["hdf_file"] = output
@@ -35,6 +36,11 @@ def OPTIMIZE(
                 output
             )
         )
+    if target_root is None and anchors is not None:
+        target_root=len(anchors)+1
+    else:
+        target_root=0
+
     wf, configs, acc = initialize_qmc_objects(
         dft_checkfile,
         opt_wf=True,
@@ -44,6 +50,7 @@ def OPTIMIZE(
         S=S,
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
+        target_root=target_root,
     )
     if anchors is None:
         linemin.line_minimization(wf, configs, acc, **linemin_kws)
@@ -142,8 +149,8 @@ def initialize_qmc_objects(
     slater_kws=None,
     accumulators=None,
     opt_wf=False,
+    target_root=0
 ):
-    target_root = 0
     if ci_checkfile is None:
         mol, mf = pyscftools.recover_pyscf(dft_checkfile)
         mc = None

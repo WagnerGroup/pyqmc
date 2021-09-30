@@ -83,6 +83,27 @@ def test_pbc_wfs(H_pbc_sto3g_krks, epsilon=1e-5, nconf=10):
         run_tests(wf, epos, epsilon)
 
 
+def test_pbc_wfs_triplet(h_noncubic_sto3g_triplet, epsilon=1e-5, nconf=10):
+    """
+    Ensure that the wave function objects are consistent in several situations.
+    """
+    mol, mf = h_noncubic_sto3g_triplet
+
+    #supercell = pyq.get_supercell(mol, S=(np.ones((3, 3)) - 2 * np.eye(3)))
+    supercell = pyq.get_supercell(mol, S=np.identity(3, dtype=int))
+    epos = pyq.initial_guess(supercell, nconf)
+    for wf in [
+        MultiplyWF(Slater(supercell, mf), generate_jastrow(supercell)[0]),
+        Slater(supercell, mf),
+    ]:
+        for k in wf.parameters:
+            if "mo_coeff" not in k and k != "det_coeff":
+                wf.parameters[k] = cp.asarray(np.random.rand(*wf.parameters[k].shape))
+
+        _, epos = pyq.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node
+        run_tests(wf, epos, epsilon)
+
+
 def test_hci_wf(H2_ccecp_hci, epsilon=1e-5):
     mol, mf, cisolver = H2_ccecp_hci
     configs = pyq.initial_guess(mol, 10)

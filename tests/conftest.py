@@ -210,3 +210,25 @@ def h_noncubic_sto3g():
     mf = pyscf.pbc.dft.multigrid.multigrid(mf)
     mf = mf.run()
     return mol, mf
+
+
+@pytest.fixture(scope='module')
+def h_noncubic_sto3g_triplet():
+    nk = (1,1,1)
+    L = 3
+    mol = pyscf.pbc.gto.M(
+        atom="""H     {0}      {0}      {0}                
+                  H     {1}      {1}      {1}""".format(
+            0.0, L / 4
+        ),
+        basis="sto-3g",
+        a=(np.ones((3, 3)) - np.eye(3)) * L / 2,
+        spin=2*np.prod(nk),
+        unit="bohr",
+    )
+    kpts = mol.make_kpts(nk)
+    mf = pyscf.pbc.scf.KUKS(mol, kpts)
+    mf.xc = "pbe"
+    mf = pyscf.pbc.dft.multigrid.multigrid(mf)
+    mf = mf.run()
+    return mol, mf

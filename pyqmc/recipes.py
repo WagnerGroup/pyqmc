@@ -37,7 +37,7 @@ def OPTIMIZE(
             )
         )
     if target_root is None and anchors is not None:
-        target_root=len(anchors)+1
+        target_root=len(anchors)
     else:
         target_root=0
 

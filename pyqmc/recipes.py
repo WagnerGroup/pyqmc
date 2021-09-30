@@ -198,6 +198,6 @@ def read_mc_output(fname, warmup=1, reblock=None, exclude_keys=('configs','weigh
                 vals = f[k][warmup:]
                 if reblock is not None: 
                     vals = pyqmc.reblock.reblock(vals, reblock)
-                ret[k] = np.mean(vals)
-                ret[k + "_err"] = scipy.stats.sem(vals)
+                ret[k] = np.mean(vals, axis=0)
+                ret[k + "_err"] = scipy.stats.sem(vals, axis=0)
     return ret

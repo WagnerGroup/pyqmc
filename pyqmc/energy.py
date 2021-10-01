@@ -48,5 +48,5 @@ def kinetic(configs, wf):
     for e in range(nelec):
         grad, lap = wf.gradient_laplacian(e, configs.electron(e))
         ke += -0.5 * lap.real
-        grad2 += np.sum(np.abs(grad) ** 2, axis=0)
+        grad2 += np.sum(np.real(grad) ** 2, axis=0)
     return ke, grad2

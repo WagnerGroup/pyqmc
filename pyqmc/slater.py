@@ -374,7 +374,7 @@ class Slater:
         where di psi/psi is the derivative defined above.
         """
         d = {}
-
+        
         # Det coeff
         curr_val = self.value()
         d["det_coeff"] = (
@@ -418,6 +418,11 @@ class Slater:
                     * coeff
                     * d["det_coeff"][:, di, np.newaxis, np.newaxis]
                 )
+
         for k, v in d.items():
             d[k] = gpu.asnumpy(v)
+
+        for k in list(d.keys()):
+            if np.prod(d[k].shape) ==0:
+                del d[k]
         return d

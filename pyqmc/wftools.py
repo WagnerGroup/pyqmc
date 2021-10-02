@@ -9,7 +9,13 @@ import h5py
 
 
 def generate_slater(
-    mol, mf, optimize_determinants=False, optimize_orbitals=False, optimize_zeros=True, epsilon=1e-8, **kwargs
+    mol,
+    mf,
+    optimize_determinants=False,
+    optimize_orbitals=False,
+    optimize_zeros=True,
+    epsilon=1e-8,
+    **kwargs,
 ):
     """Construct a Slater determinant
 
@@ -21,8 +27,8 @@ def generate_slater(
     wf = slater.Slater(mol, mf, **kwargs)
     to_opt = {}
     if optimize_determinants:
-        to_opt['det_coeff'] = np.ones_like(wf.parameters['det_coeff'], dtype=bool)
-        to_opt['det_coeff'][np.argmax(wf.parameters['det_coeff'])]=False
+        to_opt["det_coeff"] = np.ones_like(wf.parameters["det_coeff"], dtype=bool)
+        to_opt["det_coeff"][np.argmax(wf.parameters["det_coeff"])] = False
     if optimize_orbitals:
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             to_opt[k] = np.ones(wf.parameters[k].shape, dtype=bool)
@@ -183,12 +189,12 @@ def read_wf(wf, wf_file):
 
 
 def read_superposition(mol, mf, wf_files, coeffs, mc=None):
-    """Generate a wf that is a linear superposition of the given wfs with the given coefficients 
+    """Generate a wf that is a linear superposition of the given wfs with the given coefficients
 
     Typical usage:
 
     .. code-block:: python
-       
+
        wf_coeffs = 1/np.sqrt(2)*np.ones(2)
        wf_files = ["wf1.chk", "wf2.chk"]
        wf, to_opt = pyqmc.wftools.generate_superposewf(mol, mf, wf_files, wf_coeffs, mc)
@@ -209,10 +215,9 @@ def read_superposition(mol, mf, wf_files, coeffs, mc=None):
     to_opt = {}
     for iwf, wf_file in enumerate(wf_files):
         wf_tmp, to_opt_tmp = generate_wf(mol, mf, mc=mc)
-        wf_tmp  = read_wf(wf_tmp, wf_file)
+        wf_tmp = read_wf(wf_tmp, wf_file)
         wfs.append(wf_tmp)
         for k, v in to_opt_tmp.items():
-            to_opt[f"wf{iwf}"+k] = v
+            to_opt[f"wf{iwf}" + k] = v
     wf = addwf.AddWF(coeffs, wfs)
     return wf, to_opt
-

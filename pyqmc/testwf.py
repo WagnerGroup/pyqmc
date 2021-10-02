@@ -10,8 +10,8 @@ def test_mask(wf, e, epos, mask=None, tolerance=1e-6):
         mask = np.random.randint(0, 2, num_e).astype(bool)
     ratio = wf.testvalue(e, epos, mask)
     ratio_ref = wf.testvalue(e, epos)[mask]
-    error = np.abs( (ratio - ratio_ref)/np.abs(np.max(ratio)))
-    assert np.all(error < tolerance )
+    error = np.abs((ratio - ratio_ref) / np.abs(np.max(ratio)))
+    assert np.all(error < tolerance)
     print("testcase for test_value() with mask passed")
 
 
@@ -57,7 +57,11 @@ def test_updateinternals(wf, configs):
     pgradupdate = wf.pgradient()
     wf.recompute(configs)
     pgrad = wf.pgradient()
-    pgdict = {k: np.max(np.abs(pgu - pgrad[k])) for k, pgu in pgradupdate.items() if np.prod(pgu.shape)>0}
+    pgdict = {
+        k: np.max(np.abs(pgu - pgrad[k]))
+        for k, pgu in pgradupdate.items()
+        if np.prod(pgu.shape) > 0
+    }
     return {
         "updatevstest": np.max(np.abs(updatevstest)),
         "recomputevstest": np.max(np.abs(recomputevstest)),
@@ -115,7 +119,7 @@ def test_wf_pgradient(wf, configs, delta=1e-5):
         flt = wf.parameters[k].reshape(-1)
         # print(flt.shape,wf.parameters[k].shape,gradient[k].shape)
         nparms = len(flt)
-        numgrad = np.zeros((configs.configs.shape[0], nparms), dtype=dtype) 
+        numgrad = np.zeros((configs.configs.shape[0], nparms), dtype=dtype)
         for i, c in enumerate(flt):
             flt[i] += delta
             wf.parameters[k] = flt.reshape(wf.parameters[k].shape)

@@ -399,6 +399,7 @@ def optimize_orthogonal(
     correlated_options=None,
     client=None,
     npartitions=None,
+    verbose=True,
 ):
     r"""
     Minimize
@@ -561,7 +562,8 @@ def optimize_orthogonal(
             tmp_deriv = evaluate(return_data, warmup)
             N = tmp_deriv["N"][-1]
 
-            print("Normalization", N, flush=True)
+            if verbose:
+                print("Normalization", N, flush=True)
             if abs(N - Ntarget) < Ntol:
                 normalization[0] = tmp_deriv["N"][-1]
                 total_energy += tmp_deriv["total"] / (nwf - 1)
@@ -587,7 +589,8 @@ def optimize_orthogonal(
             condition += deriv_data["condition"] / (nwf - 1)
             overlaps[i + 1] = deriv_data["S"][-1, 0]
             overlap_derivatives[i + 1] = deriv_data["S_derivative"][0, :]
-        print("normalization", normalization)
+        if verbose:
+            print("normalization", normalization)
 
         delta = overlaps - Starget
         delta_phase = delta / np.abs(delta)
@@ -599,22 +602,23 @@ def optimize_orthogonal(
 
         total_derivative = energy_derivative + overlap_derivative
 
-        print("############################# iteration ", step)
-        format_str = "{:<15}" * 2 + "{:<20.3}" * 2
-        print(format_str.format("Quantity", "wf", "val", "|g|"))
-        print(
-            format_str.format(
-                "energy", len(wfs) - 1, total_energy, np.linalg.norm(energy_derivative)
-            )
-        )
-        print(format_str.format("norm", len(wfs) - 1, N, np.linalg.norm(N_derivative)))
-        for i in range(len(wfs) - 1):
+        if verbose:
+            print("############################# iteration ", step)
+            format_str = "{:<15}" * 2 + "{:<20.3}" * 2
+            print(format_str.format("Quantity", "wf", "val", "|g|"))
             print(
                 format_str.format(
-                    "overlap", i, overlaps[i], np.linalg.norm(overlap_derivatives[i])
-                ),
-                flush=True,
+                    "energy", len(wfs) - 1, total_energy, np.linalg.norm(energy_derivative)
+                )
             )
+            print(format_str.format("norm", len(wfs) - 1, N, np.linalg.norm(N_derivative)))
+            for i in range(len(wfs) - 1):
+                print(
+                    format_str.format(
+                        "overlap", i, overlaps[i], np.linalg.norm(overlap_derivatives[i])
+                    ),
+                    flush=True,
+                )
 
         # Use SR to condition the derivatives
         total_derivative, N_derivative = np.einsum(
@@ -663,17 +667,20 @@ def optimize_orthogonal(
             np.abs(line_data["weight"]) > weight_boundaries
         )
         mask = np.all(mask, axis=0)
-        print("tsteps", test_tsteps)
-        print("cost", cost)
-        print("overlap cost", overlap_cost)
-        print("mask", mask)
+        if verbose:
+            print("tsteps", test_tsteps)
+            print("cost", cost)
+            print("overlap cost", overlap_cost)
+            print("mask", mask)
         xfit = test_tsteps[mask]
         yfit = cost[mask]
 
-        print("|total_derivative|", np.linalg.norm(total_derivative))
+        if verbose:
+            print("|total_derivative|", np.linalg.norm(total_derivative))
         if len(xfit) > 2:
             min_tstep = pyqmc.linemin.stable_fit(xfit, yfit)
-            print("chose to move", min_tstep, flush=True)
+            if verbose:
+                print("chose to move", min_tstep, flush=True)
             parameters = parameters + conditioner(
                 total_derivative, condition, min_tstep
             )

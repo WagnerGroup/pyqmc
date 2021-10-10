@@ -27,6 +27,7 @@ def OPTIMIZE(
     jastrow_kws=None,
     slater_kws=None,
     target_root=None,
+    nodal_cutoff=1e-3,
     **linemin_kws,
 ):
     linemin_kws["hdf_file"] = output
@@ -51,6 +52,7 @@ def OPTIMIZE(
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
         target_root=target_root,
+        nodal_cutoff=nodal_cutoff,
     )
     if anchors is None:
         linemin.line_minimization(wf, configs, acc, **linemin_kws)
@@ -150,6 +152,7 @@ def initialize_qmc_objects(
     accumulators=None,
     opt_wf=False,
     target_root=0,
+    nodal_cutoff=1e-3,
 ):
     if ci_checkfile is None:
         mol, mf = pyscftools.recover_pyscf(dft_checkfile)
@@ -169,7 +172,7 @@ def initialize_qmc_objects(
 
     configs = pyqmc.mc.initial_guess(mol, nconfig)
     if opt_wf:
-        acc = pyqmc.accumulators.gradient_generator(mol, wf, to_opt)
+        acc = pyqmc.accumulators.gradient_generator(mol, wf, to_opt, nodal_cutoff=nodal_cutoff)
     else:
         if accumulators == None:
             accumulators = {}

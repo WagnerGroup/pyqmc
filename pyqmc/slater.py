@@ -2,7 +2,7 @@ import numpy as np
 import pyqmc.gpu as gpu
 import pyqmc.determinant_tools as determinant_tools
 import pyqmc.orbitals
-
+import warnings
 
 def sherman_morrison_row(e, inv, vec):
     tmp = np.einsum("ek,ekj->ej", vec, inv)
@@ -152,18 +152,27 @@ class Slater:
             self._dets.append(
                 gpu.cp.asarray(np.linalg.slogdet(mo_vals))
             )  # Spin, (sign, val), nconf, [ndet_up, ndet_dn]
+            is_zero = np.sum(np.isinf(self._dets[s][1]))
+            if is_zero > 0:
+                warnings.warn(f"A wave function is zero. Found this proportion: {is_zero/nconf}")
             self._inverse.append(
-                gpu.cp.linalg.inv(mo_vals)
+                gpu.cp.linalg.pinv(mo_vals)
             )  # spin, Nconf, [ndet_up, ndet_dn], nelec, nelec
         return self.value()
 
-    def updateinternals(self, e, epos, mask=None):
+    def updateinternals(self, e, epos, configs, mask=None):
         """Update any internals given that electron e moved to epos. mask is a Boolean array
         which allows us to update only certain walkers"""
 
         s = int(e >= self._nelec[0])
         if mask is None:
-            mask = [True] * epos.configs.shape[0]
+            mask = np.ones(epos.configs.shape[0], dtype=bool)
+        is_zero = np.sum(np.isinf(self._dets[s][1]))
+        if is_zero:
+            warnings.warn("Found a zero in the wave function. Recomputing everything. This should not happen often.")
+            self.recompute(configs)
+            return 
+
         eeff = e - s * self._nelec[0]
         ao = self.orbitals.aos("GTOval_sph", epos, mask)
         self._aovals[:, mask, e, :] = ao
@@ -173,6 +182,7 @@ class Slater:
         det_ratio, self._inverse[s][mask, :, :, :] = sherman_morrison_ms(
             eeff, self._inverse[s][mask, :, :, :], mo_vals
         )
+
 
         self._updateval(det_ratio, s, mask)
 

@@ -120,7 +120,7 @@ def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
             # Update wave function
             configs.move(e, newcoorde, accept)
             for wf in wfs:
-                wf.updateinternals(e, newcoorde, mask=accept)
+                wf.updateinternals(e, newcoorde, configs, mask=accept)
 
         # Collect rolling average
         save_dat = collect_overlap_data(wfs, configs, pgrad)

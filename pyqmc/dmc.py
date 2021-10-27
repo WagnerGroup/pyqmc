@@ -149,13 +149,13 @@ def dmc_propagate(
                 )
                 accept = mask & (probability > np.random.rand(nconfig))
                 configs.move(e, newepos, accept)
-                wf.updateinternals(e, newepos, mask=accept)
+                wf.updateinternals(e, newepos, configs, mask=accept)
                 tmove_acceptance += accept / nelec
 
         for e in range(nelec):  # drift-diffusion
             newepos, accept, r2 = propose_drift_diffusion(wf, configs, tstep, e)
             configs.move(e, newepos, accept)
-            wf.updateinternals(e, newepos, mask=accept)
+            wf.updateinternals(e, newepos, configs, mask=accept)
             r2_proposed += r2
             r2_accepted[accept] += r2[accept]
             prob_acceptance += accept / nelec

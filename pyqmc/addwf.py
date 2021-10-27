@@ -33,12 +33,12 @@ class AddWF:
         wf_val = np.log(np.abs(wf_val)) + ref
         return wf_sign, wf_val
 
-    def updateinternals(self, e, epos, mask=None):
+    def updateinternals(self, e, epos, configs, mask=None):
         """
         Update the electron e position to epos, for each wf component in self.wf_components
         """
         for wf in self.wf_components:
-            wf.updateinternals(e, epos, mask=mask)
+            wf.updateinternals(e, epos, configs, mask=mask)
 
     def value(self):
         """

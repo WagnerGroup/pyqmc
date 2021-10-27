@@ -29,8 +29,17 @@ def get_complex_phase(x):
     return x / np.abs(x)
 
 
-def choose_evaluator_from_pyscf(mol, mf, mc=None, twist=None, determinants=None):
+def choose_evaluator_from_pyscf(mol, mf, mc=None, twist=None, determinants=None, tol=None):
     """
+    mol: A Mole object
+    mf: a pyscf mean-field object
+    mc: a pyscf multiconfigurational object. Supports HCI and CAS 
+    twist: the twist of the calculation (units?)
+    determinants: A list of determinants suitable to pass into create_packed_objects
+    tol: smallest determinant weight to include in the wave function.
+
+    You cannot pass both mc/tol and determinants. 
+
     Returns:
     an orbital evaluator chosen based on the inputs.
     """
@@ -45,7 +54,7 @@ def choose_evaluator_from_pyscf(mol, mf, mc=None, twist=None, determinants=None)
         )
     if mc is None:
         return MoleculeOrbitalEvaluator.from_pyscf(mol, mf, determinants=determinants)
-    return MoleculeOrbitalEvaluator.from_pyscf(mol, mf, mc, determinants=determinants)
+    return MoleculeOrbitalEvaluator.from_pyscf(mol, mf, mc, determinants=determinants, tol=tol)
 
 
 class MoleculeOrbitalEvaluator:

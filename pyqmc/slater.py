@@ -2,7 +2,7 @@ import numpy as np
 import pyqmc.gpu as gpu
 import pyqmc.determinant_tools as determinant_tools
 import pyqmc.orbitals
-
+import warnings
 
 def sherman_morrison_row(e, inv, vec):
     tmp = np.einsum("ek,ekj->ej", vec, inv)
@@ -149,18 +149,12 @@ class Slater:
             end = self._nelec[0] + self._nelec[1] * s
             mo = self.orbitals.mos(self._aovals[:, :, begin:end, :], s)
             mo_vals = gpu.cp.swapaxes(mo[:, :, self._det_occup[s]], 1, 2)
-            ####
-            #print(mo_vals)
-            #import h5py
-            #with h5py.File("dump.hdf5",'w') as f:
-            #    f['mo_vals'] = mo_vals   
-            #####
             self._dets.append(
                 gpu.cp.asarray(np.linalg.slogdet(mo_vals))
             )  # Spin, (sign, val), nconf, [ndet_up, ndet_dn]
-            #print(self._dets)
-            #self.nonzero = np.(self._dets[0]) > 0.0
-            print("zeros",np.sum(np.isinf(self._dets[s][1])))
+            is_zero = np.sum(np.isinf(self._dets[s][1]))
+            if is_zero > 0:
+                warnings.warn(f"A wave function is zero. Found this proportion: {is_zero/nconf}")
             self._inverse.append(
                 gpu.cp.linalg.pinv(mo_vals)
             )  # spin, Nconf, [ndet_up, ndet_dn], nelec, nelec
@@ -175,6 +169,7 @@ class Slater:
             mask = np.ones(epos.configs.shape[0], dtype=bool)
         is_zero = np.sum(np.isinf(self._dets[s][1]))
         if is_zero:
+            warnings.warn("Found a zero in the wave function. Recomputing everything. This should not happen often.")
             self.recompute(configs)
             return 
 

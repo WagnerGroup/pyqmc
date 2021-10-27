@@ -608,14 +608,22 @@ def optimize_orthogonal(
             print(format_str.format("Quantity", "wf", "val", "|g|"))
             print(
                 format_str.format(
-                    "energy", len(wfs) - 1, total_energy, np.linalg.norm(energy_derivative)
+                    "energy",
+                    len(wfs) - 1,
+                    total_energy,
+                    np.linalg.norm(energy_derivative),
                 )
             )
-            print(format_str.format("norm", len(wfs) - 1, N, np.linalg.norm(N_derivative)))
+            print(
+                format_str.format("norm", len(wfs) - 1, N, np.linalg.norm(N_derivative))
+            )
             for i in range(len(wfs) - 1):
                 print(
                     format_str.format(
-                        "overlap", i, overlaps[i], np.linalg.norm(overlap_derivatives[i])
+                        "overlap",
+                        i,
+                        overlaps[i],
+                        np.linalg.norm(overlap_derivatives[i]),
                     ),
                     flush=True,
                 )

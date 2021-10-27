@@ -172,7 +172,9 @@ def initialize_qmc_objects(
 
     configs = pyqmc.mc.initial_guess(mol, nconfig)
     if opt_wf:
-        acc = pyqmc.accumulators.gradient_generator(mol, wf, to_opt, nodal_cutoff=nodal_cutoff)
+        acc = pyqmc.accumulators.gradient_generator(
+            mol, wf, to_opt, nodal_cutoff=nodal_cutoff
+        )
     else:
         if accumulators == None:
             accumulators = {}

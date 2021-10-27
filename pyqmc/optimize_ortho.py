@@ -100,7 +100,7 @@ def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
             newcoorde = configs.make_irreducible(e, newcoorde)
 
             # Compute reverse move
-            grads, vals = list(zip([wf.gradient_value(e, newcoorde) for wf in wfs]))
+            grads, vals = list(zip(*[wf.gradient_value(e, newcoorde) for wf in wfs]))
             grads = [np.real(g.T) for g in grads]
             new_grad = mc.limdrift(np.mean(grads, axis=0))
             forward = np.sum(gauss ** 2, axis=1)

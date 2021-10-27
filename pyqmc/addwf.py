@@ -72,7 +72,7 @@ class AddWF:
             "i,ij,ij->j", self.coeffs, wf_vals[:, 0, :], np.exp(wf_vals[:, 1, :] - ref)
         )
         if mask is None:
-            mask =np.ones(wf_val.shape[0],dtype=bool)
+            mask = np.ones(wf_val.shape[0], dtype=bool)
 
         wf_sign = wf_val / np.abs(wf_val)
         wf_val = np.log(np.abs(wf_val)) + ref
@@ -140,7 +140,7 @@ class AddWF:
         testvalue_components = np.array(
             [wf.testvalue_many(e, epos, mask=mask) for wf in self.wf_components]
         )
-        
+
         return np.einsum(
             "ijk,ij->jk", testvalue_components, self.ratio_current_config(mask)
         )

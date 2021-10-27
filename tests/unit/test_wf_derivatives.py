@@ -89,7 +89,7 @@ def test_pbc_wfs_triplet(h_noncubic_sto3g_triplet, epsilon=1e-5, nconf=10):
     """
     mol, mf = h_noncubic_sto3g_triplet
 
-    #supercell = pyq.get_supercell(mol, S=(np.ones((3, 3)) - 2 * np.eye(3)))
+    # supercell = pyq.get_supercell(mol, S=(np.ones((3, 3)) - 2 * np.eye(3)))
     supercell = pyq.get_supercell(mol, S=np.identity(3, dtype=int))
     epos = pyq.initial_guess(supercell, nconf)
     for wf in [
@@ -181,7 +181,10 @@ def test_manual_pbcs_correct(H_pbc_sto3g_kuks, epsilon=1e-5, nconf=10):
     configs = pyq.initial_guess(mol, 10)
     run_tests(wf, configs, epsilon)
 
-def test_superpose_wf(H2_casci, coeffs=[1/np.sqrt(2),1/np.sqrt(2)], epsilon=1e-5, nconf=10):
+
+def test_superpose_wf(
+    H2_casci, coeffs=[1 / np.sqrt(2), 1 / np.sqrt(2)], epsilon=1e-5, nconf=10
+):
     """
     This test makes sure that the superposewf passes all the wftests, when adding two casci wave functions.
     """
@@ -194,11 +197,8 @@ def test_superpose_wf(H2_casci, coeffs=[1/np.sqrt(2),1/np.sqrt(2)], epsilon=1e-5
 
     mc.ci = ci1
     wf1 = Slater(mol, mf, mc, tol=0.0)
-   
+
     wfs = [wf0, wf1]
     wf = AddWF(coeffs, wfs)
     configs = pyq.initial_guess(mol, nconf)
     run_tests(wf, configs, epsilon)
-
-    
-    

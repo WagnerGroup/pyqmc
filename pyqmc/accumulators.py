@@ -7,8 +7,8 @@ import pyqmc.eval_ecp as eval_ecp
 
 def gradient_generator(mol, wf, to_opt=None, nodal_cutoff=1e-3, **ewald_kwargs):
     return PGradTransform(
-        EnergyAccumulator(mol, **ewald_kwargs), 
-        LinearTransform(wf.parameters, to_opt), 
+        EnergyAccumulator(mol, **ewald_kwargs),
+        LinearTransform(wf.parameters, to_opt),
         nodal_cutoff=nodal_cutoff,
     )
 

@@ -171,8 +171,7 @@ def dmc_propagate(
 
         Snew = compute_S(e_trial, e_est, branchcut_start, v2, tstep, eloc, nelec)
         Sold = compute_S(e_trial, e_est, branchcut_start, v2old, tstep, elocold, nelec)
-        p_av = prob_acceptance * 0.5
-        wmult = np.exp(tstep * tdamp * (p_av * Snew + (1.0 - p_av) * Sold))
+        wmult = np.exp(tstep * tdamp * (0.5 * Snew + 0.5 * Sold))
         weights *= wmult
         wavg = np.mean(weights)
 
@@ -350,15 +349,17 @@ def rundmc(
       weights: The final weights from this calculation
 
     """
-    #Don't continue onto a file that's already there.
+    # Don't continue onto a file that's already there.
     if continue_from is not None and hdf_file is not None and os.path.isfile(hdf_file):
-        raise RuntimeError(f"continue_from is set but hdf_file={hdf_file} already exists! Delete or rename {hdf_file} and try again.")
+        raise RuntimeError(
+            f"continue_from is set but hdf_file={hdf_file} already exists! Delete or rename {hdf_file} and try again."
+        )
 
     # Restart if hdf_file is there
-    if continue_from is None and os.path.isfile(hdf_file):
+    if continue_from is None and hdf_file is not None and os.path.isfile(hdf_file):
         continue_from = hdf_file
 
-    # Now we should be sure that there is a file 
+    # Now we should be sure that there is a file
     # to continue from, if given.
     if continue_from is not None:
         with h5py.File(continue_from, "r") as hdf:

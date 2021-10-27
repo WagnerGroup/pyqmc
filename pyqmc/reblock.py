@@ -87,7 +87,8 @@ def _reblock(array, nblocks, weights):
     """
     vals = np.array_split(array, nblocks, axis=0)
     weights = np.array_split(weights, nblocks, axis=0)
-    return [(v * w).mean(axis=0) / w.mean(axis=0) for v, w in zip(vals, weights)]
+    # The transposes are to use the broadcast rules of numpy in the case of vector data
+    return [(v.T * w.T).T.mean(axis=0) / w.mean(axis=0) for v, w in zip(vals, weights)]
 
 
 def reblock_summary(df, nblocks=(16, 32, 48, 64), weights=None):

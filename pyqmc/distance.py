@@ -116,7 +116,7 @@ class MinimalImageDistance(RawDistance):
         d1 = v - configs
         shifts = self.shifts.reshape((-1, *[1] * (len(d1.shape) - 1), 3))
         d1all = d1[np.newaxis] + shifts
-        dists = np.linalg.norm(d1all, axis=-1)
+        dists = np.sum(d1all ** 2, axis=-1)
         mininds = np.argmin(dists, axis=0)
         inds = np.meshgrid(*[np.arange(n) for n in mininds.shape], indexing="ij")
         return d1all[(mininds, *inds)]

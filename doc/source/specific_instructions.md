@@ -1,4 +1,4 @@
-Specific instructions for HPC machines
+Installation instructions for HPC machines
 --------------------------------------------------------------
 
 
@@ -98,7 +98,7 @@ You can run this on a login node and it will execute your jobs.
 
 ### Summit
 
-Some information is available here: https://www.olcf.ornl.gov/wp-content/uploads/2019/02/STW_Feb_20190211_summit_workshop_python.pdf
+Some information is available [here](https://www.olcf.ornl.gov/wp-content/uploads/2019/02/STW_Feb_20190211_summit_workshop_python.pdf)
 
 Set up your environment:
 ```
@@ -106,7 +106,7 @@ module load python/3.7.0-anaconda3-5.3.0
 conda create -n pyqmc3.8 python=3.8
 conda init
 . .bashrc 
-conda install numpy pandas h5py
+conda install numpy pandas h5py scipy
 module load gcc/4.8.5
 CC=gcc MPICC=mpicc pip install --no-binary mpi4py install mpi4py
 ```
@@ -118,6 +118,37 @@ module load cmake
 module load openblas/0.3.9-omp
 
 git clone https://github.com/pyscf/pyscf
+cd build
+cmake ..
+make 
+cd [pyscf root directory]
+pip install .
+pip install pyqmc
+```
+
+
+```
+module load python/3.8-anaconda3
+conda create -n pyqmc3.9 python=3.9
+conda init
+. .bashrc 
+conda activate pyqmc3.9
+conda install numpy pandas h5py scipy
+module load gcc
+CC=gcc MPICC=mpicc pip install --no-binary mpi4py install mpi4py
+
+```
+
+
+Install pyscf and pyqmc. I have had trouble just doing `pip install pyscf` for non-Intel machines. 
+```
+module load gcc
+module load cmake
+module load openblas
+
+git clone https://github.com/pyscf/pyscf
+cd pyscf/pyscf/lib
+mkdir build
 cd build
 cmake ..
 make 

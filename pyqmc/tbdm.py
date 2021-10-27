@@ -61,6 +61,8 @@ class TBDMAccumulator:
 
         if kpts is None:
             self.orbitals = pyqmc.orbitals.MoleculeOrbitalEvaluator(mol, orb_coeff)
+            norb_up = orb_coeff[0].shape[1]
+            norb_down = orb_coeff[1].shape[1]
             if hasattr(mol, "a"):
                 warnings.warn(
                     "Using molecular orbital evaluator for a periodic system. This is likely wrong unless you know what you're doing. Make sure to pass kpts into TBDM if you want to use the periodic orbital evaluator."
@@ -71,6 +73,9 @@ class TBDMAccumulator:
             self.orbitals = pyqmc.orbitals.PBCOrbitalEvaluatorKpoints(
                 mol, orb_coeff, kpts
             )
+            norb_up = np.sum([o.shape[1] for o in orb_coeff[0]])
+            norb_down = np.sum([o.shape[1] for o in orb_coeff[1]])
+
 
         self.dtype = complex if self.orbitals.iscomplex else float
         self._spin_sector = spin
@@ -81,8 +86,6 @@ class TBDMAccumulator:
 
         # Default to full 2rdm if ijkl not specified
         if ijkl is None:
-            norb_up = orb_coeff[0].shape[1]
-            norb_down = orb_coeff[1].shape[1]
             ijkl = [
                 [i, j, k, l]
                 for i in range(norb_up)

@@ -26,6 +26,8 @@ def OPTIMIZE(
     S=None,
     jastrow_kws=None,
     slater_kws=None,
+    target_root=None,
+    nodal_cutoff=1e-3,
     **linemin_kws,
 ):
     linemin_kws["hdf_file"] = output
@@ -35,6 +37,11 @@ def OPTIMIZE(
                 output
             )
         )
+    if target_root is None and anchors is not None:
+        target_root = len(anchors)
+    else:
+        target_root = 0
+
     wf, configs, acc = initialize_qmc_objects(
         dft_checkfile,
         opt_wf=True,
@@ -44,6 +51,8 @@ def OPTIMIZE(
         S=S,
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
+        target_root=target_root,
+        nodal_cutoff=nodal_cutoff,
     )
     if anchors is None:
         linemin.line_minimization(wf, configs, acc, **linemin_kws)
@@ -99,7 +108,7 @@ def VMC(
         S=S,
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
-        accumulators=accumulators
+        accumulators=accumulators,
     )
 
     pyqmc.mc.vmc(wf, configs, accumulators=acc, **vmc_kws)
@@ -126,7 +135,7 @@ def DMC(
         S=S,
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
-        accumulators=accumulators
+        accumulators=accumulators,
     )
 
     dmc.rundmc(wf, configs, accumulators=acc, **dmc_kws)
@@ -142,8 +151,9 @@ def initialize_qmc_objects(
     slater_kws=None,
     accumulators=None,
     opt_wf=False,
+    target_root=0,
+    nodal_cutoff=1e-3,
 ):
-    target_root = 0
     if ci_checkfile is None:
         mol, mf = pyscftools.recover_pyscf(dft_checkfile)
         mc = None
@@ -162,7 +172,7 @@ def initialize_qmc_objects(
 
     configs = pyqmc.mc.initial_guess(mol, nconfig)
     if opt_wf:
-        acc = pyqmc.accumulators.gradient_generator(mol, wf, to_opt)
+        acc = pyqmc.accumulators.gradient_generator(mol, wf, to_opt, nodal_cutoff=nodal_cutoff)
     else:
         if accumulators == None:
             accumulators = {}
@@ -183,14 +193,19 @@ def read_opt(fname):
         )
 
 
-def read_mc_output(fname, warmup=1, reblock=None):
+def read_mc_output(
+    fname,
+    warmup=1,
+    reblock=None,
+    exclude_keys=("configs", "weights", "block", "nconfig"),
+):
     ret = {"fname": fname, "warmup": warmup, "reblock": reblock}
-    with h5py.File(fname) as f:
+    with h5py.File(fname, "r") as f:
         for k in f.keys():
-            if "energy" in k:
+            if k not in exclude_keys:
                 vals = f[k][warmup:]
-                if reblock is not None: 
+                if reblock is not None:
                     vals = pyqmc.reblock.reblock(vals, reblock)
-                ret[k] = np.mean(vals)
-                ret[k + "_err"] = scipy.stats.sem(vals)
+                ret[k] = np.mean(vals, axis=0)
+                ret[k + "_err"] = scipy.stats.sem(vals, axis=0)
     return ret

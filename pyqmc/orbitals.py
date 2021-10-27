@@ -4,6 +4,7 @@ import pyqmc.pbc as pbc
 import pyqmc.supercell as supercell
 import pyqmc.pbc_eval_gto as pbc_eval_gto
 import pyqmc.determinant_tools
+import pyscf.pbc.dft.gen_grid
 
 """
 The evaluators have the concept of a 'set' of atomic orbitals, that may apply to 
@@ -28,8 +29,17 @@ def get_complex_phase(x):
     return x / np.abs(x)
 
 
-def choose_evaluator_from_pyscf(mol, mf, mc=None, twist=None, determinants=None):
+def choose_evaluator_from_pyscf(mol, mf, mc=None, twist=None, determinants=None, tol=None):
     """
+    mol: A Mole object
+    mf: a pyscf mean-field object
+    mc: a pyscf multiconfigurational object. Supports HCI and CAS 
+    twist: the twist of the calculation (units?)
+    determinants: A list of determinants suitable to pass into create_packed_objects
+    tol: smallest determinant weight to include in the wave function.
+
+    You cannot pass both mc/tol and determinants. 
+
     Returns:
     an orbital evaluator chosen based on the inputs.
     """
@@ -44,7 +54,7 @@ def choose_evaluator_from_pyscf(mol, mf, mc=None, twist=None, determinants=None)
         )
     if mc is None:
         return MoleculeOrbitalEvaluator.from_pyscf(mol, mf, determinants=determinants)
-    return MoleculeOrbitalEvaluator.from_pyscf(mol, mf, mc, determinants=determinants)
+    return MoleculeOrbitalEvaluator.from_pyscf(mol, mf, mc, determinants=determinants, tol=tol)
 
 
 class MoleculeOrbitalEvaluator:
@@ -83,7 +93,7 @@ class MoleculeOrbitalEvaluator:
                 ]
             else:
                 occup = [
-                    [list(np.argwhere(mf.mo_occ > 1.5 - spin)[:, 0])] for spin in [0, 1]
+                    [list(np.argwhere(mf.mo_occ > 0.5 + spin)[:, 0])] for spin in [0, 1]
                 ]
 
         max_orb = [int(np.max(occup[s], initial=0) + 1) for s in [0, 1]]

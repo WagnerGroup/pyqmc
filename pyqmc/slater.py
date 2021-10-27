@@ -124,7 +124,7 @@ class Slater:
             self._det_map,
             self.orbitals,
         ) = pyqmc.orbitals.choose_evaluator_from_pyscf(
-            mol, mf, mc, twist=twist, determinants=determinants
+            mol, mf, mc, twist=twist, determinants=determinants, tol=self.tol
         )
 
         self.parameters = JoinParameters([self.myparameters, self.orbitals.parameters])
@@ -418,6 +418,11 @@ class Slater:
                     * coeff
                     * d["det_coeff"][:, di, np.newaxis, np.newaxis]
                 )
+
         for k, v in d.items():
             d[k] = gpu.asnumpy(v)
+
+        for k in list(d.keys()):
+            if np.prod(d[k].shape) == 0:
+                del d[k]
         return d

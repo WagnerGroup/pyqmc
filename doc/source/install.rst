@@ -11,12 +11,6 @@ You can obtain releases by executing
 
   pip install pyqmc --upgrade
 
-If you want parallel operation, execute
-
-.. code-block:: bash
-
-  pip install pyqmc dask distributed --upgrade
-
 The latest code can be installed as follows
 
 .. code-block:: bash
@@ -32,7 +26,6 @@ GitHub
     export PYTHONPATH:$PYTHONPATH:/path/to/pyqmc
 
 
-`specific_instructions`
 
 
 

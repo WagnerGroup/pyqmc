@@ -103,6 +103,20 @@ def H2_ccecp_uhf():
     return mol, mf
 
 @pytest.fixture(scope="module")
+def H2_casci():
+    mol = gto.M(atom="H 0. 0. 0.0; H 0. 0. 2.4",
+            basis=f"ccpvtz",  
+            unit="bohr", 
+            charge=0, 
+            spin=0, 
+            verbose=1)  
+    mf = scf.ROHF(mol).run()
+    mc = pyscf.mcscf.CASCI(mf, 2, 2)
+    mc.fcisolver.nroots = 4
+    mc.kernel()
+    return mol, mf, mc
+
+@pytest.fixture(scope="module")
 def C2_ccecp_rhf():
     mol = gto.M(
                 atom="""C 0 0 0 
@@ -113,6 +127,18 @@ def C2_ccecp_rhf():
     mf = scf.RHF(mol).run()
     return mol, mf
 
+
+@pytest.fixture(scope="module")
+def C_ccecp_rohf():
+    mol = gto.M(
+                atom="""C 0 0 0 
+                C 1 0 0  """,
+                ecp="ccecp",
+                basis="ccecpccpvdz",
+                spin=2
+                )
+    mf = scf.RHF(mol).run()
+    return mol, mf
 
 
 @pytest.fixture(scope='module')
@@ -180,6 +206,28 @@ def h_noncubic_sto3g():
     )
     kpts = mol.make_kpts(nk)
     mf = pyscf.pbc.scf.KRKS(mol, kpts)
+    mf.xc = "pbe"
+    mf = pyscf.pbc.dft.multigrid.multigrid(mf)
+    mf = mf.run()
+    return mol, mf
+
+
+@pytest.fixture(scope='module')
+def h_noncubic_sto3g_triplet():
+    nk = (1,1,1)
+    L = 3
+    mol = pyscf.pbc.gto.M(
+        atom="""H     {0}      {0}      {0}                
+                  H     {1}      {1}      {1}""".format(
+            0.0, L / 4
+        ),
+        basis="sto-3g",
+        a=(np.ones((3, 3)) - np.eye(3)) * L / 2,
+        spin=2*np.prod(nk),
+        unit="bohr",
+    )
+    kpts = mol.make_kpts(nk)
+    mf = pyscf.pbc.scf.KUKS(mol, kpts)
     mf.xc = "pbe"
     mf = pyscf.pbc.dft.multigrid.multigrid(mf)
     mf = mf.run()

@@ -100,16 +100,15 @@ def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
             newcoorde = configs.make_irreducible(e, newcoorde)
 
             # Compute reverse move
-            grads = [np.real(wf.gradient(e, newcoorde).T) for wf in wfs]
+            grads, vals = list(zip(*[wf.gradient_value(e, newcoorde) for wf in wfs]))
+            grads = [np.real(g.T) for g in grads]
             new_grad = mc.limdrift(np.mean(grads, axis=0))
             forward = np.sum(gauss ** 2, axis=1)
             backward = np.sum((gauss + tstep * (grad + new_grad)) ** 2, axis=1)
 
             # Acceptance
             t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
-            wf_ratios = np.array(
-                [np.abs(wf.testvalue(e, newcoorde)) ** 2 for wf in wfs]
-            )
+            wf_ratios = np.abs(vals) ** 2
             log_values = np.real(np.array([wf.value()[1] for wf in wfs]))
             weights = np.exp(2 * (log_values - log_values[0]))
 

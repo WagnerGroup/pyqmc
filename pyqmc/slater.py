@@ -149,21 +149,35 @@ class Slater:
             end = self._nelec[0] + self._nelec[1] * s
             mo = self.orbitals.mos(self._aovals[:, :, begin:end, :], s)
             mo_vals = gpu.cp.swapaxes(mo[:, :, self._det_occup[s]], 1, 2)
+            ####
+            #print(mo_vals)
+            #import h5py
+            #with h5py.File("dump.hdf5",'w') as f:
+            #    f['mo_vals'] = mo_vals   
+            #####
             self._dets.append(
                 gpu.cp.asarray(np.linalg.slogdet(mo_vals))
             )  # Spin, (sign, val), nconf, [ndet_up, ndet_dn]
+            #print(self._dets)
+            #self.nonzero = np.(self._dets[0]) > 0.0
+            print("zeros",np.sum(np.isinf(self._dets[s][1])))
             self._inverse.append(
-                gpu.cp.linalg.inv(mo_vals)
+                gpu.cp.linalg.pinv(mo_vals)
             )  # spin, Nconf, [ndet_up, ndet_dn], nelec, nelec
         return self.value()
 
-    def updateinternals(self, e, epos, mask=None):
+    def updateinternals(self, e, epos, configs, mask=None):
         """Update any internals given that electron e moved to epos. mask is a Boolean array
         which allows us to update only certain walkers"""
 
         s = int(e >= self._nelec[0])
         if mask is None:
-            mask = [True] * epos.configs.shape[0]
+            mask = np.ones(epos.configs.shape[0], dtype=bool)
+        is_zero = np.sum(np.isinf(self._dets[s][1]))
+        if is_zero:
+            self.recompute(configs)
+            return 
+
         eeff = e - s * self._nelec[0]
         ao = self.orbitals.aos("GTOval_sph", epos, mask)
         self._aovals[:, mask, e, :] = ao
@@ -173,6 +187,7 @@ class Slater:
         det_ratio, self._inverse[s][mask, :, :, :] = sherman_morrison_ms(
             eeff, self._inverse[s][mask, :, :, :], mo_vals
         )
+
 
         self._updateval(det_ratio, s, mask)
 

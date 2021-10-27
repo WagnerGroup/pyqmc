@@ -74,9 +74,9 @@ class MultiplyWF:
             vals += results[1]
         return signs, vals
 
-    def updateinternals(self, e, epos, mask=None):
+    def updateinternals(self, e, epos, configs, mask=None):
         for wf in self.wf_factors:
-            wf.updateinternals(e, epos, mask=mask)
+            wf.updateinternals(e, epos, configs, mask=mask)
 
     def value(self):
         results = [wf.value() for wf in self.wf_factors]

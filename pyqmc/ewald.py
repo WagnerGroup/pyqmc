@@ -381,7 +381,9 @@ class Ewald:
 
 
 def select_big(gpts, cellvolume, recvec, alpha):
-    gpoints = gpu.cp.einsum("j...,jk->...k", gpts, recvec) * 2 * np.pi
+    gpoints = gpu.cp.einsum(
+        "j...,jk->...k", gpu.cp.asarray(gpts), gpu.cp.asarray(recvec) * 2 * np.pi
+    )
     gsquared = gpu.cp.einsum("...k,...k->...", gpoints, gpoints)
     gweight = 4 * np.pi * gpu.cp.exp(-gsquared / (4 * alpha ** 2))
     gweight /= cellvolume * gsquared

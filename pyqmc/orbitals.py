@@ -210,6 +210,7 @@ class PBCOrbitalEvaluatorKpoints:
         self.iscomplex = True
         self._cell = cell.original_cell
         self.S = cell.S
+        self.Lprim = self._cell.lattice_vectors()
 
         self._kpts = [0, 0, 0] if kpts is None else kpts
         self.param_split = [
@@ -285,10 +286,11 @@ class PBCOrbitalEvaluatorKpoints:
         """
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
+        primcoords, primwrap = pbc.enforce_pbc(self.Lprim, mycoords)
         # coordinate, dimension
         wrap = configs.wrap if mask is None else configs.wrap[mask]
         wrap = np.dot(wrap, self.S)
-        wrap = wrap.reshape((-1, wrap.shape[-1]))
+        wrap = wrap.reshape((-1, wrap.shape[-1])) + primwrap
         kdotR = np.linalg.multi_dot(
             (self._kpts, self._cell.lattice_vectors().T, wrap.T)
         )
@@ -299,7 +301,7 @@ class PBCOrbitalEvaluatorKpoints:
             pbc_eval_gto.eval_gto(
                 self._cell,
                 "PBC" + eval_str,
-                mycoords,
+                primcoords,
                 kpts=self._kpts,
                 Ls=self.Ls,
                 rcut=self.rcut,

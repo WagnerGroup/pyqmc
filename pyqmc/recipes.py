@@ -28,6 +28,7 @@ def OPTIMIZE(
     slater_kws=None,
     target_root=None,
     nodal_cutoff=1e-3,
+    promotions=None,
     **linemin_kws,
 ):
     linemin_kws["hdf_file"] = output
@@ -53,6 +54,7 @@ def OPTIMIZE(
         slater_kws=slater_kws,
         target_root=target_root,
         nodal_cutoff=nodal_cutoff,
+        promotions=promotions,
     )
     if anchors is None:
         linemin.line_minimization(wf, configs, acc, **linemin_kws)
@@ -97,6 +99,7 @@ def VMC(
     jastrow_kws=None,
     slater_kws=None,
     accumulators=None,
+    promotions=None,
     **vmc_kws,
 ):
     vmc_kws["hdf_file"] = output
@@ -109,6 +112,7 @@ def VMC(
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
         accumulators=accumulators,
+        promotions=promotions,
     )
 
     pyqmc.mc.vmc(wf, configs, accumulators=acc, **vmc_kws)
@@ -124,6 +128,7 @@ def DMC(
     jastrow_kws=None,
     slater_kws=None,
     accumulators=None,
+    promotions=None,
     **dmc_kws,
 ):
     dmc_kws["hdf_file"] = output
@@ -136,6 +141,7 @@ def DMC(
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
         accumulators=accumulators,
+        promotions=promotions,
     )
 
     dmc.rundmc(wf, configs, accumulators=acc, **dmc_kws)
@@ -153,6 +159,7 @@ def initialize_qmc_objects(
     opt_wf=False,
     target_root=0,
     nodal_cutoff=1e-3,
+    promotions=None,
 ):
     if ci_checkfile is None:
         mol, mf = pyscftools.recover_pyscf(dft_checkfile)
@@ -160,6 +167,9 @@ def initialize_qmc_objects(
     else:
         mol, mf, mc = pyscftools.recover_pyscf(dft_checkfile, ci_checkfile=ci_checkfile)
         mc.ci = mc.ci[target_root]
+
+    if promotions is not None:
+        mf = promote(mf, promotions)
 
     if S is not None:
         mol = supercell.get_supercell(mol, np.asarray(S))
@@ -181,6 +191,23 @@ def initialize_qmc_objects(
         acc = generate_accumulators(mol, mf, **accumulators)
 
     return wf, configs, acc
+
+
+def promote(mf, promotions):
+    """Assume single determinant. Promotions is
+    [(spin_index, kpt_index, column_index, new_coeffs), ...]
+    """
+    if hasattr(mf, "kpts"):
+        mf = mf.to_uhf(mf)
+    else:
+        mf = mf.to_uhf()
+    if hasattr(mf, "kpts"):
+        for s, k, c, newcoeffs in promotions:
+            mf.mo_coeff[s][k][:, c] = newcoeffs
+    else:
+        for s, c, newcoeffs in promotions:
+            mf.mo_coeff[s][:, c] = newcoeffs
+    return mf
 
 
 def read_opt(fname):

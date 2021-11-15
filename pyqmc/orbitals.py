@@ -268,7 +268,9 @@ class PBCOrbitalEvaluatorKpoints:
         """
         Returns an ndarray in order [k,..., orbital] of the ao's if value is requested
 
-        if a derivative is requested, will instead return [k,d,...,orbital]
+        if a derivative is requested, will instead return [k,d,...,orbital].
+
+        The ... is the total length of mycoords. You'll need to reshape if you want the original shape
         """
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))

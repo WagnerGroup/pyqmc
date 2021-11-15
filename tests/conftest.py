@@ -179,13 +179,13 @@ def li_cubic_ccecp():
         spin=0,
         unit="bohr",
     )
-    cell.exp_to_discard = 0.2
+    #cell.exp_to_discard = 0.2
     cell.build(a=np.eye(3) * L)
     kpts = cell.make_kpts(nk)
     mf = pyscf.pbc.scf.KRKS(cell, kpts)
     mf.xc = "pbe"
     mf = mf.density_fit()
-    mf = pyscf.pbc.dft.multigrid.multigrid(mf)
+    #mf = pyscf.pbc.dft.multigrid.multigrid(mf)
     mf = mf.run()
     return cell, mf
 
@@ -193,7 +193,7 @@ def li_cubic_ccecp():
 @pytest.fixture(scope='module')
 def h_noncubic_sto3g():
     nk = (2,2,2)
-    L = 3
+    L = 1.4
     mol = pyscf.pbc.gto.M(
         atom="""H     {0}      {0}      {0}                
                   H     {1}      {1}      {1}""".format(

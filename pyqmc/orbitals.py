@@ -6,6 +6,7 @@ import pyqmc.pbc_eval_gto as pbc_eval_gto
 import pyqmc.determinant_tools
 import pyscf.pbc.dft.gen_grid
 
+
 """
 The evaluators have the concept of a 'set' of atomic orbitals, that may apply to 
 different sets of molecular orbitals
@@ -282,7 +283,9 @@ class PBCOrbitalEvaluatorKpoints:
         """
         Returns an ndarray in order [k,..., orbital] of the ao's if value is requested
 
-        if a derivative is requested, will instead return [k,d,...,orbital]
+        if a derivative is requested, will instead return [k,d,...,orbital].
+
+        The ... is the total length of mycoords. You'll need to reshape if you want the original shape
         """
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
@@ -298,13 +301,10 @@ class PBCOrbitalEvaluatorKpoints:
         wrap_phase = get_wrapphase_complex(kdotR)
         # k,coordinate, orbital
         ao = gpu.cp.asarray(
-            pbc_eval_gto.eval_gto(
-                self._cell,
+            self._cell.eval_gto(
                 "PBC" + eval_str,
                 primcoords,
                 kpts=self._kpts,
-                Ls=self.Ls,
-                rcut=self.rcut,
             )
         )
         ao = gpu.cp.einsum("k...,k...a->k...a", wrap_phase, ao)

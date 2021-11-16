@@ -3,9 +3,6 @@ import pyqmc.api as pyq
 from pyqmc.slater import Slater
 from pyqmc.pbc import enforce_pbc
 from pyqmc.coord import PeriodicConfigs
-from pyscf.pbc import gto, scf
-from pyscf.pbc.dft.multigrid import multigrid
-from pyscf.scf.addons import remove_linear_dep_
 
 
 def test_cubic_with_ecp(li_cubic_ccecp, kind=1):

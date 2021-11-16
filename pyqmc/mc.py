@@ -223,6 +223,7 @@ def vmc(
                     )
 
     df = []
+    
 
     for block in range(nblocks):
         if verbose:

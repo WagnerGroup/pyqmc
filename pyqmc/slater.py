@@ -152,12 +152,17 @@ class Slater:
             self._dets.append(
                 gpu.cp.asarray(np.linalg.slogdet(mo_vals))
             )  # Spin, (sign, val), nconf, [ndet_up, ndet_dn]
-            is_zero = np.sum(np.isinf(self._dets[s][1]))
+            
+            is_zero = np.sum(np.abs(self._dets[s][0])< 1e-16)
+            compute = np.isfinite(self._dets[s][1])
             if is_zero > 0:
                 warnings.warn(f"A wave function is zero. Found this proportion: {is_zero/nconf}")
-            self._inverse.append(
-                gpu.cp.linalg.pinv(mo_vals)
-            )  # spin, Nconf, [ndet_up, ndet_dn], nelec, nelec
+                #print(configs.configs[])
+                print(f"zero {is_zero/np.prod(compute.shape)}")
+            self._inverse.append(np.zeros(mo_vals.shape, dtype=mo_vals.dtype))
+            for d in range(compute.shape[1]):
+                self._inverse[s][compute[:,d],d,:,:]=gpu.cp.linalg.inv(mo_vals[compute[:,d],d,:,:])
+              # spin, Nconf, [ndet_up, ndet_dn], nelec, nelec
         return self.value()
 
     def updateinternals(self, e, epos, configs, mask=None):
@@ -182,9 +187,9 @@ class Slater:
         det_ratio, self._inverse[s][mask, :, :, :] = sherman_morrison_ms(
             eeff, self._inverse[s][mask, :, :, :], mo_vals
         )
+        self._dets[s][0, mask, :] *= self.get_phase(det_ratio)
+        self._dets[s][1, mask, :] += gpu.cp.log(gpu.cp.abs(det_ratio))
 
-
-        self._updateval(det_ratio, s, mask)
 
     def value(self):
         """Return logarithm of the wave function as noted in recompute()"""
@@ -194,9 +199,6 @@ class Slater:
             updets, dndets, self.parameters["det_coeff"]
         )
 
-    def _updateval(self, ratio, s, mask):
-        self._dets[s][0, mask, :] *= self.get_phase(ratio)
-        self._dets[s][1, mask, :] += gpu.cp.log(gpu.cp.abs(ratio))
 
     def _testrow(self, e, vec, mask=None, spin=None):
         """vec is a nconfig,nmo vector which replaces row e"""
@@ -237,7 +239,7 @@ class Slater:
 
         if len(numer.shape) == 2:
             denom = denom[:, gpu.cp.newaxis]
-        return numer / denom
+        return  numer / denom
 
     def _testrowderiv(self, e, vec, spin=None):
         """vec is a nconfig,nmo vector which replaces row e"""
@@ -277,7 +279,7 @@ class Slater:
 
         if len(numer.shape) == 3:
             denom = denom[gpu.cp.newaxis, :, gpu.cp.newaxis]
-        return numer / denom
+        return numer/denom
 
     def _testcol(self, det, i, s, vec):
         """vec is a nconfig,nmo vector which replaces column i
@@ -311,7 +313,11 @@ class Slater:
         mograd_vals = mograd[:, :, self._det_occup[s]]
 
         ratios = gpu.asnumpy(self._testrowderiv(e, mograd_vals))
-        return ratios[1:] / ratios[0], ratios[0]
+        derivatives = ratios[1:] / ratios[0]
+        derivatives[~np.isfinite(derivatives)]=0.0
+        values = ratios[0]
+        values[~np.isfinite(values)]=1.0
+        return derivatives, values
 
     def laplacian(self, e, epos):
         """ Compute the laplacian Psi/ Psi. """

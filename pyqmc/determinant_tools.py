@@ -155,7 +155,6 @@ def compute_value(updets, dndets, det_coeffs):
 
     wf_sign = np.zeros_like(wf_val)
     # careful, just reusing the zero so we don't have to make a new array
-    print("compute_value::wf_val", wf_val)
     nonzero = ~np.isclose(wf_val, wf_sign, atol=1e-16)
     wf_sign[nonzero] = wf_val[nonzero] / gpu.cp.abs(wf_val[nonzero])
     wf_logval = -np.ones(wf_val.shape)*np.inf

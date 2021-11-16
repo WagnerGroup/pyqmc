@@ -141,9 +141,7 @@ class Slater:
 
         nconf, nelec, ndim = configs.configs.shape
         aos = self.orbitals.aos("GTOval_sph", configs)
-        print(aos.shape)
         self._aovals = aos.reshape(-1, nconf, nelec, aos.shape[-1])
-        print('aovals shape', self._aovals.shape)
         self._dets = []
         self._inverse = []
         for s in [0, 1]:
@@ -151,7 +149,6 @@ class Slater:
             end = self._nelec[0] + self._nelec[1] * s
             mo = self.orbitals.mos(self._aovals[:, :, begin:end, :], s)
             mo_vals = gpu.cp.swapaxes(mo[:, :, self._det_occup[s]], 1, 2)
-            print(mo_vals.shape)
             self._dets.append(
                 gpu.cp.asarray(np.linalg.slogdet(mo_vals))
             )  # Spin, (sign, val), nconf, [ndet_up, ndet_dn]
@@ -161,14 +158,7 @@ class Slater:
             if is_zero > 0:
                 warnings.warn(f"A wave function is zero. Found this proportion: {is_zero/nconf}")
                 #print(configs.configs[])
-                print(f"zero {is_zero/np.prod(compute.shape)} {np.sum(compute)}")
-                configs_with_zero = np.sum(~compute, axis=1)
-                print(configs_with_zero)
-                print(configs.configs[configs_with_zero>0,...])
-                #print(mo_vals[configs_with_zero>0, ...].round(3))
-                print('aovals',np.abs(self._aovals[:,configs_with_zero>0,...]).round(2))
-                print("recomputed aovals", self.orbitals.aos("GTOval_sph", configs, mask=configs_with_zero > 0).reshape(-1, np.sum(configs_with_zero>0), nelec, aos.shape[-1]).round(2))
-                quit()
+                print(f"zero {is_zero/np.prod(compute.shape)}")
             self._inverse.append(np.zeros(mo_vals.shape, dtype=mo_vals.dtype))
             for d in range(compute.shape[1]):
                 self._inverse[s][compute[:,d],d,:,:]=gpu.cp.linalg.inv(mo_vals[compute[:,d],d,:,:])
@@ -197,13 +187,8 @@ class Slater:
         det_ratio, self._inverse[s][mask, :, :, :] = sherman_morrison_ms(
             eeff, self._inverse[s][mask, :, :, :], mo_vals
         )
-        print('det ratio', det_ratio.round(2))
         self._dets[s][0, mask, :] *= self.get_phase(det_ratio)
         self._dets[s][1, mask, :] += gpu.cp.log(gpu.cp.abs(det_ratio))
-        print('value', self.value())
-        if np.sum(~np.isfinite(self.value()))!=0:
-            print("quitting in updateinternals")
-            quit()
 
 
     def value(self):

@@ -116,9 +116,6 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
             t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
             ratio = np.abs(new_val) ** 2 * t_prob
             accept = ratio > np.random.rand(nconf)
-            print('ratio',ratio.round(2))
-            print('new_val', np.abs(new_val).round(2))
-            print('accept',accept)
 
             # Update wave function
             configs.move(e, newcoorde, accept)
@@ -227,9 +224,6 @@ def vmc(
 
     df = []
     
-    import pyqmc.testwf
-    pyqmc.testwf.test_updateinternals(wf, configs)
-    quit()
 
     for block in range(nblocks):
         if verbose:
@@ -238,8 +232,6 @@ def vmc(
             block_avg, configs = vmc_worker(
                 wf, configs, tstep, nsteps_per_block, accumulators
             )
-            print("recomputing!!!")
-            wf.recompute(configs)
         else:
             block_avg, configs = vmc_parallel(
                 wf, configs, tstep, nsteps_per_block, accumulators, client, npartitions

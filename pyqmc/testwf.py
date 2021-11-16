@@ -33,7 +33,7 @@ def test_updateinternals(wf, configs):
     updatevstest = np.zeros((ne, nconf)) * iscomplex
     recomputevstest = np.zeros((ne, nconf)) * iscomplex
     recomputevsupdate = np.zeros((ne, nconf)) * iscomplex
-    wfcopy = copy.deepcopy(wf)
+    wfcopy = copy.copy(wf)
     val1 = wf.recompute(configs)
     for e in range(ne):
         print("#### Electron", e)

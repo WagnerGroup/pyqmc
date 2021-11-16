@@ -8,7 +8,6 @@ from pyqmc.manybody_jastrow import J3
 from pyqmc.wftools import generate_jastrow
 import pyqmc.api as pyq
 
-
 def run_tests(wf, epos, epsilon):
 
     _, epos = pyq.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node

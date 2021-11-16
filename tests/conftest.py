@@ -180,13 +180,13 @@ def li_cubic_ccecp():
         spin=0,
         unit="bohr",
     )
-    #cell.exp_to_discard = 0.2
+    cell.exp_to_discard = 0.1
     cell.build(a=np.eye(3) * L)
     kpts = cell.make_kpts(nk)
     mf = pyscf.pbc.scf.KRKS(cell, kpts)
     mf.xc = "pbe"
-    mf = mf.density_fit()
-    #mf = pyscf.pbc.dft.multigrid.multigrid(mf)
+    #mf = mf.density_fit()
+    mf = pyscf.pbc.dft.multigrid.multigrid(mf)
     mf = mf.run()
     return cell, mf
 

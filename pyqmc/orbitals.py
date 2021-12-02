@@ -53,10 +53,10 @@ def choose_evaluator_from_pyscf(
                 "Do not support multiple determinants for k-points orbital evaluator"
             )
         return PBCOrbitalEvaluatorKpoints.from_mean_field(
-            mol, mf, twist, determinants=determinants
+            mol, mf, twist, determinants=determinants, tol=tol
         )
     if mc is None:
-        return MoleculeOrbitalEvaluator.from_pyscf(mol, mf, determinants=determinants)
+        return MoleculeOrbitalEvaluator.from_pyscf(mol, mf, determinants=determinants, tol=tol)
     return MoleculeOrbitalEvaluator.from_pyscf(
         mol, mf, mc, determinants=determinants, tol=tol
     )
@@ -228,7 +228,7 @@ class PBCOrbitalEvaluatorKpoints:
         self.rcut = pbc_eval_gto._estimate_rcut(self._cell)
 
     @classmethod
-    def from_mean_field(self, cell, mf, twist=None, determinants=None):
+    def from_mean_field(self, cell, mf, twist=None, determinants=None, tol=None):
         """
         mf is expected to be a KUHF, KRHF, or equivalent DFT objects.
         Selects occupied orbitals from a given twist
@@ -263,7 +263,7 @@ class PBCOrbitalEvaluatorKpoints:
 
         mo_coeff, determinants_flat = select_orbitals_kpoints(determinants, mf, kinds)
         detcoeff, occup, det_map = pyqmc.determinant_tools.create_packed_objects(
-            determinants_flat, format="list"
+            determinants_flat, format="list", tol=tol
         )
 
         return (

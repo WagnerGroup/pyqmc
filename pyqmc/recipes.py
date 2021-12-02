@@ -199,7 +199,7 @@ def read_mc_output(
     fname,
     warmup=1,
     reblock=None,
-    exclude_keys=("configs", "weights", "block", "nconfig"),
+    exclude_keys=("configs", "weights", "block", "nconfig", "wrap"),
 ):
     ret = {"fname": fname, "warmup": warmup, "reblock": reblock}
     with h5py.File(fname, "r") as f:

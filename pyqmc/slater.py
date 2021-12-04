@@ -393,16 +393,22 @@ class Slater:
 
         # Det coeff
         curr_val = self.value()
-        d["det_coeff"] = (
-            self._dets[0][0, :, self._det_map[0]]
-            * self._dets[1][0, :, self._det_map[1]]
+        nonzero = curr_val[0] != 0.0
+
+        #dets[spin][ (phase,log), configuration, determinant]
+        dets = (self._dets[0][:,:,self._det_map[0]], self._dets[1][:,:,self._det_map[1]])
+
+        d["det_coeff"] = np.zeros(dets[0].shape[1:], dtype=dets[0].dtype)
+        d["det_coeff"][nonzero,:] = (
+            dets[0][0, nonzero, :]
+            * dets[1][0, nonzero, :]
             * gpu.cp.exp(
-                self._dets[0][1, :, self._det_map[0]]
-                + self._dets[1][1, :, self._det_map[1]]
-                - gpu.cp.array(curr_val[1])
+                dets[0][1, nonzero,:]
+                + dets[1][1, nonzero, :]
+                - gpu.cp.array(curr_val[1][nonzero, np.newaxis])
             )
-            / gpu.cp.array(curr_val[0])
-        ).T
+            / gpu.cp.array(curr_val[0][nonzero, np.newaxis])
+        )
 
         for s, parm in zip([0, 1], ["mo_coeff_alpha", "mo_coeff_beta"]):
             ao = self._aovals[

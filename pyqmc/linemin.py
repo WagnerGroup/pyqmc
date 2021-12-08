@@ -131,7 +131,7 @@ def line_minimization(
     if update_kws is None:
         update_kws = {}
     if warmup_options is None:
-        warmup_options = dict(nblocks=1, nsteps_per_block=10, verbose=verbose)
+        warmup_options = dict(nblocks=3, nsteps_per_block=10, verbose=verbose)
     if "tstep" not in warmup_options and "tstep" in vmcoptions:
         warmup_options["tstep"] = vmcoptions["tstep"]
     assert npts >= 3, f"linemin npts={npts}; need npts >= 3 for correlated sampling"

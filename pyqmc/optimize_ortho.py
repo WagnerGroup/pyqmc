@@ -39,10 +39,11 @@ def collect_overlap_data(wfs, configs, pgrad):
     .. math:: \partial_m \langle \Psi_f | \Psi_i \rangle = \left\langle \frac{\partial_{fm} \Psi_i^* \Psi_j}{\rho} \right\rangle_{\rho}
 
     """
-    phase, log_vals = [np.array(x) for x in zip(*[wf.value() for wf in wfs])]
+    phase, log_vals = [np.nan_to_num(np.array(x)) for x in zip(*[wf.value() for wf in wfs])]
     log_vals = np.real(log_vals)  # should already be real
     ref = np.max(log_vals, axis=0)
     save_dat = {}
+    #print('log_vals', log_vals)
     denominator = np.sum(np.exp(2 * (log_vals - ref)), axis=0)
     normalized_values = phase * np.exp(log_vals - ref)
     save_dat["overlap"] = np.einsum(  # shape (wf, wf)
@@ -59,6 +60,7 @@ def collect_overlap_data(wfs, configs, pgrad):
         )
         / len(ref)
     )
+    #print("ratio", save_dat["overlap"].diagonal())
 
     # Weight for quantities that are evaluated as
     # int( f(X) psi_f^2 dX )
@@ -249,7 +251,7 @@ def correlated_sample(wfs, configs, parameters, pgrad):
     nparms = len(parameters)
     p0 = pgrad.transform.serialize_parameters(wfs[-1].parameters)
     wfvalues = [wf.recompute(configs) for wf in wfs]
-    phase0, log_values0 = [np.array(x) for x in zip(*wfvalues)]
+    phase0, log_values0 = [np.nan_to_num(np.array(x)) for x in zip(*wfvalues)]
     log_values0 = np.real(log_values0)
     ref = np.max(log_values0)
     normalized_values = phase0 * np.exp(log_values0 - ref)

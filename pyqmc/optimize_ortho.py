@@ -556,7 +556,7 @@ def optimize_orthogonal(
         normalization = np.zeros(nwf - 1)
         normalization_error = np.zeros(nwf - 1)
         total_energy = 0
-        total_error = 0
+        total_errors_squared = 0
         # energy_derivative = np.zeros(len(parameters))
         N_derivative = np.zeros(len(parameters))
         condition = np.zeros((len(parameters), len(parameters)))
@@ -576,7 +576,7 @@ def optimize_orthogonal(
                 normalization[0] = tmp_deriv["N"][-1]
                 normalization_error = tmp_deriv["N_error"][-1]
                 total_energy += tmp_deriv["total"] / (nwf - 1)
-                total_error += tmp_deriv["total_error"] / (nwf - 1)
+                total_errors_squared += (tmp_deriv["total_error"] / (nwf - 1))**2
                 energy_derivative = tmp_deriv["energy_derivative"] / (nwf - 1)
                 N_derivative += tmp_deriv["N_derivative"] / (nwf - 1)
                 condition += tmp_deriv["condition"] / (nwf - 1)
@@ -596,13 +596,14 @@ def optimize_orthogonal(
             normalization[i + 1] = deriv_data["N"][-1]
             normalization_error[i + 1] = deriv_data["N_error"][-1]
             total_energy += deriv_data["total"] / (nwf - 1)
-            total_error += deriv_data["total_error"] / (nwf - 1)
+            total_errors_squared += (deriv_data["total_error"] / (nwf - 1))**2
             energy_derivative += deriv_data["energy_derivative"] / (nwf - 1)
             N_derivative += deriv_data["N_derivative"] / (nwf - 1)
             condition += deriv_data["condition"] / (nwf - 1)
             overlaps[i + 1] = deriv_data["S"][-1, 0]
             overlap_errors[i + 1] = deriv_data["S_error"][-1, 0]
             overlap_derivatives[i + 1] = deriv_data["S_derivative"][0, :]
+        total_error = np.sqrt(np.sum(total_errors_squared))
         print("normalization", normalization)
 
         delta = overlaps - Starget

@@ -350,14 +350,18 @@ def evaluate(return_data, warmup):
     Returns a dictionary with relevant information.
     """
     avg_data = {}
+    std_data = {}
     for k, it in return_data.items():
         avg_data[k] = np.average(it[warmup:], axis=0)
+        std_data[k] = np.std(it[warmup:], axis=0)
     N = np.abs(avg_data["overlap"].diagonal())
+    N_std = np.abs(std_data["overlap"].diagonal())
     # Derivatives are only for the optimized wave function, so they miss
     # an index
     N_derivative = 2 * np.real(avg_data["overlap_gradient"][-1])
     Nij = np.sqrt(np.outer(N, N))
     S = avg_data["overlap"] / Nij
+    S_std = std_data["overlap"] / Nij
     S_derivative = avg_data["overlap_gradient"] / Nij[-1, :, np.newaxis] - np.einsum(
         "j,m->jm", 0.5 * avg_data["overlap"][-1, :] / Nij[-1, :], N_derivative / N[-1]
     )
@@ -369,12 +373,15 @@ def evaluate(return_data, warmup):
 
     return {
         "N": N,
+        "N_error": N_std / np.sqrt(N_std.shape[0]-1),
         "S": S,
+        "S_error": S_std / np.sqrt(S_std.shape[0]-1),
         "S_derivative": S_derivative,
         "energy_derivative": energy_derivative,
         "N_derivative": N_derivative,
         "condition": condition,
         "total": np.real(avg_data["total"]),
+        "total_error": np.real(std_data["total"]) / np.sqrt(std_data["total"].shape[0]-1),
     }
 
 
@@ -547,11 +554,14 @@ def optimize_orthogonal(
         # Memory efficient implementation
         nwf = len(wfs)
         normalization = np.zeros(nwf - 1)
+        normalization_error = np.zeros(nwf - 1)
         total_energy = 0
+        total_error = 0
         # energy_derivative = np.zeros(len(parameters))
         N_derivative = np.zeros(len(parameters))
         condition = np.zeros((len(parameters), len(parameters)))
         overlaps = np.zeros(nwf - 1, dtype=dtype)
+        overlap_errors = np.zeros(nwf - 1, dtype=dtype)
         overlap_derivatives = np.zeros((nwf - 1, len(parameters)), dtype=dtype)
 
         while True:
@@ -560,15 +570,18 @@ def optimize_orthogonal(
             )
             tmp_deriv = evaluate(return_data, warmup)
             N = tmp_deriv["N"][-1]
-
+            
             print("Normalization", N, flush=True)
             if abs(N - Ntarget) < Ntol:
                 normalization[0] = tmp_deriv["N"][-1]
+                normalization_error = tmp_deriv["N_error"][-1]
                 total_energy += tmp_deriv["total"] / (nwf - 1)
+                total_error += tmp_deriv["total_error"] / (nwf - 1)
                 energy_derivative = tmp_deriv["energy_derivative"] / (nwf - 1)
                 N_derivative += tmp_deriv["N_derivative"] / (nwf - 1)
                 condition += tmp_deriv["condition"] / (nwf - 1)
                 overlaps[0] = tmp_deriv["S"][-1, 0]
+                overlap_errors[0] = tmp_deriv["S_error"][-1, 0]
                 overlap_derivatives[0] = tmp_deriv["S_derivative"][0, :]
                 break
             else:
@@ -581,11 +594,14 @@ def optimize_orthogonal(
             )
             deriv_data = evaluate(return_data, warmup)
             normalization[i + 1] = deriv_data["N"][-1]
+            normalization_error[i + 1] = deriv_data["N_error"][-1]
             total_energy += deriv_data["total"] / (nwf - 1)
+            total_error += deriv_data["total_error"] / (nwf - 1)
             energy_derivative += deriv_data["energy_derivative"] / (nwf - 1)
             N_derivative += deriv_data["N_derivative"] / (nwf - 1)
             condition += deriv_data["condition"] / (nwf - 1)
             overlaps[i + 1] = deriv_data["S"][-1, 0]
+            overlap_errors[i + 1] = deriv_data["S_error"][-1, 0]
             overlap_derivatives[i + 1] = deriv_data["S_derivative"][0, :]
         print("normalization", normalization)
 
@@ -686,9 +702,12 @@ def optimize_orthogonal(
 
         save_data = {
             "energy": total_energy,
+            "energy_error": total_error,
             "overlap": overlaps,
+            "overlap_error": overlap_errors,
             "gradient": total_derivative,
             "N": N,
+            "N_error": N_error,
             "parameters": parameters,
             "iteration": step + step_offset,
             "normalization": normalization,

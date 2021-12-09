@@ -119,7 +119,7 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
 
             # Update wave function
             configs.move(e, newcoorde, accept)
-            wf.updateinternals(e, newcoorde, mask=accept)
+            wf.updateinternals(e, newcoorde, configs, mask=accept)
             acc += np.mean(accept) / nelec
 
         # Rolling average on step
@@ -223,6 +223,7 @@ def vmc(
                     )
 
     df = []
+    
 
     for block in range(nblocks):
         if verbose:

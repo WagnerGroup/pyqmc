@@ -4,7 +4,8 @@ import pyqmc.pbc as pbc
 import pyqmc.supercell as supercell
 import pyqmc.pbc_eval_gto as pbc_eval_gto
 import pyqmc.determinant_tools
-import pyscf.pbc.dft.gen_grid 
+import pyscf.pbc.dft.gen_grid
+
 
 """
 The evaluators have the concept of a 'set' of atomic orbitals, that may apply to 
@@ -29,8 +30,19 @@ def get_complex_phase(x):
     return x / np.abs(x)
 
 
-def choose_evaluator_from_pyscf(mol, mf, mc=None, twist=None, determinants=None):
+def choose_evaluator_from_pyscf(
+    mol, mf, mc=None, twist=None, determinants=None, tol=None
+):
     """
+    mol: A Mole object
+    mf: a pyscf mean-field object
+    mc: a pyscf multiconfigurational object. Supports HCI and CAS
+    twist: the twist of the calculation (units?)
+    determinants: A list of determinants suitable to pass into create_packed_objects
+    tol: smallest determinant weight to include in the wave function.
+
+    You cannot pass both mc/tol and determinants.
+
     Returns:
     an orbital evaluator chosen based on the inputs.
     """
@@ -41,11 +53,13 @@ def choose_evaluator_from_pyscf(mol, mf, mc=None, twist=None, determinants=None)
                 "Do not support multiple determinants for k-points orbital evaluator"
             )
         return PBCOrbitalEvaluatorKpoints.from_mean_field(
-            mol, mf, twist, determinants=determinants
+            mol, mf, twist, determinants=determinants, tol=tol
         )
     if mc is None:
-        return MoleculeOrbitalEvaluator.from_pyscf(mol, mf, determinants=determinants)
-    return MoleculeOrbitalEvaluator.from_pyscf(mol, mf, mc, determinants=determinants)
+        return MoleculeOrbitalEvaluator.from_pyscf(mol, mf, determinants=determinants, tol=tol)
+    return MoleculeOrbitalEvaluator.from_pyscf(
+        mol, mf, mc, determinants=determinants, tol=tol
+    )
 
 
 class MoleculeOrbitalEvaluator:
@@ -197,6 +211,7 @@ class PBCOrbitalEvaluatorKpoints:
         self.iscomplex = True
         self._cell = cell.original_cell
         self.S = cell.S
+        self.Lprim = self._cell.lattice_vectors()
 
         self._kpts = [0, 0, 0] if kpts is None else kpts
         self.param_split = [
@@ -213,7 +228,7 @@ class PBCOrbitalEvaluatorKpoints:
         self.rcut = pbc_eval_gto._estimate_rcut(self._cell)
 
     @classmethod
-    def from_mean_field(self, cell, mf, twist=None, determinants=None):
+    def from_mean_field(self, cell, mf, twist=None, determinants=None, tol=None):
         """
         mf is expected to be a KUHF, KRHF, or equivalent DFT objects.
         Selects occupied orbitals from a given twist
@@ -248,7 +263,7 @@ class PBCOrbitalEvaluatorKpoints:
 
         mo_coeff, determinants_flat = select_orbitals_kpoints(determinants, mf, kinds)
         detcoeff, occup, det_map = pyqmc.determinant_tools.create_packed_objects(
-            determinants_flat, format="list"
+            determinants_flat, format="list", tol=tol
         )
 
         return (
@@ -268,14 +283,17 @@ class PBCOrbitalEvaluatorKpoints:
         """
         Returns an ndarray in order [k,..., orbital] of the ao's if value is requested
 
-        if a derivative is requested, will instead return [k,d,...,orbital]
+        if a derivative is requested, will instead return [k,d,...,orbital].
+
+        The ... is the total length of mycoords. You'll need to reshape if you want the original shape
         """
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
+        primcoords, primwrap = pbc.enforce_pbc(self.Lprim, mycoords)
         # coordinate, dimension
         wrap = configs.wrap if mask is None else configs.wrap[mask]
         wrap = np.dot(wrap, self.S)
-        wrap = wrap.reshape((-1, wrap.shape[-1]))
+        wrap = wrap.reshape((-1, wrap.shape[-1])) + primwrap
         kdotR = np.linalg.multi_dot(
             (self._kpts, self._cell.lattice_vectors().T, wrap.T)
         )
@@ -283,13 +301,10 @@ class PBCOrbitalEvaluatorKpoints:
         wrap_phase = get_wrapphase_complex(kdotR)
         # k,coordinate, orbital
         ao = gpu.cp.asarray(
-            pbc_eval_gto.eval_gto(
-                self._cell,
+            self._cell.eval_gto(
                 "PBC" + eval_str,
-                mycoords,
+                primcoords,
                 kpts=self._kpts,
-                Ls=self.Ls,
-                rcut=self.rcut,
             )
         )
         ao = gpu.cp.einsum("k...,k...a->k...a", wrap_phase, ao)

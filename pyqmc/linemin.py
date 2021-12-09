@@ -48,7 +48,7 @@ def polyfit_relative(xfit, yfit, degree):
 
 
 def stable_fit(xfit, yfit, tolerance=1e-2):
-    """Fit a line and quadratic to xfit and yfit. 
+    """Fit a line and quadratic to xfit and yfit.
     1. If the linear fit is as good as the quadriatic, choose the lower endpoint.
     2. If the curvature is positive, estimate the minimum x value.
     3. If the lowest yfit is less than the new guess, use that xfit instead.
@@ -71,7 +71,7 @@ def stable_fit(xfit, yfit, tolerance=1e-2):
         else:
             est_min = minstep
         out_y = np.polyval(pl, est_min)
-    elif relative_errq < tolerance and pq[0] > 0: # If quadratic fit is good
+    elif relative_errq < tolerance and pq[0] > 0:  # If quadratic fit is good
         est_min = -pq[1] / (2 * pq[0])
         if est_min > steprange:
             est_min = steprange
@@ -81,7 +81,9 @@ def stable_fit(xfit, yfit, tolerance=1e-2):
     else:
         est_min = xfit[a]
         out_y = yfit[a]
-    if out_y > yfit[a]: # If min(yfit) has a lower energy than the guess, use it instead
+    if (
+        out_y > yfit[a]
+    ):  # If min(yfit) has a lower energy than the guess, use it instead
         est_min = xfit[a]
     return est_min
 
@@ -129,7 +131,7 @@ def line_minimization(
     if update_kws is None:
         update_kws = {}
     if warmup_options is None:
-        warmup_options = dict(nblocks=1, nsteps_per_block=10, verbose=verbose)
+        warmup_options = dict(nblocks=3, nsteps_per_block=10, verbose=verbose)
     if "tstep" not in warmup_options and "tstep" in vmcoptions:
         warmup_options["tstep"] = vmcoptions["tstep"]
     assert npts >= 3, f"linemin npts={npts}; need npts >= 3 for correlated sampling"
@@ -158,7 +160,7 @@ def line_minimization(
             accumulators={"pgrad": pgrad_acc},
             client=client,
             npartitions=npartitions,
-            **vmcoptions
+            **vmcoptions,
         )
         en = np.real(np.mean(df["pgradtotal"], axis=0))
         en_err = np.std(df["pgradtotal"], axis=0) / np.sqrt(df["pgradtotal"].shape[0])
@@ -187,7 +189,7 @@ def line_minimization(
         accumulators={},
         client=client,
         npartitions=npartitions,
-        **warmup_options
+        **warmup_options,
     )
     if verbose:
         print("finished warmup", flush=True)

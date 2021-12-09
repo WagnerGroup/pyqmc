@@ -40,13 +40,13 @@ def propose_drift_diffusion(wf, configs, tstep, e):
     newepos = configs.make_irreducible(e, eposnew)
 
     # Compute reverse move
-    new_grad = limdrift(np.real(wf.gradient(e, newepos).T), tstep)
+    g, wfratio = wf.gradient_value(e, newepos)
+    new_grad = limdrift(np.real(g.T), tstep)
     forward = np.sum(gauss ** 2, axis=1)
     backward = np.sum((gauss + grad + new_grad) ** 2, axis=1)
     t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
 
     # Acceptance -- fixed-node: reject if wf changes sign
-    wfratio = wf.testvalue(e, newepos)
     ratio = np.abs(wfratio) ** 2 * t_prob
     if not wf.iscomplex:
         ratio *= np.sign(wfratio)
@@ -149,13 +149,13 @@ def dmc_propagate(
                 )
                 accept = mask & (probability > np.random.rand(nconfig))
                 configs.move(e, newepos, accept)
-                wf.updateinternals(e, newepos, mask=accept)
+                wf.updateinternals(e, newepos, configs, mask=accept)
                 tmove_acceptance += accept / nelec
 
         for e in range(nelec):  # drift-diffusion
             newepos, accept, r2 = propose_drift_diffusion(wf, configs, tstep, e)
             configs.move(e, newepos, accept)
-            wf.updateinternals(e, newepos, mask=accept)
+            wf.updateinternals(e, newepos, configs, mask=accept)
             r2_proposed += r2
             r2_accepted[accept] += r2[accept]
             prob_acceptance += accept / nelec
@@ -349,15 +349,17 @@ def rundmc(
       weights: The final weights from this calculation
 
     """
-    #Don't continue onto a file that's already there.
+    # Don't continue onto a file that's already there.
     if continue_from is not None and hdf_file is not None and os.path.isfile(hdf_file):
-        raise RuntimeError(f"continue_from is set but hdf_file={hdf_file} already exists! Delete or rename {hdf_file} and try again.")
+        raise RuntimeError(
+            f"continue_from is set but hdf_file={hdf_file} already exists! Delete or rename {hdf_file} and try again."
+        )
 
     # Restart if hdf_file is there
     if continue_from is None and hdf_file is not None and os.path.isfile(hdf_file):
         continue_from = hdf_file
 
-    # Now we should be sure that there is a file 
+    # Now we should be sure that there is a file
     # to continue from, if given.
     if continue_from is not None:
         with h5py.File(continue_from, "r") as hdf:

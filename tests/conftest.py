@@ -6,6 +6,7 @@ import pytest
 from pyscf import lib, gto, scf
 import pyscf.pbc
 import numpy as np
+import pyscf.hci
 
 """ 
 In this file, we set up several pyscf objects that can be reused across the 
@@ -179,12 +180,12 @@ def li_cubic_ccecp():
         spin=0,
         unit="bohr",
     )
-    cell.exp_to_discard = 0.2
+    cell.exp_to_discard = 0.1
     cell.build(a=np.eye(3) * L)
     kpts = cell.make_kpts(nk)
     mf = pyscf.pbc.scf.KRKS(cell, kpts)
     mf.xc = "pbe"
-    mf = mf.density_fit()
+    #mf = mf.density_fit()
     mf = pyscf.pbc.dft.multigrid.multigrid(mf)
     mf = mf.run()
     return cell, mf
@@ -193,7 +194,7 @@ def li_cubic_ccecp():
 @pytest.fixture(scope='module')
 def h_noncubic_sto3g():
     nk = (2,2,2)
-    L = 3
+    L = 1.4
     mol = pyscf.pbc.gto.M(
         atom="""H     {0}      {0}      {0}                
                   H     {1}      {1}      {1}""".format(
@@ -206,6 +207,28 @@ def h_noncubic_sto3g():
     )
     kpts = mol.make_kpts(nk)
     mf = pyscf.pbc.scf.KRKS(mol, kpts)
+    mf.xc = "pbe"
+    mf = pyscf.pbc.dft.multigrid.multigrid(mf)
+    mf = mf.run()
+    return mol, mf
+
+
+@pytest.fixture(scope='module')
+def h_noncubic_sto3g_triplet():
+    nk = (1,1,1)
+    L = 3
+    mol = pyscf.pbc.gto.M(
+        atom="""H     {0}      {0}      {0}                
+                  H     {1}      {1}      {1}""".format(
+            0.0, L / 4
+        ),
+        basis="sto-3g",
+        a=(np.ones((3, 3)) - np.eye(3)) * L / 2,
+        spin=2*np.prod(nk),
+        unit="bohr",
+    )
+    kpts = mol.make_kpts(nk)
+    mf = pyscf.pbc.scf.KUKS(mol, kpts)
     mf.xc = "pbe"
     mf = pyscf.pbc.dft.multigrid.multigrid(mf)
     mf = mf.run()

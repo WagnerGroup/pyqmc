@@ -58,12 +58,11 @@ def test():
 
 
 @pytest.mark.slow
-def test_pbc(h_noncubic_sto3g):
-    # from pyscf.pbc import gto, scf
+def test_pbc(li_cubic_ccecp):
     from pyqmc import supercell
     import scipy
 
-    mol, mf = h_noncubic_sto3g
+    mol, mf = li_cubic_ccecp
 
     # S = np.ones((3, 3)) - np.eye(3)
     S = np.identity(3)

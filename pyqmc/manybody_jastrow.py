@@ -21,7 +21,7 @@ class J3:
         self.ao_val, self.ao_grad, self.ao_lap = self._get_val_grad_lap(configs)
         return self.value()
 
-    def updateinternals(self, e, epos, mask=None):
+    def updateinternals(self, e, epos, configs, mask=None):
         nconfig = epos.configs.shape[0]
         if mask is None:
             mask = [True] * nconfig

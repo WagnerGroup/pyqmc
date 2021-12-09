@@ -8,7 +8,6 @@ from pyqmc.manybody_jastrow import J3
 from pyqmc.wftools import generate_jastrow
 import pyqmc.api as pyq
 
-
 def run_tests(wf, epos, epsilon):
 
     _, epos = pyq.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node
@@ -70,6 +69,27 @@ def test_pbc_wfs(H_pbc_sto3g_krks, epsilon=1e-5, nconf=10):
     mol, mf = H_pbc_sto3g_krks
 
     supercell = pyq.get_supercell(mol, S=(np.ones((3, 3)) - 2 * np.eye(3)))
+    epos = pyq.initial_guess(supercell, nconf)
+    for wf in [
+        MultiplyWF(Slater(supercell, mf), generate_jastrow(supercell)[0]),
+        Slater(supercell, mf),
+    ]:
+        for k in wf.parameters:
+            if "mo_coeff" not in k and k != "det_coeff":
+                wf.parameters[k] = cp.asarray(np.random.rand(*wf.parameters[k].shape))
+
+        _, epos = pyq.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node
+        run_tests(wf, epos, epsilon)
+
+
+def test_pbc_wfs_triplet(h_noncubic_sto3g_triplet, epsilon=1e-5, nconf=10):
+    """
+    Ensure that the wave function objects are consistent in several situations.
+    """
+    mol, mf = h_noncubic_sto3g_triplet
+
+    # supercell = pyq.get_supercell(mol, S=(np.ones((3, 3)) - 2 * np.eye(3)))
+    supercell = pyq.get_supercell(mol, S=np.identity(3, dtype=int))
     epos = pyq.initial_guess(supercell, nconf)
     for wf in [
         MultiplyWF(Slater(supercell, mf), generate_jastrow(supercell)[0]),
@@ -160,7 +180,10 @@ def test_manual_pbcs_correct(H_pbc_sto3g_kuks, epsilon=1e-5, nconf=10):
     configs = pyq.initial_guess(mol, 10)
     run_tests(wf, configs, epsilon)
 
-def test_superpose_wf(H2_casci, coeffs=[1/np.sqrt(2),1/np.sqrt(2)], epsilon=1e-5, nconf=10):
+
+def test_superpose_wf(
+    H2_casci, coeffs=[1 / np.sqrt(2), 1 / np.sqrt(2)], epsilon=1e-5, nconf=10
+):
     """
     This test makes sure that the superposewf passes all the wftests, when adding two casci wave functions.
     """
@@ -173,11 +196,8 @@ def test_superpose_wf(H2_casci, coeffs=[1/np.sqrt(2),1/np.sqrt(2)], epsilon=1e-5
 
     mc.ci = ci1
     wf1 = Slater(mol, mf, mc, tol=0.0)
-   
+
     wfs = [wf0, wf1]
     wf = AddWF(coeffs, wfs)
     configs = pyq.initial_guess(mol, nconf)
     run_tests(wf, configs, epsilon)
-
-    
-    

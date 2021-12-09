@@ -39,10 +39,11 @@ def collect_overlap_data(wfs, configs, pgrad):
     .. math:: \partial_m \langle \Psi_f | \Psi_i \rangle = \left\langle \frac{\partial_{fm} \Psi_i^* \Psi_j}{\rho} \right\rangle_{\rho}
 
     """
-    phase, log_vals = [np.array(x) for x in zip(*[wf.value() for wf in wfs])]
+    phase, log_vals = [np.nan_to_num(np.array(x)) for x in zip(*[wf.value() for wf in wfs])]
     log_vals = np.real(log_vals)  # should already be real
     ref = np.max(log_vals, axis=0)
     save_dat = {}
+    #print('log_vals', log_vals)
     denominator = np.sum(np.exp(2 * (log_vals - ref)), axis=0)
     normalized_values = phase * np.exp(log_vals - ref)
     save_dat["overlap"] = np.einsum(  # shape (wf, wf)
@@ -59,6 +60,7 @@ def collect_overlap_data(wfs, configs, pgrad):
         )
         / len(ref)
     )
+    #print("ratio", save_dat["overlap"].diagonal())
 
     # Weight for quantities that are evaluated as
     # int( f(X) psi_f^2 dX )
@@ -100,16 +102,15 @@ def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
             newcoorde = configs.make_irreducible(e, newcoorde)
 
             # Compute reverse move
-            grads = [np.real(wf.gradient(e, newcoorde).T) for wf in wfs]
+            grads, vals = list(zip(*[wf.gradient_value(e, newcoorde) for wf in wfs]))
+            grads = [np.real(g.T) for g in grads]
             new_grad = mc.limdrift(np.mean(grads, axis=0))
             forward = np.sum(gauss ** 2, axis=1)
             backward = np.sum((gauss + tstep * (grad + new_grad)) ** 2, axis=1)
 
             # Acceptance
             t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
-            wf_ratios = np.array(
-                [np.abs(wf.testvalue(e, newcoorde)) ** 2 for wf in wfs]
-            )
+            wf_ratios = np.abs(vals) ** 2
             log_values = np.real(np.array([wf.value()[1] for wf in wfs]))
             weights = np.exp(2 * (log_values - log_values[0]))
 
@@ -120,7 +121,7 @@ def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
             # Update wave function
             configs.move(e, newcoorde, accept)
             for wf in wfs:
-                wf.updateinternals(e, newcoorde, mask=accept)
+                wf.updateinternals(e, newcoorde, configs, mask=accept)
 
         # Collect rolling average
         save_dat = collect_overlap_data(wfs, configs, pgrad)
@@ -250,7 +251,7 @@ def correlated_sample(wfs, configs, parameters, pgrad):
     nparms = len(parameters)
     p0 = pgrad.transform.serialize_parameters(wfs[-1].parameters)
     wfvalues = [wf.recompute(configs) for wf in wfs]
-    phase0, log_values0 = [np.array(x) for x in zip(*wfvalues)]
+    phase0, log_values0 = [np.nan_to_num(np.array(x)) for x in zip(*wfvalues)]
     log_values0 = np.real(log_values0)
     ref = np.max(log_values0)
     normalized_values = phase0 * np.exp(log_values0 - ref)
@@ -406,6 +407,7 @@ def optimize_orthogonal(
     correlated_options=None,
     client=None,
     npartitions=None,
+    verbose=True,
 ):
     r"""
     Minimize
@@ -571,7 +573,8 @@ def optimize_orthogonal(
             tmp_deriv = evaluate(return_data, warmup)
             N = tmp_deriv["N"][-1]
             
-            print("Normalization", N, flush=True)
+            if verbose:
+                print("Normalization", N, flush=True)
             if abs(N - Ntarget) < Ntol:
                 normalization[0] = tmp_deriv["N"][-1]
                 normalization_error = tmp_deriv["N_error"][-1]
@@ -603,7 +606,8 @@ def optimize_orthogonal(
             overlaps[i + 1] = deriv_data["S"][-1, 0]
             overlap_errors[i + 1] = deriv_data["S_error"][-1, 0]
             overlap_derivatives[i + 1] = deriv_data["S_derivative"][0, :]
-        print("normalization", normalization)
+        if verbose:
+            print("normalization", normalization)
 
         delta = overlaps - Starget
         delta_phase = delta / np.abs(delta)
@@ -615,22 +619,31 @@ def optimize_orthogonal(
 
         total_derivative = energy_derivative + overlap_derivative
 
-        print("############################# iteration ", step)
-        format_str = "{:<15}" * 2 + "{:<20.3}" * 2
-        print(format_str.format("Quantity", "wf", "val", "|g|"))
-        print(
-            format_str.format(
-                "energy", len(wfs) - 1, total_energy, np.linalg.norm(energy_derivative)
-            )
-        )
-        print(format_str.format("norm", len(wfs) - 1, N, np.linalg.norm(N_derivative)))
-        for i in range(len(wfs) - 1):
+        if verbose:
+            print("############################# iteration ", step)
+            format_str = "{:<15}" * 2 + "{:<20.3}" * 2
+            print(format_str.format("Quantity", "wf", "val", "|g|"))
             print(
                 format_str.format(
-                    "overlap", i, overlaps[i], np.linalg.norm(overlap_derivatives[i])
-                ),
-                flush=True,
+                    "energy",
+                    len(wfs) - 1,
+                    total_energy,
+                    np.linalg.norm(energy_derivative),
+                )
             )
+            print(
+                format_str.format("norm", len(wfs) - 1, N, np.linalg.norm(N_derivative))
+            )
+            for i in range(len(wfs) - 1):
+                print(
+                    format_str.format(
+                        "overlap",
+                        i,
+                        overlaps[i],
+                        np.linalg.norm(overlap_derivatives[i]),
+                    ),
+                    flush=True,
+                )
 
         # Use SR to condition the derivatives
         total_derivative, N_derivative = np.einsum(
@@ -679,17 +692,20 @@ def optimize_orthogonal(
             np.abs(line_data["weight"]) > weight_boundaries
         )
         mask = np.all(mask, axis=0)
-        print("tsteps", test_tsteps)
-        print("cost", cost)
-        print("overlap cost", overlap_cost)
-        print("mask", mask)
+        if verbose:
+            print("tsteps", test_tsteps)
+            print("cost", cost)
+            print("overlap cost", overlap_cost)
+            print("mask", mask)
         xfit = test_tsteps[mask]
         yfit = cost[mask]
 
-        print("|total_derivative|", np.linalg.norm(total_derivative))
+        if verbose:
+            print("|total_derivative|", np.linalg.norm(total_derivative))
         if len(xfit) > 2:
             min_tstep = pyqmc.linemin.stable_fit(xfit, yfit)
-            print("chose to move", min_tstep, flush=True)
+            if verbose:
+                print("chose to move", min_tstep, flush=True)
             parameters = parameters + conditioner(
                 total_derivative, condition, min_tstep
             )

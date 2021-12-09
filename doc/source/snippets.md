@@ -45,6 +45,12 @@ pyqmc.recipes.OPTIMIZE(chkfile, "opt.chk",slater_kws={'optimize_orbitals':True,'
 Most of the effort is in setting up and saving the CI coefficients correctly, which is done in `run_hci()` here. 
 You can copy `run_hci()` and use it on any system.
 
+If you are using pyscf 2.0 or above, you will need to run 
+```
+pip install git+git://github.com/pyscf/naive-hci
+```
+to get the simple selected CI method.
+
 ```
 import pyqmc
 import pyscf
@@ -155,7 +161,7 @@ class DipoleAccumulator:
 
 import pyqmc.recipes
 pyqmc.recipes.VMC("h2o.hdf5", "dipole.hdf5", 
-                  start_from="h2o_sj_800.hdf5", 
+                  load_parameters="h2o_sj_800.hdf5", 
                   accumulators={'extra_accumulators':{'dipole':DipoleAccumulator()}})
 ```
 

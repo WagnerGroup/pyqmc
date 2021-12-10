@@ -371,7 +371,6 @@ def evaluate(return_data, warmup):
     )
     dp = avg_data["dppsi"]
     condition = np.real(avg_data["dpidpj"] - np.einsum("i,j->ij", dp, dp))
-    print(np.real(error_data["total"]), N_error, S_error)
     return {
         "N": N,
         "N_error": N_error,

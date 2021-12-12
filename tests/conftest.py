@@ -192,31 +192,32 @@ def li_cubic_ccecp():
 
 
 @pytest.fixture(scope='module')
-def h_noncubic_sto3g():
-    nk = (2,2,2)
-    L = 1.4
-    mol = pyscf.pbc.gto.M(
-        atom="""H     {0}      {0}      {0}                
-                  H     {1}      {1}      {1}""".format(
-            0.0, L / 4
-        ),
-        basis="sto-3g",
-        a=(np.ones((3, 3)) - np.eye(3)) * L / 2,
-        spin=0,
-        unit="bohr",
-    )
-    kpts = mol.make_kpts(nk)
-    mf = pyscf.pbc.scf.KRKS(mol, kpts)
-    mf.xc = "pbe"
-    mf = pyscf.pbc.dft.multigrid.multigrid(mf)
-    mf = mf.run()
-    return mol, mf
+def diamond_primitive():
+    cell = pyscf.pbc.gto.Cell()
+    cell.verbose = 5
+    cell.atom=[
+        ['C', np.array([0., 0., 0.])], 
+        ['C', np.array([0.8925, 0.8925, 0.8925])]
+               ]
+    cell.a=[[0.0, 1.785, 1.785], 
+            [1.785, 0.0, 1.785], 
+            [1.785, 1.785, 0.0]]
+    cell.basis = 'gth-szv'
+    cell.pseudo = 'gth-pade'
+    cell.build()
+
+    mf=pyscf.pbc.dft.KRKS(cell)
+
+    mf.xc='lda,vwn'
+
+    mf.kernel()
+    return cell, mf
 
 
 @pytest.fixture(scope='module')
 def h_noncubic_sto3g_triplet():
     nk = (1,1,1)
-    L = 3
+    L = 8
     mol = pyscf.pbc.gto.M(
         atom="""H     {0}      {0}      {0}                
                   H     {1}      {1}      {1}""".format(
@@ -232,4 +233,5 @@ def h_noncubic_sto3g_triplet():
     mf.xc = "pbe"
     mf = pyscf.pbc.dft.multigrid.multigrid(mf)
     mf = mf.run()
+    print(mf.mo_occ)
     return mol, mf

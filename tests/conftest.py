@@ -202,11 +202,12 @@ def diamond_primitive():
     cell.a=[[0.0, 1.785, 1.785], 
             [1.785, 0.0, 1.785], 
             [1.785, 1.785, 0.0]]
-    cell.basis = 'gth-szv'
-    cell.pseudo = 'gth-pade'
+    cell.basis = 'ccecpccpvdz'
+    cell.ecp = 'ccecp'
+    cell.exp_to_discard=0.3
     cell.build()
-
-    mf=pyscf.pbc.dft.KRKS(cell)
+    kpts = cell.make_kpts((2,2,2))
+    mf=pyscf.pbc.dft.KRKS(cell, kpts)
 
     mf.xc='lda,vwn'
 

@@ -265,6 +265,12 @@ class PBCOrbitalEvaluatorKpoints:
         detcoeff, occup, det_map = pyqmc.determinant_tools.create_packed_objects(
             determinants_flat, format="list", tol=tol
         )
+        # Check
+        for s, (occ_s, nelec_s) in enumerate(zip(occup,cell.nelec)):
+            for determinant in occ_s:
+                if len(determinant) != nelec_s:
+                    raise RuntimeError(f"The number of electrons of spin {s} should be {nelec_s}, but found {len(determinant)} orbital[s]. You may have used a large smearing value.. Please pass your own determinants list. ")
+
 
         return (
             detcoeff,

@@ -571,15 +571,14 @@ def optimize_orthogonal(
             )
             tmp_deriv = evaluate(return_data, warmup)
             N = tmp_deriv["N"][-1]
-            
+
             if verbose:
                 print("Normalization", N, flush=True)
             if abs(N - Ntarget) < Ntol:
                 normalization[0] = tmp_deriv["N"][-1]
-                normalization_error = tmp_deriv["N_error"][-1]
+                normalization_error[0] = tmp_deriv["N_error"][-1]
                 total_energy += tmp_deriv["total"] / (nwf - 1)
                 total_errors_squared += (tmp_deriv["total_error"] / (nwf - 1))**2
-                N_error = tmp_deriv["N_error"][-1]
                 energy_derivative = tmp_deriv["energy_derivative"] / (nwf - 1)
                 N_derivative += tmp_deriv["N_derivative"] / (nwf - 1)
                 condition += tmp_deriv["condition"] / (nwf - 1)
@@ -600,7 +599,6 @@ def optimize_orthogonal(
             normalization_error[i + 1] = deriv_data["N_error"][-1]
             total_energy += deriv_data["total"] / (nwf - 1)
             total_errors_squared += (deriv_data["total_error"] / (nwf - 1))**2
-            N_error = deriv_data["N_error"][-1]
             energy_derivative += deriv_data["energy_derivative"] / (nwf - 1)
             N_derivative += deriv_data["N_derivative"] / (nwf - 1)
             condition += deriv_data["condition"] / (nwf - 1)
@@ -724,10 +722,10 @@ def optimize_orthogonal(
             "overlap_error": overlap_errors,
             "gradient": total_derivative,
             "N": N,
-            "N_error": N_error,
             "parameters": parameters,
             "iteration": step + step_offset,
             "normalization": normalization,
+            "normalization_error": normalization_error,
             "overlap_derivatives": overlap_derivatives,
             "energy_derivative": energy_derivative,
             "line_tsteps": test_tsteps,

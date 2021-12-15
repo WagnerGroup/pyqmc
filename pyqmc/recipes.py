@@ -57,7 +57,20 @@ def OPTIMIZE(
     if anchors is None:
         linemin.line_minimization(wf, configs, acc, **linemin_kws)
     else:
-        wfs = [wftools.read_wf(copy.deepcopy(wf), a) for a in anchors]
+        wfs = []
+        for i,a in enumerate(anchors):
+            wfs.append(
+                initialize_qmc_objects(
+                    dft_checkfile,
+                    ci_checkfile=ci_checkfile,
+                    load_parameters=a,
+                    S=S,
+                    jastrow_kws=jastrow_kws,
+                    slater_kws=slater_kws,
+                    target_root=i,
+                )[0]
+            )
+        #wfs = [wftools.read_wf(copy.deepcopy(wf), a) for a in anchors]
         wfs.append(wf)
         optimize_ortho.optimize_orthogonal(wfs, configs, acc, **linemin_kws)
 

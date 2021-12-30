@@ -17,6 +17,12 @@ The latest code can be installed as follows
 
   pip install git+git://github.com/WagnerGroup/pyqmc --upgrade
 
+`pyqmc` tests require the naive HCI module from pyscf. You can install it using 
+
+.. code-block:: bash
+
+  pip install pyscf[naive_hci]
+
 GitHub
 --------------------------------
 

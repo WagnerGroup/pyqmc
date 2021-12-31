@@ -62,7 +62,10 @@ class LinearTransform:
 
     Note:
         to_opt[k] can't be boolean scalar; it has to be an array with the same dimension as parameters[k].
+
         to_opt doesn't have to have all the keys of parameters, but all keys of to_opt must be keys of parameters.
+
+        If you change wf.parameters, then all serializations will be out of date. For example, if you serialize, then change wf.paramaters, then deserialize, the deserialization will be incorrect.
     """
 
     def __init__(self, parameters, to_opt=None):
@@ -71,7 +74,6 @@ class LinearTransform:
             to_opt = {k: np.ones(p.shape, dtype=bool) for k, p in parameters.items()}
         self.to_opt = {k: o for k, o in to_opt.items() if np.any(o)}
 
-        self.frozen_parms = {k: parameters[k][~opt] for k, opt in self.to_opt.items()}
 
         self.shapes = {k: parameters[k].shape for k in self.to_opt}
         self.slices = {k: np.prod(s) for k, s in self.shapes.items()}
@@ -101,17 +103,25 @@ class LinearTransform:
         grads = np.concatenate(grads, axis=1)
         return np.concatenate((grads, grads[:, self.complex_inds] * 1j), axis=1)
 
-    def deserialize(self, parameters):
-        """Convert serialized parameters to dictionary"""
+    def deserialize(self, wf, parameters):
+        """Convert serialized parameters to dictionary.
+        Inputs: 
+        wf object (this is needed to fill in the frozen parameters)
+        serialized parameters
+
+        output: dictionary with the unserialized parameters.
+        """
         n = 0
         m = self.nparams
         d = {}
+        frozen_parms = {k: wf.parameters[k][~opt] for k, opt in self.to_opt.items()}
+
         for k, opt in self.to_opt.items():
             opt_ = opt.flatten()
             n_p = np.sum(opt_)
 
             flat_parms = np.zeros(self.slices[k], dtype=self.dtypes[k])
-            flat_parms[~opt_] = self.frozen_parms[k]
+            flat_parms[~opt_] = frozen_parms[k]
             flat_parms[opt_] = parameters[n : n + n_p]
             if self.complex[k]:
                 m_p = self.nimag[k]

@@ -15,7 +15,7 @@ def test_constraints(H2_ccecp_casci_s0):
     # Test serialize parameters
     x0 = lt.serialize_parameters(wf.parameters)
     x0 += np.random.normal(size=x0.shape)
-    for k, it in lt.deserialize(x0).items():
+    for k, it in lt.deserialize(wf, x0).items():
         assert wf.parameters[k].shape == it.shape
         wf.parameters[k] = it
 
@@ -33,3 +33,21 @@ def test_constraints(H2_ccecp_casci_s0):
 
     # Pgrad should be walkers, configs
     assert pgrad_serial.shape[1] == x0.shape[0]
+
+
+def test_transform_wf_change(H2_casci):   
+    mol, mf, mc = H2_casci
+    mc = copy.copy(mc)
+    mc.ci = mc.ci[0]
+    wf, to_opt = pyq.generate_slater(mol, mf,mc=mc, optimize_determinants=True)
+    pgrad = pyq.gradient_generator(mol, wf, to_opt)
+    parameters = pgrad.transform.serialize_parameters(wf.parameters)
+    deserialize = pgrad.transform.deserialize(wf, parameters)
+    
+    wf.parameters['det_coeff']*=100
+    parameters100 = pgrad.transform.serialize_parameters(wf.parameters)
+    print("reserialize100", parameters100)
+    deserialize100= pgrad.transform.deserialize(wf, parameters100)
+    print(deserialize100['det_coeff'])
+    print(deserialize['det_coeff'])
+    assert abs(deserialize100['det_coeff'][0]- 100*deserialize['det_coeff'][0]) < 1e-10

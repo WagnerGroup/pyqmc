@@ -697,7 +697,7 @@ def optimize_orthogonal(
             print("WARNING: did not find valid moves. Reducing the timestep")
             tstep *= 0.5
 
-        for k, it in pgrad.transform.deserialize(wf, parameters).items():
+        for k, it in pgrad.transform.deserialize(wfs[-1], parameters).items():
             wfs[-1].parameters[k] = it
 
         save_data = {

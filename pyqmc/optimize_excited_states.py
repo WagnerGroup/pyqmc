@@ -44,15 +44,14 @@ def collect_overlap_data(wfs, configs, energy, transforms):
     phase, log_vals = [np.nan_to_num(np.array(x)) for x in zip(*[wf.value() for wf in wfs])]
     log_vals = np.real(log_vals)  # should already be real
     ref = np.max(log_vals, axis=0)
-    denominator = np.sum(np.exp(2 * (log_vals - ref)), axis=0)
+    denominator = np.mean(np.exp(2 * (log_vals - ref)), axis=0)
     normalized_values = phase * np.exp(log_vals - ref)
 
     # Weight for quantities that are evaluated as
     # int( f(X) psi_f^2 dX )
-    # since we sampled sum psi_i^2
+    # since we sampled sum psi_i^2 /N 
     weight = np.exp(-2 * (log_vals[:, np.newaxis] - log_vals))
-    weight = 1.0 / np.sum(weight, axis=1) # [wf, config]
-
+    weight = 1.0 / np.mean(weight, axis=1) # [wf, config]
     energies = [energy(configs, wf) for wf in wfs]
 
     dppsi = [transform.serialize_gradients(wf.pgradient()) for transform, wf in zip(transforms, wfs)] 
@@ -207,11 +206,10 @@ def average(weighted, unweighted):
         error[k] = []
         #weight is [block,wf], so we transpose
         for v, w in zip(it,unweighted['weight'].T): 
-            print(k,v)
             avg[k].append(np.sum(v, axis=0)/np.sum(w))
             error[k].append(scipy.stats.sem(v,axis=0)/np.mean(w))
+    print(unweighted.keys())
     for k,it in unweighted.items():
-        print('unweighted',k)
         avg[k] = np.mean(it, axis=0)
         error[k] = scipy.stats.sem(it, axis=0)
     return avg, error
@@ -219,8 +217,23 @@ def average(weighted, unweighted):
 
 def collect_terms(avg, error):
     """
-    Generate 
+    Generate the terms we need to do the optimization.
     """
+    ret = {}
+
+    nwf = len(avg['dpH'])
+    ret['dp_energy'] = [2.0*np.real(dpH - total*dppsi) for dpH, total, dppsi in zip(avg['dpH'], avg['total'],avg['dppsi'])]
+    ret['dp_norm'] = [2.0*np.real(avg[('overlap_gradient',i)][i,i,:]) for i in range(nwf)]
+    ret['condition'] = [np.real(dpidpj - np.einsum("i,j->ij", dp, dp)) for dpidpj,dp in zip(avg['dpidpj'], avg['dppsi']) ]
+    N = np.abs(avg["overlap"].diagonal())
+    Nij = np.sqrt(np.outer(N, N))
+
+    print("Norm", N)
+    ret['norm'] = N
+    ret['overlap'] = avg['overlap']/Nij
+    # ends up being [i,j,m] where i, j are overlaps and m is the parameter
+    ret['dp_overlap'] = [ (avg[('overlap_gradient',i)] -0.5 * avg['overlap'][:,:,np.newaxis]*ret['dp_norm'][i]/N[i] )/Nij[:,:,np.newaxis] for i in range(nwf)  ]
+    return ret
 
 def run_test():
     from pyscf import lib, gto, scf
@@ -245,12 +258,12 @@ def run_test():
 
     mol, mf, mc = H2_casci()
 
-    print('energies', mc.e_tot)
+    ci_energies= mc.e_tot
     import copy
     mc1 = copy.copy(mc)
     mc2 = copy.copy(mc)
     mc1.ci = mc.ci[0]
-    mc2.ci = mc.ci[1] # (mc.ci[0]+mc.ci[1])/np.sqrt(2)
+    mc2.ci = (mc.ci[0]+mc.ci[1])/np.sqrt(2)
 
     wf1, to_opt1 = pyq.generate_slater(mol, mf,mc=mc1, optimize_determinants=True)
     wf2, to_opt2 = pyq.generate_slater(mol, mf, mc=mc2, optimize_determinants=True)
@@ -259,12 +272,38 @@ def run_test():
 
     transform1 = pyqmc.accumulators.LinearTransform(wf1.parameters,to_opt1)
     transform2 = pyqmc.accumulators.LinearTransform(wf2.parameters,to_opt2)
-    configs = pyq.initial_guess(mol, 30)
+    configs = pyq.initial_guess(mol, 300)
     _, configs = pyq.vmc(wf1, configs)
     energy =pyq.EnergyAccumulator(mol)
-    data_weighted, data_unweighted, coords = sample_overlap_worker([wf1,wf2],configs, energy, [transform1,transform2], 200)
-    print(average(data_weighted, data_unweighted))
+    data_weighted, data_unweighted, coords = sample_overlap_worker([wf1,wf2],configs, energy, [transform1,transform2], nsteps=40, nblocks=40)
+    avg, error = average(data_weighted, data_unweighted)
+    print(avg, error)
+    terms = collect_terms(avg,error)
     #print(data_unweighted)
+    ref_energy1 = 0.5*(ci_energies[0] + ci_energies[1])
+    assert abs(avg['total'][1] - ref_energy1) < 3*error['total'][1]
+
+    overlap_tolerance = 0.02# magic number..be careful.
+
+    norm = [np.sum(np.abs(m.ci)**2) for m in [mc1,mc2]]
+    norm_ref = norm
+    
+    assert np.all( np.abs(norm_ref - terms['norm']) < overlap_tolerance) 
+
+    norm_derivative_ref = 2*np.real(mc2.ci).flatten() 
+    print('norm derivative', norm_derivative_ref, terms['dp_norm'][1])
+
+    assert np.all(np.abs(norm_derivative_ref - terms['dp_norm'][1])<overlap_tolerance)
+
+
+    overlap_ref = np.sum(mc1.ci*mc2.ci) 
+    print('overlap test', overlap_ref, terms['overlap'][0,1])
+    assert abs(overlap_ref - terms['overlap'][0,1]) < overlap_tolerance
+
+    overlap_derivative_ref = (mc1.ci.flatten() - 0.5*overlap_ref * norm_derivative_ref) 
+    print("overlap_derivative", overlap_derivative_ref, terms['dp_overlap'][1][0,1])
+    assert np.all( np.abs(overlap_derivative_ref - terms['dp_overlap'][1][0,1]) < overlap_tolerance)
+    
 
 if __name__=="__main__":
     run_test()

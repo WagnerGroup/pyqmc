@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.stats.stats import WeightedTauResult
 import pyqmc.mc as mc
 import scipy.stats
 import pyqmc.linemin as linemin
@@ -189,6 +190,38 @@ def sample_overlap_worker(wfs, configs, energy, transforms, nsteps=10, nblocks=1
     return weighted, unweighted, configs
 
 
+def sample_overlap(wfs, configs, energy, transforms, nsteps=10, nblocks=10, tstep=0.5, client=None, npartitions=0):
+    """
+    """
+    if client is None:
+        return sample_overlap_worker(wfs, configs, energy, transforms, nsteps, nblocks, tstep)
+    if npartitions is None:
+        npartitions = sum(client.nthreads().values())
+
+    coord = configs.split(npartitions)
+    runs = []
+    for nodeconfigs in coord:
+        runs.append(
+            client.submit(
+                sample_overlap_worker,
+                wfs, nodeconfigs, energy, transforms, nsteps, nblocks, tstep
+            )
+        )
+    allresults = list(zip(*[r.result() for r in runs]))
+    configs.join(allresults[2])
+    confweight = np.array([len(c.configs) for c in coord], dtype=float)
+    #weighted = allresults[0]
+    #unweighted=allresults[0]
+    weighted = {}
+    for k,it in invert_list_of_dicts(allresults[0]).items():
+        inverted_array = [np.asarray(x) for x in map(list, zip(*it))] # make the wf index the outside one
+        weighted[k] = [np.average(x, weights=confweight, axis=0) for x in inverted_array]
+    unweighted = {}
+    for k, it in invert_list_of_dicts(allresults[1]).items():
+        unweighted[k] = np.average(np.asarray(it),weights=confweight, axis=0)
+
+    return weighted, unweighted, configs
+
 
 def average(weighted, unweighted):
     """
@@ -284,6 +317,7 @@ def correlated_sampling(wfs, configs, energy, transforms, parameters):
     weight_sample_final = []
     energy_final =[]
     overlap_final = []
+    weight_variance_final = []
     for p, parameter in enumerate(parameters):
         for wf, transform, wf_parm in zip(wfs, transforms, parameter):
             for k, it in transform.deserialize(wf, wf_parm).items():
@@ -309,6 +343,7 @@ def correlated_sampling(wfs, configs, energy, transforms, parameters):
         
         energy_final.append(energies)
         overlap_final.append(overlap)
+        weight_variance_final.append(np.var(sampling_weight))
         weight_sample_final.append(np.mean(sampling_weight))
         #print('energy', energies/np.mean(sampling_weight*weight_energy))
         #print('overlap', overlap/np.mean(sampling_weight))
@@ -319,9 +354,11 @@ def correlated_sampling(wfs, configs, energy, transforms, parameters):
     return {'energy':np.asarray(energy_final),
             'overlap':np.asarray(overlap_final),
              'weight_sample':np.asarray(weight_sample_final),
-             'weight_energy':np.mean(weight_energy, axis=1)}
+             'weight_energy':np.mean(weight_energy, axis=1),
+             'weight_variance':np.asarray(weight_variance_final)
+    }
 
-def find_move_from_line(x, data, penalty):
+def find_move_from_line(x, data, penalty, weight_variance_threshold=0.1):
     """
     Given the data from correlated sampling, find the best move.
 
@@ -334,43 +371,47 @@ def find_move_from_line(x, data, penalty):
     cost = np.sum(energy,axis=1) +\
            penalty*np.sum(np.triu(overlap**2,1),axis=(1,2)) +\
            penalty*np.einsum('ijj->i', (overlap-1)**2)
-    xmin = linemin.stable_fit(x,cost)
+    good_points = data['weight_variance'] < weight_variance_threshold
+    xmin = linemin.stable_fit(x[good_points],cost[good_points])
     return xmin, cost
 
 
         
-class DirectMove():
-    def __init__(self, max_tstep=1.0, N=5):
-        self.max_tstep = max_tstep
-        self.N = N
 
-    def update(self, grad):
-        x = np.linspace(0,self.max_tstep, self.N)
+def direct_move(grad, N=20, max_tstep=0.1):
+        x = np.linspace(0,max_tstep, N)
         return [ [-delta*g for g in grad] for delta in x], x
 
 
 
 
-def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40):
+def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, max_tstep=0.1, 
+            diagonal_approximation=False,
+            condition_epsilon=0.1,
+            client=None,
+            npartitions=0):
     parameters = [transform.serialize_parameters(wf.parameters) 
           for transform, wf in zip(transforms, wfs)]
     
-    mover = DirectMove()
     data = {}
     for k in ['energy','parameters','norm','overlap', 'energy_error']:
         data[k] = []
     for step in range(nsteps):
-        data_weighted, data_unweighted, configs = sample_overlap_worker(wfs,configs, energy, transforms, nsteps=10, nblocks=40)
+        data_weighted, data_unweighted, configs = sample_overlap(wfs,configs, energy, transforms, nsteps=10, nblocks=40, client=client, npartitions=npartitions)
         avg, error = average(data_weighted, data_unweighted)
         print('energy', avg['total'], error['total'])
         terms = collect_terms(avg,error)
         print('norm',terms['norm'])
         print('overlap', terms['overlap'][0,1])
         derivative = objective_function_derivative(terms,penalty)
-        derivative_conditioned = [d/np.sqrt(condition.diagonal()) for d, condition in zip(derivative,terms['condition'])]
+        if diagonal_approximation:
+            derivative_conditioned = [d/(condition.diagonal()+condition_epsilon) for d, condition in zip(derivative,terms['condition'])]
+        else:
+            derivative_conditioned = [ -linemin.sr_update(d,condition,1.0) for d,condition in zip(derivative,terms['condition'])]
+        # 
         print('|gradient|',[np.linalg.norm(d) for d in derivative_conditioned])
 
-        line_parameters,x = mover.update(derivative_conditioned)
+        line_parameters,x = direct_move(derivative_conditioned, max_tstep=max_tstep)
         for line_p in line_parameters:
             for p, p0 in zip(line_p, parameters):
                 p+=p0
@@ -379,6 +420,11 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40):
         xmin, cost = find_move_from_line(x,correlated_data, penalty)
         print('line search', x,cost)
         print("choosing to move", xmin)
+        if abs(xmin) < 1e-16: # if we didn't move at all
+            max_tstep=0.5*max_tstep
+        else:
+            max_tstep=2*xmin
+        print("setting the step range to ", max_tstep)
         parameters = [p - xmin*d for p,d in zip(parameters, derivative_conditioned)]
         for wf, transform, parm in zip(wfs, transforms, parameters):
             for k, it in transform.deserialize(wf, parm).items():

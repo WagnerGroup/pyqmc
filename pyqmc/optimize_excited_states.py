@@ -1,13 +1,10 @@
 import numpy as np
-from numpy.random.mtrand import normal
 import pyqmc.mc as mc
 import scipy.stats
-
+import pyqmc.linemin as linemin
 """
 TODO:
 
- 2) Implement a function that generates d<psi_i|psi_j>/dp, d E_i/dp
-    2.5) Write a test for the averaging function with determinants (we should know the exact values for all these)
  3) Parallel implementation of averager, with test
 
  4) Correlated sampling
@@ -75,14 +72,15 @@ def collect_overlap_data(wfs, configs, energy, transforms):
     weighted_dat['dpidpj'] = []
     weighted_dat['dppsi'] = []
     weighted_dat["dpH"] = []
+    nconfig = weight.shape[1]
     for wfi, (dp,energy) in enumerate(zip(dppsi,energies)):
         weighted_dat['dppsi'].append(np.einsum(
             "ij,i->j", dp, weight[wfi] , optimize=True
-        ))
+        )/nconfig)
         weighted_dat['dpidpj'].append(np.einsum(
             "ij,i,ik->jk", dp, weight[wfi] , dp, optimize=True
-        ))
-        weighted_dat["dpH"].append(np.einsum("i,ij,i->j", energy['total'], dp, weight[wfi]))
+        )/nconfig)
+        weighted_dat["dpH"].append(np.einsum("i,ij,i->j", energy['total'], dp, weight[wfi])/nconfig)
 
     
     ## We have to be careful here because the wave functions may have different numbers of 
@@ -187,7 +185,7 @@ def sample_overlap_worker(wfs, configs, energy, transforms, nsteps=10, nblocks=1
         weighted[k] = [np.asarray(x) for x in map(list, zip(*weighted[k]))]
     for k in unweighted.keys():
         unweighted[k] = np.asarray(unweighted[k])
-    
+    print("sampling done")
     return weighted, unweighted, configs
 
 
@@ -208,7 +206,6 @@ def average(weighted, unweighted):
         for v, w in zip(it,unweighted['weight'].T): 
             avg[k].append(np.sum(v, axis=0)/np.sum(w))
             error[k].append(scipy.stats.sem(v,axis=0)/np.mean(w))
-    print(unweighted.keys())
     for k,it in unweighted.items():
         avg[k] = np.mean(it, axis=0)
         error[k] = scipy.stats.sem(it, axis=0)
@@ -228,82 +225,222 @@ def collect_terms(avg, error):
     N = np.abs(avg["overlap"].diagonal())
     Nij = np.sqrt(np.outer(N, N))
 
-    print("Norm", N)
     ret['norm'] = N
     ret['overlap'] = avg['overlap']/Nij
     # ends up being [i,j,m] where i, j are overlaps and m is the parameter
     ret['dp_overlap'] = [ (avg[('overlap_gradient',i)] -0.5 * avg['overlap'][:,:,np.newaxis]*ret['dp_norm'][i]/N[i] )/Nij[:,:,np.newaxis] for i in range(nwf)  ]
     return ret
 
-def run_test():
-    from pyscf import lib, gto, scf
-    import pyscf.pbc
-    import numpy as np
-    import pyqmc.api as pyq
-    import pyqmc.accumulators
-    from rich import print
+def objective_function_derivative(terms, lam):
+    """
+    terms are output from generate_terms
+    lam is the penalty
+    """
+    return  [dp_energy+
+            lam * 2*np.sum(np.triu(np.rollaxis(dp_overlap,2)*terms['overlap'],1),axis=(1,2) ) +
+            lam * 2*(N-1)*dp_norm
+            for dp_energy, dp_overlap, N, dp_norm in zip(terms['dp_energy'], terms['dp_overlap'],terms['norm'], terms['dp_norm'])]
 
-    def H2_casci():
-        mol = gto.M(atom="H 0. 0. 0.0; H 0. 0. 2.4",
-                basis=f"ccpvtz",  
-                unit="bohr", 
-                charge=0, 
-                spin=0, 
-                verbose=1)  
-        mf = scf.ROHF(mol).run()
-        mc = pyscf.mcscf.CASCI(mf, 2, 2)
-        mc.fcisolver.nroots = 4
-        mc.kernel()
-        return mol, mf, mc
 
-    mol, mf, mc = H2_casci()
 
-    ci_energies= mc.e_tot
-    import copy
-    mc1 = copy.copy(mc)
-    mc2 = copy.copy(mc)
-    mc1.ci = mc.ci[0]
-    mc2.ci = (mc.ci[0]+mc.ci[1])/np.sqrt(2)
 
-    wf1, to_opt1 = pyq.generate_slater(mol, mf,mc=mc1, optimize_determinants=True)
-    wf2, to_opt2 = pyq.generate_slater(mol, mf, mc=mc2, optimize_determinants=True)
-    for to_opt in [to_opt1, to_opt2]:
-        to_opt['det_coeff'] = np.ones_like(to_opt['det_coeff'],dtype=bool)
+import pyqmc.hdftools as hdftools
+import h5py
+def hdf_save(hdf_file, data, attr):
 
-    transform1 = pyqmc.accumulators.LinearTransform(wf1.parameters,to_opt1)
-    transform2 = pyqmc.accumulators.LinearTransform(wf2.parameters,to_opt2)
-    configs = pyq.initial_guess(mol, 300)
-    _, configs = pyq.vmc(wf1, configs)
-    energy =pyq.EnergyAccumulator(mol)
-    data_weighted, data_unweighted, coords = sample_overlap_worker([wf1,wf2],configs, energy, [transform1,transform2], nsteps=40, nblocks=40)
-    avg, error = average(data_weighted, data_unweighted)
-    print(avg, error)
-    terms = collect_terms(avg,error)
-    #print(data_unweighted)
-    ref_energy1 = 0.5*(ci_energies[0] + ci_energies[1])
-    assert abs(avg['total'][1] - ref_energy1) < 3*error['total'][1]
+    if hdf_file is not None:
+        with h5py.File(hdf_file, "a") as hdf:
+            if "energy" not in hdf.keys():
+                hdftools.setup_hdf(hdf, data, attr)
 
-    overlap_tolerance = 0.02# magic number..be careful.
+            hdftools.append_hdf(hdf, data)
 
-    norm = [np.sum(np.abs(m.ci)**2) for m in [mc1,mc2]]
-    norm_ref = norm
+
+
+def correlated_sampling(wfs, configs, energy, transforms, parameters):
+    """
+    Input: 
+       wfs
+       configs
+
+    returns: 
+      data along the path:
+         overlap*weight_correlated
+         energy*weight_correlated*weight_energy
+         weights for correlated sampling: rhoprime /rho
+         weights for energy expectation values: psi_i^2/rho
+    """
+
+    p0 = [transform.serialize_parameters(wf.parameters) for wf, transform in zip(wfs, transforms)]
+    phase, log_vals = [np.nan_to_num(np.array(x)) for x in zip(*[wf.recompute(configs) for wf in wfs])]
+    log_vals = np.real(log_vals)  # should already be real
+    ref = np.max(log_vals, axis=0)
+    weight_energy = np.exp(-2 * (log_vals[:, np.newaxis] - log_vals))
+    weight_energy = 1.0 / np.mean(weight_energy, axis=1) # [wf, config]
+    rho = np.sum(np.exp(2 * (log_vals - ref)), axis=0)
+    print('rho shape', rho.shape)
+    nconfig = configs.configs.shape[0]
+
+    weight_sample_final = []
+    energy_final =[]
+    overlap_final = []
+    for p, parameter in enumerate(parameters):
+        for wf, transform, wf_parm in zip(wfs, transforms, parameter):
+            for k, it in transform.deserialize(wf, wf_parm).items():
+                wf.parameters[k] = it
+
+        phase, log_vals = [np.nan_to_num(np.array(x)) for x in zip(*[wf.recompute(configs) for wf in wfs])]
+        denominator = np.mean(np.exp(2 * (log_vals - ref)), axis=0)
+        normalized_values = phase * np.exp(log_vals - ref)
+
+        rhoprime = np.sum(np.exp(2 * (log_vals - ref)), axis=0)
+
+        sampling_weight = rhoprime/rho
+        # Weight for quantities that are evaluated as
+        # int( f(X) psi_f^2 dX )
+        # since we sampled sum psi_i^2 /N 
+        weight = np.exp(-2 * (log_vals[:, np.newaxis] - log_vals))
+        weight = 1.0 / np.mean(weight, axis=1) # [wf, config]
+        energies = np.asarray([energy(configs, wf)['total'] for wf in wfs])
+        overlap = np.einsum( 
+            "ik,jk,k->ij", normalized_values.conj(), normalized_values / denominator,sampling_weight
+        ) / len(ref)
+        energies = np.einsum("ik, k, ik->i",energies, sampling_weight, weight_energy)/nconfig
+        
+        energy_final.append(energies)
+        overlap_final.append(overlap)
+        weight_sample_final.append(np.mean(sampling_weight))
+        #print('energy', energies/np.mean(sampling_weight*weight_energy))
+        #print('overlap', overlap/np.mean(sampling_weight))
+
+    for wf, transform, wf_parm in zip(wfs, transforms, p0):
+        for k, it in transform.deserialize(wf, wf_parm).items():
+            wf.parameters[k] = it
+    return {'energy':np.asarray(energy_final),
+            'overlap':np.asarray(overlap_final),
+             'weight_sample':np.asarray(weight_sample_final),
+             'weight_energy':np.mean(weight_energy, axis=1)}
+
+def find_move_from_line(x, data, penalty):
+    """
+    Given the data from correlated sampling, find the best move.
+
+    Return: 
+    cost function
+    xmin estimation
+    """
+    energy = data['energy']/(data['weight_sample'][:,np.newaxis]*data['weight_energy'][np.newaxis,:])
+    overlap = data['overlap']/data['weight_sample'][:,np.newaxis, np.newaxis]
+    cost = np.sum(energy,axis=1) +\
+           penalty*np.sum(np.triu(overlap**2,1),axis=(1,2)) +\
+           penalty*np.einsum('ijj->i', (overlap-1)**2)
+    xmin = linemin.stable_fit(x,cost)
+    return xmin, cost
+
+
+        
+class DirectMove():
+    def __init__(self, max_tstep=1.0, N=5):
+        self.max_tstep = max_tstep
+        self.N = N
+
+    def update(self, grad):
+        x = np.linspace(0,self.max_tstep, self.N)
+        return [ [-delta*g for g in grad] for delta in x], x
+
+
+
+
+def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40):
+    parameters = [transform.serialize_parameters(wf.parameters) 
+          for transform, wf in zip(transforms, wfs)]
     
-    assert np.all( np.abs(norm_ref - terms['norm']) < overlap_tolerance) 
+    mover = DirectMove()
+    data = {}
+    for k in ['energy','parameters','norm','overlap', 'energy_error']:
+        data[k] = []
+    for step in range(nsteps):
+        data_weighted, data_unweighted, configs = sample_overlap_worker(wfs,configs, energy, transforms, nsteps=10, nblocks=40)
+        avg, error = average(data_weighted, data_unweighted)
+        print('energy', avg['total'], error['total'])
+        terms = collect_terms(avg,error)
+        print('norm',terms['norm'])
+        print('overlap', terms['overlap'][0,1])
+        derivative = objective_function_derivative(terms,penalty)
+        derivative_conditioned = [d/np.sqrt(condition.diagonal()) for d, condition in zip(derivative,terms['condition'])]
+        print('|gradient|',[np.linalg.norm(d) for d in derivative_conditioned])
 
-    norm_derivative_ref = 2*np.real(mc2.ci).flatten() 
-    print('norm derivative', norm_derivative_ref, terms['dp_norm'][1])
+        line_parameters,x = mover.update(derivative_conditioned)
+        for line_p in line_parameters:
+            for p, p0 in zip(line_p, parameters):
+                p+=p0
+            
+        correlated_data = correlated_sampling(wfs, configs, energy, transforms, line_parameters)
+        xmin, cost = find_move_from_line(x,correlated_data, penalty)
+        print('line search', x,cost)
+        print("choosing to move", xmin)
+        parameters = [p - xmin*d for p,d in zip(parameters, derivative_conditioned)]
+        for wf, transform, parm in zip(wfs, transforms, parameters):
+            for k, it in transform.deserialize(wf, parm).items():
+                wf.parameters[k] = it
 
-    assert np.all(np.abs(norm_derivative_ref - terms['dp_norm'][1])<overlap_tolerance)
+
+class AdamMove():
+    def __init__(self, alpha=0.1, beta1=0.9, beta2=0.999, epsilon=1e-8):
+        self.alpha=alpha
+        self.beta1=beta1
+        self.beta2=beta2
+        self.epsilon=epsilon
+
+    def update(self, g,m_old,v_old,t):
+        m_new = self.beta1*m_old + (1-self.beta1)*g
+        v_new = self.beta2*v_old + (1-self.beta2)*g**2
+        mhat = m_new/(1-self.beta1**t)
+        vhat = v_new/(1-self.beta2**t)
+        theta_move = -self.alpha*mhat/(np.sqrt(vhat)+self.epsilon)
+        return theta_move, m_new, v_new
 
 
-    overlap_ref = np.sum(mc1.ci*mc2.ci) 
-    print('overlap test', overlap_ref, terms['overlap'][0,1])
-    assert abs(overlap_ref - terms['overlap'][0,1]) < overlap_tolerance
+def optimize_adam(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=400, alpha=0.01, beta1=0.9):
+    adam = AdamMove(alpha=alpha, beta1=beta1)
+    parameters = [transform.serialize_parameters(wf.parameters) 
+          for transform, wf in zip(transforms, wfs)]
+    m_adam = [np.zeros_like(x) for x in parameters]
+    v_adam = [np.zeros_like(x) for x in parameters]
+    data = {}
+    for k in ['energy','parameters','norm','overlap', 'energy_error']:
+        data[k] = []
+    for step in range(nsteps):
+        data_weighted, data_unweighted, configs = sample_overlap_worker(wfs,configs, energy, transforms, nsteps=10, nblocks=40)
+        avg, error = average(data_weighted, data_unweighted)
+        print('energy', avg['total'], error['total'])
+        terms = collect_terms(avg,error)
+        print('norm',terms['norm'])
+        print('overlap', terms['overlap'][0,1])
+        derivative = objective_function_derivative(terms,penalty)
+        derivative_conditioned = [d/np.sqrt(condition.diagonal()) for d, condition in zip(derivative,terms['condition'])]
+        print('|gradient|',[np.linalg.norm(d) for d in derivative_conditioned])
 
-    overlap_derivative_ref = (mc1.ci.flatten() - 0.5*overlap_ref * norm_derivative_ref) 
-    print("overlap_derivative", overlap_derivative_ref, terms['dp_overlap'][1][0,1])
-    assert np.all( np.abs(overlap_derivative_ref - terms['dp_overlap'][1][0,1]) < overlap_tolerance)
-    
+        adam_moves = [adam.update(g,m, v, step+1) for g,m,v in zip(derivative_conditioned, m_adam, v_adam)]
+        m_adam = [move[1] for move in adam_moves]
+        v_adam = [move[2] for move in adam_moves]
+        parameters = [parm+move[0] for parm, move in zip(parameters,adam_moves)]
+        print('parameters', [param.real.round(3) for param in parameters])
+        for wf, transform, parm in zip(wfs, transforms, parameters):
+            for k, it in transform.deserialize(wf, parm).items():
+                wf.parameters[k] = it
 
-if __name__=="__main__":
-    run_test()
+        data = {'energy':avg['total'],
+                  'energy_error': error['total'],
+                  'norm':terms['norm'],
+                  'overlap':terms['overlap'][0,1]
+                  }
+        for i,parm in enumerate(parameters):
+            data[f'parameters_{i}'] = parm
+
+        hdf_save(hdf_file, 
+                  data,
+                  {'alpha':alpha,
+                  'beta1':beta1,
+                   'nconfig':configs.configs.shape[0],
+                   'penalty':penalty})

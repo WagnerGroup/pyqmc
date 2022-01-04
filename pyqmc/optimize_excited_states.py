@@ -259,15 +259,6 @@ def collect_terms(avg, error):
     ret['dp_overlap'] = [ (avg[('overlap_gradient',i)] -0.5 * avg['overlap'][:,:,np.newaxis]*ret['dp_norm'][i]/N[i] )/Nij[:,:,np.newaxis] for i in range(nwf)  ]
     return ret
 
-def objective_function_derivative(terms, lam):
-    """
-    terms are output from generate_terms
-    lam is the penalty
-    """
-    return  [dp_energy+
-            lam * 2*np.sum(np.triu(np.rollaxis(dp_overlap,2)*terms['overlap'],1),axis=(1,2) ) +
-            lam * 2*(N-1)*dp_norm
-            for dp_energy, dp_overlap, N, dp_norm in zip(terms['dp_energy'], terms['dp_overlap'],terms['norm'], terms['dp_norm'])]
 
 
 
@@ -380,7 +371,7 @@ def correlated_sampling_worker(wfs, configs, energy, transforms, parameters):
              'weight_variance':np.asarray(weight_variance_final)
     }
 
-def find_move_from_line(x, data, penalty, weight_variance_threshold=0.1):
+def find_move_from_line(x, data, penalty, norm_relative_penalty, weight_variance_threshold=0.1 ):
     """
     Given the data from correlated sampling, find the best move.
 
@@ -392,13 +383,23 @@ def find_move_from_line(x, data, penalty, weight_variance_threshold=0.1):
     overlap = data['overlap']/data['weight_sample'][:,np.newaxis, np.newaxis]
     cost = np.sum(energy,axis=1) +\
            penalty*np.sum(np.triu(overlap**2,1),axis=(1,2)) +\
-           penalty*np.einsum('ijj->i', (overlap-1)**2)
+           norm_relative_penalty*penalty*np.einsum('ijj->i', (overlap-1)**2)
     good_points = data['weight_variance'] < weight_variance_threshold
     xmin = linemin.stable_fit(x[good_points],cost[good_points])
     return xmin, cost
 
 
-        
+
+def objective_function_derivative(terms, penalty, norm_relative_penalty):
+    """
+    terms are output from generate_terms
+    lam is the penalty
+    """
+    return  [dp_energy+
+            penalty * 2*np.sum(np.triu(np.rollaxis(dp_overlap,2)*terms['overlap'],1),axis=(1,2) ) +
+            norm_relative_penalty*penalty * 2*(N-1)*dp_norm
+            for dp_energy, dp_overlap, N, dp_norm in zip(terms['dp_energy'], terms['dp_overlap'],terms['norm'], terms['dp_norm'])]
+
 
 def direct_move(grad, N=20, max_tstep=0.1):
         x = np.linspace(0,max_tstep, N)
@@ -410,8 +411,15 @@ def direct_move(grad, N=20, max_tstep=0.1):
 def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, max_tstep=0.1, 
             diagonal_approximation=False,
             condition_epsilon=0.1,
+            norm_relative_penalty=0.01,
+            norm_projection=False,
             client=None,
             npartitions=0):
+    """
+
+    norm_relative_penalty: 
+       decrease this if the optimization seems to get 'stuck' (xmin is often zero), and the normalization is fixed to very close to 1 for all wave functions. 
+    """
     parameters = [transform.serialize_parameters(wf.parameters) 
           for transform, wf in zip(transforms, wfs)]
     
@@ -425,11 +433,21 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
         terms = collect_terms(avg,error)
         print('norm',terms['norm'])
         print('overlap', terms['overlap'][0,1])
-        derivative = objective_function_derivative(terms,penalty)
+        derivative = objective_function_derivative(terms,penalty, norm_relative_penalty)
         if diagonal_approximation:
             derivative_conditioned = [d/(condition.diagonal()+condition_epsilon) for d, condition in zip(derivative,terms['condition'])]
+            norm_derivative_conditioned = [[d/(condition.diagonal()+condition_epsilon) for d, condition in zip(terms['dp_norm'],terms['condition'])]]
         else:
             derivative_conditioned = [ -linemin.sr_update(d,condition,1.0) for d,condition in zip(derivative,terms['condition'])]
+            norm_derivative_conditioned = [ -linemin.sr_update(d,condition,1.0) for d,condition in zip(terms['dp_norm'],terms['condition'])]
+
+             #   np.dot(total_derivative, N_derivative)
+             #   * N_derivative
+             #   / (np.linalg.norm(N_derivative)) ** 2
+
+        #Project out the norm derivative
+        if norm_projection:
+            derivative_conditioned = [ g-np.dot(g,n)*n/np.linalg.norm(n)**2 for g,n in zip(derivative_conditioned,norm_derivative_conditioned)]
         # 
         print('|gradient|',[np.linalg.norm(d) for d in derivative_conditioned])
 
@@ -439,7 +457,7 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
                 p+=p0
             
         correlated_data = correlated_sampling(wfs, configs, energy, transforms, line_parameters, client=client, npartitions=npartitions)
-        xmin, cost = find_move_from_line(x,correlated_data, penalty)
+        xmin, cost = find_move_from_line(x,correlated_data, penalty, norm_relative_penalty)
         print('line search', x,cost)
         print("choosing to move", xmin)
         if abs(xmin) < 1e-16: # if we didn't move at all
@@ -469,7 +487,9 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
                   {'diagonal_approximation':diagonal_approximation,
                   'condition_epsilon':condition_epsilon,
                    'nconfig':configs.configs.shape[0],
-                   'penalty':penalty})
+                   'penalty':penalty,
+                   'norm_projection':norm_projection,
+                   'norm_relative_penalty':norm_relative_penalty})
 
 
 class AdamMove():

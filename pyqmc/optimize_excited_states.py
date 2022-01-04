@@ -289,8 +289,36 @@ def hdf_save(hdf_file, data, attr):
             hdftools.append_hdf(hdf, data)
 
 
+def correlated_sampling(wfs, configs, energy, transforms, parameters, client=None, npartitions=0):
+    """
+    Run in parallel if client is specified. 
+    """
+    if client is None:
+        return correlated_sampling_worker(wfs, configs, energy, transforms, parameters)
+    if npartitions is None:
+        npartitions = sum(client.nthreads().values())
 
-def correlated_sampling(wfs, configs, energy, transforms, parameters):
+    coord = configs.split(npartitions)
+    runs = []
+    for nodeconfigs in coord:
+        runs.append(
+            client.submit(
+                correlated_sampling_worker,
+                wfs, nodeconfigs, energy, transforms, parameters
+            )
+        )
+    allresults = [r.result() for r in runs]
+    confweight = np.array([len(c.configs) for c in coord], dtype=float)
+    weighted = {}
+    for k,it in invert_list_of_dicts(allresults).items():
+        weighted[k] = np.average(it, weights=confweight, axis=0) 
+
+    return weighted
+
+
+
+
+def correlated_sampling_worker(wfs, configs, energy, transforms, parameters):
     """
     Input: 
        wfs
@@ -311,7 +339,6 @@ def correlated_sampling(wfs, configs, energy, transforms, parameters):
     weight_energy = np.exp(-2 * (log_vals[:, np.newaxis] - log_vals))
     weight_energy = 1.0 / np.mean(weight_energy, axis=1) # [wf, config]
     rho = np.sum(np.exp(2 * (log_vals - ref)), axis=0)
-    print('rho shape', rho.shape)
     nconfig = configs.configs.shape[0]
 
     weight_sample_final = []
@@ -416,7 +443,7 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
             for p, p0 in zip(line_p, parameters):
                 p+=p0
             
-        correlated_data = correlated_sampling(wfs, configs, energy, transforms, line_parameters)
+        correlated_data = correlated_sampling(wfs, configs, energy, transforms, line_parameters, client=client, npartitions=npartitions)
         xmin, cost = find_move_from_line(x,correlated_data, penalty)
         print('line search', x,cost)
         print("choosing to move", xmin)

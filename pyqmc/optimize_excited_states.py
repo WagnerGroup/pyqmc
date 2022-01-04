@@ -6,13 +6,8 @@ import pyqmc.linemin as linemin
 """
 TODO:
 
- 3) Parallel implementation of averager, with test
-
- 4) Correlated sampling
-    4.5) Correlated sampling test
-
- 5) Optimizer
-     5.5) Optimizer test
+Correlated sampling test
+Optimizer test
 """
 
 
@@ -456,6 +451,25 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
         for wf, transform, parm in zip(wfs, transforms, parameters):
             for k, it in transform.deserialize(wf, parm).items():
                 wf.parameters[k] = it
+        data = {'energy':avg['total'],
+            'energy_error': error['total'],
+            'norm':terms['norm'],
+            'overlap':terms['overlap'],
+            'max_tstep':max_tstep,
+            'line_x':x,
+            'line_cost':cost,
+            'line_xmin':xmin
+            }
+        for i,parm in enumerate(parameters):
+            data[f'parameters_{i}'] = parm
+            data[f'gradient_{i}'] = derivative_conditioned[i]
+
+        hdf_save(hdf_file, 
+                  data,
+                  {'diagonal_approximation':diagonal_approximation,
+                  'condition_epsilon':condition_epsilon,
+                   'nconfig':configs.configs.shape[0],
+                   'penalty':penalty})
 
 
 class AdamMove():

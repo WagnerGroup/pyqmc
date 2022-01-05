@@ -338,15 +338,12 @@ def correlated_sampling_worker(wfs, configs, energy, transforms, parameters):
                 wf.parameters[k] = it
 
         phase, log_vals = [np.nan_to_num(np.array(x)) for x in zip(*[wf.recompute(configs) for wf in wfs])]
-        denominator = np.mean(np.exp(2 * (log_vals - ref)), axis=0)
         normalized_values = phase * np.exp(log_vals - ref)
 
         weight_energy = np.abs(normalized_values)**2/rho
-        print('weight_energy', weight_energy.shape)
 
         weight = np.exp(-2 * (log_vals[:, np.newaxis] - log_vals))
         weight = 1.0 / np.mean(weight, axis=1) # [wf, config]
-        print('weight ', weight.shape)
         energies = np.asarray([energy(configs, wf)['total'] for wf in wfs])
         overlap = np.einsum( 
             "ik,jk->ij", normalized_values.conj(), normalized_values / rho

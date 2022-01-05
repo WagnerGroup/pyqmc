@@ -324,13 +324,14 @@ def correlated_sampling_worker(wfs, configs, energy, transforms, parameters):
     ref = np.max(log_vals, axis=0)
     weight_energy = np.exp(-2 * (log_vals[:, np.newaxis] - log_vals))
     weight_energy = 1.0 / np.mean(weight_energy, axis=1) # [wf, config]
-    rho = np.sum(np.exp(2 * (log_vals - ref)), axis=0)
+    rho = np.mean(np.exp(2 * (log_vals - ref)), axis=0)
     nconfig = configs.configs.shape[0]
 
     weight_sample_final = []
     energy_final =[]
     overlap_final = []
     weight_variance_final = []
+    weight_energy_final = []
     for p, parameter in enumerate(parameters):
         for wf, transform, wf_parm in zip(wfs, transforms, parameter):
             for k, it in transform.deserialize(wf, wf_parm).items():
@@ -340,24 +341,24 @@ def correlated_sampling_worker(wfs, configs, energy, transforms, parameters):
         denominator = np.mean(np.exp(2 * (log_vals - ref)), axis=0)
         normalized_values = phase * np.exp(log_vals - ref)
 
-        rhoprime = np.sum(np.exp(2 * (log_vals - ref)), axis=0)
+        weight_energy = np.abs(normalized_values)**2/rho
+        print('weight_energy', weight_energy.shape)
 
-        sampling_weight = rhoprime/rho
-        # Weight for quantities that are evaluated as
-        # int( f(X) psi_f^2 dX )
-        # since we sampled sum psi_i^2 /N 
         weight = np.exp(-2 * (log_vals[:, np.newaxis] - log_vals))
         weight = 1.0 / np.mean(weight, axis=1) # [wf, config]
+        print('weight ', weight.shape)
         energies = np.asarray([energy(configs, wf)['total'] for wf in wfs])
         overlap = np.einsum( 
-            "ik,jk,k->ij", normalized_values.conj(), normalized_values / denominator,sampling_weight
-        ) / len(ref)
-        energies = np.einsum("ik, k, ik->i",energies, sampling_weight, weight_energy)/nconfig
+            "ik,jk->ij", normalized_values.conj(), normalized_values / rho
+        ) / nconfig
+        energies = np.einsum("ik, ik->i",energies, weight_energy )/nconfig
         
         energy_final.append(energies)
         overlap_final.append(overlap)
-        weight_variance_final.append(np.var(sampling_weight))
-        weight_sample_final.append(np.mean(sampling_weight))
+        weight_energy_final.append(np.mean(weight_energy,axis=1))
+
+        weight_variance_final.append(np.var(weight_energy))
+        weight_sample_final.append(np.mean(1.0))
         #print('energy', energies/np.mean(sampling_weight*weight_energy))
         #print('overlap', overlap/np.mean(sampling_weight))
 
@@ -367,7 +368,7 @@ def correlated_sampling_worker(wfs, configs, energy, transforms, parameters):
     return {'energy':np.asarray(energy_final),
             'overlap':np.asarray(overlap_final),
              'weight_sample':np.asarray(weight_sample_final),
-             'weight_energy':np.mean(weight_energy, axis=1),
+             'weight_energy':np.asarray(weight_energy_final),
              'weight_variance':np.asarray(weight_variance_final)
     }
 
@@ -381,6 +382,9 @@ def find_move_from_line(x, data, penalty, norm_relative_penalty, weight_variance
     """
     energy = data['energy']/(data['weight_sample'][:,np.newaxis]*data['weight_energy'][np.newaxis,:])
     overlap = data['overlap']/data['weight_sample'][:,np.newaxis, np.newaxis]
+    print('energy cost', np.sum(energy,axis=1))
+    print('overlap cost', penalty*np.sum(np.triu(overlap**2,1),axis=(1,2)))
+    print('norm cost', norm_relative_penalty*penalty*np.einsum('ijj->i', (overlap-1)**2))
     cost = np.sum(energy,axis=1) +\
            penalty*np.sum(np.triu(overlap**2,1),axis=(1,2)) +\
            norm_relative_penalty*penalty*np.einsum('ijj->i', (overlap-1)**2)
@@ -395,14 +399,14 @@ def objective_function_derivative(terms, penalty, norm_relative_penalty):
     terms are output from generate_terms
     lam is the penalty
     """
-    return  [dp_energy+
-            penalty * 2*np.sum(np.triu(np.rollaxis(dp_overlap,2)*terms['overlap'],1),axis=(1,2) ) +
-            norm_relative_penalty*penalty * 2*(N-1)*dp_norm
+    return  [dp_energy
+            + penalty * 2*np.sum(np.triu(np.rollaxis(dp_overlap,2)*terms['overlap'],1),axis=(1,2) ) 
+            + norm_relative_penalty*penalty * 2*(N-1)*dp_norm
             for dp_energy, dp_overlap, N, dp_norm in zip(terms['dp_energy'], terms['dp_overlap'],terms['norm'], terms['dp_norm'])]
 
 
-def direct_move(grad, N=20, max_tstep=0.1):
-        x = np.linspace(0,max_tstep, N)
+def direct_move(grad, N=40, max_tstep=0.1):
+        x = np.linspace(-max_tstep,max_tstep, N)
         return [ [-delta*g for g in grad] for delta in x], x
 
 
@@ -412,7 +416,6 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
             diagonal_approximation=False,
             condition_epsilon=0.1,
             norm_relative_penalty=0.01,
-            norm_projection=False,
             client=None,
             npartitions=0):
     """
@@ -436,19 +439,10 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
         derivative = objective_function_derivative(terms,penalty, norm_relative_penalty)
         if diagonal_approximation:
             derivative_conditioned = [d/(condition.diagonal()+condition_epsilon) for d, condition in zip(derivative,terms['condition'])]
-            norm_derivative_conditioned = [[d/(condition.diagonal()+condition_epsilon) for d, condition in zip(terms['dp_norm'],terms['condition'])]]
         else:
             derivative_conditioned = [ -linemin.sr_update(d,condition,1.0) for d,condition in zip(derivative,terms['condition'])]
-            norm_derivative_conditioned = [ -linemin.sr_update(d,condition,1.0) for d,condition in zip(terms['dp_norm'],terms['condition'])]
 
-             #   np.dot(total_derivative, N_derivative)
-             #   * N_derivative
-             #   / (np.linalg.norm(N_derivative)) ** 2
-
-        #Project out the norm derivative
-        if norm_projection:
-            derivative_conditioned = [ g-np.dot(g,n)*n/np.linalg.norm(n)**2 for g,n in zip(derivative_conditioned,norm_derivative_conditioned)]
-        # 
+        
         print('|gradient|',[np.linalg.norm(d) for d in derivative_conditioned])
 
         line_parameters,x = direct_move(derivative_conditioned, max_tstep=max_tstep)
@@ -463,7 +457,7 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
         if abs(xmin) < 1e-16: # if we didn't move at all
             max_tstep=0.5*max_tstep
         else:
-            max_tstep=2*xmin
+            max_tstep=2*abs(xmin)
         print("setting the step range to ", max_tstep)
         parameters = [p - xmin*d for p,d in zip(parameters, derivative_conditioned)]
         for wf, transform, parm in zip(wfs, transforms, parameters):
@@ -488,7 +482,6 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
                   'condition_epsilon':condition_epsilon,
                    'nconfig':configs.configs.shape[0],
                    'penalty':penalty,
-                   'norm_projection':norm_projection,
                    'norm_relative_penalty':norm_relative_penalty})
 
 

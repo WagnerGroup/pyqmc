@@ -451,11 +451,6 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
         xmin, cost = find_move_from_line(x,correlated_data, penalty, norm_relative_penalty)
         print('line search', x,cost)
         print("choosing to move", xmin)
-        if abs(xmin) < 1e-16: # if we didn't move at all
-            max_tstep=0.5*max_tstep
-        else:
-            max_tstep=2*abs(xmin)
-        print("setting the step range to ", max_tstep)
         parameters = [p - xmin*d for p,d in zip(parameters, derivative_conditioned)]
         for wf, transform, parm in zip(wfs, transforms, parameters):
             for k, it in transform.deserialize(wf, parm).items():

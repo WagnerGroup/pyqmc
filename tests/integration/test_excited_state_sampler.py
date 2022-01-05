@@ -10,7 +10,7 @@ from pyqmc.optimize_excited_states import sample_overlap_worker,average, collect
 
 
 
-def dnttest_excited_state(H2_casci):
+def test_sampler(H2_casci):
 
     mol, mf, mc = H2_casci
 
@@ -65,9 +65,6 @@ def dnttest_excited_state(H2_casci):
     overlap_derivative_ref = (mc1.ci.flatten() - 0.5*overlap_ref * norm_derivative_ref) 
     print("overlap_derivative", overlap_derivative_ref, terms['dp_overlap'][1][0,1])
     assert np.all( np.abs(overlap_derivative_ref - terms['dp_overlap'][1][0,1]) < overlap_tolerance)
-
-    mc3 = copy.copy(mc)
-    mc3.ci = mc.ci[1]
 
 
 def test_correlated_sampling(H2_casci):

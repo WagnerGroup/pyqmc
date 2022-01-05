@@ -327,7 +327,6 @@ def correlated_sampling_worker(wfs, configs, energy, transforms, parameters):
     rho = np.mean(np.exp(2 * (log_vals - ref)), axis=0)
     nconfig = configs.configs.shape[0]
 
-    weight_sample_final = []
     energy_final =[]
     overlap_final = []
     weight_variance_final = []
@@ -354,8 +353,7 @@ def correlated_sampling_worker(wfs, configs, energy, transforms, parameters):
         overlap_final.append(overlap)
         weight_energy_final.append(np.mean(weight_energy,axis=1))
 
-        weight_variance_final.append(np.var(weight_energy))
-        weight_sample_final.append(np.mean(1.0))
+        weight_variance_final.append(np.mean(np.var(weight_energy,axis=1)))
         #print('energy', energies/np.mean(sampling_weight*weight_energy))
         #print('overlap', overlap/np.mean(sampling_weight))
 
@@ -364,12 +362,11 @@ def correlated_sampling_worker(wfs, configs, energy, transforms, parameters):
             wf.parameters[k] = it
     return {'energy':np.asarray(energy_final),
             'overlap':np.asarray(overlap_final),
-             'weight_sample':np.asarray(weight_sample_final),
              'weight_energy':np.asarray(weight_energy_final),
              'weight_variance':np.asarray(weight_variance_final)
     }
 
-def find_move_from_line(x, data, penalty, norm_relative_penalty, weight_variance_threshold=0.1 ):
+def find_move_from_line(x, data, penalty, norm_relative_penalty, weight_variance_threshold=1.0 ):
     """
     Given the data from correlated sampling, find the best move.
 
@@ -377,14 +374,17 @@ def find_move_from_line(x, data, penalty, norm_relative_penalty, weight_variance
     cost function
     xmin estimation
     """
-    energy = data['energy']/(data['weight_sample'][:,np.newaxis]*data['weight_energy'][np.newaxis,:])
-    overlap = data['overlap']/data['weight_sample'][:,np.newaxis, np.newaxis]
+    print('energy', data['energy'].shape)
+    energy = data['energy']/data['weight_energy']
+    print('energy', energy.shape)
+    overlap = data['overlap']
     print('energy cost', np.sum(energy,axis=1))
     print('overlap cost', penalty*np.sum(np.triu(overlap**2,1),axis=(1,2)))
     print('norm cost', norm_relative_penalty*penalty*np.einsum('ijj->i', (overlap-1)**2))
     cost = np.sum(energy,axis=1) +\
            penalty*np.sum(np.triu(overlap**2,1),axis=(1,2)) +\
            norm_relative_penalty*penalty*np.einsum('ijj->i', (overlap-1)**2)
+    print('weight variance', data['weight_variance'])
     good_points = data['weight_variance'] < weight_variance_threshold
     xmin = linemin.stable_fit(x[good_points],cost[good_points])
     return xmin, cost

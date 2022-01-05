@@ -265,14 +265,22 @@ def collect_terms(avg, error):
 
 import pyqmc.hdftools as hdftools
 import h5py
-def hdf_save(hdf_file, data, attr):
+def hdf_save(hdf_file, data, attr, wfs):
 
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
             if "energy" not in hdf.keys():
                 hdftools.setup_hdf(hdf, data, attr)
+                for wfi, wf in enumerate(wfs):
+                    for k, it in wf.parameters.items():
+                        hdf.create_dataset(f"wf/{wfi}/" + k, data=it)
+
 
             hdftools.append_hdf(hdf, data)
+            for wfi, wf in enumerate(wfs):
+                for k, it in wf.parameters.items():
+                    hdf[f"wf/{wfi}/" + k][...] = it.copy()
+
 
 
 def correlated_sampling(wfs, configs, energy, transforms, parameters, client=None, npartitions=0):
@@ -474,7 +482,8 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
                   'condition_epsilon':condition_epsilon,
                    'nconfig':configs.configs.shape[0],
                    'penalty':penalty,
-                   'norm_relative_penalty':norm_relative_penalty})
+                   'norm_relative_penalty':norm_relative_penalty},
+                   wfs)
 
 
 class AdamMove():

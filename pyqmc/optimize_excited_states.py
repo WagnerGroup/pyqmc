@@ -119,7 +119,6 @@ def sample_overlap_worker(wfs, configs, energy, transforms, nsteps=10, nblocks=1
     weighted = []
     unweighted=[]
     for block in range(nblocks):
-        print('-', end="", flush=True)
         weighted_block = {}        
         unweighted_block = {}
 
@@ -181,7 +180,6 @@ def sample_overlap_worker(wfs, configs, energy, transforms, nsteps=10, nblocks=1
         weighted[k] = [np.asarray(x) for x in map(list, zip(*weighted[k]))]
     for k in unweighted.keys():
         unweighted[k] = np.asarray(unweighted[k])
-    print("sampling done")
     return weighted, unweighted, configs
 
 
@@ -421,6 +419,7 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
             diagonal_approximation=False,
             condition_epsilon=0.1,
             norm_relative_penalty=0.01,
+            vmc_options = None,
             client=None,
             npartitions=0):
     """
@@ -430,12 +429,13 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
     """
     parameters = [transform.serialize_parameters(wf.parameters) 
           for transform, wf in zip(transforms, wfs)]
-    
+    if vmc_options is None:
+        vmc_options = {'nblocks':10,'nsteps':40}
     data = {}
     for k in ['energy','parameters','norm','overlap', 'energy_error']:
         data[k] = []
     for step in range(nsteps):
-        data_weighted, data_unweighted, configs = sample_overlap(wfs,configs, energy, transforms, nsteps=10, nblocks=40, client=client, npartitions=npartitions)
+        data_weighted, data_unweighted, configs = sample_overlap(wfs,configs, energy, transforms, client=client, npartitions=npartitions, **vmc_options)
         avg, error = average(data_weighted, data_unweighted)
         print('energy', avg['total'], error['total'])
         terms = collect_terms(avg,error)

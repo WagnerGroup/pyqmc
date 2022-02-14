@@ -19,13 +19,14 @@ def get_frac_twist(cell, S, twist):
     return frac_twist
 
 
-def check_duplicate(array, ind, tol=1e-6):
-    """ Given the index of a row in a numpy array, return the indices of its duplication """
-    dup_ind = []
-    for i in range(len(array)):
-        if np.linalg.norm(array[i] - array[ind]) < tol:
-            dup_ind.append(i)
-    return dup_ind
+def check_equivalent(kpts, ind, tol=1e-6):
+    """ Given the index of a kpt in kpts, return the indices of its equivalent k-points in kpts """
+    equiv_ind = []
+    for i in range(len(kpts)):
+        kdiffs = np.mod(kpts[i] - kpts[ind] + 0.5, 1.0) - 0.5
+        if np.linalg.norm(kdiffs) < tol:
+            equiv_ind.append(i)
+    return equiv_ind
 
 
 def get_qmc_kpts(cell, S, frac_twist):
@@ -49,9 +50,9 @@ def available_twists(cell, mf, S):
     ind = 0
     unique_frac_kpts = np.array([get_frac_twist(cell, S, kpt) for kpt in mf.kpts])
     while ind < len(unique_frac_kpts):
-        dup_ind = check_duplicate(unique_frac_kpts, ind)
-        if len(dup_ind) > 1:
-            unique_frac_kpts = np.delete(unique_frac_kpts, dup_ind[1:], 0)
+        equiv_ind = check_equivalent(unique_frac_kpts, ind)
+        if len(equiv_ind) > 1:
+            unique_frac_kpts = np.delete(unique_frac_kpts, equiv_ind[1:], 0)
         ind += 1
     avail_twists = []
     for frac_twist in unique_frac_kpts:

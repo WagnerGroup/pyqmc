@@ -1,9 +1,9 @@
 import numpy as np
-import twists
+import pyqmc.twists
 
 
 def run_tests(cell, mf, S, n):
-    avai = twists.available_twists(cell, mf, S)
+    avai = pyqmc.twists.available_twists(cell, mf, S)
     assert avai.shape[0] == n, f"Found {avai.shape[0]} available twists but should have found {n}"
 
 

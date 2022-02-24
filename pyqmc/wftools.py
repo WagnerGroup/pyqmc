@@ -124,7 +124,9 @@ def generate_sj(mol, mf, optimize_orbitals=False, twist=None, **jastrow_kws):
     wf = multiplywf.MultiplyWF(wf1, wf2)
     to_opt = {"wf1" + x: opt for x, opt in to_opt1.items()}
     to_opt.update({"wf2" + x: opt for x, opt in to_opt2.items()})
+
     return wf, to_opt
+
 
 def generate_wf(
     mol, mf, jastrow=generate_jastrow, jastrow_kws=None, slater_kws=None, mc=None
@@ -154,7 +156,6 @@ def generate_wf(
 
     if not isinstance(jastrow, list):
         jastrow = [jastrow]
-        #jastrow_kws = [jastrow_kws]
     if not isinstance(jastrow_kws, list):
         jastrow_kws = [jastrow_kws]
 

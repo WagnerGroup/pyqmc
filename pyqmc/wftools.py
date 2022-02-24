@@ -105,16 +105,11 @@ def generate_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
     to_opt["bcoeff"][0, [0, 1, 2]] = False  # Cusp conditions
     return jastrow, to_opt
 
-def generate_gps_jastrow(mol,isoptimize=True,start_alpha=np.zeros(2),start_sigma=np.array([1.0])):
+def generate_gps_jastrow(mol,start_alpha=np.zeros(2),start_sigma=np.array([1.0])):
     wf = gps_jastrow.GPSJastrow(mol,start_alpha=start_alpha,start_sigma=start_sigma)
-    if isoptimize:
-        to_opt = {"alpha": np.ones(wf.parameters["alpha"].shape).astype(bool)}
-        to_opt["Xtraining"]=np.ones(wf.parameters["Xtraining"].shape).astype(bool)
-        to_opt["sigma"] =  np.ones(wf.parameters["sigma"].shape).astype(bool)
-    else:
-        to_opt = {"alpha": np.zeros(wf.parameters["alpha"].shape).astype(bool)}
-        to_opt["Xtraining"]=np.zeros(wf.parameters["Xtraining"].shape).astype(bool)
-        to_opt["sigma"] =  np.ones(wf.parameters["sigma"].shape).astype(bool)
+    to_opt = {"alpha": np.ones(wf.parameters["alpha"].shape).astype(bool)}
+    to_opt["Xtraining"]=np.ones(wf.parameters["Xtraining"].shape).astype(bool)
+    to_opt["sigma"] =  np.ones(wf.parameters["sigma"].shape).astype(bool)
     return wf, to_opt
 
 

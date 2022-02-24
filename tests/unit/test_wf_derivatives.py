@@ -5,8 +5,10 @@ from pyqmc.slater import Slater
 from pyqmc.multiplywf import MultiplyWF
 from pyqmc.addwf import AddWF
 from pyqmc.manybody_jastrow import J3
-from pyqmc.wftools import generate_jastrow
+import pyqmc.wftools as wftools
 import pyqmc.api as pyq
+
+
 
 def run_tests(wf, epos, epsilon):
 
@@ -37,7 +39,9 @@ def run_tests(wf, epos, epsilon):
         ],
     ):
         d = func(wf, epos)
+        print(d)
         for k, v in d.items():
+            print("k,v",k,v)
             assert v < 1e-10, (k, v)
 
 
@@ -45,13 +49,14 @@ def test_obc_wfs(LiH_sto3g_rhf, epsilon=1e-5, nconf=10):
     """
     Ensure that the wave function objects are consistent in several situations.
     """
-
+    n_training=5
     mol, mf = LiH_sto3g_rhf
     for wf in [
-        generate_jastrow(mol)[0],
+        wftools.generate_jastrow(mol)[0],
+        wftools.generate_gps_jastrow(mol)[0],
         J3(mol),
-        MultiplyWF(Slater(mol, mf), generate_jastrow(mol)[0]),
-        MultiplyWF(Slater(mol, mf), generate_jastrow(mol)[0], J3(mol)),
+        MultiplyWF(Slater(mol, mf), wftools.generate_jastrow(mol)[0]),
+        MultiplyWF(Slater(mol, mf), wftools.generate_jastrow(mol)[0], J3(mol)),
         Slater(mol, mf),
     ]:
         for k in wf.parameters:
@@ -71,7 +76,7 @@ def test_pbc_wfs(H_pbc_sto3g_krks, epsilon=1e-5, nconf=10):
     supercell = pyq.get_supercell(mol, S=(np.ones((3, 3)) - 2 * np.eye(3)))
     epos = pyq.initial_guess(supercell, nconf)
     for wf in [
-        MultiplyWF(Slater(supercell, mf), generate_jastrow(supercell)[0]),
+        MultiplyWF(Slater(supercell, mf), wftools.generate_jastrow(supercell)[0]),
         Slater(supercell, mf),
     ]:
         for k in wf.parameters:
@@ -92,7 +97,7 @@ def test_pbc_wfs_triplet(h_noncubic_sto3g_triplet, epsilon=1e-5, nconf=10):
     supercell = pyq.get_supercell(mol, S=np.identity(3, dtype=int))
     epos = pyq.initial_guess(supercell, nconf)
     for wf in [
-        MultiplyWF(Slater(supercell, mf), generate_jastrow(supercell)[0]),
+        MultiplyWF(Slater(supercell, mf), wftools.generate_jastrow(supercell)[0]),
         Slater(supercell, mf),
     ]:
         for k in wf.parameters:

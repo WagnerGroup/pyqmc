@@ -4,6 +4,7 @@ import pyqmc.addwf as addwf
 import pyqmc.jastrowspin as jastrowspin
 import pyqmc.func3d as func3d
 import pyqmc.gpu as gpu
+import pyqmc.gps_jastrow as gps_jastrow
 import numpy as np
 import h5py
 
@@ -104,6 +105,18 @@ def generate_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
     to_opt["bcoeff"][0, [0, 1, 2]] = False  # Cusp conditions
     return jastrow, to_opt
 
+def generate_gps_jastrow(mol,isoptimize=True,start_alpha=np.zeros(2),start_sigma=np.array([1.0])):
+    wf = gps_jastrow.GPSJastrow(mol,start_alpha=start_alpha,start_sigma=start_sigma)
+    if isoptimize:
+        to_opt = {"alpha": np.ones(wf.parameters["alpha"].shape).astype(bool)}
+        to_opt["Xtraining"]=np.ones(wf.parameters["Xtraining"].shape).astype(bool)
+        to_opt["sigma"] =  np.ones(wf.parameters["sigma"].shape).astype(bool)
+    else:
+        to_opt = {"alpha": np.zeros(wf.parameters["alpha"].shape).astype(bool)}
+        to_opt["Xtraining"]=np.zeros(wf.parameters["Xtraining"].shape).astype(bool)
+        to_opt["sigma"] =  np.ones(wf.parameters["sigma"].shape).astype(bool)
+    return wf, to_opt
+
 
 def generate_sj(mol, mf, optimize_orbitals=False, twist=None, **jastrow_kws):
     wf1, to_opt1 = generate_slater(mol, mf, optimize_orbitals, twist)
@@ -111,9 +124,7 @@ def generate_sj(mol, mf, optimize_orbitals=False, twist=None, **jastrow_kws):
     wf = multiplywf.MultiplyWF(wf1, wf2)
     to_opt = {"wf1" + x: opt for x, opt in to_opt1.items()}
     to_opt.update({"wf2" + x: opt for x, opt in to_opt2.items()})
-
     return wf, to_opt
-
 
 def generate_wf(
     mol, mf, jastrow=generate_jastrow, jastrow_kws=None, slater_kws=None, mc=None
@@ -143,6 +154,8 @@ def generate_wf(
 
     if not isinstance(jastrow, list):
         jastrow = [jastrow]
+        #jastrow_kws = [jastrow_kws]
+    if not isinstance(jastrow_kws, list):
         jastrow_kws = [jastrow_kws]
 
     wf1, to_opt1 = generate_slater(mol, mf, mc=mc, **slater_kws)

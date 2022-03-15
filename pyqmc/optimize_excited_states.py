@@ -29,9 +29,9 @@ def collect_overlap_data(wfs, configs, energy, transforms):
 
     The function returns two dictionaries: 
 
-    weighted_dat: each element is a list (one item per wf) of quantities that are accumulated as O psi_i^2/rho
+    weighted_dat: each element is a list (one item per wf) of quantities that are accumulated as O psi_i psi_j /rho
     unweighted_dat: Each element is a numpy array that are accumulated just as O (no weight). 
-                    This in particular includes 'weight' which is just psi_i^2/rho
+                    This in particular includes 'weight' which is just psi_i psi_j/rho
 
     """
     phase, log_vals = [np.nan_to_num(np.array(x)) for x in zip(*[wf.value() for wf in wfs])]
@@ -43,9 +43,9 @@ def collect_overlap_data(wfs, configs, energy, transforms):
     # Weight for quantities that are evaluated as
     # int( f(X) psi_f^2 dX )
     # since we sampled sum psi_i^2 /N 
-    weight = np.exp(-2 * (log_vals[:, np.newaxis] - log_vals))
-    weight = 1.0 / np.mean(weight, axis=1) # [wf, config]
-    energies = [energy(configs, wf) for wf in wfs]
+#    weight = np.exp(-2 * (log_vals[:, np.newaxis] - log_vals))
+#    weight = 1.0 / np.mean(weight, axis=1) # [wf, config]
+    energies = invert_list_of_dicts([energy(configs, wf) for wf in wfs])
 
     dppsi = [transform.serialize_gradients(wf.pgradient()) for transform, wf in zip(transforms, wfs)] 
 
@@ -54,29 +54,24 @@ def collect_overlap_data(wfs, configs, energy, transforms):
 
      # normalized_values are [config,wf]
      # we average over configs here and produce [wf,wf]
-    unweighted_dat["overlap"] = np.einsum( 
-        "ik,jk->ij", normalized_values.conj(), normalized_values / denominator
-    ) / len(ref)
+     # c refers to the configuration
+    weight = np.einsum( 
+        "ic,jc->ijc", normalized_values.conj(), normalized_values / denominator
+    ) 
+    unweighted_dat["overlap"] = np.mean(weight, axis=-1)
 
     #Weighted average
-    for k in energies[0].keys():
-        weighted_dat[k]=[]
-    for wt, en in zip(weight, energies): 
-        for k in en.keys():
-            weighted_dat[k].append(np.mean(en[k]*wt,axis=0))
+    for k, en in energies.items():
+        weighted_dat[k]=np.einsum("jc,ijc->ij", np.asarray(en), weight)/weight.shape[-1]
 
-    weighted_dat['dpidpj'] = []
-    weighted_dat['dppsi'] = []
-    weighted_dat["dpH"] = []
-    nconfig = weight.shape[1]
-    for wfi, (dp,energy) in enumerate(zip(dppsi,energies)):
-        weighted_dat['dppsi'].append(np.einsum(
-            "ij,i->j", dp, weight[wfi] , optimize=True
-        )/nconfig)
-        weighted_dat['dpidpj'].append(np.einsum(
-            "ij,i,ik->jk", dp, weight[wfi] , dp, optimize=True
-        )/nconfig)
-        weighted_dat["dpH"].append(np.einsum("i,ij,i->j", energy['total'], dp, weight[wfi])/nconfig)
+
+    nconfig = weight.shape[-1]
+    for wfi, dp in enumerate(dppsi):
+        weighted_dat[('dp2',wfi)]= np.einsum(
+            "cp,ijc,cp->pij", dp, weight, dp, optimize=True
+        )/nconfig
+        print(energy)
+        weighted_dat[("dpH",wfi)] = np.einsum("jc,cp,ijc->pij", energies['total'], dp, weight)/nconfig
 
     
     ## We have to be careful here because the wave functions may have different numbers of 
@@ -84,13 +79,12 @@ def collect_overlap_data(wfs, configs, energy, transforms):
     for wfi, dp in enumerate(dppsi):
         unweighted_dat[("overlap_gradient",wfi)] = \
             np.einsum(
-                "km,ik,jk->ijm",  # shape (wf, param) k is config index
+                "cp,ijc->ijp",  # shape (wf, param) k is config index
                 dp,
-                normalized_values.conj(),
-                normalized_values / denominator,
+                weight
             )/ len(ref)
 
-    unweighted_dat["weight"] = np.mean(weight, axis=1)
+    #unweighted_dat["weight"] = np.mean(weight, axis=1)
     return weighted_dat, unweighted_dat
 
 
@@ -171,13 +165,14 @@ def sample_overlap_worker(wfs, configs, energy, transforms, nsteps=10, nblocks=1
 
     # here we modify the data so that it's a dictionary of lists of arrays for weighted
     # and a dictionary of arrays for unweighted
-    # Access weighted as weighted[quantity][wave function][block, ...]
+    # Access weighted as weighted[quantity][block, ...]
     # Access unweighted as unweighted[quantity][block,...]
     weighted = invert_list_of_dicts(weighted)
     unweighted = invert_list_of_dicts(unweighted)
 
     for k in weighted.keys():
-        weighted[k] = [np.asarray(x) for x in map(list, zip(*weighted[k]))]
+        weighted[k] = np.asarray(weighted[k]) 
+        print(k,weighted[k].shape)
     for k in unweighted.keys():
         unweighted[k] = np.asarray(unweighted[k])
     return weighted, unweighted, configs
@@ -203,12 +198,9 @@ def sample_overlap(wfs, configs, energy, transforms, nsteps=10, nblocks=10, tste
     allresults = list(zip(*[r.result() for r in runs]))
     configs.join(allresults[2])
     confweight = np.array([len(c.configs) for c in coord], dtype=float)
-    #weighted = allresults[0]
-    #unweighted=allresults[0]
     weighted = {}
     for k,it in invert_list_of_dicts(allresults[0]).items():
-        inverted_array = [np.asarray(x) for x in map(list, zip(*it))] # make the wf index the outside one
-        weighted[k] = [np.average(x, weights=confweight, axis=0) for x in inverted_array]
+        weighted[k] = np.average(it, weights=confweight, axis=0) #[np.average(x, weights=confweight, axis=0) for x in inverted_array]
     unweighted = {}
     for k, it in invert_list_of_dicts(allresults[1]).items():
         unweighted[k] = np.average(np.asarray(it),weights=confweight, axis=0)
@@ -226,12 +218,8 @@ def average(weighted, unweighted):
     avg = {}
     error = {}
     for k,it in weighted.items():
-        avg[k] = []
-        error[k] = []
-        #weight is [block,wf], so we transpose
-        for v, w in zip(it,unweighted['weight'].T): 
-            avg[k].append(np.sum(v, axis=0)/np.sum(w))
-            error[k].append(scipy.stats.sem(v,axis=0)/np.mean(w))
+        avg[k] =np.sum(it, axis=0)/np.sum(unweighted['overlap'], axis=0)
+        error[k] = scipy.stats.sem(it,axis=0)/np.mean(unweighted['overlap'], axis=0)
     for k,it in unweighted.items():
         avg[k] = np.mean(it, axis=0)
         error[k] = scipy.stats.sem(it, axis=0)

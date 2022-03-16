@@ -67,10 +67,13 @@ def collect_overlap_data(wfs, configs, energy, transforms):
 
     nconfig = weight.shape[-1]
     for wfi, dp in enumerate(dppsi):
+        weighted_dat[('dp',wfi)]= np.einsum(
+            "cp,ijc->pij", dp, weight, optimize=True
+        )/nconfig
+
         weighted_dat[('dp2',wfi)]= np.einsum(
             "cp,ijc,cp->pij", dp, weight, dp, optimize=True
         )/nconfig
-        print(energy)
         weighted_dat[("dpH",wfi)] = np.einsum("jc,cp,ijc->pij", energies['total'], dp, weight)/nconfig
 
     
@@ -79,7 +82,7 @@ def collect_overlap_data(wfs, configs, energy, transforms):
     for wfi, dp in enumerate(dppsi):
         unweighted_dat[("overlap_gradient",wfi)] = \
             np.einsum(
-                "cp,ijc->ijp",  # shape (wf, param) k is config index
+                "cp,ijc->pij",  # shape (wf, param) k is config index
                 dp,
                 weight
             )/ len(ref)
@@ -172,7 +175,6 @@ def sample_overlap_worker(wfs, configs, energy, transforms, nsteps=10, nblocks=1
 
     for k in weighted.keys():
         weighted[k] = np.asarray(weighted[k]) 
-        print(k,weighted[k].shape)
     for k in unweighted.keys():
         unweighted[k] = np.asarray(unweighted[k])
     return weighted, unweighted, configs
@@ -232,17 +234,20 @@ def collect_terms(avg, error):
     """
     ret = {}
 
-    nwf = len(avg['dpH'])
-    ret['dp_energy'] = [2.0*np.real(dpH - total*dppsi) for dpH, total, dppsi in zip(avg['dpH'], avg['total'],avg['dppsi'])]
-    ret['dp_norm'] = [2.0*np.real(avg[('overlap_gradient',i)][i,i,:]) for i in range(nwf)]
-    ret['condition'] = [np.real(dpidpj - np.einsum("i,j->ij", dp, dp)) for dpidpj,dp in zip(avg['dpidpj'], avg['dppsi']) ]
+    nwf = avg['total'].shape[0]
     N = np.abs(avg["overlap"].diagonal())
     Nij = np.sqrt(np.outer(N, N))
 
     ret['norm'] = N
     ret['overlap'] = avg['overlap']/Nij
-    # ends up being [i,j,m] where i, j are overlaps and m is the parameter
-    ret['dp_overlap'] = [ (avg[('overlap_gradient',i)] -0.5 * avg['overlap'][:,:,np.newaxis]*ret['dp_norm'][i]/N[i] )/Nij[:,:,np.newaxis] for i in range(nwf)  ]
+    fac = np.ones( (nwf, nwf)) + np.identity(nwf)
+    for wfi in range(nwf):
+        print('collect terms',wfi, avg[('dpH',wfi)].shape, avg['total'].shape, avg[('overlap_gradient',wfi)].shape)
+        ret[('dp_energy',wfi)] = fac*np.real(avg[('dpH',wfi)] - avg['total']*avg[('overlap_gradient',wfi)])
+        ret[('dp_norm',wfi)] = 2.0*np.real(avg[('overlap_gradient',wfi)][:,wfi,wfi])
+        ret[('dp_overlap',wfi)] =  fac*(avg[('overlap_gradient',wfi)] 
+                                    -0.5 * avg['overlap']*ret[('dp_norm',wfi)][:,np.newaxis, np.newaxis]/N[wfi] )/Nij 
+        ret[('condition',wfi)] = np.real(avg[('dp2',wfi)] - avg[('dp',wfi)]**2) 
     return ret
 
 
@@ -474,7 +479,7 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
                    wfs)
 
 
-class AdamMove():
+class AdamMove:
     def __init__(self, alpha=0.1, beta1=0.9, beta2=0.999, epsilon=1e-8):
         self.alpha=alpha
         self.beta1=beta1

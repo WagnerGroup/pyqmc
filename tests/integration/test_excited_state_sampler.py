@@ -28,42 +28,36 @@ def test_sampler(H2_casci):
 
     transform1 = pyqmc.accumulators.LinearTransform(wf1.parameters,to_opt1)
     transform2 = pyqmc.accumulators.LinearTransform(wf2.parameters,to_opt2)
-    configs = pyq.initial_guess(mol, 100)
+    configs = pyq.initial_guess(mol, 1000)
     _, configs = pyq.vmc(wf1, configs)
     energy =pyq.EnergyAccumulator(mol)
     data_weighted, data_unweighted, configs = sample_overlap_worker([wf1,wf2],configs, energy, [transform1,transform2], nsteps=40, nblocks=20)
     avg, error = average(data_weighted, data_unweighted)
     print(avg, error)
-    #print('derivative', derivative)
-    #print('conditioned derivative',derivative_conditioned)
-    #print(data_unweighted)
+
     ref_energy1 = 0.5*(ci_energies[0] + ci_energies[1])
-    assert abs(avg['total'][1][1] - ref_energy1) < 3*error['total'][1][1]
+    assert abs(avg['total'][1,1] - ref_energy1) < 3*error['total'][1][1]
 
     overlap_tolerance = 0.02# magic number..be careful.
+    terms = collect_terms(avg,error)
 
     norm = [np.sum(np.abs(m.ci)**2) for m in [mc1,mc2]]
     norm_ref = norm
-    terms = collect_terms(avg,error)
-    return
-    derivative = objective_function_derivative(terms,1.0, norm_relative_penalty=1.0)
-    print('condition', terms['condition'])
-
     assert np.all( np.abs(norm_ref - terms['norm']) < overlap_tolerance) 
 
     norm_derivative_ref = 2*np.real(mc2.ci).flatten() 
-    print('norm derivative', norm_derivative_ref, terms['dp_norm'][1])
-
-    assert np.all(np.abs(norm_derivative_ref - terms['dp_norm'][1])<overlap_tolerance)
-
+    print(terms[('dp_norm',1)].shape, norm_derivative_ref.shape)
+    assert np.all(np.abs(norm_derivative_ref - terms[('dp_norm',1)])<overlap_tolerance)
 
     overlap_ref = np.sum(mc1.ci*mc2.ci) 
     print('overlap test', overlap_ref, terms['overlap'][0,1])
     assert abs(overlap_ref - terms['overlap'][0,1]) < overlap_tolerance
 
     overlap_derivative_ref = (mc1.ci.flatten() - 0.5*overlap_ref * norm_derivative_ref) 
-    print("overlap_derivative", overlap_derivative_ref, terms['dp_overlap'][1][0,1])
-    assert np.all( np.abs(overlap_derivative_ref - terms['dp_overlap'][1][0,1]) < overlap_tolerance)
+    assert np.all( np.abs(overlap_derivative_ref - terms[('dp_overlap',1)][:,0,1]) < overlap_tolerance)
+
+    derivative = objective_function_derivative(terms,1.0, norm_relative_penalty=1.0)
+
 
 
 def test_correlated_sampling(H2_casci):

@@ -40,24 +40,18 @@ def collect_overlap_data(wfs, configs, energy, transforms):
     denominator = np.mean(np.exp(2 * (log_vals - ref)), axis=0)
     normalized_values = phase * np.exp(log_vals - ref)
 
-    # Weight for quantities that are evaluated as
-    # int( f(X) psi_f^2 dX )
-    # since we sampled sum psi_i^2 /N 
-#    weight = np.exp(-2 * (log_vals[:, np.newaxis] - log_vals))
-#    weight = 1.0 / np.mean(weight, axis=1) # [wf, config]
     energies = invert_list_of_dicts([energy(configs, wf) for wf in wfs])
-
     dppsi = [transform.serialize_gradients(wf.pgradient()) for transform, wf in zip(transforms, wfs)] 
 
     weighted_dat = {}
     unweighted_dat  = {}
 
-     # normalized_values are [config,wf]
-     # we average over configs here and produce [wf,wf]
-     # c refers to the configuration
     weight = np.einsum( 
         "ic,jc->ijc", normalized_values.conj(), normalized_values / denominator
     ) 
+    # normalized_values are [config,wf]
+     # we average over configs here and produce [wf,wf]
+     # c refers to the configuration
     unweighted_dat["overlap"] = np.mean(weight, axis=-1)
 
     #Weighted average
@@ -219,12 +213,17 @@ def average(weighted, unweighted):
     """
     avg = {}
     error = {}
-    for k,it in weighted.items():
-        avg[k] =np.sum(it, axis=0)/np.sum(unweighted['overlap'], axis=0)
-        error[k] = scipy.stats.sem(it,axis=0)/np.mean(unweighted['overlap'], axis=0)
     for k,it in unweighted.items():
         avg[k] = np.mean(it, axis=0)
         error[k] = scipy.stats.sem(it, axis=0)
+
+    N = np.abs(avg['overlap'].diagonal())
+    Nij = np.sqrt(np.outer(N, N))
+    print("Nij", Nij)
+
+    for k,it in weighted.items():
+        avg[k] =np.mean(it, axis=0)/Nij
+        error[k] = scipy.stats.sem(it,axis=0)/Nij
     return avg, error
 
 
@@ -390,11 +389,14 @@ def find_move_from_line(x, data, penalty, norm_relative_penalty, weight_variance
 
 
 
-def objective_function_derivative(terms, penalty, norm_relative_penalty):
+def objective_function_derivative(terms, penalty, norm_relative_penalty, offdiagonal_energy_penalty=1.0):
     """
     terms are output from generate_terms
     lam is the penalty
+    norm_relative_penalty is the prefactor on the norm
+    offdiagonal_energy_penalty is the penalty on the off-diagonal matrix elements.
     """
+    print('function derivative', terms[('dp_energy',1)])
     return  [dp_energy
             + penalty * 2*np.sum(np.triu(np.rollaxis(dp_overlap,2)*terms['overlap'],1),axis=(1,2) ) 
             + norm_relative_penalty*penalty * 2*(N-1)*dp_norm

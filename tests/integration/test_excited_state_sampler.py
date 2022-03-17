@@ -7,15 +7,39 @@ import pyqmc.api as pyq
 import pyqmc.accumulators
 from rich import print
 from pyqmc.optimize_excited_states import sample_overlap_worker,average, collect_terms, objective_function_derivative, correlated_sampling
+import copy
 
 
+def take_derivative_casci_energy(mc, civec, delta = 1e-6):
+    h1e = mc.get_h1cas()[0]
+    eri = mc.ao2mo()
+    enbase = mc.fcisolver.energy(h1e=h1e, 
+                         eri=eri,
+                        fcivec=civec,
+                        norb=2,
+                        nelec=(1,1))
+    en_derivative = []
+    print(civec.shape)
+    for i in range(civec.shape[0]):
+        for j in range(civec.shape[1]):
+            citest = civec[:,:]
+            citest[i,j] += delta
+            citest /= np.linalg.norm(citest)
+            entest = mc.fcisolver.energy(h1e=h1e, 
+                                        eri=eri,
+                                        fcivec=citest,
+                                        norb=2,
+                                        nelec=(1,1))
+
+            en_derivative.append( (entest -enbase)/delta )
+    return np.asarray(en_derivative).reshape(civec.shape)
+  
 
 def test_sampler(H2_casci):
 
     mol, mf, mc = H2_casci
 
     ci_energies= mc.e_tot
-    import copy
     mc1 = copy.copy(mc)
     mc2 = copy.copy(mc)
     mc1.ci = mc.ci[0]
@@ -28,7 +52,7 @@ def test_sampler(H2_casci):
 
     transform1 = pyqmc.accumulators.LinearTransform(wf1.parameters,to_opt1)
     transform2 = pyqmc.accumulators.LinearTransform(wf2.parameters,to_opt2)
-    configs = pyq.initial_guess(mol, 1000)
+    configs = pyq.initial_guess(mol, 2000)
     _, configs = pyq.vmc(wf1, configs)
     energy =pyq.EnergyAccumulator(mol)
     data_weighted, data_unweighted, configs = sample_overlap_worker([wf1,wf2],configs, energy, [transform1,transform2], nsteps=40, nblocks=20)
@@ -38,7 +62,10 @@ def test_sampler(H2_casci):
     ref_energy1 = 0.5*(ci_energies[0] + ci_energies[1])
     assert abs(avg['total'][1,1] - ref_energy1) < 3*error['total'][1][1]
 
-    overlap_tolerance = 0.02# magic number..be careful.
+    ref_energy01 = ci_energies[0]/np.sqrt(2)
+    assert abs(avg['total'][0,1] - ref_energy01) < 3*error['total'][0,1]
+
+    overlap_tolerance = 0.2# magic number..be careful.
     terms = collect_terms(avg,error)
 
     norm = [np.sum(np.abs(m.ci)**2) for m in [mc1,mc2]]
@@ -56,7 +83,10 @@ def test_sampler(H2_casci):
     overlap_derivative_ref = (mc1.ci.flatten() - 0.5*overlap_ref * norm_derivative_ref) 
     assert np.all( np.abs(overlap_derivative_ref - terms[('dp_overlap',1)][:,0,1]) < overlap_tolerance)
 
-    derivative = objective_function_derivative(terms,1.0, norm_relative_penalty=1.0)
+    en_derivative = take_derivative_casci_energy(mc, mc2.ci)
+    print(terms[('dp_energy',1)][:,1,1].reshape(mc2.ci.shape), en_derivative)
+    assert False
+    #derivative = objective_function_derivative(terms,1.0, norm_relative_penalty=1.0)
 
 
 

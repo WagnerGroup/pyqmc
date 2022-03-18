@@ -125,11 +125,12 @@ def test_correlated_sampling(H2_casci):
     energies_reference=np.asarray(energies_reference)
     overlap_reference=np.asarray(overlap_reference)
     correlated_results = correlated_sampling([wf1,wf2], configs,energy, [transform1,transform2], sample_parameters )
-    energy_sample = correlated_results['energy']/correlated_results['weight_energy']
+    print(correlated_results)
+    energy_sample = correlated_results['energy']/correlated_results['overlap']
     print('energy reference',energies_reference)
     print('energy sample', energy_sample)
 
-    assert np.all(np.abs(energy_sample - energies_reference) < 0.1)
+    assert np.all(np.abs(energy_sample.diagonal(axis1=1,axis2=2) - energies_reference) < 0.1)
 
     print('overlap sample', correlated_results['overlap'])
 

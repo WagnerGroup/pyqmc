@@ -358,15 +358,13 @@ def correlated_sampling_worker(wfs, configs, energy, transforms, parameters):
     phase, log_vals = [np.nan_to_num(np.array(x)) for x in zip(*[wf.recompute(configs) for wf in wfs])]
     log_vals = np.real(log_vals)  # should already be real
     ref = np.max(log_vals, axis=0)
-    weight_energy = np.exp(-2 * (log_vals[:, np.newaxis] - log_vals))
-    weight_energy = 1.0 / np.mean(weight_energy, axis=1) # [wf, config]
+#    weight_energy = np.exp(-2 * (log_vals[:, np.newaxis] - log_vals))
+#    weight_energy = 1.0 / np.mean(weight_energy, axis=1) # [wf, config]
     rho = np.mean(np.exp(2 * (log_vals - ref)), axis=0)
     nconfig = configs.configs.shape[0]
 
     energy_final =[]
     overlap_final = []
-    weight_variance_final = []
-    weight_energy_final = []
     for p, parameter in enumerate(parameters):
         for wf, transform, wf_parm in zip(wfs, transforms, parameter):
             for k, it in transform.deserialize(wf, wf_parm).items():
@@ -374,32 +372,21 @@ def correlated_sampling_worker(wfs, configs, energy, transforms, parameters):
 
         phase, log_vals = [np.nan_to_num(np.array(x)) for x in zip(*[wf.recompute(configs) for wf in wfs])]
         normalized_values = phase * np.exp(log_vals - ref)
-
-        weight_energy = np.abs(normalized_values)**2/rho
-
-        weight = np.exp(-2 * (log_vals[:, np.newaxis] - log_vals))
-        weight = 1.0 / np.mean(weight, axis=1) # [wf, config]
         energies = np.asarray([energy(configs, wf)['total'] for wf in wfs])
+
         overlap = np.einsum( 
-            "ik,jk->ij", normalized_values.conj(), normalized_values / rho
-        ) / nconfig
-        energies = np.einsum("ik, ik->i",energies, weight_energy )/nconfig
+            "ik,jk->ijk", normalized_values.conj(), normalized_values / rho
+        ) 
+        energies = np.einsum("ik, ijk->ij",energies, overlap)/nconfig
         
         energy_final.append(energies)
-        overlap_final.append(overlap)
-        weight_energy_final.append(np.mean(weight_energy,axis=1))
-
-        weight_variance_final.append(np.mean(np.var(weight_energy,axis=1)))
-        #print('energy', energies/np.mean(sampling_weight*weight_energy))
-        #print('overlap', overlap/np.mean(sampling_weight))
+        overlap_final.append(np.mean(overlap, axis=-1))
 
     for wf, transform, wf_parm in zip(wfs, transforms, p0):
         for k, it in transform.deserialize(wf, wf_parm).items():
             wf.parameters[k] = it
     return {'energy':np.asarray(energy_final),
             'overlap':np.asarray(overlap_final),
-             'weight_energy':np.asarray(weight_energy_final),
-             'weight_variance':np.asarray(weight_variance_final)
     }
 
 def find_move_from_line(x, data, penalty, norm_relative_penalty, weight_variance_threshold=1.0 ):
@@ -461,12 +448,7 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
         print('norm',terms['norm'])
         print('overlap', terms['overlap'][0,1])
         derivative = objective_function_derivative(terms,penalty, norm_relative_penalty)
-        if diagonal_approximation:
-            derivative_conditioned = [d/(condition.diagonal()+condition_epsilon) for d, condition in zip(derivative,terms['condition'])]
-        else:
-            derivative_conditioned = [ -linemin.sr_update(d,condition,1.0) for d,condition in zip(derivative,terms['condition'])]
-
-        
+        derivative_conditioned = [d/(condition+condition_epsilon) for d, condition in zip(derivative,terms['condition'])]
         print('|gradient|',[np.linalg.norm(d) for d in derivative_conditioned])
 
         line_parameters,x = direct_move(derivative_conditioned, max_tstep=max_tstep)

@@ -19,7 +19,6 @@ def take_derivative_casci_energy(mc, civec, delta = 1e-4):
                         norb=2,
                         nelec=(1,1))
     en_derivative = []
-    print(civec.shape)
     for i in range(civec.shape[0]):
         for j in range(civec.shape[1]):
             citest = civec.copy()
@@ -31,8 +30,6 @@ def take_derivative_casci_energy(mc, civec, delta = 1e-4):
                                         norb=2,
                                         nelec=(1,1))/np.sum(citest**2)
             derivative = (entest -enbase)/delta 
-            print('i,j,entest',i,j,entest, derivative)
-            print(citest)
             en_derivative.append(derivative)
     return np.asarray(en_derivative).reshape(civec.shape)
   
@@ -86,12 +83,8 @@ def test_sampler(H2_casci):
     assert np.all( np.abs(overlap_derivative_ref - terms[('dp_overlap',1)][:,0,1]) < overlap_tolerance)
 
     en_derivative = take_derivative_casci_energy(mc, mc2.ci)
-    print(terms[('dp_energy',1)][:,1,1].reshape(mc2.ci.shape))
-    print(en_derivative)
-    print(mc2.ci)
-    print(wf2.parameters['det_coeff'])
-    assert False
-    #derivative = objective_function_derivative(terms,1.0, norm_relative_penalty=1.0)
+    assert(np.all(abs(terms[('dp_energy',1)][:,1,1].reshape(mc2.ci.shape)-en_derivative) -overlap_tolerance) )
+    derivative = objective_function_derivative(terms,1.0, norm_relative_penalty=1.0)
 
 
 

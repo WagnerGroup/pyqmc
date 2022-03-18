@@ -85,13 +85,13 @@ def collect_overlap_data(wfs, configs, energy, transforms):
     
     ## We have to be careful here because the wave functions may have different numbers of 
     ## parameters
-    for wfi, dp in enumerate(dppsi):
-        unweighted_dat[("overlap_gradient",wfi)] = \
-            np.einsum(
-                "cp,ijc->pij",  # shape (wf, param) k is config index
-                dp,
-                weight
-            )/ len(ref)
+    #for wfi, dp in enumerate(dppsi):
+    #    unweighted_dat[("overlap_gradient",wfi)] = \
+    #        np.einsum(
+    #            "cp,ijc->pij",  # shape (wf, param) k is config index
+    #            dp,
+    #            weight
+    #        )/ len(ref)
 
     #unweighted_dat["weight"] = np.mean(weight, axis=1)
     return weighted_dat, unweighted_dat
@@ -253,13 +253,39 @@ def collect_terms(avg, error):
     ret['overlap'] = avg['overlap']/Nij
     fac = np.ones( (nwf, nwf)) + np.identity(nwf)
     for wfi in range(nwf):
-        print('collect terms',wfi, avg[('dpH',wfi)].shape, avg['total'].shape, avg[('overlap_gradient',wfi)].shape)
-        ret[('dp_energy',wfi)] = fac*np.real(avg[('dpH',wfi)] - avg['total']*avg[('overlap_gradient',wfi)])
-        ret[('dp_norm',wfi)] = 2.0*np.real(avg[('overlap_gradient',wfi)][:,wfi,wfi])
-        ret[('dp_overlap',wfi)] =  fac*(avg[('overlap_gradient',wfi)] 
-                                    -0.5 * avg['overlap']*ret[('dp_norm',wfi)][:,np.newaxis, np.newaxis]/N[wfi] )/Nij 
+        ret[('dp_energy',wfi)] = fac*np.real(avg[('dpH',wfi)] - avg['total']*avg[('dp',wfi)])
+        ret[('dp_norm',wfi)] = 2.0*np.real(avg[('dp',wfi)][:,wfi,wfi])
+        print('collect', avg[('dp',wfi)], avg['overlap'], ret[('dp_norm',wfi)])
+        norm_part = np.zeros( (ret[('dp_energy',wfi)].shape[0],nwf,nwf), dtype=avg['overlap'].dtype)
+        norm_part[:,wfi,:] = np.einsum('i,p->pi', avg['overlap'][wfi,:], ret[('dp_norm',wfi)])/N[wfi]
+        norm_part += norm_part.transpose((0,2,1))
+        ret[('dp_overlap',wfi)] =  fac*(avg[('dp',wfi)] -0.5 * norm_part)/Nij 
         ret[('condition',wfi)] = np.real(avg[('dp2',wfi)] - avg[('dp',wfi)]**2) 
+    ret['energy'] = avg['total']
     return ret
+
+
+
+def objective_function_derivative(terms, penalty, norm_relative_penalty, offdiagonal_energy_penalty=1.0):
+    """
+    terms are output from generate_terms
+    lam is the penalty
+    norm_relative_penalty is the prefactor on the norm
+    offdiagonal_energy_penalty is the penalty on the off-diagonal matrix elements.
+    """
+    print('function derivative', terms[('dp_energy',1)], terms[('dp_norm',1)].shape)
+    print("triu", terms[('dp_overlap',1)])
+    print('energy', terms[('dp_energy',1)])
+    nwf = terms['energy'].shape[0]
+
+    
+
+    return  [terms[('dp_energy',i)][:,i,i]
+            + penalty * 2*np.sum(np.triu(terms[('dp_overlap',i)]*terms['overlap'],1),axis=(1,2) ) 
+            + norm_relative_penalty*penalty * 2*(terms['norm'][i]-1)*terms[('dp_norm',i)]
+            + offdiagonal_energy_penalty * 2.0* np.sum( np.triu(terms['energy']* terms[('dp_energy',i)],1), axis=(1,2))
+            for i in range(nwf)]
+
 
 
 
@@ -399,20 +425,6 @@ def find_move_from_line(x, data, penalty, norm_relative_penalty, weight_variance
     xmin = linemin.stable_fit(x[good_points],cost[good_points])
     return xmin, cost
 
-
-
-def objective_function_derivative(terms, penalty, norm_relative_penalty, offdiagonal_energy_penalty=1.0):
-    """
-    terms are output from generate_terms
-    lam is the penalty
-    norm_relative_penalty is the prefactor on the norm
-    offdiagonal_energy_penalty is the penalty on the off-diagonal matrix elements.
-    """
-    print('function derivative', terms[('dp_energy',1)])
-    return  [dp_energy
-            + penalty * 2*np.sum(np.triu(np.rollaxis(dp_overlap,2)*terms['overlap'],1),axis=(1,2) ) 
-            + norm_relative_penalty*penalty * 2*(N-1)*dp_norm
-            for dp_energy, dp_overlap, N, dp_norm in zip(terms['dp_energy'], terms['dp_overlap'],terms['norm'], terms['dp_norm'])]
 
 
 def direct_move(grad, N=40, max_tstep=0.1):

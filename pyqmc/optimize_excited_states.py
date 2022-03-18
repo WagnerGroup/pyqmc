@@ -61,14 +61,26 @@ def collect_overlap_data(wfs, configs, energy, transforms):
 
     nconfig = weight.shape[-1]
     for wfi, dp in enumerate(dppsi):
-        weighted_dat[('dp',wfi)]= np.einsum(
-            "cp,ijc->pij", dp, weight, optimize=True
+        weighted_dat[('dp',wfi)] = np.zeros((dp.shape[1],weight.shape[0], weight.shape[1]), dtype=dp.dtype)
+        weighted_dat[('dpH',wfi)] = np.zeros((dp.shape[1],weight.shape[0], weight.shape[1]), dtype=dp.dtype)
+        weighted_dat[('dp2',wfi)] = np.zeros((dp.shape[1],weight.shape[0], weight.shape[1]), dtype=dp.dtype)
+
+        #print(dp.shape, weight.shape, weighted_dat[('dp',wfi)].shape)
+
+        weighted_dat[('dp',wfi)][:,wfi,:]= np.einsum(
+            "cp,jc->pj", dp, weight[wfi,:,:], optimize=True
         )/nconfig
 
-        weighted_dat[('dp2',wfi)]= np.einsum(
-            "cp,ijc,cp->pij", dp, weight, dp, optimize=True
+        weighted_dat[('dp2',wfi)][:,wfi,:]= np.einsum(
+            "cp,jc->pj", dp**2, weight[wfi,:,:], optimize=True
         )/nconfig
-        weighted_dat[("dpH",wfi)] = np.einsum("jc,cp,ijc->pij", energies['total'], dp, weight)/nconfig
+
+        weighted_dat[("dpH",wfi)][:,wfi,:]=np.einsum("jc,cp,jc->pj", energies['total'], dp, weight[wfi,:,:])/nconfig
+
+        ## make it symmetric
+        for k in ['dp','dp2','dpH']:
+            weighted_dat[(k,wfi)] += weighted_dat[(k,wfi)].transpose((0,2,1))
+            weighted_dat[(k,wfi)][:,wfi,wfi]/=2
 
     
     ## We have to be careful here because the wave functions may have different numbers of 

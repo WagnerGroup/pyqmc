@@ -260,7 +260,7 @@ def collect_terms(avg, error):
         norm_part[:,wfi,:] = np.einsum('i,p->pi', avg['overlap'][wfi,:], ret[('dp_norm',wfi)])/N[wfi]
         norm_part += norm_part.transpose((0,2,1))
         ret[('dp_overlap',wfi)] =  fac*(avg[('dp',wfi)] -0.5 * norm_part)/Nij 
-        ret[('condition',wfi)] = np.real(avg[('dp2',wfi)] - avg[('dp',wfi)]**2) 
+        ret[('condition',wfi)] = np.real(avg[('dp2',wfi)][:,wfi,wfi] - avg[('dp',wfi)][:,wfi,wfi]**2) 
     ret['energy'] = avg['total']
     return ret
 
@@ -389,7 +389,7 @@ def correlated_sampling_worker(wfs, configs, energy, transforms, parameters):
             'overlap':np.asarray(overlap_final),
     }
 
-def find_move_from_line(x, data, penalty, norm_relative_penalty, weight_variance_threshold=1.0 ):
+def find_move_from_line(x, data, penalty, norm_relative_penalty, weight_variance_threshold=1.0,offdiagonal_energy_penalty=1.0 ):
     """
     Given the data from correlated sampling, find the best move.
 
@@ -398,18 +398,18 @@ def find_move_from_line(x, data, penalty, norm_relative_penalty, weight_variance
     xmin estimation
     """
     print('energy', data['energy'].shape)
-    energy = data['energy']/data['weight_energy']
+    energy = data['energy']/data['overlap']
     print('energy', energy.shape)
     overlap = data['overlap']
     print('energy cost', np.sum(energy,axis=1))
     print('overlap cost', penalty*np.sum(np.triu(overlap**2,1),axis=(1,2)))
     print('norm cost', norm_relative_penalty*penalty*np.einsum('ijj->i', (overlap-1)**2))
-    cost = np.sum(energy,axis=1) +\
+    cost = np.sum(energy.diagonal(axis1=1,axis2=2),axis=1) +\
            penalty*np.sum(np.triu(overlap**2,1),axis=(1,2)) +\
+           offdiagonal_energy_penalty*np.sum(np.triu(energy**2,1),axis=(1,2)) +\
            norm_relative_penalty*penalty*np.einsum('ijj->i', (overlap-1)**2)
-    print('weight variance', data['weight_variance'])
-    good_points = data['weight_variance'] < weight_variance_threshold
-    xmin = linemin.stable_fit(x[good_points],cost[good_points])
+
+    xmin = linemin.stable_fit(x,cost)
     return xmin, cost
 
 
@@ -448,7 +448,8 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
         print('norm',terms['norm'])
         print('overlap', terms['overlap'][0,1])
         derivative = objective_function_derivative(terms,penalty, norm_relative_penalty)
-        derivative_conditioned = [d/(condition+condition_epsilon) for d, condition in zip(derivative,terms['condition'])]
+        print("derivative shape", derivative[0].shape)
+        derivative_conditioned = [d/(terms[('condition',i)]+condition_epsilon) for i,d in enumerate(derivative)]
         print('|gradient|',[np.linalg.norm(d) for d in derivative_conditioned])
 
         line_parameters,x = direct_move(derivative_conditioned, max_tstep=max_tstep)

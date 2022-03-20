@@ -6,7 +6,6 @@ import pyqmc.linemin as linemin
 """
 TODO:
 
-Correlated sampling test
 Optimizer test
 """
 
@@ -37,8 +36,8 @@ def collect_overlap_data(wfs, configs, energy, transforms):
     phase, log_vals = [np.nan_to_num(np.array(x)) for x in zip(*[wf.value() for wf in wfs])]
     log_vals = np.real(log_vals)  # should already be real
     ref = np.max(log_vals, axis=0)
-    denominator = np.mean(np.exp(2 * (log_vals - ref)), axis=0)
-    normalized_values = phase * np.exp(log_vals - ref)
+    denominator = np.mean(np.nan_to_num(np.exp(2 * (log_vals - ref))), axis=0)
+    normalized_values = phase * np.nan_to_num(np.exp(log_vals - ref))
 
     energies = invert_list_of_dicts([energy(configs, wf) for wf in wfs])
     dppsi = [transform.serialize_gradients(wf.pgradient()) for transform, wf in zip(transforms, wfs)] 
@@ -65,8 +64,6 @@ def collect_overlap_data(wfs, configs, energy, transforms):
         weighted_dat[('dpH',wfi)] = np.zeros((dp.shape[1],weight.shape[0], weight.shape[1]), dtype=dp.dtype)
         weighted_dat[('dp2',wfi)] = np.zeros((dp.shape[1],weight.shape[0], weight.shape[1]), dtype=dp.dtype)
 
-        #print(dp.shape, weight.shape, weighted_dat[('dp',wfi)].shape)
-
         weighted_dat[('dp',wfi)][:,wfi,:]= np.einsum(
             "cp,jc->pj", dp, weight[wfi,:,:], optimize=True
         )/nconfig
@@ -83,17 +80,6 @@ def collect_overlap_data(wfs, configs, energy, transforms):
             weighted_dat[(k,wfi)][:,wfi,wfi]/=2
 
     
-    ## We have to be careful here because the wave functions may have different numbers of 
-    ## parameters
-    #for wfi, dp in enumerate(dppsi):
-    #    unweighted_dat[("overlap_gradient",wfi)] = \
-    #        np.einsum(
-    #            "cp,ijc->pij",  # shape (wf, param) k is config index
-    #            dp,
-    #            weight
-    #        )/ len(ref)
-
-    #unweighted_dat["weight"] = np.mean(weight, axis=1)
     return weighted_dat, unweighted_dat
 
 
@@ -231,7 +217,6 @@ def average(weighted, unweighted):
 
     N = np.abs(avg['overlap'].diagonal())
     Nij = np.sqrt(np.outer(N, N))
-    print("Nij", Nij)
 
     for k,it in weighted.items():
         avg[k] =np.mean(it, axis=0)/Nij
@@ -255,7 +240,6 @@ def collect_terms(avg, error):
     for wfi in range(nwf):
         ret[('dp_energy',wfi)] = fac*np.real(avg[('dpH',wfi)] - avg['total']*avg[('dp',wfi)])
         ret[('dp_norm',wfi)] = 2.0*np.real(avg[('dp',wfi)][:,wfi,wfi])
-        print('collect', avg[('dp',wfi)], avg['overlap'], ret[('dp_norm',wfi)])
         norm_part = np.zeros( (ret[('dp_energy',wfi)].shape[0],nwf,nwf), dtype=avg['overlap'].dtype)
         norm_part[:,wfi,:] = np.einsum('i,p->pi', avg['overlap'][wfi,:], ret[('dp_norm',wfi)])/N[wfi]
         norm_part += norm_part.transpose((0,2,1))
@@ -266,16 +250,13 @@ def collect_terms(avg, error):
 
 
 
-def objective_function_derivative(terms, penalty, norm_relative_penalty, offdiagonal_energy_penalty=1.0):
+def objective_function_derivative(terms, penalty, norm_relative_penalty, offdiagonal_energy_penalty):
     """
     terms are output from generate_terms
     lam is the penalty
     norm_relative_penalty is the prefactor on the norm
     offdiagonal_energy_penalty is the penalty on the off-diagonal matrix elements.
     """
-    print('function derivative', terms[('dp_energy',1)], terms[('dp_norm',1)].shape)
-    print("triu", terms[('dp_overlap',1)])
-    print('energy', terms[('dp_energy',1)])
     nwf = terms['energy'].shape[0]
 
     
@@ -358,9 +339,7 @@ def correlated_sampling_worker(wfs, configs, energy, transforms, parameters):
     phase, log_vals = [np.nan_to_num(np.array(x)) for x in zip(*[wf.recompute(configs) for wf in wfs])]
     log_vals = np.real(log_vals)  # should already be real
     ref = np.max(log_vals, axis=0)
-#    weight_energy = np.exp(-2 * (log_vals[:, np.newaxis] - log_vals))
-#    weight_energy = 1.0 / np.mean(weight_energy, axis=1) # [wf, config]
-    rho = np.mean(np.exp(2 * (log_vals - ref)), axis=0)
+    rho = np.mean(np.nan_to_num(np.exp(2 * (log_vals - ref))), axis=0)
     nconfig = configs.configs.shape[0]
 
     energy_final =[]
@@ -371,7 +350,7 @@ def correlated_sampling_worker(wfs, configs, energy, transforms, parameters):
                 wf.parameters[k] = it
 
         phase, log_vals = [np.nan_to_num(np.array(x)) for x in zip(*[wf.recompute(configs) for wf in wfs])]
-        normalized_values = phase * np.exp(log_vals - ref)
+        normalized_values = phase * np.nan_to_num(np.exp(log_vals - ref))
         energies = np.asarray([energy(configs, wf)['total'] for wf in wfs])
 
         overlap = np.einsum( 
@@ -389,7 +368,7 @@ def correlated_sampling_worker(wfs, configs, energy, transforms, parameters):
             'overlap':np.asarray(overlap_final),
     }
 
-def find_move_from_line(x, data, penalty, norm_relative_penalty, weight_variance_threshold=1.0,offdiagonal_energy_penalty=1.0 ):
+def find_move_from_line(x, data, penalty, norm_relative_penalty,offdiagonal_energy_penalty ):
     """
     Given the data from correlated sampling, find the best move.
 
@@ -397,13 +376,8 @@ def find_move_from_line(x, data, penalty, norm_relative_penalty, weight_variance
     cost function
     xmin estimation
     """
-    print('energy', data['energy'].shape)
     energy = data['energy']/data['overlap']
-    print('energy', energy.shape)
     overlap = data['overlap']
-    print('energy cost', np.sum(energy,axis=1))
-    print('overlap cost', penalty*np.sum(np.triu(overlap**2,1),axis=(1,2)))
-    print('norm cost', norm_relative_penalty*penalty*np.einsum('ijj->i', (overlap-1)**2))
     cost = np.sum(energy.diagonal(axis1=1,axis2=2),axis=1) +\
            penalty*np.sum(np.triu(overlap**2,1),axis=(1,2)) +\
            offdiagonal_energy_penalty*np.sum(np.triu(energy**2,1),axis=(1,2)) +\
@@ -422,9 +396,9 @@ def direct_move(grad, N=40, max_tstep=0.1):
 
 
 def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, max_tstep=0.1, 
-            diagonal_approximation=False,
             condition_epsilon=0.1,
             norm_relative_penalty=0.01,
+            offdiagonal_energy_penalty=0.1,
             vmc_options = None,
             client=None,
             npartitions=0):
@@ -447,7 +421,7 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
         terms = collect_terms(avg,error)
         print('norm',terms['norm'])
         print('overlap', terms['overlap'][0,1])
-        derivative = objective_function_derivative(terms,penalty, norm_relative_penalty)
+        derivative = objective_function_derivative(terms,penalty, norm_relative_penalty,offdiagonal_energy_penalty)
         print("derivative shape", derivative[0].shape)
         derivative_conditioned = [d/(terms[('condition',i)]+condition_epsilon) for i,d in enumerate(derivative)]
         print('|gradient|',[np.linalg.norm(d) for d in derivative_conditioned])
@@ -458,7 +432,7 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
                 p+=p0
             
         correlated_data = correlated_sampling(wfs, configs, energy, transforms, line_parameters, client=client, npartitions=npartitions)
-        xmin, cost = find_move_from_line(x,correlated_data, penalty, norm_relative_penalty)
+        xmin, cost = find_move_from_line(x,correlated_data, penalty, norm_relative_penalty, offdiagonal_energy_penalty)
         print('line search', x,cost)
         print("choosing to move", xmin)
         parameters = [p - xmin*d for p,d in zip(parameters, derivative_conditioned)]
@@ -480,11 +454,12 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
 
         hdf_save(hdf_file, 
                   data,
-                  {'diagonal_approximation':diagonal_approximation,
+                  {
                   'condition_epsilon':condition_epsilon,
                    'nconfig':configs.configs.shape[0],
                    'penalty':penalty,
-                   'norm_relative_penalty':norm_relative_penalty},
+                   'norm_relative_penalty':norm_relative_penalty,
+                   'offdiagonal_energy_penalty':offdiagonal_energy_penalty},
                    wfs)
 
 

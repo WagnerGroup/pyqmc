@@ -69,6 +69,6 @@ if __name__=="__main__":
     from concurrent.futures import ProcessPoolExecutor
     #with ProcessPoolExecutor(max_workers=2) as client:
     client=None
-    for norm_penalty in [0.1]:
+    for norm_penalty in [0.005]:
 
             run_optimization_best_practice_2states(hdf_file=f'optimize_norm{norm_penalty}.hdf5', penalty=1.0, max_tstep=0.1, diagonal_approximation=False, norm_relative_penalty=norm_penalty, client=client, npartitions=2, nsteps=200)

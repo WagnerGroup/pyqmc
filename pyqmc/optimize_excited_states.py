@@ -356,7 +356,7 @@ def correlated_sampling_worker(wfs, configs, energy, transforms, parameters):
         overlap = np.einsum( 
             "ik,jk->ijk", normalized_values.conj(), normalized_values / rho
         ) 
-        energies = np.einsum("ik, ijk->ij",energies, overlap)/nconfig
+        energies = np.einsum("jk, ijk->ij",energies, overlap)/nconfig
         
         energy_final.append(energies)
         overlap_final.append(np.mean(overlap, axis=-1))
@@ -368,7 +368,7 @@ def correlated_sampling_worker(wfs, configs, energy, transforms, parameters):
             'overlap':np.asarray(overlap_final),
     }
 
-def find_move_from_line(x, data, penalty, norm_relative_penalty,offdiagonal_energy_penalty ):
+def find_move_from_line(x, data, penalty, norm_relative_penalty,offdiagonal_energy_penalty, max_norm_deviation=0.2 ):
     """
     Given the data from correlated sampling, find the best move.
 
@@ -376,20 +376,29 @@ def find_move_from_line(x, data, penalty, norm_relative_penalty,offdiagonal_ener
     cost function
     xmin estimation
     """
-    energy = data['energy']/data['overlap']
+    N = np.abs(data["overlap"].diagonal(axis1=1,axis2=2))
+    Nij = np.asarray([np.sqrt(np.outer(a, a)) for a in N])
+
+    energy = data['energy']/Nij
     overlap = data['overlap']
+    print("energy cost", np.sum(energy.diagonal(axis1=1,axis2=2),axis=1))
+    print("overlap cost",np.sum(np.triu(overlap**2,1),axis=(1,2)) )
+    print("offdiagonal_energy", energy)
+    print("norm",np.einsum('ijj->i', (overlap-1)**2 ))
     cost = np.sum(energy.diagonal(axis1=1,axis2=2),axis=1) +\
            penalty*np.sum(np.triu(overlap**2,1),axis=(1,2)) +\
            offdiagonal_energy_penalty*np.sum(np.triu(energy**2,1),axis=(1,2)) +\
            norm_relative_penalty*penalty*np.einsum('ijj->i', (overlap-1)**2)
 
+    #good_norms = np.prod(np.einsum('ijj->ij',np.abs(overlap-1) < max_norm_deviation),axis=1)
+    #print("good norms", good_norms, 'cost', cost[good_norms])
     xmin = linemin.stable_fit(x,cost)
     return xmin, cost
 
 
 
 def direct_move(grad, N=40, max_tstep=0.1):
-        x = np.linspace(-max_tstep,max_tstep, N)
+        x = np.linspace(0,max_tstep, N)
         return [ [-delta*g for g in grad] for delta in x], x
 
 
@@ -422,11 +431,10 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
         print('norm',terms['norm'])
         print('overlap', terms['overlap'][0,1])
         derivative = objective_function_derivative(terms,penalty, norm_relative_penalty,offdiagonal_energy_penalty)
-        print("derivative shape", derivative[0].shape)
         derivative_conditioned = [d/(terms[('condition',i)]+condition_epsilon) for i,d in enumerate(derivative)]
         print('|gradient|',[np.linalg.norm(d) for d in derivative_conditioned])
 
-        line_parameters,x = direct_move(derivative_conditioned, max_tstep=max_tstep)
+        line_parameters,x = direct_move(derivative_conditioned, N=10, max_tstep=max_tstep)
         for line_p in line_parameters:
             for p, p0 in zip(line_p, parameters):
                 p+=p0

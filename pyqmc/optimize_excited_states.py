@@ -381,10 +381,10 @@ def find_move_from_line(x, data, penalty, norm_relative_penalty,offdiagonal_ener
 
     energy = data['energy']/Nij
     overlap = data['overlap']
-    print("energy cost", np.sum(energy.diagonal(axis1=1,axis2=2),axis=1))
-    print("overlap cost",np.sum(np.triu(overlap**2,1),axis=(1,2)) )
-    print("offdiagonal_energy", energy)
-    print("norm",np.einsum('ijj->i', (overlap-1)**2 ))
+    #print("energy cost", np.sum(energy.diagonal(axis1=1,axis2=2),axis=1))
+    #print("overlap cost",np.sum(np.triu(overlap**2,1),axis=(1,2)) )
+    #print("offdiagonal_energy", energy)
+    #print("norm",np.einsum('ijj->i', (overlap-1)**2 ))
     cost = np.sum(energy.diagonal(axis1=1,axis2=2),axis=1) +\
            penalty*np.sum(np.triu(overlap**2,1),axis=(1,2)) +\
            offdiagonal_energy_penalty*np.sum(np.triu(energy**2,1),axis=(1,2)) +\
@@ -400,7 +400,6 @@ def find_move_from_line(x, data, penalty, norm_relative_penalty,offdiagonal_ener
 def direct_move(grad, N=40, max_tstep=0.1):
         x = np.linspace(0,max_tstep, N)
         return [ [-delta*g for g in grad] for delta in x], x
-
 
 
 
@@ -447,6 +446,7 @@ def optimize(wfs, configs, energy, transforms, hdf_file, penalty=.5, nsteps=40, 
         for wf, transform, parm in zip(wfs, transforms, parameters):
             for k, it in transform.deserialize(wf, parm).items():
                 wf.parameters[k] = it
+
         data = {'energy':avg['total'],
             'energy_error': error['total'],
             'norm':terms['norm'],

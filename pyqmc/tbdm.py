@@ -182,9 +182,7 @@ class TBDMAccumulator:
             "norm_a": np.zeros((nconf, orb_configs[0].shape[-1])),
             "norm_b": np.zeros((nconf, orb_configs[1].shape[-1])),
         }
-        orb_configs = gpu.cp.asarray(
-            [orb_configs[s][:, :, self._ijkl[2 * s]] for s in [0, 1]]
-        )
+        orb_configs = [orb_configs[s][:, :, self._ijkl[2 * s]] for s in [0, 1]]
 
         down_start = [np.min(self._electrons[s]) for s in [0, 1]]
         for sweep in range(self._nsweeps):

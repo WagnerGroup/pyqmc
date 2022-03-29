@@ -39,10 +39,11 @@ def collect_overlap_data(wfs, configs, pgrad):
     .. math:: \partial_m \langle \Psi_f | \Psi_i \rangle = \left\langle \frac{\partial_{fm} \Psi_i^* \Psi_j}{\rho} \right\rangle_{\rho}
 
     """
-    phase, log_vals = [np.array(x) for x in zip(*[wf.value() for wf in wfs])]
+    phase, log_vals = [np.nan_to_num(np.array(x)) for x in zip(*[wf.value() for wf in wfs])]
     log_vals = np.real(log_vals)  # should already be real
     ref = np.max(log_vals, axis=0)
     save_dat = {}
+    #print('log_vals', log_vals)
     denominator = np.sum(np.exp(2 * (log_vals - ref)), axis=0)
     normalized_values = phase * np.exp(log_vals - ref)
     save_dat["overlap"] = np.einsum(  # shape (wf, wf)
@@ -59,6 +60,7 @@ def collect_overlap_data(wfs, configs, pgrad):
         )
         / len(ref)
     )
+    #print("ratio", save_dat["overlap"].diagonal())
 
     # Weight for quantities that are evaluated as
     # int( f(X) psi_f^2 dX )
@@ -249,7 +251,7 @@ def correlated_sample(wfs, configs, parameters, pgrad):
     nparms = len(parameters)
     p0 = pgrad.transform.serialize_parameters(wfs[-1].parameters)
     wfvalues = [wf.recompute(configs) for wf in wfs]
-    phase0, log_values0 = [np.array(x) for x in zip(*wfvalues)]
+    phase0, log_values0 = [np.nan_to_num(np.array(x)) for x in zip(*wfvalues)]
     log_values0 = np.real(log_values0)
     ref = np.max(log_values0)
     normalized_values = phase0 * np.exp(log_values0 - ref)
@@ -269,7 +271,7 @@ def correlated_sample(wfs, configs, parameters, pgrad):
     data["base_weight"] = weight
     for p, parameter in enumerate(parameters):
         wf = wfs[-1]
-        for k, it in pgrad.transform.deserialize(parameter).items():
+        for k, it in pgrad.transform.deserialize(wf, parameter).items():
             wf.parameters[k] = it
         wf.recompute(configs)
         val = wf.value()
@@ -286,7 +288,7 @@ def correlated_sample(wfs, configs, parameters, pgrad):
         data["weight"][p] = np.mean(wt) / rhoprime
         data["overlap"][p] = np.mean(overlap, axis=1) / np.sqrt(np.mean(wt) * weight)
 
-    for k, it in pgrad.transform.deserialize(p0).items():
+    for k, it in pgrad.transform.deserialize(wf, p0).items():
         wfs[-1].parameters[k] = it
     return data
 
@@ -695,7 +697,7 @@ def optimize_orthogonal(
             print("WARNING: did not find valid moves. Reducing the timestep")
             tstep *= 0.5
 
-        for k, it in pgrad.transform.deserialize(parameters).items():
+        for k, it in pgrad.transform.deserialize(wfs[-1], parameters).items():
             wfs[-1].parameters[k] = it
 
         save_data = {

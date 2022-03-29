@@ -36,12 +36,16 @@ def test_updateinternals(wf, configs):
     wfcopy = copy.copy(wf)
     val1 = wf.recompute(configs)
     for e in range(ne):
+        print("#### Electron", e)
         # val1 = wf.recompute(configs)
         epos = configs.make_irreducible(e, configs.configs[:, e, :] + delta)
         ratio = wf.testvalue(e, epos)
+        print("*****updateinternals")
         wf.updateinternals(e, epos, configs)
+        print("*****value")
         update = wf.value()
         configs.move(e, epos, [True] * nconf)
+        print("*****copy recompute")
         recompute = wfcopy.recompute(configs)
         updatevstest[e, :] = update[0] / val1[0] * np.exp(update[1] - val1[1]) - ratio
         recomputevsupdate[e, :] = update[0] / val1[0] * np.exp(
@@ -53,20 +57,20 @@ def test_updateinternals(wf, configs):
         val1 = recompute
 
     # Test mask and pgrad
-    _, configs = mc.vmc(wf, configs, nblocks=1, nsteps_per_block=1, tstep=2)
-    pgradupdate = wf.pgradient()
-    wf.recompute(configs)
-    pgrad = wf.pgradient()
-    pgdict = {
-        k: np.max(np.abs(pgu - pgrad[k]))
-        for k, pgu in pgradupdate.items()
-        if np.prod(pgu.shape) > 0
-    }
+    #_, configs = mc.vmc(wf, configs, nblocks=1, nsteps_per_block=1, tstep=2)
+    #pgradupdate = wf.pgradient()
+    #wf.recompute(configs)
+    #pgrad = wf.pgradient()
+    #pgdict = {
+    #    k: np.max(np.abs(pgu - pgrad[k]))
+    #    for k, pgu in pgradupdate.items()
+    #    if np.prod(pgu.shape) > 0
+    #}
     return {
         "updatevstest": np.max(np.abs(updatevstest)),
         "recomputevstest": np.max(np.abs(recomputevstest)),
         "recomputevsupdate": np.max(np.abs(recomputevsupdate)),
-        **pgdict,
+    #    **pgdict,
     }
 
 

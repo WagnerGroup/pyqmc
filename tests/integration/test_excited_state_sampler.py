@@ -5,7 +5,6 @@ import numpy as np
 from pyscf.fci.addons import overlap
 import pyqmc.api as pyq
 import pyqmc.accumulators
-from rich import print
 from pyqmc.optimize_excited_states import sample_overlap_worker,average, collect_terms, objective_function_derivative, correlated_sampling
 import copy
 

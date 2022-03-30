@@ -8,7 +8,7 @@ class JastrowSpin:
 
             The Jastrow form is :math:`e^{U(R)}`, where
 
-        .. math::  U(R) = \sum_{I, i, k} c^{a}_{Ik\sigma(i)} a_{k}(r_{Ii}) + \sum_{i,j,k} c^{b}_{k\sigma(i)\sigma(j)} b^{l}(r_{ij})
+        .. math::  U(R) = \sum_{I, i, k} c^{a}_{Ik\sigma(i)} a_{k}(r_{Ii}) + \sum_{i,j,l} c^{b}_{l\sigma(i)\sigma(j)} b_{l}(r_{ij})
 
 
     """
@@ -230,7 +230,7 @@ class JastrowSpin:
 
     def gradient(self, e, epos):
         r"""We compute the gradient for electron e as
-        :math:`\nabla_e \ln \Psi_J = \sum_k c_k \left(\sum_{j > e} \nabla_e b_k(r_{ej}) + \sum_{i < e} \nabla_e b_k(r_{ie})\right)`
+        :math:`\nabla_e \ln \Psi_J = \sum_l c_l \left(\sum_{j > e} \nabla_e b_l(r_{ej}) + \sum_{i < e} \nabla_e b_l(r_{ie})\right)`
         So we need to compute the gradient of the b's for these indices.
         Note that we need to compute distances between electron position given and the current electron distances.
         We will need this for laplacian() as well"""

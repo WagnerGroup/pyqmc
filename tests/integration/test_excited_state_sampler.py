@@ -83,7 +83,7 @@ def test_sampler(H2_casci):
 
     en_derivative = take_derivative_casci_energy(mc, mc2.ci)
     assert(np.all(abs(terms[('dp_energy',1)][:,1,1].reshape(mc2.ci.shape)-en_derivative) -overlap_tolerance) )
-    derivative = objective_function_derivative(terms,1.0, norm_relative_penalty=1.0)
+    derivative = objective_function_derivative(terms,1.0, norm_relative_penalty=1.0, offdiagonal_energy_penalty=0.1)
 
 
 

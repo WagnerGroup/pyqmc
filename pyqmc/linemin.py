@@ -120,7 +120,7 @@ def line_minimization(
     :parameter update_kws: Any keywords
     :parameter int npts: number of points to fit to in each line minimization
     :parameter boolean verbose: print output if True
-    :return: optimized wave function
+    :return: optimized wave function, optimization data
     """
 
     if vmcoptions is None:

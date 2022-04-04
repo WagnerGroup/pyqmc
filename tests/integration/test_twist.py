@@ -3,9 +3,6 @@ import pyqmc.api as pyq
 from pyqmc.slater import Slater
 from pyqmc.pbc import enforce_pbc
 from pyqmc.coord import PeriodicConfigs
-from pyscf.pbc import gto, scf
-from pyscf.pbc.dft.multigrid import multigrid
-from pyscf.scf.addons import remove_linear_dep_
 
 
 def test_cubic_with_ecp(li_cubic_ccecp, kind=1):
@@ -13,8 +10,8 @@ def test_cubic_with_ecp(li_cubic_ccecp, kind=1):
     runtest(cell, mf, kind=kind)
 
 
-def test_noncubic(h_noncubic_sto3g, kind=1):
-    cell, mf = h_noncubic_sto3g
+def test_noncubic(diamond_primitive, kind=1):
+    cell, mf = diamond_primitive
     runtest(cell, mf, kind=kind)
 
 
@@ -53,7 +50,7 @@ def runtest(mol, mf, kind=0):
 
     e = 0
     rat0 = wf0.testvalue(e, newcoords.electron(e))
-    assert np.linalg.norm(rat0 - 1) < 1e-10, rat0 - 1
+    assert np.linalg.norm(rat0 - 1) < 1e-9, rat0 - 1
     ratt = wft.testvalue(e, newcoords.electron(e))
     rattdiff = ratt - phase[:, e]
     print("phase", phase[:, e])
@@ -86,5 +83,5 @@ def runtest(mol, mf, kind=0):
                     print("ecp%s diff" % l, mad, np.linalg.norm(diff))
                     assert mad < 1e-3, diff
         else:
-            assert np.mean(np.abs(diff0)) < 1e-8, diff0
-            assert np.mean(np.abs(difft)) < 1e-8, difft
+            assert np.mean(np.abs(diff0)) < 1e-6, diff0
+            assert np.mean(np.abs(difft)) < 1e-6, difft

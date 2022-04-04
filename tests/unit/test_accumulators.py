@@ -3,7 +3,7 @@ from pyqmc.accumulators import EnergyAccumulator, LinearTransform, SqAccumulator
 from pyqmc.obdm import OBDMAccumulator
 from pyqmc.tbdm import TBDMAccumulator
 import pyqmc.api as pyq
-
+import copy
 
 def test_transform(LiH_sto3g_rhf):
     """Tests that the shapes are ok"""
@@ -18,6 +18,9 @@ def test_transform(LiH_sto3g_rhf):
     gradtrans = transform.serialize_gradients(pgrad)
     assert gradtrans.shape[1] == len(x)
     assert gradtrans.shape[0] == nconfig
+
+
+
 
 
 def test_info_functions_mol(LiH_sto3g_rhf):

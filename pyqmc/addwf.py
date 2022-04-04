@@ -33,12 +33,12 @@ class AddWF:
         wf_val = np.log(np.abs(wf_val)) + ref
         return wf_sign, wf_val
 
-    def updateinternals(self, e, epos, mask=None):
+    def updateinternals(self, e, epos, configs, mask=None):
         """
         Update the electron e position to epos, for each wf component in self.wf_components
         """
         for wf in self.wf_components:
-            wf.updateinternals(e, epos, mask=mask)
+            wf.updateinternals(e, epos, configs, mask=mask)
 
     def value(self):
         """
@@ -67,10 +67,13 @@ class AddWF:
           ratio c*psi_i(R)/psi(R)
         """
         wf_vals = np.array([wf.value() for wf in self.wf_components])
-        ref = np.amax(wf_vals[:, 1, :]).real
+        ref = np.amax(wf_vals[:, 1, :], axis=0).real
         wf_val = np.einsum(
             "i,ij,ij->j", self.coeffs, wf_vals[:, 0, :], np.exp(wf_vals[:, 1, :] - ref)
         )
+        if mask is None:
+            mask = np.ones(wf_val.shape[0], dtype=bool)
+
         wf_sign = wf_val / np.abs(wf_val)
         wf_val = np.log(np.abs(wf_val)) + ref
         ratio = np.einsum(
@@ -79,8 +82,6 @@ class AddWF:
             wf_vals[:, 0, mask] / wf_sign[mask],
             np.exp(wf_vals[:, 1, mask] - wf_val[mask]),
         )
-        if ratio.shape[1] == 1:
-            ratio = np.squeeze(ratio)
         return ratio
 
     def ratio(self, e, epos, mask=None):
@@ -139,6 +140,7 @@ class AddWF:
         testvalue_components = np.array(
             [wf.testvalue_many(e, epos, mask=mask) for wf in self.wf_components]
         )
+
         return np.einsum(
             "ijk,ij->jk", testvalue_components, self.ratio_current_config(mask)
         )

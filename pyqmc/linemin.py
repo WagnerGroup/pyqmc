@@ -120,7 +120,7 @@ def line_minimization(
     :parameter update_kws: Any keywords
     :parameter int npts: number of points to fit to in each line minimization
     :parameter boolean verbose: print output if True
-    :return: optimized wave function
+    :return: optimized wave function, optimization data
     """
 
     if vmcoptions is None:
@@ -131,7 +131,7 @@ def line_minimization(
     if update_kws is None:
         update_kws = {}
     if warmup_options is None:
-        warmup_options = dict(nblocks=1, nsteps_per_block=10, verbose=verbose)
+        warmup_options = dict(nblocks=3, nsteps_per_block=10, verbose=verbose)
     if "tstep" not in warmup_options and "tstep" in vmcoptions:
         warmup_options["tstep"] = vmcoptions["tstep"]
     assert npts >= 3, f"linemin npts={npts}; need npts >= 3 for correlated sampling"
@@ -151,7 +151,7 @@ def line_minimization(
     attr = dict(max_iterations=max_iterations, npts=npts, steprange=steprange)
 
     def gradient_energy_function(x, coords):
-        newparms = pgrad_acc.transform.deserialize(x)
+        newparms = pgrad_acc.transform.deserialize(wf, x)
         for k in newparms:
             wf.parameters[k] = newparms[k]
         df, coords = pyqmc.mc.vmc(
@@ -238,10 +238,10 @@ def line_minimization(
         step_data["yfit"] = yfit
         step_data["est_min"] = est_min
 
-        opt_hdf(hdf_file, step_data, attr, coords, pgrad_acc.transform.deserialize(x0))
+        opt_hdf(hdf_file, step_data, attr, coords, pgrad_acc.transform.deserialize(wf, x0))
         df.append(step_data)
 
-    newparms = pgrad_acc.transform.deserialize(x0)
+    newparms = pgrad_acc.transform.deserialize(wf, x0)
     for k in newparms:
         wf.parameters[k] = newparms[k]
 
@@ -265,7 +265,7 @@ def correlated_compute(wf, configs, params, pgrad_acc):
     psi0 = wf.recompute(configs)[1]  # recompute gives logdet
 
     for p in params:
-        newparms = pgrad_acc.transform.deserialize(p)
+        newparms = pgrad_acc.transform.deserialize(wf, p)
         for k in newparms:
             wf.parameters[k] = newparms[k]
         psi = wf.recompute(configs)[1]  # recompute gives logdet

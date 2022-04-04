@@ -40,13 +40,13 @@ def propose_drift_diffusion(wf, configs, tstep, e):
     newepos = configs.make_irreducible(e, eposnew)
 
     # Compute reverse move
-    new_grad = limdrift(np.real(wf.gradient(e, newepos).T), tstep)
+    g, wfratio = wf.gradient_value(e, newepos)
+    new_grad = limdrift(np.real(g.T), tstep)
     forward = np.sum(gauss ** 2, axis=1)
     backward = np.sum((gauss + grad + new_grad) ** 2, axis=1)
     t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
 
     # Acceptance -- fixed-node: reject if wf changes sign
-    wfratio = wf.testvalue(e, newepos)
     ratio = np.abs(wfratio) ** 2 * t_prob
     if not wf.iscomplex:
         ratio *= np.sign(wfratio)
@@ -149,13 +149,13 @@ def dmc_propagate(
                 )
                 accept = mask & (probability > np.random.rand(nconfig))
                 configs.move(e, newepos, accept)
-                wf.updateinternals(e, newepos, mask=accept)
+                wf.updateinternals(e, newepos, configs, mask=accept)
                 tmove_acceptance += accept / nelec
 
         for e in range(nelec):  # drift-diffusion
             newepos, accept, r2 = propose_drift_diffusion(wf, configs, tstep, e)
             configs.move(e, newepos, accept)
-            wf.updateinternals(e, newepos, mask=accept)
+            wf.updateinternals(e, newepos, configs, mask=accept)
             r2_proposed += r2
             r2_accepted[accept] += r2[accept]
             prob_acceptance += accept / nelec

@@ -9,13 +9,16 @@ import warnings
 
 
 class TBDMAccumulator:
-    """Returns one spin sector of the tbdm[s1,s2] as an array (norb_s1,norb_s1,norb_s2,norb_s2) with indices (using pySCF's
-    convention): tbdm[s1,s2][i,j,k,l] = < c^+_{s1,i} c^+_{s2,k} c_{s2,l} c_{s1,j} > = \phi*_{s1,j} \phi*_{s2,l} \phi_{s2,k} \phi_{s1,i}.
+    """Returns one spin sector of the tbdm[s1,s2] as an array (norb_s1,norb_s1,norb_s2,norb_s2)
 
+    We use PySCF's index convention (note that Eq. 10 in DOI:10.1063/1.4793531 uses QWalk's).
+    PySCF -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,k} c_{s2,l} c_{s1,j} > = \phi*_{s1,j} \phi*_{s2,l} \phi_{s2,k} \phi_{s1,i}
 
-    We use pySCF's index convention (while Eq. 10 in DOI:10.1063/1.4793531 uses QWalk's)
+    .. math:: \rho_{ijkl}^{\sigma_1\sigma_2} = \left\langle c^\dagger_{\sigma_1, i} c^\dagger_{\sigma_2, k} c_{\sigma_2, l} c_{\sigma_1, j} \right\rangle = \phi^*_{\sigma_1,j} \phi^*_{\sigma_2,l} \phi_{\sigma_2,k} \phi_{\sigma_1,i}.
+
     QWalk -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,j} c_{s2,l} c_{s1,k} > = \phi*_{s1,k} \phi*_{s2,l} \phi_{s2,j} \phi_{s1,i}
-    pySCF -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,k} c_{s2,l} c_{s1,j} > = \phi*_{s1,j} \phi*_{s2,l} \phi_{s2,k} \phi_{s1,i}
+
+    .. math:: \rho_{ijkl}^{\sigma_1\sigma_2} = \left\langle c^\dagger_{\sigma_1, i} c^\dagger_{\sigma_2, j} c_{\sigma_2, l} c_{\sigma_1, k} \right\rangle = \phi^*_{\sigma_1,k} \phi^*_{\sigma_2,l} \phi_{\sigma_2,j} \phi_{\sigma_1,i}.
 
     Args:
 
@@ -259,6 +262,6 @@ class TBDMAccumulator:
 
 def normalize_tbdm(tbdm, norm_a, norm_b):
     """Returns tbdm by taking the ratio of the averages in Eq. (10) of DOI:10.1063/1.4793531."""
-    # We are using pySCF's notation:
+    # We are using PySCF's notation:
     #  tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,k} c_{s2,l} c_{s1,j} > = \phi*_{s1,j} \phi*_{s2,l} \phi_{s2,k} \phi_{s1,i}
     return tbdm / np.einsum("i,j,k,l->ijkl", norm_a, norm_a, norm_b, norm_b) ** 0.5

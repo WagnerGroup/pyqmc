@@ -309,6 +309,27 @@ def dmc_file(hdf_file, data, attr, configs, weights):
             hdf["weights"][:] = weights
 
 
+
+def evaluate_energy_worker(configs, wf, en):
+    wf.recompute(configs)
+    return en(configs, wf)
+
+def evaluate_energies(wf, configs, en, client, npartitions): 
+    if client is None: 
+        return evaluate_energy_worker(configs, wf, en)
+
+    else: 
+        config = configs.split(npartitions)
+        runs = [
+            client.submit(evaluate_energy_worker, conf, wf, en)
+            for conf in config
+            ]
+        ret = {}
+        data = [r.result() for r in runs]
+        for k in data[0].keys():
+            ret[k] = np.concatenate([d[k] for d in data])
+        return ret
+
 def rundmc(
     wf,
     configs,
@@ -326,6 +347,7 @@ def rundmc(
     continue_from=None,
     client=None,
     npartitions=None,
+    vmc_warmup=10,
     **kwargs,
 ):
     """
@@ -341,6 +363,7 @@ def rundmc(
     :parameter ekey: tuple of strings; energy is needed for DMC weights. Access total energy by accumulators[ekey[0]](configs, wf)[ekey[1]
     :parameter verbose: Print out step information
     :parameter stepoffset: If continuing a run, what to start the step numbering at.
+    :parameter vmc_warmup: If starting a run, how many VMC warmup blocks to run
     :returns: (df,coords,weights)
       df: A list of dictionaries nstep long that contains all results from the accumulators.
 
@@ -376,20 +399,19 @@ def rundmc(
             if verbose:
                 print(f"Restarting calculation {continue_from} from step {stepoffset}")
     else:
-        warmup = 2
         df, configs = mc.vmc(
             wf,
             configs,
-            accumulators={ekey[0]: accumulators[ekey[0]]},
             client=client,
             npartitions=npartitions,
             verbose=verbose,
+            nblocks=vmc_warmup
         )
-        en = df[ekey[0] + ekey[1]][warmup:]
+        en = evaluate_energies(wf, configs, accumulators[ekey[0]], client, npartitions)[ekey[1]]
         eref = np.mean(en).real
         e_trial = eref
         e_est = eref
-        esigma = np.sqrt(np.var(en) * np.mean(df["nconfig"]))
+        esigma = np.std(en) 
         if verbose:
             print("eref start", eref, "esigma", esigma)
 

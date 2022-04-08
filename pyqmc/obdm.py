@@ -14,15 +14,15 @@ class OBDMAccumulator:
 
     We are measuring the amplitude of moving one electron (e.g. the first one) from orbital :math:`\phi_i` to orbital :math:`\phi_j` (Eq (7) of DOI:10.1063/1.4793531)
 
-    .. math:: \rho_{i,k} = \int dR dr' \Psi^*(R') \phi_k(r') \phi_i^*(r) \Psi(R)
+    .. math:: \rho_{i,k} = \int dR dr' \Psi^*(R') \phi_i(r') \phi_k^*(r) \Psi(R)
 
     (The complex conjugate is on the wrong orbital in Eq (7) in the paper.) Sampling :math:`R` from :math:`|\Psi(R)^2|` and :math:`r'` from :math:`f(r) = \sum_i |\phi(r)|^2`
 
-    .. math:: \rho_{i,k} = \int dR dr' \frac{\Psi^*(R')}{\Psi^*(R)} \left[\Psi^*(R) \Psi(R)\right] \frac{\phi_k(r') \phi_i^*(r)}{f(r)} \left[f(r)\right]
+    .. math:: \rho_{i,k} = \int dR dr' \frac{\Psi^*(R')}{\Psi^*(R)} \left[\Psi^*(R) \Psi(R)\right] \frac{\phi_i(r') \phi_k^*(r)}{f(r)} \left[f(r)\right]
 
     The distributions (in square brackets) are accounted for by the Monte Carlo integration
 
-    .. math:: \rho_{i,k} = \left\langle \frac{\Psi^*(R')}{\Psi^*(R)} \frac{\phi_k(r') \phi_i^*(r)}{f(r)} \right\rangle
+    .. math:: \rho_{i,k} = \left\langle \frac{\Psi^*(R')}{\Psi^*(R)} \frac{\phi_i(r') \phi_k^*(r)}{f(r)} \right\rangle
 
     Eq (9) in the paper is the complex conjugate of this
 

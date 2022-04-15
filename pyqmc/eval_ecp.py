@@ -3,7 +3,7 @@ import copy
 import scipy.spatial.transform
 
 
-def ecp(mol, configs, wf, threshold):
+def ecp(mol, configs, wf, threshold, naip=None):
     """
     :returns: ECP value, summed over all the electrons and atoms.
     """
@@ -13,16 +13,16 @@ def ecp(mol, configs, wf, threshold):
         for atom in mol._atom:
             if atom[0] in mol._ecp.keys():
                 for e in range(nelec):
-                    ecp_tot += ecp_ea(mol, configs, wf, e, atom, threshold)["total"]
+                    ecp_tot += ecp_ea(mol, configs, wf, e, atom, threshold, naip)["total"]
     return ecp_tot
 
 
-def compute_tmoves(mol, configs, wf, e, threshold, tau):
+def compute_tmoves(mol, configs, wf, e, threshold, tau, naip=None):
     """"""
     nconfig = configs.configs.shape[0]
     if mol._ecp != {}:
         data = [
-            ecp_ea(mol, configs, wf, e, atom, threshold)
+            ecp_ea(mol, configs, wf, e, atom, threshold, naip)
             for atom in mol._atom
             if atom[0] in mol._ecp.keys()
         ]
@@ -50,7 +50,7 @@ def compute_tmoves(mol, configs, wf, e, threshold, tau):
     return {"ratio": ratio, "weight": weight, "configs": configs}
 
 
-def ecp_ea(mol, configs, wf, e, atom, threshold):
+def ecp_ea(mol, configs, wf, e, atom, threshold, naip=None):
     """
     :returns: the ECP value between electron e and atom at, local+nonlocal.
     TODO: update documentation
@@ -72,7 +72,7 @@ def ecp_ea(mol, configs, wf, e, atom, threshold):
     # Use masked objects internally
     r_ea = r_ea[mask]
     r_ea_vec = r_ea_vec[mask]
-    P_l, r_ea_i = get_P_l(r_ea, r_ea_vec, l_list)
+    P_l, r_ea_i = get_P_l(r_ea, r_ea_vec, l_list, naip)
 
     # Note: epos_rot is not just apos+r_ea_i because of the boundary;
     # positions of the samples are relative to the electron, not atom.
@@ -143,7 +143,7 @@ def generate_ecp_functors(coeffs):
 
 
 class rnExp:
-    """
+    r"""
     v_l object.
 
     :math:`cr^{n-2}\cdot\exp(-er^2)`
@@ -188,7 +188,7 @@ def P_l(x, l):
         raise NotImplementedError(f"Legendre functions for l>4 not implemented {l}")
 
 
-def get_P_l(r_ea, r_ea_vec, l_list):
+def get_P_l(r_ea, r_ea_vec, l_list, naip=None):
     r"""The factor :math:`(2l+1)` and the quadrature weights are included.
 
     :parameter r_ea: distances of electron e and atom a
@@ -199,7 +199,8 @@ def get_P_l(r_ea, r_ea_vec, l_list):
     :returns: legendre function P_l values for each :math:`l` channel.
     :rtype: (nconf, naip, nl) array
     """
-    naip = 6 if len(l_list) <= 2 else 12
+    if naip is None:
+        naip = 6 if len(l_list) <= 2 else 12
     nconf = r_ea.shape[0]
     weights, rot_vec = get_rot(nconf, naip)
 

@@ -224,8 +224,8 @@ class TBDMAccumulator:
                 "nio,nio,no,no,n ->nio",
                 orb_configs[0][:, electrons_a_ind, :],  # phi_i(r1)
                 orb_configs[1][:, electrons_b_ind, :],  # phi_k(r2)
-                phi_j_r1p,  # phi_j
-                phi_l_r2p,  # phi_l
+                phi_j_r1p.conj(),  # phi_j^*(r1)
+                phi_l_r2p.conj(),  # phi_l^*(r2)
                 rho1rho2,
             )
 

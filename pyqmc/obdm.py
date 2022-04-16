@@ -8,9 +8,9 @@ import pyqmc.supercell as supercell
 
 
 class OBDMAccumulator:
-    r"""Return the obdm as an array with indices rho[spin][i][j] = <c_{spin,i}c^+_{spin,j}>
+    r"""Return the obdm as an array with indices rho[spin][i][j] = <c^+_{spin,i}c_{spin,j}>
 
-    .. math:: \rho^\sigma_{ij} = \langle c_{\sigma, i} c^\dagger_{\sigma, j} \rangle
+    .. math:: \rho^\sigma_{ij} = \langle c^\dagger_{\sigma, i} c_{\sigma, j} \rangle
 
     We are measuring the amplitude of moving one electron (e.g. the first one) from orbital :math:`\phi_i` to orbital :math:`\phi_j` (Eq (7) of DOI:10.1063/1.4793531)
 

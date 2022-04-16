@@ -9,12 +9,14 @@ import warnings
 
 
 class TBDMAccumulator:
-    """Returns one spin sector of the tbdm[s1,s2] as an array (norb_s1,norb_s1,norb_s2,norb_s2)
+    r"""Returns one spin sector of the tbdm[s1,s2] as an array (norb_s1,norb_s1,norb_s2,norb_s2)
 
     We use PySCF's index convention (note that Eq. 10 in DOI:10.1063/1.4793531 uses QWalk's).
     PySCF -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,k} c_{s2,l} c_{s1,j} > = \phi*_{s1,j} \phi*_{s2,l} \phi_{s2,k} \phi_{s1,i}
 
     .. math:: \rho_{ijkl}^{\sigma_1\sigma_2} = \left\langle c^\dagger_{\sigma_1, i} c^\dagger_{\sigma_2, k} c_{\sigma_2, l} c_{\sigma_1, j} \right\rangle = \phi^*_{\sigma_1,j} \phi^*_{\sigma_2,l} \phi_{\sigma_2,k} \phi_{\sigma_1,i}.
+
+    .. math:: \rho_{ijkl} = \left\langle \sum_{a<b} \frac{\Psi(\mathbf{R}'_{ab})}{\Psi(\mathbf{R})} \frac{\phi^*_{j}(\mathbf{r}_a') \phi^*_{l}(\mathbf{r}_b') \phi_{i}(\mathbf{r}_a) \phi_{k}(\mathbf{r}_b) }{\rho_{\rm aux}(\mathbf{r}_a')\rho_{\rm aux}(\mathbf{r}_b')} \right\rangle_{\begin{subarray}{l}\mathbf{R}\sim|\Psi|^2;\\ \mathbf{r}_a'\sim\rho_{\rm aux}\end{subarray}},
 
     QWalk -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,j} c_{s2,l} c_{s1,k} > = \phi*_{s1,k} \phi*_{s2,l} \phi_{s2,j} \phi_{s1,i}
 

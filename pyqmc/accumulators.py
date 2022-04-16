@@ -16,9 +16,10 @@ def gradient_generator(mol, wf, to_opt=None, nodal_cutoff=1e-3, **ewald_kwargs):
 class EnergyAccumulator:
     """Returns local energy of each configuration in a dictionary."""
 
-    def __init__(self, mol, threshold=10, **kwargs):
+    def __init__(self, mol, threshold=10,naip=None, **kwargs):
         self.mol = mol
         self.threshold = threshold
+        self.naip = naip
         if hasattr(mol, "a"):
             self.coulomb = ewald.Ewald(mol, **kwargs)
         else:
@@ -26,7 +27,7 @@ class EnergyAccumulator:
 
     def __call__(self, configs, wf):
         ee, ei, ii = self.coulomb.energy(configs)
-        ecp_val = eval_ecp.ecp(self.mol, configs, wf, self.threshold)
+        ecp_val = eval_ecp.ecp(self.mol, configs, wf, self.threshold, self.naip)
         ke, grad2 = energy.kinetic(configs, wf)
         return {
             "ke": ke,

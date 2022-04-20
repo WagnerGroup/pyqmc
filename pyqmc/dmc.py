@@ -199,6 +199,11 @@ def dmc_propagate(
 
 
 def compute_S(e_trial, e_est, branchcut, v2, tau, eloc, nelec):
+    r"""
+    .. math:: S = E_T - E_{\rm est} + \frac{f_{\rm sat}(E_{\rm est} - E_L; c_{\rm branch})}{1 + \frac{v^2\tau}{n_{\rm elec}}}
+
+    :math:`f_{\rm sat}(x; c)` is the saturation function: :math:`x` if :math:`|x| < c` and :math:`c{\rm sign}(x)` otherwise.
+    """
     e_cut = e_est - eloc
     mask = np.abs(e_cut) > branchcut
     e_cut[mask] = branchcut * np.sign(e_cut[mask])

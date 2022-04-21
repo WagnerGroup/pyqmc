@@ -33,12 +33,14 @@ class AddWF:
         wf_val = np.log(np.abs(wf_val)) + ref
         return wf_sign, wf_val
 
-    def updateinternals(self, e, epos, configs, mask=None):
+    def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
         """
         Update the electron e position to epos, for each wf component in self.wf_components
         """
-        for wf in self.wf_components:
-            wf.updateinternals(e, epos, configs, mask=mask)
+        if saved_values is None:
+            saved_values = [None] * len(self.wf_factors)
+        for wf, saved in zip(self.wf_components, saved_values):
+            wf.updateinternals(e, epos, configs, mask=mask, saved_values=saved)
 
     def value(self):
         """
@@ -126,12 +128,10 @@ class AddWF:
         """
         Compute the ratio :math:`\psi(R')/\psi(R)`, where R' is the configuration when electron e's position is replaced by epos.
         """
-        testvalue_components = np.array(
-            [wf.testvalue(e, epos, mask=mask) for wf in self.wf_components]
-        )
+        testvalue_components, saved_values = list(zip(*[wf.testvalue(e, epos, mask=mask) for wf in self.wf_components]))
         return np.einsum(
-            "ij...,ij->j...", testvalue_components, self.ratio_current_config(mask)
-        )
+            "ij...,ij->j...", np.array(testvalue_components), self.ratio_current_config(mask)
+        ), saved_values
 
     def testvalue_many(self, e, epos, mask=None):
         """
@@ -150,11 +150,11 @@ class AddWF:
         Compute the gradient of the log wave function, and the ratio psi(R')/psi(R).
         """
         grad_vals = [wf.gradient_value(e, epos) for wf in self.wf_components]
-        grads, vals = list(zip(*grad_vals))
+        grads, vals, saved_values = list(zip(*grad_vals))
         ratio = self.ratio(e, epos)
         grad = np.einsum("ijk,ik->jk", grads, ratio)
         val = np.einsum("ij,ij->j", vals, self.ratio_current_config())
-        return grad, val
+        return grad, val, saved_values
 
     def gradient_laplacian(self, e, epos):
         """

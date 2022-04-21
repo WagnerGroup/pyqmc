@@ -18,17 +18,21 @@ class J3:
         # ao_val: (nconf, nelec, nbasis)
         # ao_grad: (3, nconf, nelec, nbasis)
         # ao_lap: (3, nconf, nelec, nbasis)
-        self.ao_val, self.ao_grad, self.ao_lap = self._get_val_grad_lap(configs)
+        # not used #self.ao_val, self.ao_grad, self.ao_lap = self._get_val_grad_lap(configs)
+        self.ao_val = self._get_val_grad_lap(configs, mode="val")
         return self.value()
 
-    def updateinternals(self, e, epos, configs, mask=None):
+    def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
         nconfig = epos.configs.shape[0]
         if mask is None:
             mask = [True] * nconfig
-        e_val, e_grad, e_lap = self._get_val_grad_lap(epos)
+        if saved_values is None:
+            e_val = self._get_val_grad_lap(epos, mode="val")
+        else:
+            e_val = saved_values
         self.ao_val[mask, e, :] = e_val[mask, 0, :]
-        self.ao_grad[:, mask, e, :] = e_grad[:, mask, 0, :]
-        self.ao_lap[:, mask, e, :] = e_lap[:, mask, 0, :]
+        # not used #self.ao_grad[:, mask, e, :] = e_grad[:, mask, 0, :]
+        # not used #self.ao_lap[:, mask, e, :] = e_lap[:, mask, 0, :]
         self._configscurrent.configs[:, e, :] = epos.configs
 
     def value(self):
@@ -45,7 +49,7 @@ class J3:
         return (signs, gpu.asnumpy(vals))
 
     def gradient_value(self, e, epos):
-        return self.gradient(e, epos), self.testvalue(e, epos)
+        return self.gradient(e, epos), *self.testvalue(e, epos)
 
     def gradient(self, e, epos):
         _, e_grad = self._get_val_grad_lap(epos, mode="grad")
@@ -178,4 +182,4 @@ class J3:
             optimize=self.optimize,
         )
 
-        return gpu.asnumpy(np.exp((new_val.T - curr_val).T))
+        return gpu.asnumpy(np.exp((new_val.T - curr_val).T)), new_ao_val

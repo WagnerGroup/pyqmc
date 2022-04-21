@@ -90,7 +90,7 @@ class JastrowSpin:
         u += gpu.cp.einsum("ijkl,jkl->i", self._avalues, self.parameters["acoeff"])
         return (np.ones(len(u)), gpu.asnumpy(u))
 
-    def updateinternals(self, e, epos, configs, mask=None):
+    def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
         r"""Update a and b sums.
         _avalues is the array for current configurations :math:`A_{Iks} = \sum_s a_{k}(r_{Is})` where :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums.
         _bvalues is the array for current configurations :math:`B_{ls} = \sum_s b_{l}(r_{s})` where :math:`s` indexes over :math:`\uparrow\uparrow` (:math:`\alpha_1 < \alpha_2`), :math:`\uparrow\downarrow` (:math:`\alpha, \beta`), and :math:`\downarrow\downarrow` (:math:`\beta_1 < \beta_2`)  sums.
@@ -98,8 +98,11 @@ class JastrowSpin:
         if mask is None:
             mask = [True] * self._configscurrent.configs.shape[0]
         edown = int(e >= self._mol.nelec[0])
-        aupdate = self._a_update(e, epos, mask)
-        bupdate = self._b_update(e, epos, mask)
+        if saved_values is None:
+            aupdate = self._a_update(e, epos, mask)
+            bupdate = self._b_update(e, epos, mask)
+        else:
+            aupdate, bupdate = [s[mask] for s in saved_values]
         self._avalues[:, :, :, edown][mask] += aupdate - self._a_partial[e][mask]
         self._bvalues[:, :, edown : edown + 2][mask] += (
             bupdate - self._b_partial[e][mask]
@@ -307,7 +310,7 @@ class JastrowSpin:
             "...jk,jk->...", deltab, self.parameters["bcoeff"][:, edown : edown + 2]
         )
         val = gpu.cp.exp(b_val + a_val)
-        return gpu.asnumpy(grad), gpu.asnumpy(val)
+        return gpu.asnumpy(grad), gpu.asnumpy(val), (a_partial_e, b_partial_e)
 
     def gradient_laplacian(self, e, epos):
         """ """
@@ -359,18 +362,20 @@ class JastrowSpin:
         if mask is None:
             mask = [True] * epos.configs.shape[0]
         edown = int(e >= self._mol.nelec[0])
-        deltaa = self._a_update(e, epos, mask) - self._a_partial[e][mask]
+        aupdate = self._a_update(e, epos, mask)
+        deltaa = aupdate - self._a_partial[e][mask]
         a_val = gpu.cp.einsum(
             "...jk,jk->...", deltaa, self.parameters["acoeff"][..., edown]
         )
-        deltab = self._b_update(e, epos, mask) - self._b_partial[e][mask]
+        bupdate = self._b_update(e, epos, mask)
+        deltab = bupdate - self._b_partial[e][mask]
         b_val = gpu.cp.einsum(
             "...jk,jk->...", deltab, self.parameters["bcoeff"][:, edown : edown + 2]
         )
         val = gpu.cp.exp(b_val + a_val)
         if len(val.shape) == 2:
             val = val.T
-        return gpu.asnumpy(val)
+        return gpu.asnumpy(val), (aupdate, bupdate)
 
     def testvalue_many(self, e, epos, mask=None):
         r"""

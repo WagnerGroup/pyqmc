@@ -165,7 +165,7 @@ class TBDMAccumulator:
         It should be of length [nsweeps,nconf], and contain integers between 0 and naux.
         """
 
-        nconf = configs.configs.shape[0]
+        nconf, nelec = configs.configs.shape[:2]
         if not self._warmed_up:
             naux = nconf if self._naux is None else self._naux
             self.warm_up(naux)

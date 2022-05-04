@@ -49,7 +49,7 @@ class J3:
         return (signs, gpu.asnumpy(vals))
 
     def gradient_value(self, e, epos):
-        val, savedvals = self.testvalue(e, epos))
+        val, savedvals = self.testvalue(e, epos)
         return self.gradient(e, epos), val, savedvals
 
     def gradient(self, e, epos):

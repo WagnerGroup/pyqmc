@@ -30,7 +30,7 @@ class J3:
             e_val = self._get_val_grad_lap(epos, mode="val")
         else:
             e_val = saved_values
-        self.ao_val[mask, e, :] = e_val[mask, 0, :]
+        self.ao_val[mask, e, :] = e_val[mask, :]
         # not used #self.ao_grad[:, mask, e, :] = e_grad[:, mask, 0, :]
         # not used #self.ao_lap[:, mask, e, :] = e_lap[:, mask, 0, :]
         self._configscurrent.configs[:, e, :] = epos.configs

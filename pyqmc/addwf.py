@@ -105,13 +105,13 @@ class AddWF:
         )
         wf_sign = wf_val / np.abs(wf_val)
         wf_val = np.log(np.abs(wf_val)) + ref
-        testvals = [wf.testvalue(e, epos, mask) for wf in self.wf_components]
+        testvals = [wf.testvalue(e, epos, mask)[0] for wf in self.wf_components]
         ratio = np.einsum(
             "i,i...j,i...j,ij->i...j",
             self.coeffs,
             wf_vals[:, 0, mask] / wf_sign,
             np.exp(wf_vals[:, 1, mask] - wf_val),
-            testvals / self.testvalue(e, epos, mask),
+            testvals / self.testvalue(e, epos, mask)[0],
         )
         if ratio.shape[1] == 1:
             ratio = np.squeeze(ratio)

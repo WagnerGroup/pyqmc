@@ -1,39 +1,39 @@
 import numpy as np
 import pyqmc.gpu as gpu
+import pyqmc.orbitals
 
 
 class J3:
-    def __init__(self, mol):
+    def __init__(self, mol, orbitals=None):
+        if hasattr(mol, "lattice_vectors"):
+            raise NotImplementedError("J3 is not implemented for periodic systems")
         self.mol = mol
+        if orbitals is None:
+            self.orbitals = pyqmc.orbitals.MoleculeOrbitalEvaluator(mol, [0, 0])
+        else:
+            self.orbitals = orbitals
         randpos = np.random.random((1, 3))
         dim = mol.eval_gto("GTOval_cart", randpos).shape[-1]
-        self.parameters = {"gcoeff": np.zeros((dim, dim))}
+        self.parameters = {"gcoeff": gpu.cp.zeros((dim, dim))}
         self.iscomplex = False
         self.optimize = "greedy"
 
     def recompute(self, configs):
-        self._configscurrent = configs.copy()
-        self.nelec = configs.configs.shape[1]
+        nconf, self.nelec = configs.configs.shape[:2]
         # shape of arrays:
         # ao_val: (nconf, nelec, nbasis)
-        # ao_grad: (3, nconf, nelec, nbasis)
-        # ao_lap: (3, nconf, nelec, nbasis)
-        self.ao_val, self.ao_grad, self.ao_lap = self._get_val_grad_lap(configs)
+        aos = self.orbitals.aos("GTOval_cart", configs)
+        self.ao_val = aos.reshape(nconf, self.nelec, aos.shape[-1])
         return self.value()
 
     def updateinternals(self, e, epos, configs, mask=None):
-        nconfig = epos.configs.shape[0]
         if mask is None:
-            mask = [True] * nconfig
-        e_val, e_grad, e_lap = self._get_val_grad_lap(epos)
-        self.ao_val[mask, e, :] = e_val[mask, 0, :]
-        self.ao_grad[:, mask, e, :] = e_grad[:, mask, 0, :]
-        self.ao_lap[:, mask, e, :] = e_lap[:, mask, 0, :]
-        self._configscurrent.configs[:, e, :] = epos.configs
+            mask = [True] * epos.configs.shape[0]
+        self.ao_val[mask, e, :] = self.orbitals.aos("GTOval_cart", epos, mask=mask)[0]
 
     def value(self):
-        mask = np.tril(np.ones((self.nelec, self.nelec)), -1)
-        vals = np.einsum(
+        mask = gpu.cp.tril(gpu.cp.ones((self.nelec, self.nelec)), -1)
+        vals = gpu.cp.einsum(
             "mn,cim, cjn, ij-> c",
             self.parameters["gcoeff"],
             self.ao_val,
@@ -44,138 +44,80 @@ class J3:
         signs = np.ones(len(vals))
         return (signs, gpu.asnumpy(vals))
 
+    def compute_value(self, ao_e, ao, e):
+        # `...` is for derivatives
+        curr_val = gpu.cp.einsum(
+            "mn, ...cm, cjn -> ...c",
+            self.parameters["gcoeff"],
+            ao_e,
+            ao[:, :e, :],
+            optimize=self.optimize,
+        )
+        curr_val += gpu.cp.einsum(
+            "mn, ...cn, cim -> ...c",
+            self.parameters["gcoeff"],
+            ao_e,
+            ao[:, e + 1 :, :],
+            optimize=self.optimize,
+        )
+        return curr_val
+
     def gradient_value(self, e, epos):
-        return self.gradient(e, epos), self.testvalue(e, epos)
+        ao = self.orbitals.aos("GTOval_cart_deriv1", epos)[0]
+        deriv = self.compute_value(ao, self.ao_val, e)
+        curr_val = self.compute_value(ao[0], self.ao_val, e)
+        val_ratio = gpu.cp.exp(deriv[0] - curr_val)
+        return gpu.asnumpy(deriv[1:]), gpu.asnumpy(val_ratio)
 
     def gradient(self, e, epos):
-        _, e_grad = self._get_val_grad_lap(epos, mode="grad")
-        grad1 = np.einsum(
-            "mn, dcm, cjn -> dc",
-            self.parameters["gcoeff"],
-            e_grad[:, :, 0, :],
-            self.ao_val[:, :e, :],
-            optimize=self.optimize,
-        )
-        grad2 = np.einsum(
-            "mn, cim, dcn -> dc",
-            self.parameters["gcoeff"],
-            self.ao_val[:, e + 1 :, :],
-            e_grad[:, :, 0, :],
-            optimize=self.optimize,
-        )
-        return gpu.asnumpy(grad1 + grad2)
+        ao = self.orbitals.aos("GTOval_cart_deriv1", epos)[0]
+        grad = self.compute_value(ao[1:], self.ao_val, e)
+        return gpu.asnumpy(grad)
 
     def laplacian(self, e, epos):
         return self.gradient_laplacian(e, epos)[1]
 
     def gradient_laplacian(self, e, epos):
-        _, e_grad, e_lap = self._get_val_grad_lap(epos)
-        lap1 = np.einsum(
-            "mn, dcm, cjn-> c",
-            self.parameters["gcoeff"],
-            e_lap[:, :, 0, :],
-            self.ao_val[:, :e, :],
-            optimize=self.optimize,
+        ao = self.orbitals.aos("GTOval_cart_deriv2", epos)[0]
+        ao = gpu.cp.concatenate(
+            [ao[1:4, ...], ao[[4, 7, 9], ...].sum(axis=0, keepdims=True)], axis=0
         )
-        lap2 = np.einsum(
-            "mn, cim, dcn -> c",
-            self.parameters["gcoeff"],
-            self.ao_val[:, e + 1 :, :],
-            e_lap[:, :, 0, :],
-            optimize=self.optimize,
-        )
-
-        grad1 = np.einsum(
-            "mn, dcm, cjn -> dc",
-            self.parameters["gcoeff"],
-            e_grad[:, :, 0, :],
-            self.ao_val[:, :e, :],
-            optimize=self.optimize,
-        )
-        grad2 = np.einsum(
-            "mn, cim, dcn -> dc",
-            self.parameters["gcoeff"],
-            self.ao_val[:, e + 1 :, :],
-            e_grad[:, :, 0, :],
-            optimize=self.optimize,
-        )
-        grad = grad1 + grad2
-
-        lap3 = np.einsum("dc,dc->c", grad, grad)
-        return gpu.asnumpy(grad), gpu.asnumpy(lap1 + lap2 + lap3)
+        deriv = self.compute_value(ao, self.ao_val, e)
+        grad = deriv[:3]
+        lap3 = gpu.cp.einsum("dc,dc->c", grad, grad)
+        return gpu.asnumpy(grad), gpu.asnumpy(deriv[3] + lap3)
 
     def pgradient(self):
-        mask = np.tril(
-            np.ones((self.nelec, self.nelec)), -1
+        mask = gpu.cp.tril(
+            gpu.cp.ones((self.nelec, self.nelec)), -1
         )  # to prevent double counting of electron pairs
-        coeff_grad = np.einsum(
+        coeff_grad = gpu.cp.einsum(
             "cim, cjn, ij-> cmn", self.ao_val, self.ao_val, mask, optimize=self.optimize
         )
         return {"gcoeff": coeff_grad}
 
-    def _get_val_grad_lap(self, configs, mode="lap", mask=None):
-        if mask is None:
-            mask = [True] * configs.configs.shape[0]
-
-        coords = configs.configs[mask].reshape((-1, 3))
-        nconf = np.sum(mask)
-        nelec = configs.configs.shape[1] if len(configs.configs.shape) > 2 else 1
-
-        if mode == "val":
-            ao = np.real_if_close(self.mol.eval_gto("GTOval_cart", coords), tol=1e4)
-            if nelec == 1:
-                return ao.reshape((nconf, ao.shape[-1]))
-            return ao.reshape((nconf, nelec, ao.shape[-1]))
-        elif mode == "grad":
-            ao = np.real_if_close(
-                self.mol.eval_gto("GTOval_cart_deriv1", coords), tol=1e4
-            )
-            val = ao[0].reshape((nconf, nelec, ao.shape[-1]))
-            grad = ao[1:4].reshape((3, nconf, nelec, ao.shape[-1]))
-            return (val, grad)
-        elif mode == "lap":
-            ao = np.real_if_close(
-                self.mol.eval_gto("GTOval_cart_deriv2", coords), tol=1e4
-            )
-            val = ao[0].reshape((nconf, nelec, ao.shape[-1]))
-            grad = ao[1:4].reshape((3, nconf, nelec, ao.shape[-1]))
-            lap = ao[[4, 7, 9]].reshape((3, nconf, nelec, ao.shape[-1]))
-            return (val, grad, lap)
-
     def testvalue(self, e, epos, mask=None):
         if mask is None:
-            mask = [True] * epos.configs.shape[0]
-
+            mask = [True] * self.ao_val.shape[0]
         masked_ao_val = self.ao_val[mask]
-        curr_val = np.einsum(
-            "mn, cm, cjn -> c",
-            self.parameters["gcoeff"],
-            masked_ao_val[:, e, :],
-            masked_ao_val[:, :e, :],
-            optimize=self.optimize,
+        curr_val = self.compute_value(masked_ao_val[:, e], masked_ao_val, e)
+        aos = self.orbitals.aos("GTOval_cart", epos, mask=mask)[0]
+        new_ao_val = aos.reshape(
+            len(curr_val), *epos.configs.shape[1:-1], aos.shape[-1]
         )
-        curr_val += np.einsum(
-            "mn, cim, cn -> c",
-            self.parameters["gcoeff"],
-            masked_ao_val[:, e + 1 :, :],
-            masked_ao_val[:, e, :],
-            optimize=self.optimize,
-        )
-
-        new_ao_val = self._get_val_grad_lap(epos, mode="val", mask=mask)
-        new_val = np.einsum(
+        # `...` is for extra dimension for ECP aux coordinates
+        new_val = gpu.cp.einsum(
             "mn, c...m, cjn -> c...",
             self.parameters["gcoeff"],
             new_ao_val,
             masked_ao_val[:, :e, :],
             optimize=self.optimize,
         )
-        new_val += np.einsum(
-            "mn, cim, c...n -> c...",
+        new_val += gpu.cp.einsum(
+            "mn, c...n, cim -> c...",
             self.parameters["gcoeff"],
-            masked_ao_val[:, e + 1 :, :],
             new_ao_val,
+            masked_ao_val[:, e + 1 :, :],
             optimize=self.optimize,
         )
-
-        return gpu.asnumpy(np.exp((new_val.T - curr_val).T))
+        return gpu.asnumpy(gpu.cp.exp((new_val.T - curr_val).T))

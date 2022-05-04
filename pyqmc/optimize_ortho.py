@@ -102,7 +102,7 @@ def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
             newcoorde = configs.make_irreducible(e, newcoorde)
 
             # Compute reverse move
-            grads, vals, saved = list(zip(*[wf.gradient_value(e, newcoorde) for wf in wfs]))
+            grads, vals, savedvals = list(zip(*[wf.gradient_value(e, newcoorde) for wf in wfs]))
             grads = [np.real(g.T) for g in grads]
             new_grad = mc.limdrift(np.mean(grads, axis=0))
             forward = np.sum(gauss ** 2, axis=1)
@@ -120,7 +120,7 @@ def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
 
             # Update wave function
             configs.move(e, newcoorde, accept)
-            for wf in wfs:
+            for wf, saved in zip(wfs, savedvals):
                 wf.updateinternals(e, newcoorde, configs, mask=accept, saved_values=saved)
 
         # Collect rolling average

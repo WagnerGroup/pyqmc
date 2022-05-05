@@ -165,7 +165,7 @@ class TBDMAccumulator:
         It should be of length [nsweeps,nconf], and contain integers between 0 and naux.
         """
 
-        nconf = configs.configs.shape[0]
+        nconf, nelec = configs.configs.shape[:2]
         if not self._warmed_up:
             naux = nconf if self._naux is None else self._naux
             self.warm_up(naux)
@@ -190,6 +190,8 @@ class TBDMAccumulator:
         orb_configs = [orb_configs[s][:, :, self._ijkl[2 * s]] for s in [0, 1]]
 
         down_start = [np.min(self._electrons[s]) for s in [0, 1]]
+
+        _, saved0 = list(zip(*[wf.testvalue(e, configs.electron(e)) for e in range(nelec)]))
         for sweep in range(self._nsweeps):
             fsum = [
                 gpu.cp.sum(gpu.cp.abs(aux["orbs"][spin][sweep]) ** 2, axis=1)
@@ -208,10 +210,10 @@ class TBDMAccumulator:
                 electrons_b = self._electrons[1][self._electrons[1] != ea]
                 epos_a = aux["configs"][0][sweep].electron(0)
                 epos_b = aux["configs"][1][sweep].electron(0)
-                wfratio_a = wf.testvalue(ea, epos_a)
-                wf.updateinternals(ea, epos_a, configs)
+                wfratio_a, saved_a = wf.testvalue(ea, epos_a)
+                wf.updateinternals(ea, epos_a, configs, saved_values=saved_a)
                 wfratio_b = wf.testvalue_many(electrons_b, epos_b)
-                wf.updateinternals(ea, configs.electron(ea), configs)
+                wf.updateinternals(ea, configs.electron(ea), configs, saved_values=saved0[ea])
                 wfratio.append(wfratio_a[:, np.newaxis] * wfratio_b)
                 electrons_a_ind.extend([ea - down_start[0]] * len(electrons_b))
                 electrons_b_ind.extend(electrons_b - down_start[1])

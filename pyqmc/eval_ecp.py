@@ -82,7 +82,7 @@ def ecp_ea(mol, configs, wf, e, atom, threshold, naip=None):
     epos_rot[mask] = (configs.configs[mask, e, :] - r_ea_vec)[:, np.newaxis] + r_ea_i
 
     epos = configs.make_irreducible(e, epos_rot, mask)
-    ratio = wf.testvalue(e, epos, mask)
+    ratio, _ = wf.testvalue(e, epos, mask)
 
     # Compute local and non-local parts
     ecp_val[mask] = np.einsum("ij,ik,ijk->i", ratio, masked_v_l, P_l)

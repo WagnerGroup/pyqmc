@@ -26,10 +26,14 @@ class J3:
         self.ao_val = aos.reshape(nconf, self.nelec, aos.shape[-1])
         return self.value()
 
-    def updateinternals(self, e, epos, configs, mask=None):
+    def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
         if mask is None:
             mask = [True] * epos.configs.shape[0]
-        self.ao_val[mask, e, :] = self.orbitals.aos("GTOval_cart", epos, mask=mask)[0]
+        if saved_values is None:
+            aoval = self.orbitals.aos("GTOval_cart", epos, mask=mask)[0]
+        else:
+            aoval = saved_values[mask]
+        self.ao_val[mask, e, :] = aoval
 
     def value(self):
         mask = gpu.cp.tril(gpu.cp.ones((self.nelec, self.nelec)), -1)
@@ -65,9 +69,9 @@ class J3:
     def gradient_value(self, e, epos):
         ao = self.orbitals.aos("GTOval_cart_deriv1", epos)[0]
         deriv = self.compute_value(ao, self.ao_val, e)
-        curr_val = self.compute_value(ao[0], self.ao_val, e)
+        curr_val = self.compute_value(self.ao_val[:, e], self.ao_val, e)
         val_ratio = gpu.cp.exp(deriv[0] - curr_val)
-        return gpu.asnumpy(deriv[1:]), gpu.asnumpy(val_ratio)
+        return gpu.asnumpy(deriv[1:]), gpu.asnumpy(val_ratio), ao[0]
 
     def gradient(self, e, epos):
         ao = self.orbitals.aos("GTOval_cart_deriv1", epos)[0]
@@ -120,4 +124,4 @@ class J3:
             masked_ao_val[:, e + 1 :, :],
             optimize=self.optimize,
         )
-        return gpu.asnumpy(gpu.cp.exp((new_val.T - curr_val).T))
+        return gpu.asnumpy(gpu.cp.exp((new_val.T - curr_val).T)), new_ao_val

@@ -165,7 +165,7 @@ class Slater:
               # spin, Nconf, [ndet_up, ndet_dn], nelec, nelec
         return self.value()
 
-    def updateinternals(self, e, epos, configs, mask=None):
+    def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
         """Update any internals given that electron e moved to epos. mask is a Boolean array
         which allows us to update only certain walkers"""
 
@@ -179,10 +179,14 @@ class Slater:
             return 
 
         eeff = e - s * self._nelec[0]
-        ao = self.orbitals.aos("GTOval_sph", epos, mask)
-        self._aovals[:, mask, e, :] = ao
-        mo = self.orbitals.mos(ao, s)
-
+        if saved_values is None:
+            ao = self.orbitals.aos("GTOval_sph", epos, mask)
+            self._aovals[:, mask, e, :] = ao
+            mo = self.orbitals.mos(ao, s)
+        else:
+            ao, mo = saved_values
+            self._aovals[:, mask, e, :] = ao[:, mask]
+            mo = mo[mask]
         mo_vals = mo[:, self._det_occup[s]]
         det_ratio, self._inverse[s][mask, :, :, :] = sherman_morrison_ms(
             eeff, self._inverse[s][mask, :, :, :], mo_vals
@@ -317,7 +321,7 @@ class Slater:
         derivatives[~np.isfinite(derivatives)]=0.0
         values = ratios[0]
         values[~np.isfinite(values)]=1.0
-        return derivatives, values
+        return derivatives, values, (aograd[:, 0], mograd[0])
 
     def laplacian(self, e, epos):
         """ Compute the laplacian Psi/ Psi. """
@@ -354,7 +358,7 @@ class Slater:
             mo_vals = mo_vals.reshape(
                 -1, epos.configs.shape[1], mo_vals.shape[1], mo_vals.shape[2]
             )
-        return gpu.asnumpy(self._testrow(e, mo_vals, mask))
+        return gpu.asnumpy(self._testrow(e, mo_vals, mask)), (ao, mo)
 
     def testvalue_many(self, e, epos, mask=None):
         """return the ratio between the current wave function and the wave function if

@@ -49,9 +49,9 @@ def runtest(mol, mf, kind=0):
     ent = enacc(coords, wft)
 
     e = 0
-    rat0 = wf0.testvalue(e, newcoords.electron(e))
+    rat0 = wf0.testvalue(e, newcoords.electron(e))[0]
     assert np.linalg.norm(rat0 - 1) < 1e-9, rat0 - 1
-    ratt = wft.testvalue(e, newcoords.electron(e))
+    ratt = wft.testvalue(e, newcoords.electron(e))[0]
     rattdiff = ratt - phase[:, e]
     print("phase", phase[:, e])
     assert np.linalg.norm(rattdiff) < 1e-9, [

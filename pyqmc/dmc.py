@@ -40,7 +40,7 @@ def propose_drift_diffusion(wf, configs, tstep, e):
     newepos = configs.make_irreducible(e, eposnew)
 
     # Compute reverse move
-    g, wfratio = wf.gradient_value(e, newepos)
+    g, wfratio, saved = wf.gradient_value(e, newepos)
     new_grad = limdrift(np.real(g.T), tstep)
     forward = np.sum(gauss ** 2, axis=1)
     backward = np.sum((gauss + grad + new_grad) ** 2, axis=1)
@@ -53,7 +53,7 @@ def propose_drift_diffusion(wf, configs, tstep, e):
     accept = ratio > np.random.rand(nconfig)
     r2 = np.sum((gauss + grad) ** 2, axis=1)
 
-    return newepos, accept, r2
+    return newepos, accept, r2, saved
 
 
 def propose_tmoves(wf, configs, energy_accumulator, tstep, e):
@@ -153,9 +153,9 @@ def dmc_propagate(
                 tmove_acceptance += accept / nelec
 
         for e in range(nelec):  # drift-diffusion
-            newepos, accept, r2 = propose_drift_diffusion(wf, configs, tstep, e)
+            newepos, accept, r2, saved = propose_drift_diffusion(wf, configs, tstep, e)
             configs.move(e, newepos, accept)
-            wf.updateinternals(e, newepos, configs, mask=accept)
+            wf.updateinternals(e, newepos, configs, mask=accept, saved_values=saved)
             r2_proposed += r2
             r2_accepted[accept] += r2[accept]
             prob_acceptance += accept / nelec

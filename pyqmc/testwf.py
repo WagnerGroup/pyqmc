@@ -8,8 +8,8 @@ def test_mask(wf, e, epos, mask=None, tolerance=1e-6):
     if mask is None:
         num_e = len(wf.value()[1])
         mask = np.random.randint(0, 2, num_e).astype(bool)
-    ratio = wf.testvalue(e, epos, mask)
-    ratio_ref = wf.testvalue(e, epos)[mask]
+    ratio, _ = wf.testvalue(e, epos, mask)
+    ratio_ref = wf.testvalue(e, epos)[0][mask]
     error = np.abs((ratio - ratio_ref) / np.abs(np.max(ratio)))
     assert np.all(error < tolerance)
     print("testcase for test_value() with mask passed")
@@ -39,9 +39,9 @@ def test_updateinternals(wf, configs):
         print("#### Electron", e)
         # val1 = wf.recompute(configs)
         epos = configs.make_irreducible(e, configs.configs[:, e, :] + delta)
-        ratio = wf.testvalue(e, epos)
+        ratio, savedvals = wf.testvalue(e, epos)
         print("*****updateinternals")
-        wf.updateinternals(e, epos, configs)
+        wf.updateinternals(e, epos, configs, saved_values=savedvals)
         print("*****value")
         update = wf.value()
         configs.move(e, epos, [True] * nconf)
@@ -104,11 +104,11 @@ def test_wf_gradient(wf, configs, delta=1e-5):
             epos = configs.make_irreducible(
                 e, configs.configs[:, e, :] + delta * np.eye(3)[d]
             )
-            plusval = wf.testvalue(e, epos)
+            plusval, _ = wf.testvalue(e, epos)
             epos = configs.make_irreducible(
                 e, configs.configs[:, e, :] - delta * np.eye(3)[d]
             )
-            minuval = wf.testvalue(e, epos)
+            minuval, _ = wf.testvalue(e, epos)
             numeric[:, e, d] = (plusval - minuval) / (2 * delta)
     maxerror = np.amax(np.abs(grad - numeric))
     return maxerror
@@ -179,12 +179,12 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
             epos = configs.make_irreducible(
                 e, configs.configs[:, e, :] + delta * np.eye(3)[d]
             )
-            plusval = wf.testvalue(e, epos)
+            plusval, _ = wf.testvalue(e, epos)
             plusgrad = wf.gradient(e, epos)[d] * plusval
             epos = configs.make_irreducible(
                 e, configs.configs[:, e, :] - delta * np.eye(3)[d]
             )
-            minuval = wf.testvalue(e, epos)
+            minuval, _ = wf.testvalue(e, epos)
             minugrad = wf.gradient(e, epos)[d] * minuval
             numeric[:, e] += (plusgrad - minugrad) / (2 * delta)
 
@@ -239,11 +239,11 @@ def test_wf_gradient_value(wf, configs):
     ttog = 0
     for e in range(nelec):
         ts0 = time.perf_counter()
-        val[:, e] = wf.testvalue(e, configs.electron(e))
+        val[:, e], _ = wf.testvalue(e, configs.electron(e))
         grad[e] = wf.gradient(e, configs.electron(e))
         ts1 = time.perf_counter()
         tt0 = time.perf_counter()
-        andgrad[e], andval[:, e] = wf.gradient_value(e, configs.electron(e))
+        andgrad[e], andval[:, e], _ = wf.gradient_value(e, configs.electron(e))
         tt1 = time.perf_counter()
         tsep += ts1 - ts0
         ttog += tt1 - tt0

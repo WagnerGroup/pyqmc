@@ -225,6 +225,13 @@ def test_wf_gradient_laplacian(wf, configs):
     return {"grad": rmax_grad, "lap": rmax_lap}
 
 
+def compare_nested_saved_vals(saved1, saved2):
+    if hasattr(saved1, "shape"):
+        return np.amax(np.abs(saved1 - saved2))
+    else:
+        a = [compare_nested_saved_vals(s1, s2) for s1, s2 in zip(saved1, saved2)]
+        return np.amax(np.abs(a))
+
 def test_wf_gradient_value(wf, configs):
     nconf, nelec = configs.configs.shape[0:2]
     iscomplex = 1j if wf.iscomplex else 1
@@ -234,16 +241,18 @@ def test_wf_gradient_value(wf, configs):
     grad = np.zeros(configs.configs.shape).transpose((1, 2, 0)) * iscomplex
     andval = np.zeros(configs.configs.shape[:2]) * iscomplex
     andgrad = np.zeros(configs.configs.shape).transpose((1, 2, 0)) * iscomplex
+    saved_diff = np.zeros(configs.configs.shape[0])
 
     tsep = 0
     ttog = 0
     for e in range(nelec):
         ts0 = time.perf_counter()
-        val[:, e], _ = wf.testvalue(e, configs.electron(e))
+        val[:, e], savedv = wf.testvalue(e, configs.electron(e))
         grad[e] = wf.gradient(e, configs.electron(e))
         ts1 = time.perf_counter()
         tt0 = time.perf_counter()
-        andgrad[e], andval[:, e], _ = wf.gradient_value(e, configs.electron(e))
+        andgrad[e], andval[:, e], savedg = wf.gradient_value(e, configs.electron(e))
+        saved_diff[e] = compare_nested_saved_vals(savedv, savedg)
         tt1 = time.perf_counter()
         tsep += ts1 - ts0
         ttog += tt1 - tt0
@@ -251,8 +260,9 @@ def test_wf_gradient_value(wf, configs):
     rel_val = np.abs((andval - val) / val)
     rmax_grad = np.max(rel_grad)
     rmax_val = np.max(rel_val)
+    max_saved = np.max(saved_diff)
 
     print("separate", tsep)
     print("together", ttog)
 
-    return {"grad": rmax_grad, "val": rmax_val}
+    return {"grad": rmax_grad, "val": rmax_val, "saved": max_saved}

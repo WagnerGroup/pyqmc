@@ -435,9 +435,9 @@ class CutoffCuspFunction:
         c = 1 / (1 + gamma * b) ** 2 / (rcut * r)
 
         temp = 2 * (y - 1) / (rcut * r)
-        temp -= a / r ** 2
+        temp -= a / r**2
         temp -= 2 * a * a * c * gamma * (1 + gamma * b)
-        lap[mask] = -rcut * c * (a + rvec ** 2 * temp)
+        lap[mask] = -rcut * c * (a + rvec**2 * temp)
         return lap
 
     def gradient_laplacian(self, rvec, r):
@@ -463,9 +463,9 @@ class CutoffCuspFunction:
 
         grad[mask] = -rcut * a * c * rvec
         temp = 2 * (y - 1) / (rcut * r)
-        temp -= a / r ** 2
+        temp -= a / r**2
         temp -= 2 * a * a * c * gamma * (1 + gamma * b)
-        lap[mask] = -rcut * c * (a + rvec ** 2 * temp)
+        lap[mask] = -rcut * c * (a + rvec**2 * temp)
         return grad, lap
 
     def pgradient(self, rvec, r):

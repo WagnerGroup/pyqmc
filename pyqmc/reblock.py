@@ -190,7 +190,7 @@ def test_reblocking():
         Creates correlated data. Taken from
         https://pyblock.readthedocs.io/en/latest/tutorial.html.
         """
-        return np.convolve(np.random.randn(2 ** N), np.ones(2 ** L) / 10, "same")
+        return np.convolve(np.random.randn(2**N), np.ones(2**L) / 10, "same")
 
     n = 11
     cols = ["test_data1", "test_data2"]

@@ -90,7 +90,9 @@ class MultiplyWF:
         return np.sum(grads, axis=0)
 
     def testvalue(self, e, epos, mask=None):
-        testvalues, saved_values = list(zip(*[wf.testvalue(e, epos, mask=mask) for wf in self.wf_factors]))
+        testvalues, saved_values = list(
+            zip(*[wf.testvalue(e, epos, mask=mask) for wf in self.wf_factors])
+        )
         return np.prod(testvalues, axis=0), saved_values
 
     def testvalue_many(self, e, epos, mask=None):

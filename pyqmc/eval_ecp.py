@@ -217,9 +217,6 @@ def get_P_l(r_ea, r_ea_vec, l_list, naip=None):
     return P_l_val, r_ea_i
 
 
-quadrature_grid = generate_quadrature_grids()
-
-
 def get_rot(nconf, naip):
     """
     :parameter int nconf: number of configurations
@@ -297,3 +294,6 @@ def generate_quadrature_grids():
     qgrid[32] = (IABC, repeat("I", 5/168, 5/168, 27/840))
     
     return qgrid
+
+
+quadrature_grid = generate_quadrature_grids()

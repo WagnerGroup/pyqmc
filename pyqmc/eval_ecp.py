@@ -217,6 +217,29 @@ def get_P_l(r_ea, r_ea_vec, l_list, naip=None):
     return P_l_val, r_ea_i
 
 
+quadrature_grid = generate_quadrature_grids()
+
+
+def get_rot(nconf, naip):
+    """
+    :parameter int nconf: number of configurations
+    :parameter int naip: number of auxiliary integration points
+    :returns: the integration weights, and the positions of the rotated electron e
+    :rtype:  ((naip,) array, (nconf, naip, 3) array)
+    """
+
+    if nconf > 0:  # get around a bug(?) when there are zero configurations.
+        rot = scipy.spatial.transform.Rotation.random(nconf).as_matrix()
+    else:
+        rot = np.zeros((0, 3, 3))
+
+    if naip not in quadrature_grid.keys():
+        raise ValueError("Do not support naip!= 6 or 12")
+    points, weights = quadrature_grid[naip]
+    rot_vec = np.einsum("jkl,ik->jil", rot, points)
+    return weights, rot_vec
+
+
 def generate_quadrature_grids():
     """
     Generate quadrature grids from Mitas, Shirley, and Ceperley J. Chem. Phys. 95, 3467 (1991)
@@ -274,25 +297,3 @@ def generate_quadrature_grids():
     qgrid[32] = (IABC, repeat("I", 5/168, 5/168, 27/840))
     
     return qgrid
-
-quadrature_grid = generate_quadrature_grids()
-
-
-def get_rot(nconf, naip):
-    """
-    :parameter int nconf: number of configurations
-    :parameter int naip: number of auxiliary integration points
-    :returns: the integration weights, and the positions of the rotated electron e
-    :rtype:  ((naip,) array, (nconf, naip, 3) array)
-    """
-
-    if nconf > 0:  # get around a bug(?) when there are zero configurations.
-        rot = scipy.spatial.transform.Rotation.random(nconf).as_matrix()
-    else:
-        rot = np.zeros((0, 3, 3))
-
-    if naip not in quadrature_grid.keys():
-        raise ValueError("Do not support naip!= 6 or 12")
-    points, weights = quadrature_grid[naip]
-    rot_vec = np.einsum("jkl,ik->jil", rot, points)
-    return weights, rot_vec

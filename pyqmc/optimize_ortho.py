@@ -39,11 +39,13 @@ def collect_overlap_data(wfs, configs, pgrad):
     .. math:: \partial_m \langle \Psi_f | \Psi_i \rangle = \left\langle \frac{\partial_{fm} \Psi_i^* \Psi_j}{\rho} \right\rangle_{\rho}
 
     """
-    phase, log_vals = [np.nan_to_num(np.array(x)) for x in zip(*[wf.value() for wf in wfs])]
+    phase, log_vals = [
+        np.nan_to_num(np.array(x)) for x in zip(*[wf.value() for wf in wfs])
+    ]
     log_vals = np.real(log_vals)  # should already be real
     ref = np.max(log_vals, axis=0)
     save_dat = {}
-    #print('log_vals', log_vals)
+    # print('log_vals', log_vals)
     denominator = np.sum(np.exp(2 * (log_vals - ref)), axis=0)
     normalized_values = phase * np.exp(log_vals - ref)
     save_dat["overlap"] = np.einsum(  # shape (wf, wf)
@@ -51,16 +53,13 @@ def collect_overlap_data(wfs, configs, pgrad):
     ) / len(ref)
 
     dppsi = pgrad.transform.serialize_gradients(wfs[-1].pgradient())
-    save_dat["overlap_gradient"] = (
-        np.einsum(
-            "km,k,jk->jm",  # shape (wf, param)
-            dppsi,
-            normalized_values[-1].conj(),
-            normalized_values / denominator,
-        )
-        / len(ref)
-    )
-    #print("ratio", save_dat["overlap"].diagonal())
+    save_dat["overlap_gradient"] = np.einsum(
+        "km,k,jk->jm",  # shape (wf, param)
+        dppsi,
+        normalized_values[-1].conj(),
+        normalized_values / denominator,
+    ) / len(ref)
+    # print("ratio", save_dat["overlap"].diagonal())
 
     # Weight for quantities that are evaluated as
     # int( f(X) psi_f^2 dX )
@@ -102,10 +101,12 @@ def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
             newcoorde = configs.make_irreducible(e, newcoorde)
 
             # Compute reverse move
-            grads, vals, savedvals = list(zip(*[wf.gradient_value(e, newcoorde) for wf in wfs]))
+            grads, vals, savedvals = list(
+                zip(*[wf.gradient_value(e, newcoorde) for wf in wfs])
+            )
             grads = [np.real(g.T) for g in grads]
             new_grad = mc.limdrift(np.mean(grads, axis=0))
-            forward = np.sum(gauss ** 2, axis=1)
+            forward = np.sum(gauss**2, axis=1)
             backward = np.sum((gauss + tstep * (grad + new_grad)) ** 2, axis=1)
 
             # Acceptance
@@ -121,7 +122,9 @@ def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
             # Update wave function
             configs.move(e, newcoorde, accept)
             for wf, saved in zip(wfs, savedvals):
-                wf.updateinternals(e, newcoorde, configs, mask=accept, saved_values=saved)
+                wf.updateinternals(
+                    e, newcoorde, configs, mask=accept, saved_values=saved
+                )
 
         # Collect rolling average
         save_dat = collect_overlap_data(wfs, configs, pgrad)

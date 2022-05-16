@@ -57,20 +57,20 @@ def test_updateinternals(wf, configs):
         val1 = recompute
 
     # Test mask and pgrad
-    #_, configs = mc.vmc(wf, configs, nblocks=1, nsteps_per_block=1, tstep=2)
-    #pgradupdate = wf.pgradient()
-    #wf.recompute(configs)
-    #pgrad = wf.pgradient()
-    #pgdict = {
+    # _, configs = mc.vmc(wf, configs, nblocks=1, nsteps_per_block=1, tstep=2)
+    # pgradupdate = wf.pgradient()
+    # wf.recompute(configs)
+    # pgrad = wf.pgradient()
+    # pgdict = {
     #    k: np.max(np.abs(pgu - pgrad[k]))
     #    for k, pgu in pgradupdate.items()
     #    if np.prod(pgu.shape) > 0
-    #}
+    # }
     return {
         "updatevstest": np.max(np.abs(updatevstest)),
         "recomputevstest": np.max(np.abs(recomputevstest)),
         "recomputevsupdate": np.max(np.abs(recomputevsupdate)),
-    #    **pgdict,
+        #    **pgdict,
     }
 
 

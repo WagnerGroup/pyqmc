@@ -189,7 +189,7 @@ class OBDMAccumulator:
 
 
 def sample_onebody(configs, orbitals, spin, nsamples=1, tstep=0.5):
-    r""" For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i \phi_i(r)^2`. """
+    r"""For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i \phi_i(r)^2`."""
     n = configs.configs.shape[0]
     ao = orbitals.aos("GTOval_sph", configs)
     borb = orbitals.mos(ao, spin=spin)

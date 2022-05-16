@@ -4,7 +4,7 @@ import pyqmc.api
 
 
 def get_twist(cell, S, frac_twist):
-    """ Given the twist in unit of supercell reciprocal primitive lattice vectors and the supercell, return the twist in Bohr^-1 """
+    """Given the twist in unit of supercell reciprocal primitive lattice vectors and the supercell, return the twist in Bohr^-1"""
     supercell = pyqmc.supercell.get_supercell(cell, S)
     frac_twist = np.mod(frac_twist + 0.5, 1.0) - 0.5
     twist = np.dot(np.linalg.inv(supercell.a), frac_twist) * 2 * np.pi
@@ -12,7 +12,7 @@ def get_twist(cell, S, frac_twist):
 
 
 def get_frac_twist(cell, S, twist):
-    """ Given the twist in Bohr^-1 and the supercell, return the twist in supercell reciprocal primitive lattice vectors """
+    """Given the twist in Bohr^-1 and the supercell, return the twist in supercell reciprocal primitive lattice vectors"""
     supercell = pyqmc.supercell.get_supercell(cell, S)
     frac_twist = np.dot(supercell.a, twist) / (2 * np.pi)
     frac_twist = np.mod(frac_twist + 0.5, 1.0) - 0.5
@@ -20,7 +20,7 @@ def get_frac_twist(cell, S, twist):
 
 
 def check_equivalent(kpts, ind, tol=1e-6):
-    """ Given the index of a kpt in kpts, return the indices of its equivalent k-points in kpts """
+    """Given the index of a kpt in kpts, return the indices of its equivalent k-points in kpts"""
     equiv_ind = []
     for i in range(len(kpts)):
         kdiffs = np.mod(kpts[i] - kpts[ind] + 0.5, 1.0) - 0.5
@@ -30,7 +30,7 @@ def check_equivalent(kpts, ind, tol=1e-6):
 
 
 def get_qmc_kpts(cell, S, frac_twist):
-    """ Given the cell, supercell transformation matrix and fractional twist, return the required k-points by a QMC calculation on that supercell """
+    """Given the cell, supercell transformation matrix and fractional twist, return the required k-points by a QMC calculation on that supercell"""
     twist = get_twist(cell, S, frac_twist)
     supercell = pyqmc.supercell.get_supercell(cell, S)
     qmc_kpts = pyqmc.supercell.get_supercell_kpts(supercell) + twist
@@ -38,7 +38,7 @@ def get_qmc_kpts(cell, S, frac_twist):
 
 
 def get_k_indices(cell, mf_kpts, kpts, tol=1e-6):
-    """ Given a list of kpts, return inds such that mf_kpts[inds] is a list of kpts equivalent to the input list """
+    """Given a list of kpts, return inds such that mf_kpts[inds] is a list of kpts equivalent to the input list"""
     kdiffs = mf_kpts[np.newaxis] - kpts[:, np.newaxis]
     frac_kdiffs = np.dot(kdiffs, cell.lattice_vectors().T) / (2 * np.pi)
     kdiffs = np.mod(frac_kdiffs + 0.5, 1.0) - 0.5
@@ -46,7 +46,7 @@ def get_k_indices(cell, mf_kpts, kpts, tol=1e-6):
 
 
 def available_twists(cell, mf, S):
-    """ Given the primitive cell and mf object from a DFT calculation and a supercell transformation matrix, return all valid twists (fractional) for a QMC calculation """
+    """Given the primitive cell and mf object from a DFT calculation and a supercell transformation matrix, return all valid twists (fractional) for a QMC calculation"""
     ind = 0
     unique_frac_kpts = np.array([get_frac_twist(cell, S, kpt) for kpt in mf.kpts])
     while ind < len(unique_frac_kpts):

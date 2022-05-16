@@ -154,8 +154,8 @@ class JastrowSpin:
         bvals = gpu.cp.stack([b.value(d, r) for b in self.b_basis], axis=-2)
         b_partial_e[..., 0] = bvals[..., :sep].sum(axis=-1)
         b_partial_e[..., 1] = bvals[..., sep:].sum(axis=-1)
-        
-        #for l, b in enumerate(self.b_basis):
+
+        # for l, b in enumerate(self.b_basis):
         #    bval = b.value(d, r)
         #    b_partial_e[..., l, 0] = bval[..., :sep].sum(axis=-1)
         #    b_partial_e[..., l, 1] = bval[..., sep:].sum(axis=-1)
@@ -207,12 +207,12 @@ class JastrowSpin:
         sep = nup - int(e < nup)
         not_e = np.arange(self._nelec) != e
         edown = int(e >= nup)
-        #d = gpu.cp.asarray(
+        # d = gpu.cp.asarray(
         #    epos.dist.dist_i(
         #        self._configscurrent.configs[mask][:, not_e], epos.configs[mask]
         #    )
-        #)
-        #r = gpu.cp.linalg.norm(d, axis=-1)
+        # )
+        # r = gpu.cp.linalg.norm(d, axis=-1)
         dold = gpu.cp.asarray(
             epos.dist.dist_i(
                 self._configscurrent.configs[mask][:, not_e],
@@ -225,10 +225,10 @@ class JastrowSpin:
         oldbvals = gpu.cp.stack([b.value(dold, rold) for b in self.b_basis], axis=-2)
         bdiff = savedbvals - oldbvals
         self._b_partial[eind, mind, :, edown] += bdiff.transpose((2, 0, 1))
-        self._b_partial[e,..., 0][mask] = savedbvals[..., :sep].sum(axis=-1)
-        self._b_partial[e,..., 1][mask] = savedbvals[..., sep:].sum(axis=-1)
-        
-        #for l, b in enumerate(self.b_basis):
+        self._b_partial[e, ..., 0][mask] = savedbvals[..., :sep].sum(axis=-1)
+        self._b_partial[e, ..., 1][mask] = savedbvals[..., sep:].sum(axis=-1)
+
+        # for l, b in enumerate(self.b_basis):
         #    bval = b.value(d, r)
         #    bdiff = bval - b.value(dold, rold)
         #    self._b_partial[eind, mind, l, edown] += bdiff.transpose((1, 0))
@@ -358,7 +358,7 @@ class JastrowSpin:
             grad += c[1 + edown] * gpu.cp.sum(bgrad[:, nup - eup :], axis=1).T
             lap += c[edown] * gpu.cp.sum(blap[:, : nup - eup], axis=(1, 2))
             lap += c[1 + edown] * gpu.cp.sum(blap[:, nup - eup :], axis=(1, 2))
-        return gpu.asnumpy(grad), gpu.asnumpy(lap + gpu.cp.sum(grad ** 2, axis=0))
+        return gpu.asnumpy(grad), gpu.asnumpy(lap + gpu.cp.sum(grad**2, axis=0))
 
     def laplacian(self, e, epos):
         return self.gradient_laplacian(e, epos)[1]

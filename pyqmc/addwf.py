@@ -128,10 +128,17 @@ class AddWF:
         """
         Compute the ratio :math:`\psi(R')/\psi(R)`, where R' is the configuration when electron e's position is replaced by epos.
         """
-        testvalue_components, saved_values = list(zip(*[wf.testvalue(e, epos, mask=mask) for wf in self.wf_components]))
-        return np.einsum(
-            "ij...,ij->j...", np.array(testvalue_components), self.ratio_current_config(mask)
-        ), saved_values
+        testvalue_components, saved_values = list(
+            zip(*[wf.testvalue(e, epos, mask=mask) for wf in self.wf_components])
+        )
+        return (
+            np.einsum(
+                "ij...,ij->j...",
+                np.array(testvalue_components),
+                self.ratio_current_config(mask),
+            ),
+            saved_values,
+        )
 
     def testvalue_many(self, e, epos, mask=None):
         """

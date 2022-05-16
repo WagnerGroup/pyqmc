@@ -13,7 +13,9 @@ def ecp(mol, configs, wf, threshold, naip=None):
         for atom in mol._atom:
             if atom[0] in mol._ecp.keys():
                 for e in range(nelec):
-                    ecp_tot += ecp_ea(mol, configs, wf, e, atom, threshold, naip)["total"]
+                    ecp_tot += ecp_ea(mol, configs, wf, e, atom, threshold, naip)[
+                        "total"
+                    ]
     return ecp_tot
 
 

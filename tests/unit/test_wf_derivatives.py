@@ -4,7 +4,7 @@ from pyqmc.gpu import cp, asnumpy
 from pyqmc.slater import Slater
 from pyqmc.multiplywf import MultiplyWF
 from pyqmc.addwf import AddWF
-from pyqmc.manybody_jastrow import J3
+from pyqmc.j3 import J3
 from pyqmc.wftools import generate_jastrow
 import pyqmc.api as pyq
 

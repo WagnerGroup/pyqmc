@@ -58,7 +58,7 @@ def OPTIMIZE(
         linemin.line_minimization(wf, configs, acc, **linemin_kws)
     else:
         wfs = []
-        for i,a in enumerate(anchors):
+        for i, a in enumerate(anchors):
             wfs.append(
                 initialize_qmc_objects(
                     dft_checkfile,
@@ -70,7 +70,7 @@ def OPTIMIZE(
                     target_root=i,
                 )[0]
             )
-        #wfs = [wftools.read_wf(copy.deepcopy(wf), a) for a in anchors]
+        # wfs = [wftools.read_wf(copy.deepcopy(wf), a) for a in anchors]
         wfs.append(wf)
         optimize_ortho.optimize_orthogonal(wfs, configs, acc, **linemin_kws)
 

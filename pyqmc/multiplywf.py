@@ -74,9 +74,11 @@ class MultiplyWF:
             vals += results[1]
         return signs, vals
 
-    def updateinternals(self, e, epos, configs, mask=None):
-        for wf in self.wf_factors:
-            wf.updateinternals(e, epos, configs, mask=mask)
+    def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
+        if saved_values is None:
+            saved_values = [None] * len(self.wf_factors)
+        for wf, saved_val in zip(self.wf_factors, saved_values):
+            wf.updateinternals(e, epos, configs, mask=mask, saved_values=saved_val)
 
     def value(self):
         results = [wf.value() for wf in self.wf_factors]
@@ -88,8 +90,10 @@ class MultiplyWF:
         return np.sum(grads, axis=0)
 
     def testvalue(self, e, epos, mask=None):
-        testvalues = [wf.testvalue(e, epos, mask=mask) for wf in self.wf_factors]
-        return np.prod(testvalues, axis=0)
+        testvalues, saved_values = list(
+            zip(*[wf.testvalue(e, epos, mask=mask) for wf in self.wf_factors])
+        )
+        return np.prod(testvalues, axis=0), saved_values
 
     def testvalue_many(self, e, epos, mask=None):
         testvalues = [wf.testvalue_many(e, epos, mask=mask) for wf in self.wf_factors]
@@ -97,8 +101,8 @@ class MultiplyWF:
 
     def gradient_value(self, e, epos):
         grad_vals = [wf.gradient_value(e, epos) for wf in self.wf_factors]
-        grads, vals = list(zip(*grad_vals))
-        return np.sum(grads, axis=0), np.prod(vals, axis=0)
+        grads, vals, saved_values = list(zip(*grad_vals))
+        return np.sum(grads, axis=0), np.prod(vals, axis=0), saved_values
 
     def gradient_laplacian(self, e, epos):
         grad_laps = [wf.gradient_laplacian(e, epos) for wf in self.wf_factors]

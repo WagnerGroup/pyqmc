@@ -40,9 +40,9 @@ def propose_drift_diffusion(wf, configs, tstep, e):
     newepos = configs.make_irreducible(e, eposnew)
 
     # Compute reverse move
-    g, wfratio = wf.gradient_value(e, newepos)
+    g, wfratio, saved = wf.gradient_value(e, newepos)
     new_grad = limdrift(np.real(g.T), tstep)
-    forward = np.sum(gauss ** 2, axis=1)
+    forward = np.sum(gauss**2, axis=1)
     backward = np.sum((gauss + grad + new_grad) ** 2, axis=1)
     t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
 
@@ -53,7 +53,7 @@ def propose_drift_diffusion(wf, configs, tstep, e):
     accept = ratio > np.random.rand(nconfig)
     r2 = np.sum((gauss + grad) ** 2, axis=1)
 
-    return newepos, accept, r2
+    return newepos, accept, r2, saved
 
 
 def propose_tmoves(wf, configs, energy_accumulator, tstep, e):
@@ -153,9 +153,9 @@ def dmc_propagate(
                 tmove_acceptance += accept / nelec
 
         for e in range(nelec):  # drift-diffusion
-            newepos, accept, r2 = propose_drift_diffusion(wf, configs, tstep, e)
+            newepos, accept, r2, saved = propose_drift_diffusion(wf, configs, tstep, e)
             configs.move(e, newepos, accept)
-            wf.updateinternals(e, newepos, configs, mask=accept)
+            wf.updateinternals(e, newepos, configs, mask=accept, saved_values=saved)
             r2_proposed += r2
             r2_accepted[accept] += r2[accept]
             prob_acceptance += accept / nelec
@@ -310,26 +310,24 @@ def dmc_file(hdf_file, data, attr, configs, weights):
             hdf["weights"][:] = weights
 
 
-
 def evaluate_energy_worker(configs, wf, en):
     wf.recompute(configs)
     return en(configs, wf)
 
-def evaluate_energies(wf, configs, en, client, npartitions): 
-    if client is None: 
+
+def evaluate_energies(wf, configs, en, client, npartitions):
+    if client is None:
         return evaluate_energy_worker(configs, wf, en)
 
-    else: 
+    else:
         config = configs.split(npartitions)
-        runs = [
-            client.submit(evaluate_energy_worker, conf, wf, en)
-            for conf in config
-            ]
+        runs = [client.submit(evaluate_energy_worker, conf, wf, en) for conf in config]
         ret = {}
         data = [r.result() for r in runs]
         for k in data[0].keys():
             ret[k] = np.concatenate([d[k] for d in data])
         return ret
+
 
 def rundmc(
     wf,
@@ -406,13 +404,15 @@ def rundmc(
             client=client,
             npartitions=npartitions,
             verbose=verbose,
-            nblocks=vmc_warmup
+            nblocks=vmc_warmup,
         )
-        en = evaluate_energies(wf, configs, accumulators[ekey[0]], client, npartitions)[ekey[1]]
+        en = evaluate_energies(wf, configs, accumulators[ekey[0]], client, npartitions)[
+            ekey[1]
+        ]
         eref = np.mean(en).real
         e_trial = eref
         e_est = eref
-        esigma = np.std(en) 
+        esigma = np.std(en)
         if verbose:
             print("eref start", eref, "esigma", esigma)
 

@@ -4,6 +4,7 @@ import pyqmc.determinant_tools as determinant_tools
 import pyqmc.orbitals
 import warnings
 
+
 def sherman_morrison_row(e, inv, vec):
     tmp = np.einsum("ek,ekj->ej", vec, inv)
     ratio = tmp[:, e]
@@ -152,20 +153,24 @@ class Slater:
             self._dets.append(
                 gpu.cp.asarray(np.linalg.slogdet(mo_vals))
             )  # Spin, (sign, val), nconf, [ndet_up, ndet_dn]
-            
-            is_zero = np.sum(np.abs(self._dets[s][0])< 1e-16)
+
+            is_zero = np.sum(np.abs(self._dets[s][0]) < 1e-16)
             compute = np.isfinite(self._dets[s][1])
             if is_zero > 0:
-                warnings.warn(f"A wave function is zero. Found this proportion: {is_zero/nconf}")
-                #print(configs.configs[])
+                warnings.warn(
+                    f"A wave function is zero. Found this proportion: {is_zero/nconf}"
+                )
+                # print(configs.configs[])
                 print(f"zero {is_zero/np.prod(compute.shape)}")
             self._inverse.append(np.zeros(mo_vals.shape, dtype=mo_vals.dtype))
             for d in range(compute.shape[1]):
-                self._inverse[s][compute[:,d],d,:,:]=gpu.cp.linalg.inv(mo_vals[compute[:,d],d,:,:])
-              # spin, Nconf, [ndet_up, ndet_dn], nelec, nelec
+                self._inverse[s][compute[:, d], d, :, :] = gpu.cp.linalg.inv(
+                    mo_vals[compute[:, d], d, :, :]
+                )
+            # spin, Nconf, [ndet_up, ndet_dn], nelec, nelec
         return self.value()
 
-    def updateinternals(self, e, epos, configs, mask=None):
+    def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
         """Update any internals given that electron e moved to epos. mask is a Boolean array
         which allows us to update only certain walkers"""
 
@@ -174,22 +179,27 @@ class Slater:
             mask = np.ones(epos.configs.shape[0], dtype=bool)
         is_zero = np.sum(np.isinf(self._dets[s][1]))
         if is_zero:
-            warnings.warn("Found a zero in the wave function. Recomputing everything. This should not happen often.")
+            warnings.warn(
+                "Found a zero in the wave function. Recomputing everything. This should not happen often."
+            )
             self.recompute(configs)
-            return 
+            return
 
         eeff = e - s * self._nelec[0]
-        ao = self.orbitals.aos("GTOval_sph", epos, mask)
-        self._aovals[:, mask, e, :] = ao
-        mo = self.orbitals.mos(ao, s)
-
+        if saved_values is None:
+            ao = self.orbitals.aos("GTOval_sph", epos, mask)
+            self._aovals[:, mask, e, :] = ao
+            mo = self.orbitals.mos(ao, s)
+        else:
+            ao, mo = saved_values
+            self._aovals[:, mask, e, :] = ao[:, mask]
+            mo = mo[mask]
         mo_vals = mo[:, self._det_occup[s]]
         det_ratio, self._inverse[s][mask, :, :, :] = sherman_morrison_ms(
             eeff, self._inverse[s][mask, :, :, :], mo_vals
         )
         self._dets[s][0, mask, :] *= self.get_phase(det_ratio)
         self._dets[s][1, mask, :] += gpu.cp.log(gpu.cp.abs(det_ratio))
-
 
     def value(self):
         """Return logarithm of the wave function as noted in recompute()"""
@@ -198,7 +208,6 @@ class Slater:
         return determinant_tools.compute_value(
             updets, dndets, self.parameters["det_coeff"]
         )
-
 
     def _testrow(self, e, vec, mask=None, spin=None):
         """vec is a nconfig,nmo vector which replaces row e"""
@@ -239,7 +248,7 @@ class Slater:
 
         if len(numer.shape) == 2:
             denom = denom[:, gpu.cp.newaxis]
-        return  numer / denom
+        return numer / denom
 
     def _testrowderiv(self, e, vec, spin=None):
         """vec is a nconfig,nmo vector which replaces row e"""
@@ -279,7 +288,7 @@ class Slater:
 
         if len(numer.shape) == 3:
             denom = denom[gpu.cp.newaxis, :, gpu.cp.newaxis]
-        return numer/denom
+        return numer / denom
 
     def _testcol(self, det, i, s, vec):
         """vec is a nconfig,nmo vector which replaces column i
@@ -314,13 +323,13 @@ class Slater:
 
         ratios = gpu.asnumpy(self._testrowderiv(e, mograd_vals))
         derivatives = ratios[1:] / ratios[0]
-        derivatives[~np.isfinite(derivatives)]=0.0
+        derivatives[~np.isfinite(derivatives)] = 0.0
         values = ratios[0]
-        values[~np.isfinite(values)]=1.0
-        return derivatives, values
+        values[~np.isfinite(values)] = 1.0
+        return derivatives, values, (aograd[:, 0], mograd[0])
 
     def laplacian(self, e, epos):
-        """ Compute the laplacian Psi/ Psi. """
+        """Compute the laplacian Psi/ Psi."""
         s = int(e >= self._nelec[0])
         ao = self.orbitals.aos("GTOval_sph_deriv2", epos)
         ao_val = ao[:, 0, :, :]
@@ -354,7 +363,7 @@ class Slater:
             mo_vals = mo_vals.reshape(
                 -1, epos.configs.shape[1], mo_vals.shape[1], mo_vals.shape[2]
             )
-        return gpu.asnumpy(self._testrow(e, mo_vals, mask))
+        return gpu.asnumpy(self._testrow(e, mo_vals, mask)), (ao, mo)
 
     def testvalue_many(self, e, epos, mask=None):
         """return the ratio between the current wave function and the wave function if
@@ -395,15 +404,18 @@ class Slater:
         curr_val = self.value()
         nonzero = curr_val[0] != 0.0
 
-        #dets[spin][ (phase,log), configuration, determinant]
-        dets = (self._dets[0][:,:,self._det_map[0]], self._dets[1][:,:,self._det_map[1]])
+        # dets[spin][ (phase,log), configuration, determinant]
+        dets = (
+            self._dets[0][:, :, self._det_map[0]],
+            self._dets[1][:, :, self._det_map[1]],
+        )
 
         d["det_coeff"] = np.zeros(dets[0].shape[1:], dtype=dets[0].dtype)
-        d["det_coeff"][nonzero,:] = (
+        d["det_coeff"][nonzero, :] = (
             dets[0][0, nonzero, :]
             * dets[1][0, nonzero, :]
             * gpu.cp.exp(
-                dets[0][1, nonzero,:]
+                dets[0][1, nonzero, :]
                 + dets[1][1, nonzero, :]
                 - gpu.cp.array(curr_val[1][nonzero, np.newaxis])
             )

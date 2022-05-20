@@ -153,6 +153,6 @@ def compute_value(updets, dndets, det_coeffs):
     phases = updets[0] * dndets[0]
     wf_val = gpu.cp.einsum("d,id->i", det_coeffs, phases * gpu.cp.exp(logvals))
 
-    wf_sign = np.nan_to_num(wf_val/ gpu.cp.abs(wf_val) )
-    wf_logval= np.nan_to_num(gpu.cp.log(gpu.cp.abs(wf_val)) + upref + dnref)
+    wf_sign = np.nan_to_num(wf_val / gpu.cp.abs(wf_val))
+    wf_logval = np.nan_to_num(gpu.cp.log(gpu.cp.abs(wf_val)) + upref + dnref)
     return gpu.asnumpy(wf_sign), gpu.asnumpy(wf_logval)

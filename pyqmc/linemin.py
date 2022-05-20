@@ -238,7 +238,9 @@ def line_minimization(
         step_data["yfit"] = yfit
         step_data["est_min"] = est_min
 
-        opt_hdf(hdf_file, step_data, attr, coords, pgrad_acc.transform.deserialize(wf, x0))
+        opt_hdf(
+            hdf_file, step_data, attr, coords, pgrad_acc.transform.deserialize(wf, x0)
+        )
         df.append(step_data)
 
     newparms = pgrad_acc.transform.deserialize(wf, x0)

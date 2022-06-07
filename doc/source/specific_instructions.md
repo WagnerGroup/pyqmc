@@ -44,6 +44,7 @@ with open(subname,'w') as f:
 ##SBATCH --mail-user=NetID@illinois.edu  # Send email notifications
 ##SBATCH --mail-type=BEGIN,END           # Type of email notifications to send
 . ~/bin/activate_conda.sh
+export OMP_NUM_THREADS=1
 srun -n 1 -c 40 python3  {filename} >& {filename}.stdout
 """)
 

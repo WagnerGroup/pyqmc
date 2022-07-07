@@ -90,12 +90,22 @@ def generate_accumulators(mol, mf, energy=True, rdm1=False, extra_accumulators=N
             raise Exception("Found energy in extra_accumulators and energy is True")
         acc["energy"] = pyqmc.accumulators.EnergyAccumulator(mol)
     if rdm1:
+        if hasattr(mol, 'a'):
+            from pyqmc.orbitals import get_k_indices
+            
+            kinds = list(
+                set(get_k_indices(mol, mf, supercell.get_supercell_kpts(mol)))
+            )
+            kpts = mf.kpts[kinds]
+        else: 
+            kpts=None
+
         if "rdm1_up" in acc.keys() or "rdm1_down" in acc.keys():
             raise Exception(
                 "Found rdm1_up or rdm1_down in extra_accumulators and rdm1 is True"
             )
-        acc["rdm1_up"] = obdm.OBDMAccumulator(mol, orb_coeff=mo_coeff[0], spin=0)
-        acc["rdm1_down"] = obdm.OBDMAccumulator(mol, orb_coeff=mo_coeff[1], spin=1)
+        acc["rdm1_up"] = obdm.OBDMAccumulator(mol, orb_coeff=mo_coeff[0], spin=0, kpts=kpts)
+        acc["rdm1_down"] = obdm.OBDMAccumulator(mol, orb_coeff=mo_coeff[1], spin=1, kpts=kpts)
 
     return acc
 

@@ -496,6 +496,7 @@ def optimize(
     vmc_options=None,
     client=None,
     npartitions=0,
+    n_line_min = 10,
 ):
     """
 
@@ -536,7 +537,7 @@ def optimize(
         print("|gradient|", [np.linalg.norm(d) for d in derivative_conditioned])
 
         line_parameters, x = direct_move(
-            derivative_conditioned, N=10, max_tstep=max_tstep
+            derivative_conditioned, N=n_line_min, max_tstep=max_tstep
         )
         for line_p in line_parameters:
             for p, p0 in zip(line_p, parameters):

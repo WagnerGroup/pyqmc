@@ -115,21 +115,25 @@ def test_correlated_sampling(H2_casci):
     sample_parameters = []
     energies_reference = []
     overlap_reference = []
-    for theta in np.linspace(0,np.pi/2, 4):
+    for theta in np.linspace(0,np.pi/8, 4):
         a = np.cos(theta)
         b = np.sin(theta)
-        sample_parameters.append([a*parameters1 + b*parameters2, a*parameters1 - b*parameters2])
-        energies_reference.append([a**2*ci_energies[0] + b**2*ci_energies[1]]*2)
-        overlap_reference.append([[1.0, a**2-b**2], [a**2-b**2,1.0]]  )
+        sample_parameters.append([a*parameters1 + b*parameters2, b*parameters1 +a*parameters2])
+        energies_reference.append([ [a*a*ci_energies[0] + b*b*ci_energies[1],a*b*ci_energies[0]+b*a*ci_energies[1]], 
+                                    [a*b*ci_energies[0]+b*a*ci_energies[1], b*b*ci_energies[0] + a*a*ci_energies[1]]])
+        overlap_reference.append([[1.0, a*b+b*a], [a*b+b*a,1.0]]  )
     energies_reference=np.asarray(energies_reference)
     overlap_reference=np.asarray(overlap_reference)
     correlated_results = correlated_sampling([wf1,wf2], configs,energy, [transform1,transform2], sample_parameters )
     print(correlated_results)
-    energy_sample = correlated_results['energy']/correlated_results['overlap']
+    N = np.abs(correlated_results["overlap"].diagonal(axis1=1, axis2=2))
+    Nij = np.asarray([np.sqrt(np.outer(a, a)) for a in N])
+
+    energy_sample = correlated_results['energy']/Nij
     print('energy reference',energies_reference)
     print('energy sample', energy_sample)
 
-    assert np.all(np.abs(energy_sample.diagonal(axis1=1,axis2=2) - energies_reference) < 0.1)
+    assert np.all(np.abs(energy_sample - energies_reference) < 0.1)
 
     print('overlap sample', correlated_results['overlap'])
 

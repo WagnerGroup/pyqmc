@@ -303,7 +303,7 @@ def collect_terms(avg, error):
 
 
 def objective_function_derivative(
-    terms, penalty, norm_relative_penalty, offdiagonal_energy_penalty
+    terms, overlap_penalty, norm_penalty, offdiagonal_energy_penalty
 ):
     """
     terms are output from generate_terms
@@ -315,11 +315,10 @@ def objective_function_derivative(
 
     return [
         terms[("dp_energy", i)][:, i, i]
-        + penalty
+        + overlap_penalty
         * 2
         * np.sum(np.triu(terms[("dp_overlap", i)] * terms["overlap"], 1), axis=(1, 2))
-        + norm_relative_penalty
-        * penalty
+        + norm_penalty
         * 2
         * (terms["norm"][i] - 1)
         * terms[("dp_norm", i)]
@@ -443,8 +442,8 @@ def correlated_sampling_worker(wfs, configs, energy, transforms, parameters):
 def find_move_from_line(
     x,
     data,
-    penalty,
-    norm_relative_penalty,
+    overlap_penalty,
+    norm_penalty,
     offdiagonal_energy_penalty,
     max_norm_deviation=0.2,
 ):
@@ -466,9 +465,9 @@ def find_move_from_line(
     # print("norm",np.einsum('ijj->i', (overlap-1)**2 ))
     cost = (
         np.sum(energy.diagonal(axis1=1, axis2=2), axis=1)
-        + penalty * np.sum(np.triu(overlap**2, 1), axis=(1, 2))
+        + overlap_penalty * np.sum(np.triu(overlap**2, 1), axis=(1, 2))
         + offdiagonal_energy_penalty * np.sum(np.triu(energy**2, 1), axis=(1, 2))
-        + norm_relative_penalty * penalty * np.einsum("ijj->i", (overlap - 1) ** 2)
+        + norm_penalty * np.einsum("ijj->i", (overlap - 1) ** 2)
     )
 
     # good_norms = np.prod(np.einsum('ijj->ij',np.abs(overlap-1) < max_norm_deviation),axis=1)
@@ -488,19 +487,20 @@ def optimize(
     energy,
     transforms,
     hdf_file,
-    penalty=0.5,
+    overlap_penalty=0.5,
     nsteps=40,
     max_tstep=0.1,
     condition_epsilon=0.1,
-    norm_relative_penalty=0.01,
+    norm_penalty=0.01,
     offdiagonal_energy_penalty=0.1,
     vmc_options=None,
     client=None,
     npartitions=0,
+    n_line_min = 10,
 ):
     """
 
-    norm_relative_penalty:
+    norm_penalty:
        decrease this if the optimization seems to get 'stuck' (xmin is often zero), and the normalization is fixed to very close to 1 for all wave functions.
     """
     parameters = [
@@ -528,7 +528,7 @@ def optimize(
         print("norm", terms["norm"])
         print("overlap", terms["overlap"][0, 1])
         derivative = objective_function_derivative(
-            terms, penalty, norm_relative_penalty, offdiagonal_energy_penalty
+            terms, overlap_penalty, norm_penalty, offdiagonal_energy_penalty
         )
         derivative_conditioned = [
             d / (terms[("condition", i)] + condition_epsilon)
@@ -537,7 +537,7 @@ def optimize(
         print("|gradient|", [np.linalg.norm(d) for d in derivative_conditioned])
 
         line_parameters, x = direct_move(
-            derivative_conditioned, N=10, max_tstep=max_tstep
+            derivative_conditioned, N=n_line_min, max_tstep=max_tstep
         )
         for line_p in line_parameters:
             for p, p0 in zip(line_p, parameters):
@@ -555,8 +555,8 @@ def optimize(
         xmin, cost = find_move_from_line(
             x,
             correlated_data,
-            penalty,
-            norm_relative_penalty,
+            overlap_penalty,
+            norm_penalty,
             offdiagonal_energy_penalty,
         )
         print("line search", x, cost)
@@ -586,8 +586,8 @@ def optimize(
             {
                 "condition_epsilon": condition_epsilon,
                 "nconfig": configs.configs.shape[0],
-                "penalty": penalty,
-                "norm_relative_penalty": norm_relative_penalty,
+                "overlap_penalty": overlap_penalty,
+                "norm_penalty": norm_penalty,
                 "offdiagonal_energy_penalty": offdiagonal_energy_penalty,
             },
             wfs,

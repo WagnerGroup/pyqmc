@@ -195,19 +195,23 @@ class PadeFunction:
 
 @gpu.fuse()
 def polypadevalue(z, beta):
-    p = z * z * (6 - 8 * z + 3 * z * z)
+    z2 = z * z
+    p = z2 * (6 - 8 * z + 3 * z2)
     return (1 - p) / (1 + beta * p)
 
 
 @gpu.fuse()
 def polypadegradvalue(r, beta, rcut):
     z = r / rcut
-    p = z * z * (6 - 8 * z + 3 * z * z)
+    z1 = z - 1
+    z12 = z1 * z1
+    p = (3 * z12 + 4 * z1) * z12 + 1
+    obp = 1 / (1 + beta * p)
     dpdz = 12 * z * (z * z - 2 * z + 1)
-    dbdp = -(1 + beta) / (1 + beta * p) ** 2
+    dbdp = -(1 + beta) * obp * obp
     dzdx_rvec = 1 / (r * rcut)
     grad_rvec = dbdp * dpdz * dzdx_rvec
-    value = (1 - p) / (1 + beta * p)
+    value = (1 - p)  * obp
     return grad_rvec, value
 
 
@@ -303,15 +307,18 @@ class PolyPadeFunction:
         r = r[mask]
         rvec = rvec[mask]
         z = r / self.parameters["rcut"]
+        z1 = z - 1
+        z12 = z1 * z1
         beta = self.parameters["beta"]
 
-        p = z * z * (6 - 8 * z + 3 * z * z)
-        dpdz = 12 * z * (z * z - 2 * z + 1)
-        dbdp = -(1 + beta) / (1 + beta * p) ** 2
+        p = (3 * z12 + 4 * z1) * z12 + 1
+        obp = 1 / (1 + beta * p)
+        dpdz = 12 * z * z12
+        dbdp = -(1 + beta) * obp * obp
         dzdx = rvec / (r * self.parameters["rcut"])
         gradmask = dbdp * dpdz * dzdx
-        d2pdz2_over_dpdz = (3 * z - 1) / (z * (z - 1))
-        d2bdp2_over_dbdp = -2 * beta / (1 + beta * p)
+        d2pdz2_over_dpdz = (3 * z - 1) / (z * z1)
+        d2bdp2_over_dbdp = -2 * beta * obp
         d2zdx2 = (1 - (rvec / r) ** 2) / (r * self.parameters["rcut"])
         grad[mask] = gradmask
         lap[mask] += dbdp * dpdz * d2zdx2 + (
@@ -329,13 +336,16 @@ class PolyPadeFunction:
         """
         mask = r >= self.parameters["rcut"]
         z = r / self.parameters["rcut"]
+        z1 = z - 1
+        z12 = z1 * z1
         beta = self.parameters["beta"]
 
-        p = z * z * (6 - 8 * z + 3 * z * z)
-        dbdp = -(1 + beta) / (1 + beta * p) ** 2
-        dpdz = 12 * z * (z * z - 2 * z + 1)
+        p = (3 * z12 + 4 * z1) * z12 + 1
+        obp = 1 / (1 + beta * p)
+        dpdz = 12 * z * z12
+        dbdp = -(1 + beta) * obp * obp
         derivrcut = dbdp * dpdz * (-z / self.parameters["rcut"])
-        derivbeta = -p * (1 - p) / (1 + beta * p) ** 2
+        derivbeta = -p * (1 - p) * obp * obp
         derivrcut[mask] = 0.0
         derivbeta[mask] = 0.0
         pderiv = {"rcut": derivrcut, "beta": derivbeta}
@@ -365,7 +375,8 @@ class CutoffCuspFunction:
         mask = r < self.parameters["rcut"]
         y = r[mask] / self.parameters["rcut"]
         gamma = self.parameters["gamma"]
-        p = y - y * y + y * y * y / 3
+        y1 = y - 1
+        p = (y1 * y1 * y1 + 1) / 3
         func = gpu.cp.zeros(r.shape)
         func[mask] = -p / (1 + gamma * p) + 1 / (3 + gamma)
         return func * self.parameters["rcut"]
@@ -382,9 +393,10 @@ class CutoffCuspFunction:
         mask = r < rcut
         r = r[mask][..., np.newaxis]
         y = r / rcut
+        y1 = y - 1
 
-        a = 1 - 2 * y + y * y
-        b = y - y * y + y * y * y / 3
+        a = y1 * y1
+        b = (a * y1 + 1) / 3
         c = 1 / (1 + gamma * b) ** 2 / (rcut * r)
 
         grad = gpu.cp.zeros(rvec.shape)
@@ -405,14 +417,15 @@ class CutoffCuspFunction:
         mask = r < rcut
         r = r[mask][..., np.newaxis]
         y = r / rcut
+        y1 = y - 1
 
-        a = 1 - 2 * y + y * y
-        b = y - y * y + y * y * y / 3
-        c = 1 / (1 + gamma * b) ** 2 / (rcut * r)
+        a = y1 * y1
+        b = (a * y1 + 1) / 3
+        ogb = 1 / (1 + gamma * b)
+        c = ogb * ogb / (rcut * r)
 
         grad[mask] = -rvec[mask] * a * c * rcut
-        b = b[..., 0]
-        value[mask] = -b / (1 + gamma * b) + 1 / (3 + gamma)
+        value[mask] = -(b * ogb)[..., 0] + 1 / (3 + gamma)
         return grad, value * rcut
 
     def laplacian(self, rvec, r):
@@ -429,12 +442,13 @@ class CutoffCuspFunction:
         r = r[mask][..., np.newaxis]
         rvec = rvec[mask]
         y = r / rcut
+        y1 = y - 1
 
-        a = 1 - 2 * y + y * y
-        b = y - y * y + y * y * y / 3
+        a = y1 * y1
+        b = (a * y1 + 1) / 3
         c = 1 / (1 + gamma * b) ** 2 / (rcut * r)
 
-        temp = 2 * (y - 1) / (rcut * r)
+        temp = 2 * y1 / (rcut * r)
         temp -= a / r**2
         temp -= 2 * a * a * c * gamma * (1 + gamma * b)
         lap[mask] = -rcut * c * (a + rvec**2 * temp)
@@ -456,13 +470,14 @@ class CutoffCuspFunction:
         r = r[mask][..., np.newaxis]
         rvec = rvec[mask]
         y = r / rcut
+        y1 = y - 1
 
-        a = 1 - 2 * y + y * y
-        b = y - y * y + y * y * y / 3
+        a = y1 * y1
+        b = (a * y1 + 1) / 3
         c = 1 / (1 + gamma * b) ** 2 / (rcut * r)
 
         grad[mask] = -rcut * a * c * rvec
-        temp = 2 * (y - 1) / (rcut * r)
+        temp = 2 * y1 / (rcut * r)
         temp -= a / r**2
         temp -= 2 * a * a * c * gamma * (1 + gamma * b)
         lap[mask] = -rcut * c * (a + rvec**2 * temp)
@@ -479,16 +494,17 @@ class CutoffCuspFunction:
         rcut = self.parameters["rcut"]
         gamma = self.parameters["gamma"]
         mask = r > rcut
-        r = r
         y = r / rcut
+        y1 = y - 1
 
-        a = 1 - 2 * y + y * y
-        b = y - y * y + y * y * y / 3
-        c = a / (1 + gamma * b) ** 2 / (rcut * r)
-        val = -b / (1 + gamma * b) + 1 / (3 + gamma)
+        a = y1 * y1
+        b = (a * y1 + 1) / 3
+        ogb = 1 / (1 + gamma * b)
+        c = a * ogb * ogb / (rcut * r)
+        val = -b * ogb + 1 / (3 + gamma)
 
-        dfdrcut = y * a / (1 + gamma * b) ** 2 + val
-        dfdgamma = ((b / (1 + gamma * b)) ** 2 - 1 / (3 + gamma) ** 2) * rcut
+        dfdrcut = y * a * ogb * ogb + val
+        dfdgamma = ((b * ogb) ** 2 - 1 / (3 + gamma) ** 2) * rcut
         dfdrcut[mask] = 0.0
         dfdgamma[mask] = 0.0
         func = {"rcut": dfdrcut, "gamma": dfdgamma}

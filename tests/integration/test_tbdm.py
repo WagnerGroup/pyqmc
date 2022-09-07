@@ -153,13 +153,7 @@ def tbdm_from_mf(mol, mf, iaos):
 
 ###########################################################
 def run_vmc_tbdm(
-    mol,
-    mf,
-    iaos,
-    nconf=500,
-    n_vmc_steps=400,
-    vmc_tstep=0.3,
-    vmc_warmup=30,
+    mol, mf, iaos, nconf=500, n_vmc_steps=400, vmc_tstep=0.3, vmc_warmup=30,
 ):
     """ compute the TBDM using VMC  and orbitals given by iaos """
 

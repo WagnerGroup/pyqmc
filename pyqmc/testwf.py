@@ -232,6 +232,7 @@ def compare_nested_saved_vals(saved1, saved2):
         a = [compare_nested_saved_vals(s1, s2) for s1, s2 in zip(saved1, saved2)]
         return np.amax(np.abs(a))
 
+
 def test_wf_gradient_value(wf, configs):
     nconf, nelec = configs.configs.shape[0:2]
     iscomplex = 1j if wf.iscomplex else 1

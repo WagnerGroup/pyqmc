@@ -26,7 +26,7 @@ def ei_energy(mol, configs):
     ei = 0.0
     for c, coord in zip(mol.atom_charges(), mol.atom_coords()):
         delta = configs.configs - coord[np.newaxis, np.newaxis, :]
-        deltar = np.sqrt(np.sum(delta**2, axis=2))
+        deltar = np.sqrt(np.sum(delta ** 2, axis=2))
         ei += -c * np.sum(1.0 / deltar, axis=1)
     return ei
 

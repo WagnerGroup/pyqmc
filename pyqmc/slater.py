@@ -410,7 +410,7 @@ class Slater:
             self._dets[1][:, :, self._det_map[1]],
         )
 
-        d["det_coeff"] = np.zeros(dets[0].shape[1:], dtype=dets[0].dtype)
+        d["det_coeff"] = gpu.cp.zeros(dets[0].shape[1:], dtype=dets[0].dtype)
         d["det_coeff"][nonzero, :] = (
             dets[0][0, nonzero, :]
             * dets[1][0, nonzero, :]

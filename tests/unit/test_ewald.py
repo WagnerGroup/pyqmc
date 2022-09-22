@@ -112,9 +112,7 @@ def test_ewald_CaF2():
 
 def compute_ewald_shifted(x, delta, L=4.0):
     cell = gto.Cell(
-        atom="""H     {0}      {0}      {0} """.format(
-            x * L,
-        ),
+        atom="""H     {0}      {0}      {0} """.format(x * L,),
         basis="ccecpccpvdz",
         ecp="ccecp",
         spin=1,

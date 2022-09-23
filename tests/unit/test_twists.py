@@ -4,7 +4,9 @@ import pyqmc.twists
 
 def run_tests(cell, mf, S, n):
     avai = pyqmc.twists.available_twists(cell, mf, S)
-    assert avai.shape[0] == n, f"Found {avai.shape[0]} available twists but should have found {n}"
+    assert (
+        avai.shape[0] == n
+    ), f"Found {avai.shape[0]} available twists but should have found {n}"
 
 
 def test_H_pbc_sto3g_krks(H_pbc_sto3g_krks):

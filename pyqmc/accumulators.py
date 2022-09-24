@@ -114,7 +114,7 @@ class LinearTransform:
         n = 0
         m = self.nparams
         d = {}
-        frozen_parms = {k: wf.parameters[k][~opt] for k, opt in self.to_opt.items()}
+        frozen_parms = {k: gpu.asnumpy(wf.parameters[k])[~opt] for k, opt in self.to_opt.items()}
 
         for k, opt in self.to_opt.items():
             opt_ = opt.flatten()

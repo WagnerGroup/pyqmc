@@ -21,10 +21,6 @@ class Three_Body_JastrowSpin:
     self.sum_j = np.zeros((nelec,nconf,self._mol.natm,len(self.a_basis),len(self.a_basis),len(self.b_basis),2))
     #can dot product this with the coefficent vector and get the final U
     #order of spin channel: upup,updown,downdown
-    self.sum_ij = np.zeros((nconf,self._mol.natm,len(self.a_basis),len(self.a_basis),len(self.b_basis),3))
-    
-
-    notmask = np.ones(nconf, dtype=bool)
 
     #electron-electron distances
     #d_upup dim is  nconf, nup(nup-1)/2,3
@@ -37,14 +33,9 @@ class Three_Body_JastrowSpin:
         configs.configs[:, :nup], configs.configs[:, nup:]
     )
     d_downdown, ij_downdown = configs.dist.dist_matrix(configs.configs[:, nup:]) 
-
-    d_upup=np.swapaxes(d_upup,0,1)
-    d_updown=np.swapaxes(d_updown,0,1)
-    d_downdown=np.swapaxes(d_downdown,0,1)
-
-    r_upup= np.linalg.norm(d_upup, axis=-1)
-    r_updown= np.linalg.norm(d_updown, axis=-1)
-    r_downdown= np.linalg.norm(d_downdown, axis=-1)
+    d_all = [d_upup, d_updown, d_downdown]
+    ij_all = [ij_upup, ij_updown, ij_downdown]
+    r_all = [np.linalg.norm(d, axis=-1) for d in d_all]
 
     #electron-ion distances
     di = np.zeros((nelec, nconf, self._mol.natm, 3))
@@ -55,35 +46,15 @@ class Three_Body_JastrowSpin:
     ri = np.linalg.norm(di, axis=-1)
 
     #bvalues are the evaluations of b bases. bm(rij)
+    b_2d_values = []
+    for s, shape in enumerate([(nup, nup), (nup, ndown), (ndown, ndown)]):
+        bvalues = np.stack([b.value(d_all[s], r_all[s]) for i, b in enumerate(self.b_basis)], axis=-1)
+        b_2d_values_s = np.zeros((*shape,nconf,len(self.b_basis)))
+        inds = tuple(zip(*ij_all[s]))
+        b_2d_values_s[inds] = bvalues.swapaxes(0, 1)
+        b_2d_values.append(b_2d_values_s)
+        print(shape,b_2d_values_s.shape)
 
-    b_upup_values = np.zeros((int(nup*(nup-1)/2),nconf,len(self.b_basis)))
-    b_updown_values = np.zeros((nup*ndown,nconf,len(self.b_basis)))
-    b_downdown_values = np.zeros((int(ndown*(ndown-1)/2),nconf,len(self.b_basis)))
-
-    #set b_values
-    for i, b in enumerate(self.b_basis):
-        #swap axes: nconf and nelec. for now doing it here. check if this swap works.
-        b_upup_values[:,:,i] = b.value(d_upup,r_upup)
-        b_updown_values[:,:,i]= b.value(d_updown,r_updown)
-        b_downdown_values[:,:,i]= b.value(d_downdown,r_downdown)
-
-    b_upup_2d_values = np.zeros((nup,nup,nconf,len(self.b_basis)))
-    inds = tuple(zip(*ij_upup))
-    b_upup_2d_values[inds] = self.b_upup_values 
-    print('upup 2d',b_upup_2d_values.shape)
-
-    b_updown_2d_values = np.zeros((nup,ndown,nconf,len(self.b_basis)))
-    inds = tuple(zip(*ij_updown))
-    b_updown_2d_values[inds] = self.b_updown_values 
-    print('nelec',self._mol.nelec)
-    print('updown 2d',b_updown_2d_values.shape)
-
-
-    b_downdown_2d_values = np.zeros((ndown,ndown,nconf,len(self.b_basis)))
-    inds = tuple(zip(*ij_downdown))
-    b_downdown_2d_values[inds] = self.b_downdown_values 
-    print('downdown 2d',b_downdown_2d_values.shape)
-        
     #evaluate a_values
     #a_values are a evaluations ak(rIi)
     #might not need all of these, but have them defined here for now. idealy use as few as possible
@@ -92,17 +63,14 @@ class Three_Body_JastrowSpin:
         #di dim nconf,I,nelec
         a_values[:,:,:,i]=a.value(di,ri)
 
-    self.sum_ij[:,:,:,:,:,0] = np.einsum('inIk,jnIl,ijnm->nIklm',a_values[:nup],a_values[:nup],b_upup_2d_values)
-    self.sum_ij[:,:,:,:,:,1] = np.einsum('inIk,jnIl,ijnm->nIklm',a_values[:nup],a_values[nup:],b_updown_2d_values)
-    self.sum_ij[:,:,:,:,:,2] = np.einsum('inIk,jnIl,ijnm->nIklm',a_values[nup:],a_values[nup:],b_downdown_2d_values)
-
+    self.sum_ij = np.zeros((nconf,self._mol.natm,len(self.a_basis),len(self.a_basis),len(self.b_basis),3))
+    self.sum_ij[:,:,:,:,:,0] = np.einsum('inIk,jnIl,ijnm->nIklm',a_values[:nup],a_values[:nup],b_2d_values[0])
+    self.sum_ij[:,:,:,:,:,1] = np.einsum('inIk,jnIl,ijnm->nIklm',a_values[:nup],a_values[nup:],b_2d_values[1])
+    self.sum_ij[:,:,:,:,:,2] = np.einsum('inIk,jnIl,ijnm->nIklm',a_values[nup:],a_values[nup:],b_2d_values[2])
 
     self.C = self.parameters['ccoeff']+ self.parameters['ccoeff'].swapaxes(1,2)
     val =np.einsum('Iklms,nIklms->n',self.C,self.sum_ij)  
 
-
-    #nconf,I,k,nelec , nconf,I,l,nelec , nconf,m,nelec*(nelec-1)/2 --> nconf,I,k,l,m)
-    #collapse the two a_basis into one with size n(n-1)/2
     return np.ones(len(val)),val
 
   def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
@@ -174,7 +142,6 @@ class Three_Body_JastrowSpin:
 
   def testvalue(self, e, epos, mask=None):
     e_partial_old = self.sum_j[e]
-    e_partial_new = 
     sum_ij_old = self.sum_ij
     sum_ij_new = sum_ij_old - e_partial_old + e_partial_new 
     old_value = self.value()

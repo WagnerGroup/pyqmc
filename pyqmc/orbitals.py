@@ -310,11 +310,7 @@ class PBCOrbitalEvaluatorKpoints:
         wrap_phase = get_wrapphase_complex(kdotR)
         # k,coordinate, orbital
         ao = gpu.cp.asarray(
-            self._cell.eval_gto(
-                "PBC" + eval_str,
-                primcoords,
-                kpts=self._kpts,
-            )
+            self._cell.eval_gto("PBC" + eval_str, primcoords, kpts=self._kpts,)
         )
         ao = gpu.cp.einsum("k...,k...a->k...a", wrap_phase, ao)
         if len(ao.shape) == 4:  # if derivatives are included

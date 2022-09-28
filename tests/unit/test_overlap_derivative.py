@@ -39,13 +39,13 @@ def compute_normalization(wfs, parameters, transform, configs):
 
     normalization = np.zeros(len(parameters))
     for p, param in enumerate(parameters):
-        for k, it in transform.deserialize(wfs[-1],param).items():
+        for k, it in transform.deserialize(wfs[-1], param).items():
             wfs[-1].parameters[k][:] = it
         val = wfs[-1].recompute(configs)[1]
         normalized_value = np.exp(2 * (val - ref)) / denominator
         normalization[p] = np.mean(normalized_value)
 
-    for k, it in transform.deserialize(wfs[-1],p0).items():
+    for k, it in transform.deserialize(wfs[-1], p0).items():
         wfs[-1].parameters[k] = it
     return normalization
 

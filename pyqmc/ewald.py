@@ -176,10 +176,10 @@ class Ewald:
 
         """
         self.i_sum = np.sum(self.atom_charges)
-        ii_sum2 = np.sum(self.atom_charges**2)
-        ii_sum = (self.i_sum**2 - ii_sum2) / 2
+        ii_sum2 = np.sum(self.atom_charges ** 2)
+        ii_sum = (self.i_sum ** 2 - ii_sum2) / 2
 
-        self.ijconst = -np.pi / (cellvolume * self.alpha**2)
+        self.ijconst = -np.pi / (cellvolume * self.alpha ** 2)
         self.squareconst = -self.alpha / np.sqrt(np.pi) + self.ijconst / 2
 
         self.ii_const = ii_sum * self.ijconst + ii_sum2 * self.squareconst
@@ -308,7 +308,7 @@ class Ewald:
         e_GdotR = gpu.cp.einsum("hik,jk->hij", gpu.cp.asarray(configs), self.gpoints)
         sum_e_sin = gpu.cp.sin(e_GdotR).sum(axis=1)
         sum_e_cos = gpu.cp.cos(e_GdotR).sum(axis=1)
-        ee_recip = gpu.cp.dot(sum_e_sin**2 + sum_e_cos**2, self.gweight)
+        ee_recip = gpu.cp.dot(sum_e_sin ** 2 + sum_e_cos ** 2, self.gweight)
         ## Reciprocal space electron-ion part
         coscos_sinsin = -self.ion_exp.real * sum_e_cos - self.ion_exp.imag * sum_e_sin
         ei_recip = 2 * gpu.cp.dot(coscos_sinsin, self.gweight)
@@ -385,7 +385,7 @@ def select_big(gpts, cellvolume, recvec, alpha):
         "j...,jk->...k", gpu.cp.asarray(gpts), gpu.cp.asarray(recvec) * 2 * np.pi
     )
     gsquared = gpu.cp.einsum("...k,...k->...", gpoints, gpoints)
-    gweight = 4 * np.pi * gpu.cp.exp(-gsquared / (4 * alpha**2))
+    gweight = 4 * np.pi * gpu.cp.exp(-gsquared / (4 * alpha ** 2))
     gweight /= cellvolume * gsquared
     bigweight = gweight > 1e-10
     return gpoints[bigweight], gweight[bigweight]

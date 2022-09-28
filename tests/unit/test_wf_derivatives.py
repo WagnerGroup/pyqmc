@@ -8,6 +8,7 @@ from pyqmc.j3 import J3
 from pyqmc.wftools import generate_jastrow
 import pyqmc.api as pyq
 
+
 def run_tests(wf, epos, epsilon):
 
     _, epos = pyq.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node
@@ -20,21 +21,14 @@ def run_tests(wf, epos, epsilon):
 
     for fname, func in zip(
         ["gradient", "laplacian", "pgradient"],
-        [
-            testwf.test_wf_gradient,
-            testwf.test_wf_laplacian,
-            testwf.test_wf_pgradient,
-        ],
+        [testwf.test_wf_gradient, testwf.test_wf_laplacian, testwf.test_wf_pgradient,],
     ):
         err = [func(wf, epos, delta) for delta in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8]]
         assert min(err) < epsilon, "epsilon {0}".format(epsilon)
 
     for fname, func in zip(
         ["gradient_value", "gradient_laplacian"],
-        [
-            testwf.test_wf_gradient_value,
-            testwf.test_wf_gradient_laplacian,
-        ],
+        [testwf.test_wf_gradient_value, testwf.test_wf_gradient_laplacian,],
     ):
         d = func(wf, epos)
         for k, v in d.items():

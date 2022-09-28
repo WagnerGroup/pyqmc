@@ -109,7 +109,7 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
             # Compute reverse move
             g, new_val, saved = wf.gradient_value(e, newcoorde)
             new_grad = limdrift(np.real(g.T))
-            forward = np.sum(gauss**2, axis=1)
+            forward = np.sum(gauss ** 2, axis=1)
             backward = np.sum((gauss + tstep * (grad + new_grad)) ** 2, axis=1)
 
             # Acceptance

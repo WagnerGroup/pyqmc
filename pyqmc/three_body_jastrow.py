@@ -43,10 +43,8 @@ class Three_Body_JastrowSpin:
 
         # electron-ion distances
         di = np.zeros((nelec, nconf, self._mol.natm, 3))
-        for e in range(nelec):
-            di[e] = np.asarray(
-                configs.dist.dist_i(self._mol.atom_coords(), configs.configs[:, e, :])
-            )
+        for e, epos in enumerate(configs.configs.swapaxes(0, 1)):
+            di[e] = configs.dist.dist_i(self._mol.atom_coords(), epos)
         ri = np.linalg.norm(di, axis=-1)
 
         # bvalues are the evaluations of b bases. bm(rij)
@@ -163,14 +161,10 @@ class Three_Body_JastrowSpin:
         sep = nup - int(e < nup)
         not_e = np.arange(self._nelec) != e
 
-        di = np.stack(
-            [
-                configs.dist.dist_i(self._mol.atom_coords(), configs.configs[:, e_, :])
-                for e_ in np.arange(nelec)[not_e]
-            ],
-            axis=0,
-        )
-
+        # electron-ion distances
+        di = np.zeros((nelec - 1, nconf, self._mol.natm, 3))
+        for e_, epos_ in enumerate(configs.configs.swapaxes(0, 1)[not_e]):
+            di[e_] = configs.dist.dist_i(self._mol.atom_coords(), epos_)
         ri = np.linalg.norm(di, axis=-1)
 
         a_values = np.zeros((self._nelec - 1, nconf, self._mol.natm, len(self.a_basis)))

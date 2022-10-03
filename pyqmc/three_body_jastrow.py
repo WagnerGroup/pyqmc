@@ -23,44 +23,43 @@ class Three_Body_JastrowSpin:
         nconf, nelec = configs.configs.shape[:2]
         na, nb = len(self.a_basis), len(self.b_basis)
         # n_elec in first axis to match di format
-        self.sum_j = np.zeros((nelec, nconf, self._mol.natm, na, na, nb, 2))
         # order of spin channel: upup,updown,downdown
 
         # electron-electron distances
         # d_upup dim is  nconf, nup(nup-1)/2,3
         # d_downdown dim is nconf, ndown(ndown-1)/2,3
         # d_updown dim is nconf, nup*ndown,3
-        nup = int(self._mol.nelec[0])
-        ndown = int(self._mol.nelec[1])
-        d_upup, ij_upup = configs.dist.dist_matrix(configs.configs[:, :nup])
-        d_updown, ij_updown = configs.dist.pairwise(
-            configs.configs[:, :nup], configs.configs[:, nup:]
-        )
-        d_downdown, ij_downdown = configs.dist.dist_matrix(configs.configs[:, nup:])
-        d_all = [d_upup, d_updown, d_downdown]
-        ij_all = [ij_upup, ij_updown, ij_downdown]
-        r_all = [np.linalg.norm(d, axis=-1) for d in d_all]
+        # nup = int(self._mol.nelec[0])
+        # ndown = int(self._mol.nelec[1])
+        # d_upup, ij_upup = configs.dist.dist_matrix(configs.configs[:, :nup])
+        # d_updown, ij_updown = configs.dist.pairwise(
+        #    configs.configs[:, :nup], configs.configs[:, nup:]
+        # )
+        # d_downdown, ij_downdown = configs.dist.dist_matrix(configs.configs[:, nup:])
+        # d_all = [d_upup, d_updown, d_downdown]
+        # ij_all = [ij_upup, ij_updown, ij_downdown]
+        # r_all = [np.linalg.norm(d, axis=-1) for d in d_all]
 
+        # bvalues are the evaluations of b bases. bm(rij)
+        # b_2d_values = []
+        # for s, shape in enumerate([(nup, nup), (nup, ndown), (ndown, ndown)]):
+        #    bvalues = np.stack(
+        #        [b.value(d_all[s], r_all[s]) for i, b in enumerate(self.b_basis)],
+        #        axis=-1,
+        #    )
+        #    b_2d_values_s = np.zeros((*shape, nconf, len(self.b_basis)))
+        #    inds = tuple(zip(*ij_all[s]))
+        #    b_2d_values_s[inds] = bvalues.swapaxes(0, 1)
+        #    b_2d_values.append(b_2d_values_s)
+
+        # evaluate a_values ak(rIi)
+        # might not need all of these, but have them defined here for now. idealy use as few as possible
         # electron-ion distances
         di = np.zeros((nelec, nconf, self._mol.natm, 3))
         for e, epos in enumerate(configs.configs.swapaxes(0, 1)):
             di[e] = configs.dist.dist_i(self._mol.atom_coords(), epos)
         ri = np.linalg.norm(di, axis=-1)
 
-        # bvalues are the evaluations of b bases. bm(rij)
-        b_2d_values = []
-        for s, shape in enumerate([(nup, nup), (nup, ndown), (ndown, ndown)]):
-            bvalues = np.stack(
-                [b.value(d_all[s], r_all[s]) for i, b in enumerate(self.b_basis)],
-                axis=-1,
-            )
-            b_2d_values_s = np.zeros((*shape, nconf, len(self.b_basis)))
-            inds = tuple(zip(*ij_all[s]))
-            b_2d_values_s[inds] = bvalues.swapaxes(0, 1)
-            b_2d_values.append(b_2d_values_s)
-
-        # evaluate a_values ak(rIi)
-        # might not need all of these, but have them defined here for now. idealy use as few as possible
         a_values = np.zeros((self._nelec, nconf, self._mol.natm, len(self.a_basis)))
         for i, a in enumerate(self.a_basis):
             # di dim nconf,I,nelec
@@ -69,29 +68,10 @@ class Three_Body_JastrowSpin:
         self.C = self.parameters["ccoeff"] + self.parameters["ccoeff"].swapaxes(1, 2)
 
         self.sum_jC = np.zeros((nelec, nconf))
-        updown = np.einsum(
-            "inIk,jnIl,ijnm,Iklm->ijn",
-            a_values[:nup],
-            a_values[nup:],
-            b_2d_values[1],
-            self.C[..., 1],
-        )
-        self.sum_jC[:nup] += updown.sum(axis=1)
-        self.sum_jC[nup:] += updown.sum(axis=0)
-        self.sum_jC[:nup] += np.einsum(
-            "inIk,jnIl,ijnm,Iklm->in",
-            a_values[:nup],
-            a_values[:nup],
-            b_2d_values[0],
-            self.C[..., 0],
-        )
-        self.sum_jC[nup:] += np.einsum(
-            "inIk,jnIl,ijnm,Iklm->in",
-            a_values[nup:],
-            a_values[nup:],
-            b_2d_values[2],
-            self.C[..., 2],
-        )
+        arange_e = np.arange(nelec)
+        for e, epos in enumerate(configs.configs.swapaxes(0, 1)):
+            not_e = arange_e != e
+            self.sum_jC[e] = self.single_e_partial(configs, e, epos, a_values[not_e])
 
         val = self.sum_jC.sum(axis=0)
         self.val = val

@@ -173,7 +173,9 @@ class Three_Body_JastrowSpin:
             # di dim nconf,I,nelec
             a_values[:, :, :, i] = a.value(di, ri)
 
-        e_partial_old = self.single_e_partial(configs, e, configs.configs[:, e], a_values)
+        e_partial_old = self.single_e_partial(
+            configs, e, configs.configs[:, e], a_values
+        )
         e_partial_new = self.single_e_partial(configs, e, epos.configs, a_values)
 
         self.val = np.exp(2 * e_partial_new - 2 * e_partial_old)

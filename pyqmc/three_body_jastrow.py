@@ -18,49 +18,29 @@ class Three_Body_JastrowSpin:
         self.iscomplex = False
 
     def recompute(self, configs):
-        """returns phase, log value"""
+        """returns phase, log value """
         nconf, nelec = configs.configs.shape[:2]
-        # n_elec in first axis to match di format
-        self.sum_j = np.zeros(
-            (
-                nelec,
-                nconf,
-                self._mol.natm,
-                len(self.a_basis),
-                len(self.a_basis),
-                len(self.b_basis),
-                2,
-            )
-        )
-        # can dot product this with the coefficent vector and get the final U
-        # order of spin channel: upup,updown,downdown
-        self.sum_ij = np.zeros(
-            (
-                nconf,
-                self._mol.natm,
-                len(self.a_basis),
-                len(self.a_basis),
-                len(self.b_basis),
-                3,
-            )
-        )
+        #n_elec in first axis to match di format
+        self.sum_j = np.zeros((nelec,nconf,self._mol.natm,len(self.a_basis),len(self.a_basis),len(self.b_basis),2))
+        #can dot product this with the coefficent vector and get the final U
+        #order of spin channel: upup,updown,downdown
 
-        notmask = np.ones(nconf, dtype=bool)
-
-        # electron-electron distances
-        # d_upup dim is  nconf, nup(nup-1)/2,3
-        # d_downdown dim is nconf, ndown(ndown-1)/2,3
-        # d_updown dim is nconf, nup*ndown,3
+        #electron-electron distances
+        #d_upup dim is  nconf, nup(nup-1)/2,3
+        #d_downdown dim is nconf, ndown(ndown-1)/2,3
+        #d_updown dim is nconf, nup*ndown,3
         nup = int(self._mol.nelec[0])
-        ndown = int(self._mol.nelec[1])
+        ndown=int(self._mol.nelec[1])
         d_upup, ij_upup = configs.dist.dist_matrix(configs.configs[:, :nup])
         d_updown, ij_updown = configs.dist.pairwise(
             configs.configs[:, :nup], configs.configs[:, nup:]
         )
-        d_downdown, ij_downdown = configs.dist.dist_matrix(configs.configs[:, nup:])
-        # electron-ion distances
-        # diup = np.zeros((nup, nconf, self._mol.natm, 3)) = nup,nconf,I,3
-        # didown = np.zeros((nelec- nup, nconf, self._mol.natm, 3))
+        d_downdown, ij_downdown = configs.dist.dist_matrix(configs.configs[:, nup:]) 
+        d_all = [d_upup, d_updown, d_downdown]
+        ij_all = [ij_upup, ij_updown, ij_downdown]
+        r_all = [np.linalg.norm(d, axis=-1) for d in d_all]
+
+        #electron-ion distances
         di = np.zeros((nelec, nconf, self._mol.natm, 3))
         for e in range(nelec):
             di[e] = np.asarray(
@@ -68,90 +48,33 @@ class Three_Body_JastrowSpin:
             )
         ri = np.linalg.norm(di, axis=-1)
 
-        diup = di[:nup]
-        didown = di[nup:]
-        riup = ri[:nup]
-        ridown = ri[nup:]
+        #bvalues are the evaluations of b bases. bm(rij)
+        b_2d_values = []
+        for s, shape in enumerate([(nup, nup), (nup, ndown), (ndown, ndown)]):
+            bvalues = np.stack([b.value(d_all[s], r_all[s]) for i, b in enumerate(self.b_basis)], axis=-1)
+            b_2d_values_s = np.zeros((*shape,nconf,len(self.b_basis)))
+            inds = tuple(zip(*ij_all[s]))
+            b_2d_values_s[inds] = bvalues.swapaxes(0, 1)
+            b_2d_values.append(b_2d_values_s)
+            print(shape,b_2d_values_s.shape)
 
-        # a_values are a evaluations ak(rIi)
-        # might not need all of these, but have them defined here for now. idealy use as few as possible
-        a_values = np.zeros((self._nelec, nconf, self._mol.natm, len(self.a_basis)))
-        self.a_up_values = np.zeros((nup, nconf, self._mol.natm, len(self.a_basis)))
-        self.a_down_values = np.zeros((ndown, nconf, self._mol.natm, len(self.a_basis)))
-
-        # bvalues are the evaluations of b bases. bm(rij)
-
-        self.b_upup_values = np.zeros(
-            (int(nup * (nup - 1) / 2), nconf, len(self.b_basis))
-        )
-        self.b_updown_values = np.zeros((nup * ndown, nconf, len(self.b_basis)))
-        self.b_downdown_values = np.zeros(
-            (int(ndown * (ndown - 1) / 2), nconf, len(self.b_basis))
-        )
-
-        d_upup = np.swapaxes(d_upup, 0, 1)
-        d_updown = np.swapaxes(d_updown, 0, 1)
-        d_downdown = np.swapaxes(d_downdown, 0, 1)
-
-        r_upup = np.linalg.norm(d_upup, axis=-1)
-        r_updown = np.linalg.norm(d_updown, axis=-1)
-        r_downdown = np.linalg.norm(d_downdown, axis=-1)
-
-        # set b_values
-        for i, b in enumerate(self.b_basis):
-            # swap axes: nconf and nelec. for now doing it here. check if this swap works.
-            self.b_upup_values[:, :, i] = b.value(d_upup, r_upup)
-            self.b_updown_values[:, :, i] = b.value(d_updown, r_updown)
-            self.b_downdown_values[:, :, i] = b.value(d_downdown, r_downdown)
-
-        b_upup_2d_values = np.zeros((nup, nup, nconf, len(self.b_basis)))
-        inds = tuple(zip(*ij_upup))
-        b_upup_2d_values[inds] = self.b_upup_values
-        print("upup 2d", b_upup_2d_values.shape)
-
-        b_updown_2d_values = np.zeros((nup, ndown, nconf, len(self.b_basis)))
-        inds = tuple(zip(*ij_updown))
-        b_updown_2d_values[inds] = self.b_updown_values
-        print("nelec", self._mol.nelec)
-        print("updown 2d", b_updown_2d_values.shape)
-
-        b_downdown_2d_values = np.zeros((ndown, ndown, nconf, len(self.b_basis)))
-        inds = tuple(zip(*ij_downdown))
-        b_downdown_2d_values[inds] = self.b_downdown_values
-        print("downdown 2d", b_downdown_2d_values.shape)
-
-        # set evaluations of a functions
+        #evaluate a_values
+        #a_values are a evaluations ak(rIi)
+        #might not need all of these, but have them defined here for now. idealy use as few as possible
+        a_values = np.zeros((self._nelec,nconf,self._mol.natm,len(self.a_basis)))
         for i, a in enumerate(self.a_basis):
-            # di dim nconf,I,nelec
-            a_values[:, :, :, i] = a.value(di, ri)
-            self.a_up_values[:, :, :, i] = a.value(diup, riup)
-            self.a_down_values[:, :, :, i] = a.value(didown, ridown)
+            #di dim nconf,I,nelec
+            a_values[:,:,:,i]=a.value(di,ri)
 
-        self.sum_ij[:, :, :, :, :, 0] = np.einsum(
-            "inIk,jnIl,ijnm->nIklm",
-            self.a_up_values,
-            self.a_up_values,
-            b_upup_2d_values,
-        )
-        self.sum_ij[:, :, :, :, :, 1] = np.einsum(
-            "inIk,jnIl,ijnm->nIklm",
-            self.a_up_values,
-            self.a_down_values,
-            b_updown_2d_values,
-        )
-        self.sum_ij[:, :, :, :, :, 2] = np.einsum(
-            "inIk,jnIl,ijnm->nIklm",
-            self.a_down_values,
-            self.a_down_values,
-            b_downdown_2d_values,
-        )
+        self.sum_ij = np.zeros((nconf,self._mol.natm,len(self.a_basis),len(self.a_basis),len(self.b_basis),3))
+        self.sum_ij[:,:,:,:,:,0] = np.einsum('inIk,jnIl,ijnm->nIklm',a_values[:nup],a_values[:nup],b_2d_values[0])
+        self.sum_ij[:,:,:,:,:,1] = np.einsum('inIk,jnIl,ijnm->nIklm',a_values[:nup],a_values[nup:],b_2d_values[1])
+        self.sum_ij[:,:,:,:,:,2] = np.einsum('inIk,jnIl,ijnm->nIklm',a_values[nup:],a_values[nup:],b_2d_values[2])
 
-        self.C = self.parameters["ccoeff"] + self.parameters["ccoeff"].swapaxes(1, 2)
-        val = np.einsum("Iklms,nIklms->n", self.C, self.sum_ij)
+        self.C = self.parameters['ccoeff']+ self.parameters['ccoeff'].swapaxes(1,2)
+        val =np.einsum('Iklms,nIklms->n',self.C,self.sum_ij)  
 
-        # nconf,I,k,nelec , nconf,I,l,nelec , nconf,m,nelec*(nelec-1)/2 --> nconf,I,k,l,m)
-        # collapse the two a_basis into one with size n(n-1)/2
-        return np.ones(len(val)), val
+        return np.ones(len(val)),val
 
     # def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
     # nconf, nelec = configs.configs.shape[:2]

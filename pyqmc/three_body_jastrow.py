@@ -18,7 +18,6 @@ class Three_Body_JastrowSpin:
     """returns phase, log value """
     nconf, nelec = configs.configs.shape[:2]
     #n_elec in first axis to match di format
-    self.sum_j = np.zeros((nelec,nconf,self._mol.natm,len(self.a_basis),len(self.a_basis),len(self.b_basis),2))
     #can dot product this with the coefficent vector and get the final U
     #order of spin channel: upup,updown,downdown
 
@@ -67,6 +66,7 @@ class Three_Body_JastrowSpin:
     self.sum_ij[:,:,:,:,:,0] = np.einsum('inIk,jnIl,ijnm->nIklm',a_values[:nup],a_values[:nup],b_2d_values[0])
     self.sum_ij[:,:,:,:,:,1] = np.einsum('inIk,jnIl,ijnm->nIklm',a_values[:nup],a_values[nup:],b_2d_values[1])
     self.sum_ij[:,:,:,:,:,2] = np.einsum('inIk,jnIl,ijnm->nIklm',a_values[nup:],a_values[nup:],b_2d_values[2])
+    self.sum_j = np.zeros((nelec,nconf,self._mol.natm,len(self.a_basis),len(self.a_basis),len(self.b_basis),2))
 
     self.C = self.parameters['ccoeff']+ self.parameters['ccoeff'].swapaxes(1,2)
     val =np.einsum('Iklms,nIklms->n',self.C,self.sum_ij)  

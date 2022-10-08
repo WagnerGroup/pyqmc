@@ -71,18 +71,20 @@ class Three_Body_JastrowSpin:
         arange_e = np.arange(nelec)
         for e, epos in enumerate(configs.configs.swapaxes(0, 1)):
             not_e = arange_e != e
-            self.sum_jC[e] = self.single_e_partial(configs, e, epos, a_values[not_e])
+            self.sum_jC[e] = self.single_e_partial(configs, e, epos, a_values[not_e])[0]
 
         val = self.sum_jC.sum(axis=0)
         self.val = val
+        self.a_values = a_values
 
         return (np.ones(len(val)), val)
 
     def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
+        if mask is None:
+            mask = np.ones(len(epos.configs), dtype=bool)
         newconfigs = configs.copy()
-        newconfigs.move(e, epos, np.ones(len(epos.configs), dtype=bool))
+        newconfigs.move(e, epos, mask)
         self.recompute(newconfigs)
-        self.sum_jC[e]
 
     def value(self):
         val = self.val
@@ -90,13 +92,11 @@ class Three_Body_JastrowSpin:
         return (np.ones(len(val)), val)
 
     def single_e_partial(self, configs, e, epos, a_values):
-        nup = int(self._mol.nelec[0])
-        ndown = int(self._mol.nelec[1])
+        nup, ndown = self._mol.nelec
         sep = nup - int(e < nup)
-        not_e = np.arange(self._nelec) != e
-
-        nconf = configs.configs.shape[0]
         edown = int(e >= self._mol.nelec[0])
+        not_e = np.arange(self._nelec) != e
+        nconf = configs.configs.shape[0]
 
         de = configs.dist.dist_i(configs.configs[:, not_e], epos)
         re = np.linalg.norm(de, axis=-1)
@@ -109,12 +109,10 @@ class Three_Body_JastrowSpin:
             ae[:, :, i] = a.value(di_e, ri_e)
 
         b_values = np.zeros((self._nelec - 1, nconf, len(self.b_basis)))
-
         for i, b in enumerate(self.b_basis):
             # swap axes: nconf and nelec. for now doing it here.
             b_values[:, :, i] = b.value(de, re).swapaxes(0, 1)
 
-        na, nb = len(self.a_basis), len(self.b_basis)
         e_partial = np.zeros(nconf)
         e_partial += np.einsum(
             "nIk,jnIl,jnm,Iklm->n",
@@ -130,7 +128,7 @@ class Three_Body_JastrowSpin:
             b_values[sep:],
             self.C[..., edown + 1],
         )
-        return e_partial
+        return e_partial, ae
 
     def testvalue(self, e, epos, mask=None):
         configs = self._configscurrent
@@ -142,106 +140,77 @@ class Three_Body_JastrowSpin:
         sep = nup - int(e < nup)
         not_e = np.arange(self._nelec) != e
 
-        # electron-ion distances
-        di = np.zeros((nelec - 1, nconf, self._mol.natm, 3))
-        for e_, epos_ in enumerate(configs.configs.swapaxes(0, 1)[not_e]):
-            di[e_] = configs.dist.dist_i(self._mol.atom_coords(), epos_)
-        ri = np.linalg.norm(di, axis=-1)
-
-        a_values = np.zeros((self._nelec - 1, nconf, self._mol.natm, len(self.a_basis)))
-
-        for i, a in enumerate(self.a_basis):
-            # di dim nconf,I,nelec
-            a_values[:, :, :, i] = a.value(di, ri)
-
-        e_partial_old = self.single_e_partial(
-            configs, e, configs.configs[:, e], a_values
+        e_partial_old, _ = self.single_e_partial(
+            configs, e, configs.configs[:, e], self.a_values[not_e]
         )
-        e_partial_new = self.single_e_partial(configs, e, epos.configs, a_values)
+        e_partial_new, a_e = self.single_e_partial(
+            configs, e, epos.configs, self.a_values[not_e]
+        )
 
-        self.val = np.exp( 2*e_partial_new - 2* e_partial_old)
-        return self.val, None
+        val = np.exp(2 * e_partial_new - 2 * e_partial_old)
+        return val, a_e
 
-    
     def gradient(self, e, epos):
-        configs=self._configscurrent
+        configs = self._configscurrent
         nconf, nelec = configs.configs.shape[:2]
         nup = int(self._mol.nelec[0])
         not_e = np.arange(self._nelec) != e
 
-        #electron-ion distances
-        #di is electron -ion distance for all electrons.
-        di = np.zeros((nelec, nconf, self._mol.natm, 3))
-        for e_, epos_ in enumerate(configs.configs.swapaxes(0, 1)):
-            di[e_] = configs.dist.dist_i(self._mol.atom_coords(), epos_)
-        ri = np.linalg.norm(di,axis=-1)
-
-        #electron-ion distances for electron e 
-        di_e = di[e]
+        # electron-ion distances for electron e
+        di_e = configs.dist.dist_i(self._mol.atom_coords(), epos.configs)
         ri_e = np.linalg.norm(di_e, axis=-1)
 
-        #di is electron -ion distance for all electrons but electron e.
-        di_not_e = di[not_e]
-        ri_not_e = np.linalg.norm(di_not_e,axis=-1)
-
-        #electron-electron distances from electron e
+        # di is electron -ion distance for all electrons but electron e.
+        # electron-electron distances from electron e
         de = configs.dist.dist_i(configs.configs[:, not_e], epos.configs)
         re = np.linalg.norm(de, axis=-1)
 
-        #set values of a basis evaluations needed.
-        a_values = np.zeros((self._nelec, nconf, self._mol.natm, len(self.a_basis)))
-        a_gradients=np.zeros((nconf, self._mol.natm, len(self.a_basis),3))
+        # set values of a basis evaluations needed.
+        a_gradients = np.zeros((nconf, self._mol.natm, len(self.a_basis), 3))
+        a_e = np.zeros((nconf, self._mol.natm, len(self.a_basis)))
         for k, a in enumerate(self.a_basis):
             # di dim nconf,I,nelec
-            #can use gradient value for ri_e
-            a_values[:, :, :, k] = a.value(di, ri)
-            a_gradients[:,:,k,:] = a.gradient(di_e,ri_e)
+            # can use gradient value for ri_e
+            a_gradients[:, :, k, :], a_e[..., k] = a.gradient_value(di_e, ri_e)
 
-        a_e = a_values[e]
-        a_all_but_e = a_values[not_e]
-
-        sep = nup - int(e < nup)
-
-        a_all_but_e_up = a_all_but_e[:sep]
-        a_all_but_e_down = a_all_but_e[sep:]
-        
-        #set values of b basis evaluations needed
-        b_values = np.zeros((self._nelec - 1, nconf, len(self.b_basis)))
-        b_gradients = np.zeros((nconf,self._nelec - 1, len(self.b_basis),3))
-        for m,b in enumerate(self.b_basis):
-            g,v=b.gradient_value(de,re)
-            b_values[:,:,m] = v.swapaxes(0,1)
-            b_gradients[:,:,m,:] = g 
-
-        b_values_up = b_values[:sep]
-        b_values_down = b_values[sep:]
-
-        b_gradients_up = b_gradients[:,:sep,:,:]
-        b_gradients_down = b_gradients[:,sep:,:,:]
+        # set values of b basis evaluations needed
+        b_values = np.zeros((nconf, self._nelec - 1, len(self.b_basis)))
+        b_gradients = np.zeros((nconf, self._nelec - 1, len(self.b_basis), 3))
+        for m, b in enumerate(self.b_basis):
+            b_gradients[:, :, m], b_values[:, :, m] = b.gradient_value(de, re)
 
         edown = int(e >= nup)
+        sep = nup - int(e < nup)
 
-        term1= np.einsum("Iklm,jnIl,nIkd,jnm->dn",self.C[:,:,:,:,edown],a_all_but_e_up,a_gradients,b_values_up)
-        term1+= np.einsum("Iklm,jnIl,nIkd,jnm->dn",self.C[:,:,:,:,edown+1],a_all_but_e_down,a_gradients,b_values_down)
-        #print(term1,'term1')
+        term1 = np.einsum(
+            "Iklm,jnIl,nIkd,njm->dn",
+            self.C[..., edown],
+            self.a_values[not_e][:sep],
+            a_gradients,
+            b_values[:, :sep],
+        )
+        term1 += np.einsum(
+            "Iklm,jnIl,nIkd,njm->dn",
+            self.C[..., edown + 1],
+            self.a_values[not_e][sep:],
+            a_gradients,
+            b_values[:, sep:],
+        )
 
-        term2 = np.einsum("Ilkm,jnIl,nik,njmd->dn",self.C[:,:,:,:,edown],a_all_but_e_up,a_e,b_gradients_up)
-        term2 += np.einsum("Ilkm,jnIl,nik,njmd->dn",self.C[:,:,:,:,edown+1],a_all_but_e_down,a_e,b_gradients_down)
-        #print(term2,"term2")
+        term2 = np.einsum(
+            "Iklm,jnIl,nIk,njmd->dn",
+            self.C[..., edown],
+            self.a_values[not_e][:sep],
+            a_e,
+            b_gradients[:, :sep],
+        )
+        term2 += np.einsum(
+            "Iklm,jnIl,nIk,njmd->dn",
+            self.C[..., edown + 1],
+            self.a_values[not_e][sep:],
+            a_e,
+            b_gradients[:, sep:],
+        )
 
-        grad = term1+term2
-        #it is returning 0.
-        return 2*grad
-
-
-
-
-
-
-        
-
-
-
-
-
-
+        grad = term1 + term2
+        return 2 * grad

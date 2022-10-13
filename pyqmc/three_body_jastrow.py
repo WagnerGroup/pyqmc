@@ -90,31 +90,54 @@ class Three_Body_JastrowSpin:
 
         self.C = self.parameters["ccoeff"] + self.parameters["ccoeff"].swapaxes(1, 2)
 
-        self.sum_jC = np.zeros((nelec, nconf))
+        self.P_i = np.zeros((nelec, nconf))
         arange_e = np.arange(nelec)
         for e, epos in enumerate(configs.configs.swapaxes(0, 1)):
             not_e = arange_e != e
-            self.sum_jC[e] = self.single_e_partial(configs, e, epos, a_values[not_e])[0]
+            self.P_i[e] = self.single_e_partial(configs, e, epos, a_values[not_e])[
+                0
+            ].sum(axis=0)
 
-        val = 0.5 * self.sum_jC.sum(axis=0)
-        self.val = val
+        self.val = 0.5 * self.P_i.sum(axis=0)
         self.a_values = a_values
 
-        return (np.ones(len(val)), val)
+        return self.value()
 
     def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
         if mask is None:
             mask = np.ones(len(epos.configs), dtype=bool)
-        newconfigs = configs.copy()
-        newconfigs.move(e, epos, mask)
+        not_e = np.arange(self._nelec) != e
+        # save P_i.
+        # P_ij = \sum_{Iklm} c_{Iklm\sigma_i\sigma{j}} a_k(r_{iI}) a_l(r_{jI}) b_m(r_{ij})
+        # P_i = \sum_{j\ne i} P_{ij}
+        # update electron e
+        # P_e^{\rm new} = \sum_{j\ne e} \sum_{Iklm} c_{Iklm\sigma_e\sigma{j}} a_k(r_{eI}') a_l(r_{jI}) b_m(r_{ej}')
+        # P_{i\ne e}^{new} = \sum_{Iklm} c_{Iklm\sigma_e\sigma{j}} a_k(r_{iI}) a_l(r_{eI}') b_m(r_{ie}') - P_{ie}^{\rm old}
+        configs_mask = configs.mask(mask)
+        eind, mind = np.ix_(not_e, mask)
+        if saved_values is None:
+            P_ie_new, ae = self.single_e_partial(
+                configs_mask, e, epos.configs[mask], self.a_values[eind, mind]
+            )
+        else:
+            P_ie_new, ae = saved_values
+        P_ie_old = self.single_e_partial(
+            configs_mask, e, configs_mask.configs[:, e], self.a_values[eind, mind]
+        )[0]
+        newval = P_ie_new.sum(axis=0)
+        self.val[mask] += newval - self.P_i[e, mask]
+        self.P_i[e, mask] = newval
+        self.P_i[eind, mind] += P_ie_new - P_ie_old
+        self.a_values[e, mask] = ae
+        self._configscurrent.move(e, epos, mask)
+
         # eventually want to remove recompute from here.
-        self.recompute(newconfigs)
+        # self.recompute(newconfigs)
 
     def value(self):
         """Compute the current log value of the wavefunction
         :returns: tuple (phases,values) of shape [nconfig]"""
-        val = self.val
-        return (np.ones(len(val)), val)
+        return (np.ones(len(self.val)), self.val.copy())
 
     def single_e_partial(self, configs, e, epos, a_values):
         """Args:
@@ -149,16 +172,16 @@ class Three_Body_JastrowSpin:
             # swap axes: nconf and nelec. for now doing it here.
             b_values[:, :, i] = b.value(de, re).swapaxes(0, 1)
 
-        e_partial = np.zeros(nconf)
-        e_partial += np.einsum(
-            "nIk,jnIl,jnm,Iklm->n",
+        e_partial = np.zeros((self._nelec - 1, nconf))
+        e_partial[:sep] = np.einsum(
+            "nIk,jnIl,jnm,Iklm->jn",
             ae,
             a_values[:sep],
             b_values[:sep],
             self.C[..., edown],
         )
-        e_partial += np.einsum(
-            "nIk,jnIl,jnm,Iklm->n",
+        e_partial[sep:] = np.einsum(
+            "nIk,jnIl,jnm,Iklm->jn",
             ae,
             a_values[sep:],
             b_values[sep:],
@@ -179,15 +202,12 @@ class Three_Body_JastrowSpin:
         sep = nup - int(e < nup)
         not_e = np.arange(self._nelec) != e
 
-        e_partial_old, _ = self.single_e_partial(
-            configs, e, configs.configs[:, e], self.a_values[not_e]
-        )
         e_partial_new, a_e = self.single_e_partial(
             configs, e, epos.configs, self.a_values[not_e]
         )
 
-        val = np.exp(e_partial_new - e_partial_old)
-        return val, a_e
+        val = np.exp(e_partial_new.sum(axis=0) - self.P_i[e])
+        return val, (e_partial_new, a_e)
 
     def gradient(self, e, epos):
         r"""We compute the gradient for U with electron e moved to epos, with respect to e as
@@ -387,7 +407,7 @@ class Three_Body_JastrowSpin:
             self.a_values[not_e][sep:],
             b_double_ders[:, sep:],
         )
-        return grad, lap + np.sum(grad ** 2, axis=0)
+        return grad, lap + np.sum(grad**2, axis=0)
 
     def laplacian(self, e, epos):
         r"""We compute the laplacian for U with electron e moved to epos, with respect to e as
@@ -466,7 +486,7 @@ class Three_Body_JastrowSpin:
                 self.a_values[not_e][sep:],
                 b_values[sep:],
             )
-        return {"ccoeff": 0.5 * np.sum(e_partial, axis=0)}
+        return {"ccoeff": np.sum(e_partial, axis=0)}
 
         # order of spin channel: upup,updown,downdown
 

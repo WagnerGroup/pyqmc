@@ -297,8 +297,10 @@ class Three_Body_JastrowSpin:
         configs = self._configscurrent
         na, nb = len(self.a_basis), len(self.b_basis)
         nconf, nelec = configs.configs.shape[:2]
-        nup = int(self._mol.nelec[0])
+        nup, ndown = self._mol.nelec
         not_e = np.arange(self._nelec) != e
+        edown = int(e >= nup)
+        sep = nup - int(e < nup)
 
         # electron-ion distances for electron e
         di_e = configs.dist.dist_i(self._mol.atom_coords(), epos.configs)
@@ -317,65 +319,30 @@ class Three_Body_JastrowSpin:
             a_gradients[:, :, k, :], a_e[..., k] = a.gradient_value(di_e, ri_e)
 
         # set values of b basis evaluations needed
-        b_values = np.zeros((nconf, self._nelec - 1, nb))
-        b_gradients = np.zeros((nconf, self._nelec - 1, nb, 3))
+        b_gradvals = np.zeros((nconf, self._nelec - 1, nb, 4))
         for m, b in enumerate(self.b_basis):
-            b_gradients[:, :, m], b_values[:, :, m] = b.gradient_value(de, re)
+            b_gradvals[:, :, m, 1:], b_gradvals[:, :, m, 0] = b.gradient_value(de, re)
 
-        edown = int(e >= nup)
-        sep = nup - int(e < nup)
+        spin_up = (np.arange(self._nelec - 1) < sep).astype(float)
+        spin = np.stack([spin_up, 1 - spin_up], axis=0)
+        Cab_j = np.einsum(
+            "jnIl,njmd,Iklms,sj->djnIk",
+            self.a_values[not_e],
+            b_gradvals,
+            self.C[..., edown:edown+2],
+            spin,
+        ) 
 
-        e_partial_new = np.zeros((self._nelec - 1, nconf))
-        e_partial_new[:sep] = np.einsum(
-            "nIk,jnIl,njm,Iklm->jn",
-            a_e,
-            self.a_values[not_e][:sep],
-            b_values[:,:sep],
-            self.C[..., edown],
-        )
-        e_partial_new[sep:] = np.einsum(
-            "nIk,jnIl,njm,Iklm->jn",
-            a_e,
-            self.a_values[not_e][sep:],
-            b_values[:,sep:],
-            self.C[..., edown + 1],
-        )
+        e_partial_new = np.einsum("nIk,jnIk->jn", a_e, Cab_j[0])
+        Cab = Cab_j.sum(axis=1)
 
         val = np.exp(np.sum(e_partial_new,axis=0) - self.P_i[e])
 
-        grad_term1 = np.einsum(
-            "Iklm,jnIl,nIkd,njm->dn",
-            self.C[..., edown],
-            self.a_values[not_e][:sep],
-            a_gradients,
-            b_values[:, :sep],
-        )
-        grad_term1 += np.einsum(
-            "Iklm,jnIl,nIkd,njm->dn",
-            self.C[..., edown + 1],
-            self.a_values[not_e][sep:],
-            a_gradients,
-            b_values[:, sep:],
-        )
-        grad_term2 = np.einsum(
-            "Iklm,jnIl,nIk,njmd->dn",
-            self.C[..., edown],
-            self.a_values[not_e][:sep],
-            a_e,
-            b_gradients[:, :sep],
-        )
-        grad_term2 += np.einsum(
-            "Iklm,jnIl,nIk,njmd->dn",
-            self.C[..., edown + 1],
-            self.a_values[not_e][sep:],
-            a_e,
-            b_gradients[:, sep:],
-        )
-        return grad_term1 + grad_term2,val,(e_partial_new,a_e)
+        grad_term1 = np.einsum("nIkd,nIk->dn", a_gradients, Cab[0])
+        grad_term2 = np.einsum("nIk,dnIk->dn", a_e, Cab[1:])
+        return grad_term1 + grad_term2, val, (e_partial_new, a_e)
 
-
-
-    def gradient_laplacian(self, e, epos):
+def gradient_laplacian(self, e, epos):
         configs = self._configscurrent
         na, nb = len(self.a_basis), len(self.b_basis)
         nconf, nelec = configs.configs.shape[:2]

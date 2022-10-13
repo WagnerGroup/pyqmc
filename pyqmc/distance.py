@@ -60,7 +60,7 @@ class RawDistance:
         ij = []
         for i in range(n2):
             vs.append(self.dist_i(config1, config2[:, i, :]))
-            ij.extend([(i, j) for j in range(n1)])
+            ij.extend([(j, i) for j in range(n1)])
         vs = np.concatenate(vs, axis=1)
 
         return vs, ij
@@ -116,7 +116,7 @@ class MinimalImageDistance(RawDistance):
         d1 = v - configs
         shifts = self.shifts.reshape((-1, *[1] * (len(d1.shape) - 1), 3))
         d1all = d1[np.newaxis] + shifts
-        dists = np.sum(d1all ** 2, axis=-1)
+        dists = np.sum(d1all**2, axis=-1)
         mininds = np.argmin(dists, axis=0)
         inds = np.meshgrid(*[np.arange(n) for n in mininds.shape], indexing="ij")
         return d1all[(mininds, *inds)]

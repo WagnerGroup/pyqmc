@@ -451,13 +451,13 @@ class Three_Body_JastrowSpin:
         for s, shape in enumerate([(nup, nup), (nup, ndown), (ndown, ndown)]):
             b_2d_values[inds] = bvalues.swapaxes(0, 1)
 
-        a_up = self.a_values[:nup]
-        a_down = self.a_values[nup:]
+        a = self.a_values
+        up, down = slice(0, nup), slice(nup, None)
         c_ders = np.zeros((nconf, self._mol.natm, na, na, nb, 3))
         einstr = "inIk,jnIl,ijnm->nIklm"
-        c_ders[..., 0] = np.einsum(einstr, a_up, a_up, b_2d_values[:nup, :nup])
-        c_ders[..., 1] = np.einsum(einstr, a_up, a_down, b_2d_values[:nup, nup:])
-        c_ders[..., 2] = np.einsum(einstr, a_down, a_down, b_2d_values[nup:, nup:])
+        c_ders[..., 0] = np.einsum(einstr, a[up], a[up], b_2d_values[up, up])
+        c_ders[..., 1] = np.einsum(einstr, a[up], a[down], b_2d_values[up, down])
+        c_ders[..., 2] = np.einsum(einstr, a[down], a[down], b_2d_values[down, down])
         c_ders += c_ders.swapaxes(2, 3)
 
         return {"ccoeff": c_ders}

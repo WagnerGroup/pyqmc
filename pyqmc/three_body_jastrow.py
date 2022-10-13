@@ -440,104 +440,24 @@ class Three_Body_JastrowSpin:
         configs = self._configscurrent
         nconf, nelec = configs.configs.shape[:2]
         na, nb = len(self.a_basis), len(self.b_basis)
-        nup = int(self._mol.nelec[0])
-        ndown = int(self._mol.nelec[1])
-
-        c_ders = np.zeros((self._mol.natm, na, na, nb, 3))
-
-        arange_e = np.arange(nelec)
-
-        e_partial = np.zeros(
-            (
-                nelec,
-                nconf,
-                self._mol.natm,
-                na,
-                na,
-                nb,
-                3,
-            )
-        )
-
-        for e, epos in enumerate(configs.configs.swapaxes(0, 1)):
-            not_e = arange_e != e
-            nup, ndown = self._mol.nelec
-            sep = nup - int(e < nup)
-            edown = int(e >= self._mol.nelec[0])
-            not_e = np.arange(self._nelec) != e
-
-            de = configs.dist.dist_i(configs.configs[:, not_e], epos)
-            re = np.linalg.norm(de, axis=-1)
-
-            b_values = np.zeros((self._nelec - 1, nconf, nb))
-            for i, b in enumerate(self.b_basis):
-                # swap axes: nconf and nelec. for now doing it here.
-                b_values[:, :, i] = b.value(de, re).swapaxes(0, 1)
-
-            e_partial[e, :, :, :, :, :, edown] = np.einsum(
-                "nIk,jnIl,jnm->nIklm",
-                self.a_values[e],
-                self.a_values[not_e][:sep],
-                b_values[:sep],
-            )
-            e_partial[e, :, :, :, :, :, edown + 1] = np.einsum(
-                "nIk,jnIl,jnm->nIklm",
-                self.a_values[e],
-                self.a_values[not_e][sep:],
-                b_values[sep:],
-            )
-        return {"ccoeff": np.sum(e_partial, axis=0)}
+        nup, ndown = self._mol.nelec
 
         # order of spin channel: upup,updown,downdown
+        d_all, ij = configs.dist.dist_matrix(configs.configs)
+        r_all = np.linalg.norm(d_all, axis=-1)
+        bvalues = np.stack([b.value(d_all, r_all) for b in self.b_basis], axis=-1)
+        inds = tuple(zip(*ij))
+        b_2d_values = np.zeros((nelec, nelec, nconf, nb))
+        for s, shape in enumerate([(nup, nup), (nup, ndown), (ndown, ndown)]):
+            b_2d_values[inds] = bvalues.swapaxes(0, 1)
 
-        # electron-electron distances
-        # d_upup dim is  nconf, nup(nup-1)/2,3
-        # d_downdown dim is nconf, ndown(ndown-1)/2,3
-        # d_updown dim is nconf, nup*ndown,3
+        a_up = self.a_values[:nup]
+        a_down = self.a_values[nup:]
+        c_ders = np.zeros((nconf, self._mol.natm, na, na, nb, 3))
+        einstr = "inIk,jnIl,ijnm->nIklm"
+        c_ders[..., 0] = np.einsum(einstr, a_up, a_up, b_2d_values[:nup, :nup])
+        c_ders[..., 1] = np.einsum(einstr, a_up, a_down, b_2d_values[:nup, nup:])
+        c_ders[..., 2] = np.einsum(einstr, a_down, a_down, b_2d_values[nup:, nup:])
+        c_ders += c_ders.swapaxes(2, 3)
 
-        # d_upup, ij_upup = configs.dist.dist_matrix(configs.configs[:, :nup])
-        # d_updown, ij_updown = configs.dist.pairwise(
-        #    configs.configs[:, :nup], configs.configs[:, nup:]
-        # )
-        # d_downdown, ij_downdown = configs.dist.dist_matrix(configs.configs[:, nup:])
-        # d_all = [d_upup, d_updown, d_downdown]
-
-        # ij_all = [ij_upup, ij_updown, ij_downdown]
-        # r_all = [np.linalg.norm(d, axis=-1) for d in d_all]
-
-        # # bvalues are the evaluations of b bases. bm(rij)
-        # b_2d_values = []
-        # for s, shape in enumerate([(nup, nup), (nup, ndown), (ndown, ndown)]):
-        #     bvalues = np.stack(
-        #        [b.value(d_all[s], r_all[s]) for i, b in enumerate(self.b_basis)],
-        #        axis=-1,
-        #     )
-        #     b_2d_values_s = np.zeros((*shape, nconf, nb))
-        #     inds = tuple(zip(*ij_all[s]))
-        #     b_2d_values_s[inds] = bvalues.swapaxes(0, 1)
-        #     b_2d_values.append(b_2d_values_s)
-
-        # sum_ij = np.zeros(
-        # (
-        #     nconf,
-        #     self._mol.natm,
-        #     na,
-        #     na,
-        #     nb,
-        #     3,
-        # ))
-        # print(b_2d_values[1][:,:,0,0],'bvals pgrad')
-
-        # sum_ij[:, :, :, :, :, 0] = np.einsum(
-        #     "inIk,jnIl,ijnm->nIklm", self.a_values[:nup], self.a_values[:nup], b_2d_values[0]
-        # )
-        # sum_ij[:, :, :, :, :, 1] = np.einsum(
-        #     "inIk,jnIl,ijnm->nIklm", self.a_values[:nup], self.a_values[nup:], b_2d_values[1]
-        # )
-        # sum_ij[:, :, :, :, :, 2] = np.einsum(
-        #     "inIk,jnIl,ijnm->nIklm", self.a_values[nup:], self.a_values[nup:], b_2d_values[2]
-        # )
-
-        # return {
-        #     "ccoeff": sum_ij
-        # }
+        return {"ccoeff": c_ders}

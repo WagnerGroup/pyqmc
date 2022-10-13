@@ -307,9 +307,6 @@ class Three_Body_JastrowSpin:
         de = configs.dist.dist_i(configs.configs[:, not_e], epos.configs)
         re = np.linalg.norm(de, axis=-1)
 
-        de_old = configs.dist.dist_i(configs.configs[:, not_e], configs.configs[:,e,:])
-        re_old = np.linalg.norm(de_old, axis=-1)
-
         # set values of a basis evaluations needed.
         a_gradients = np.zeros((nconf, self._mol.natm, na, 3))
         a_e = np.zeros((nconf, self._mol.natm, na))
@@ -320,17 +317,13 @@ class Three_Body_JastrowSpin:
         # set values of b basis evaluations needed
         b_values = np.zeros((nconf, self._nelec - 1, nb))
         b_gradients = np.zeros((nconf, self._nelec - 1, nb, 3))
-        b_values_old = np.zeros((nconf, self._nelec - 1, nb))
         for m, b in enumerate(self.b_basis):
             b_gradients[:, :, m], b_values[:, :, m] = b.gradient_value(de, re)
-            b_values_old[:,:,m] = b.value(de_old,re_old)
 
         edown = int(e >= nup)
         sep = nup - int(e < nup)
 
         e_partial_new = np.zeros((self._nelec - 1, nconf))
-        e_partial_old = np.zeros((self._nelec - 1, nconf))
-
         e_partial_new[:sep] = np.einsum(
             "nIk,jnIl,njm,Iklm->jn",
             a_e,
@@ -345,23 +338,8 @@ class Three_Body_JastrowSpin:
             b_values[:,sep:],
             self.C[..., edown + 1],
         )
-        e_partial_old[:sep] = np.einsum(
-            "nIk,jnIl,njm,Iklm->jn",
-            self.a_values[e],
-            self.a_values[not_e][:sep],
-            b_values_old[:,:sep],
-            self.C[..., edown],
-        )
-        e_partial_old[sep:] = np.einsum(
-            "nIk,jnIl,njm,Iklm->jn",
-            self.a_values[e],
-            self.a_values[not_e][sep:],
-            b_values_old[:,sep:],
-            self.C[..., edown + 1],
-        )
 
-        val = np.exp(np.sum(e_partial_new,axis=0) - np.sum(e_partial_old,axis=0))
-
+        val = np.exp(np.sum(e_partial_new,axis=0) - self.P_i[e])
 
         grad_term1 = np.einsum(
             "Iklm,jnIl,nIkd,njm->dn",

@@ -1,8 +1,9 @@
-import pyqmc.api as pyq
 
+import pyqmc.api as pyq
 # import pyqmc.three_body_jastrow_backup as three_body_jastrow
 import three_body_jastrow as three_body_jastrow
 import pyqmc.wftools as wftools
+import pyqmc.mc as mc
 import pyqmc.testwf as testwf
 import pyqmc.coord as coord
 import numpy as np
@@ -13,7 +14,7 @@ mol = pyscf.gto.M(atom="H 0. 0. 0.,; Li 0. 0. 1.5", basis="sto-3g", unit="bohr")
 a_basis, b_basis = wftools.default_jastrow_basis(mol)
 J = three_body_jastrow.Three_Body_JastrowSpin(mol, a_basis, b_basis)
 J.parameters["ccoeff"] = np.random.random(J.parameters["ccoeff"].shape) * 0.02 - 0.01
-configs = pyq.initial_guess(mol, 10)
+configs = mc.initial_guess(mol, 10)
 epos = coord.OpenConfigs(
     np.random.random((configs.configs.shape[0], configs.configs.shape[2]))
 )
@@ -28,27 +29,27 @@ def run_tests(wf, epos, epsilon):
 
     # _, epos = pyq.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node
 
+
+    
+    _, epos = mc.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node
+
     for k, item in testwf.test_updateinternals(wf, epos).items():
         print(k, item)
         assert item < epsilon
 
-    # testwf.test_mask(wf, 0, epos)
+    #testwf.test_mask(wf, 0, epos)
+
+    # for fname, func in zip(
+    #     ["gradient", "laplacian", "pgradient"],
+    #     [testwf.test_wf_gradient, testwf.test_wf_laplacian, testwf.test_wf_pgradient,],
+    # ):
+    #     err = [func(wf, epos, delta) for delta in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8]]
+    #     assert min(err) < epsilon, "epsilon {0}".format(epsilon)
 
     for fname, func in zip(
-        ["gradient", "laplacian", "pgradient"],
-        [testwf.test_wf_gradient, testwf.test_wf_laplacian, testwf.test_wf_pgradient],
+        ["gradient_value", "gradient_laplacian"],
+        [testwf.test_wf_gradient_value, testwf.test_wf_gradient_laplacian,],
     ):
-        err = [func(wf, epos, delta) for delta in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8]]
-        print(err)
-        assert min(err) < epsilon, "epsilon {0}".format(epsilon)
-
-    for fname, func in zip(
-        ["gradient_laplacian"],
-        [
-            testwf.test_wf_gradient_laplacian,
-        ],
-    ):
-        # "gradient_value",testwf.test_wf_gradient_value
         d = func(wf, epos)
         for k, v in d.items():
             assert v < 1e-10, (k, v)

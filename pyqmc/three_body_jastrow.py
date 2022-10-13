@@ -88,7 +88,7 @@ class Three_Body_JastrowSpin:
             # di dim nconf,I,nelec
             a_values[:, :, :, i] = a.value(di, ri)
 
-        self.C = self.parameters["ccoeff"] + self.parameters["ccoeff"].swapaxes(1, 2)
+        self.C = (self.parameters["ccoeff"] + self.parameters["ccoeff"].swapaxes(1, 2))/2
 
         self.sum_jC = np.zeros((nelec, nconf))
         arange_e = np.arange(nelec)
@@ -109,6 +109,10 @@ class Three_Body_JastrowSpin:
         newconfigs.move(e, epos, mask)
         # eventually want to remove recompute from here.
         self.recompute(newconfigs)
+        #update a_values
+
+        #update e_partials.
+
 
     def value(self):
         """Compute the current log value of the wavefunction
@@ -271,6 +275,111 @@ class Three_Body_JastrowSpin:
 
         grad = term1 + term2
         return grad
+
+
+    def gradient_value(self, e, epos):
+        configs = self._configscurrent
+        na, nb = len(self.a_basis), len(self.b_basis)
+        nconf, nelec = configs.configs.shape[:2]
+        nup = int(self._mol.nelec[0])
+        not_e = np.arange(self._nelec) != e
+
+        # electron-ion distances for electron e
+        di_e = configs.dist.dist_i(self._mol.atom_coords(), epos.configs)
+        ri_e = np.linalg.norm(di_e, axis=-1)
+
+        # di is electron -ion distance for all electrons but electron e.
+        # electron-electron distances from electron e
+        de = configs.dist.dist_i(configs.configs[:, not_e], epos.configs)
+        re = np.linalg.norm(de, axis=-1)
+
+        de_old = configs.dist.dist_i(configs.configs[:, not_e], configs.configs[:,e,:])
+        re_old = np.linalg.norm(de_old, axis=-1)
+
+        # set values of a basis evaluations needed.
+        a_gradients = np.zeros((nconf, self._mol.natm, na, 3))
+        a_e = np.zeros((nconf, self._mol.natm, na))
+        for k, a in enumerate(self.a_basis):
+            # di dim nconf,I,nelec
+            a_gradients[:, :, k, :], a_e[..., k] = a.gradient_value(di_e, ri_e)
+
+        # set values of b basis evaluations needed
+        b_values = np.zeros((nconf, self._nelec - 1, nb))
+        b_gradients = np.zeros((nconf, self._nelec - 1, nb, 3))
+        b_values_old = np.zeros((nconf, self._nelec - 1, nb))
+        for m, b in enumerate(self.b_basis):
+            b_gradients[:, :, m], b_values[:, :, m] = b.gradient_value(de, re)
+            b_values_old[:,:,m] = b.value(de_old,re_old)
+
+        edown = int(e >= nup)
+        sep = nup - int(e < nup)
+
+        e_partial_new = np.zeros(nconf)
+        e_partial_old = np.zeros(nconf)
+
+        e_partial_new += np.einsum(
+            "nIk,jnIl,njm,Iklm->n",
+            a_e,
+            self.a_values[not_e][:sep],
+            b_values[:,:sep],
+            self.C[..., edown],
+        )
+        e_partial_new += np.einsum(
+            "nIk,jnIl,njm,Iklm->n",
+            a_e,
+            self.a_values[not_e][sep:],
+            b_values[:,sep:],
+            self.C[..., edown + 1],
+        )
+        e_partial_old += np.einsum(
+            "nIk,jnIl,njm,Iklm->n",
+            self.a_values[e],
+            self.a_values[not_e][:sep],
+            b_values_old[:,:sep],
+            self.C[..., edown],
+        )
+        e_partial_old += np.einsum(
+            "nIk,jnIl,njm,Iklm->n",
+            self.a_values[e],
+            self.a_values[not_e][sep:],
+            b_values_old[:,sep:],
+            self.C[..., edown + 1],
+        )
+
+        val = np.exp(e_partial_new - e_partial_old)
+
+        grad_term1 = np.einsum(
+            "Iklm,jnIl,nIkd,njm->dn",
+            self.C[..., edown],
+            self.a_values[not_e][:sep],
+            a_gradients,
+            b_values[:, :sep],
+        )
+        grad_term1 += np.einsum(
+            "Iklm,jnIl,nIkd,njm->dn",
+            self.C[..., edown + 1],
+            self.a_values[not_e][sep:],
+            a_gradients,
+            b_values[:, sep:],
+        )
+
+        grad_term2 = np.einsum(
+            "Iklm,jnIl,nIk,njmd->dn",
+            self.C[..., edown],
+            self.a_values[not_e][:sep],
+            a_e,
+            b_gradients[:, :sep],
+        )
+        grad_term2 += np.einsum(
+            "Iklm,jnIl,nIk,njmd->dn",
+            self.C[..., edown + 1],
+            self.a_values[not_e][sep:],
+            a_e,
+            b_gradients[:, sep:],
+        )
+        return grad_term1 + grad_term2,val,a_e
+
+
 
     def gradient_laplacian(self, e, epos):
         configs = self._configscurrent

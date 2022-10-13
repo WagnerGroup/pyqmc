@@ -32,7 +32,6 @@ class Three_Body_JastrowSpin:
         self.parameters["ccoeff"] = np.zeros(
             (self._mol.natm, len(a_basis), len(a_basis), len(b_basis), 3)
         )
-        # self.parameters["ccoeef_diagonal"] = np.diagonal(self.C,axis1=1,axis2=2)
         self.iscomplex = False
 
     def recompute(self, configs):
@@ -121,6 +120,8 @@ class Three_Body_JastrowSpin:
             )
         else:
             P_ie_new, ae = saved_values
+            P_ie_new=P_ie_new[:,mask]
+            ae = ae[mask]
         P_ie_old = self.single_e_partial(
             configs_mask, e, configs_mask.configs[:, e], self.a_values[eind, mind]
         )[0]
@@ -329,8 +330,6 @@ class Three_Body_JastrowSpin:
 
         e_partial_new = np.zeros((self._nelec - 1, nconf))
         e_partial_old = np.zeros((self._nelec - 1, nconf))
-        # print(e,'e')
-        # print(self.a_values[not_e][:sep].shape,'ashape')
 
         e_partial_new[:sep] = np.einsum(
             "nIk,jnIl,njm,Iklm->jn",
@@ -362,6 +361,7 @@ class Three_Body_JastrowSpin:
         )
 
         val = np.exp(np.sum(e_partial_new,axis=0) - np.sum(e_partial_old,axis=0))
+
 
         grad_term1 = np.einsum(
             "Iklm,jnIl,nIkd,njm->dn",

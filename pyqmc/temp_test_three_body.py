@@ -1,4 +1,3 @@
-
 import pyqmc.api as pyq
 # import pyqmc.three_body_jastrow_backup as three_body_jastrow
 import three_body_jastrow as three_body_jastrow
@@ -12,13 +11,16 @@ import pyscf
 
 def run_tests(wf, epos, epsilon):
 
-  #  _, epos = pyq.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node
+    #_, epos = pyq.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node
 
     for k, item in testwf.test_updateinternals(wf, epos).items():
         print(k, item)
         assert item < epsilon
 
-   # testwf.test_mask(wf, 0, epos)
+
+    print(epos.configs.shape,'epos shape in runtests temp test')
+
+    testwf.test_mask(wf, 0, epos.make_irreducible(0,epos.configs[:,0]))
 
     for fname, func in zip(
         ["gradient", "laplacian", "pgradient"],
@@ -50,6 +52,7 @@ def test_obc_wfs(mol, J, epsilon=1e-5, nconf=10):
             wf.parameters[k] = np.asarray(np.random.rand(*wf.parameters[k].shape))
 
     epos = pyq.initial_guess(mol, nconf)
+    print(epos.configs.shape,'epos shape in initial guess')
     run_tests(wf, epos, epsilon)
 
 

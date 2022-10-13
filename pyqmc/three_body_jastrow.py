@@ -194,6 +194,8 @@ class Three_Body_JastrowSpin:
         configs = self._configscurrent
         nconf, nelec = configs.configs.shape[:2]
         edown = int(e >= self._mol.nelec[0])
+        if mask is None:
+            mask = np.ones(nconf, dtype=bool)
 
         nup = int(self._mol.nelec[0])
         ndown = int(self._mol.nelec[1])
@@ -201,10 +203,10 @@ class Three_Body_JastrowSpin:
         not_e = np.arange(self._nelec) != e
 
         e_partial_new, a_e = self.single_e_partial(
-            configs, e, epos.configs, self.a_values[not_e]
+            configs.mask(mask), e, epos.configs[mask], self.a_values[not_e][:, mask]
         )
 
-        val = np.exp(e_partial_new.sum(axis=0) - self.P_i[e])
+        val = np.exp(e_partial_new.sum(axis=0) - self.P_i[e, mask])
         return val, (e_partial_new, a_e)
 
     def gradient(self, e, epos):

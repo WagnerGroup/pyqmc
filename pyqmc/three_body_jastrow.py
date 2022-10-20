@@ -161,28 +161,28 @@ class Three_Body_JastrowSpin:
         di_e = configs.dist.dist_i(self._mol.atom_coords(), epos)
         ri_e = np.linalg.norm(di_e, axis=-1)
 
-        ae = np.zeros((nconf, self._mol.natm, na))
+        ae = np.zeros((*epos.shape[-2::-1], self._mol.natm, na))
         for i, a in enumerate(self.a_basis):
-            ae[:, :, i] = a.value(di_e, ri_e)
+            ae[..., :, i] = a.value(di_e, ri_e)
 
-        b_values = np.zeros((self._nelec - 1, nconf, nb))
+        b_values = np.zeros((*epos.shape[-2::-1],self._nelec - 1, nb))
         for i, b in enumerate(self.b_basis):
-            # swap axes: nconf and nelec. for now doing it here.
-            b_values[:, :, i] = b.value(de, re).swapaxes(0, 1)
+            b_values[..., :, i] = b.value(de, re)
+        #epos shape nconfig,naux,3
+        e_partial = np.zeros((self._nelec - 1, *epos.shape[-2::-1]))
 
-        e_partial = np.zeros((self._nelec - 1, nconf))
         e_partial[:sep] = np.einsum(
-            "nIk,jnIl,jnm,Iklm->jn",
+            "...nIk,j...nIl,...njm,Iklm->j...n",
             ae,
             a_values[:sep],
-            b_values[:sep],
+            b_values[...,:sep,:],
             self.C[..., edown],
         )
         e_partial[sep:] = np.einsum(
-            "nIk,jnIl,jnm,Iklm->jn",
+            "...nIk,j...nIl,...njm,Iklm->j...n",
             ae,
             a_values[sep:],
-            b_values[sep:],
+            b_values[...,sep:,:],
             self.C[..., edown + 1],
         )
         return e_partial, ae
@@ -193,13 +193,9 @@ class Three_Body_JastrowSpin:
         """
         configs = self._configscurrent
         nconf, nelec = configs.configs.shape[:2]
-        edown = int(e >= self._mol.nelec[0])
         if mask is None:
             mask = np.ones(nconf, dtype=bool)
 
-        nup = int(self._mol.nelec[0])
-        ndown = int(self._mol.nelec[1])
-        sep = nup - int(e < nup)
         not_e = np.arange(self._nelec) != e
 
         e_partial_new, a_e = self.single_e_partial(
@@ -207,7 +203,7 @@ class Three_Body_JastrowSpin:
         )
 
         val = np.exp(e_partial_new.sum(axis=0) - self.P_i[e, mask])
-        return val, (e_partial_new, a_e)
+        return val.T, (e_partial_new, a_e)
 
     def gradient(self, e, epos):
         r"""We compute the gradient for U with electron e moved to epos, with respect to e as
@@ -342,7 +338,7 @@ class Three_Body_JastrowSpin:
         grad_term2 = np.einsum("nIk,dnIk->dn", a_e, Cab[1:])
         return grad_term1 + grad_term2, val, (e_partial_new, a_e)
 
-def gradient_laplacian(self, e, epos):
+    def gradient_laplacian(self, e, epos):
         configs = self._configscurrent
         na, nb = len(self.a_basis), len(self.b_basis)
         nconf, nelec = configs.configs.shape[:2]
@@ -484,7 +480,7 @@ def gradient_laplacian(self, e, epos):
             epos: configs object for electron e
         :returns: gradient with respect to electron e with shape [3,nconfigs]
         """
-        return self.gradient_laplacian(e, epos)[1]
+        return self.gradient_laplacian(e, epos)[1]  
 
     def pgradient(self):
         configs = self._configscurrent

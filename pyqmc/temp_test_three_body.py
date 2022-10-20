@@ -21,7 +21,10 @@ def run_tests(wf, epos, epsilon):
     print(epos.configs.shape,'epos shape in runtests temp test')
 
     testwf.test_mask(wf, 0, epos.make_irreducible(0,epos.configs[:,0]))
+    print('testmask1 passed')
+    testwf.test_mask(wf, 0, epos)
 
+   
     for fname, func in zip(
         ["gradient", "laplacian", "pgradient"],
         [testwf.test_wf_gradient, testwf.test_wf_laplacian, testwf.test_wf_pgradient],

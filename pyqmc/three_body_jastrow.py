@@ -45,7 +45,7 @@ class Three_Body_JastrowSpin:
         """
         self._configscurrent = configs.copy()
         nconf, nelec = configs.configs.shape[:2]
-        na, nb = len(self.a_basis), len(self.b_basis)
+        na = len(self.a_basis)
         # n_elec in first axis to match di format
         # order of spin channel: upup,updown,downdown
 
@@ -87,7 +87,9 @@ class Three_Body_JastrowSpin:
             # di dim nconf,I,nelec
             a_values[:, :, :, i] = a.value(di, ri)
 
-        self.C = (self.parameters["ccoeff"] + self.parameters["ccoeff"].swapaxes(1, 2))/2
+        self.C = (
+            self.parameters["ccoeff"] + self.parameters["ccoeff"].swapaxes(1, 2)
+        ) / 2
 
         self.P_i = np.zeros((nelec, nconf))
         arange_e = np.arange(nelec)
@@ -120,7 +122,7 @@ class Three_Body_JastrowSpin:
             )
         else:
             P_ie_new, ae = saved_values
-            P_ie_new=P_ie_new[:,mask]
+            P_ie_new = P_ie_new[:, mask]
             ae = ae[mask]
         P_ie_old = self.single_e_partial(
             configs_mask, e, configs_mask.configs[:, e], self.a_values[eind, mind]
@@ -149,11 +151,10 @@ class Three_Body_JastrowSpin:
 
         """
         na, nb = len(self.a_basis), len(self.b_basis)
-        nup, ndown = self._mol.nelec
+        nup = self._mol.nelec[0]
         sep = nup - int(e < nup)
         edown = int(e >= self._mol.nelec[0])
         not_e = np.arange(self._nelec) != e
-        nconf = configs.configs.shape[0]
 
         de = configs.dist.dist_i(configs.configs[:, not_e], epos)
         re = np.linalg.norm(de, axis=-1)
@@ -165,24 +166,24 @@ class Three_Body_JastrowSpin:
         for i, a in enumerate(self.a_basis):
             ae[..., :, i] = a.value(di_e, ri_e)
 
-        b_values = np.zeros((*epos.shape[-2::-1],self._nelec - 1, nb))
+        b_values = np.zeros((*epos.shape[-2::-1], self._nelec - 1, nb))
         for i, b in enumerate(self.b_basis):
             b_values[..., :, i] = b.value(de, re)
-        #epos shape nconfig,naux,3
+        # epos shape nconfig,naux,3
         e_partial = np.zeros((self._nelec - 1, *epos.shape[-2::-1]))
 
         e_partial[:sep] = np.einsum(
             "...nIk,j...nIl,...njm,Iklm->j...n",
             ae,
             a_values[:sep],
-            b_values[...,:sep,:],
+            b_values[..., :sep, :],
             self.C[..., edown],
         )
         e_partial[sep:] = np.einsum(
             "...nIk,j...nIl,...njm,Iklm->j...n",
             ae,
             a_values[sep:],
-            b_values[...,sep:,:],
+            b_values[..., sep:, :],
             self.C[..., edown + 1],
         )
         return e_partial, ae
@@ -192,7 +193,7 @@ class Three_Body_JastrowSpin:
         Compute the ratio :math:`\Psi_{\rm new}/\Psi_{\rm old}` for moving electron e to epos.
         """
         configs = self._configscurrent
-        nconf, nelec = configs.configs.shape[:2]
+        nconf = configs.configs.shape[0]
         if mask is None:
             mask = np.ones(nconf, dtype=bool)
 
@@ -203,6 +204,7 @@ class Three_Body_JastrowSpin:
         )
 
         val = np.exp(e_partial_new.sum(axis=0) - self.P_i[e, mask])
+        # if val is dim 2 naux,nconf, val.T flips it, else it leaves it be. for a 1d array, A : A = A.T
         return val.T, (e_partial_new, a_e)
 
     def gradient(self, e, epos):
@@ -226,7 +228,7 @@ class Three_Body_JastrowSpin:
 
         configs = self._configscurrent
         na, nb = len(self.a_basis), len(self.b_basis)
-        nconf, nelec = configs.configs.shape[:2]
+        nconf = configs.configs.shape[0]
         nup = int(self._mol.nelec[0])
         not_e = np.arange(self._nelec) != e
 
@@ -288,12 +290,11 @@ class Three_Body_JastrowSpin:
         grad = term1 + term2
         return grad
 
-
     def gradient_value(self, e, epos):
         configs = self._configscurrent
         na, nb = len(self.a_basis), len(self.b_basis)
-        nconf, nelec = configs.configs.shape[:2]
-        nup, ndown = self._mol.nelec
+        nconf = configs.configs.shape[0]
+        nup = self._mol.nelec[0]
         not_e = np.arange(self._nelec) != e
         edown = int(e >= nup)
         sep = nup - int(e < nup)
@@ -325,14 +326,14 @@ class Three_Body_JastrowSpin:
             "jnIl,njmd,Iklms,sj->djnIk",
             self.a_values[not_e],
             b_gradvals,
-            self.C[..., edown:edown+2],
+            self.C[..., edown : edown + 2],
             spin,
-        ) 
+        )
 
         e_partial_new = np.einsum("nIk,jnIk->jn", a_e, Cab_j[0])
         Cab = Cab_j.sum(axis=1)
 
-        val = np.exp(np.sum(e_partial_new,axis=0) - self.P_i[e])
+        val = np.exp(np.sum(e_partial_new, axis=0) - self.P_i[e])
 
         grad_term1 = np.einsum("nIkd,nIk->dn", a_gradients, Cab[0])
         grad_term2 = np.einsum("nIk,dnIk->dn", a_e, Cab[1:])
@@ -341,7 +342,7 @@ class Three_Body_JastrowSpin:
     def gradient_laplacian(self, e, epos):
         configs = self._configscurrent
         na, nb = len(self.a_basis), len(self.b_basis)
-        nconf, nelec = configs.configs.shape[:2]
+        nconf = configs.configs.shape[0]
         nup = int(self._mol.nelec[0])
         not_e = np.arange(self._nelec) != e
 
@@ -453,7 +454,7 @@ class Three_Body_JastrowSpin:
             self.a_values[not_e][sep:],
             b_double_ders[:, sep:],
         )
-        return grad, lap + np.sum(grad**2, axis=0)
+        return grad, lap + np.sum(grad ** 2, axis=0)
 
     def laplacian(self, e, epos):
         r"""We compute the laplacian for U with electron e moved to epos, with respect to e as
@@ -480,7 +481,7 @@ class Three_Body_JastrowSpin:
             epos: configs object for electron e
         :returns: gradient with respect to electron e with shape [3,nconfigs]
         """
-        return self.gradient_laplacian(e, epos)[1]  
+        return self.gradient_laplacian(e, epos)[1]
 
     def pgradient(self):
         configs = self._configscurrent
@@ -506,4 +507,4 @@ class Three_Body_JastrowSpin:
         c_ders[..., 2] = np.einsum(einstr, a[down], a[down], b_2d_values[down, down])
         c_ders += c_ders.swapaxes(2, 3)
 
-        return {"ccoeff": 0.5*c_ders}
+        return {"ccoeff": 0.5 * c_ders}

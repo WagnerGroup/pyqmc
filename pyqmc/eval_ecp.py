@@ -263,8 +263,8 @@ def generate_quadrature_grids():
         return s * np.cos(p_), s * np.sin(p_), np.cos(t_)
 
     b_1 = np.arctan(2)
-    c_1 = np.arccos((2 + 5**.5) / (15 + 6 * 5**.5)**.5)
-    c_2 = np.arccos(1 / (15 + 6 * 5**.5)**.5)
+    c_1 = np.arccos((2 + 5 ** 0.5) / (15 + 6 * 5 ** 0.5) ** 0.5)
+    c_2 = np.arccos(1 / (15 + 6 * 5 ** 0.5) ** 0.5)
     theta, phi = {}, {}
     theta["A"] = np.array([0, np.pi])
     phi["A"] = np.zeros(2)
@@ -282,17 +282,18 @@ def generate_quadrature_grids():
     lens = {}
     lens["O"] = [len(x) for x in [OA, OB, OC, OD]]
     lens["I"] = [len(I[s]) for s in "ABC"]
+
     def repeat(s, *args):
         return np.concatenate([np.repeat(w, l) for w, l in zip(args, lens[s])])
 
     qgrid = {}
-    qgrid[6] =  (OA, repeat("O", 1/6))
-    qgrid[18] = (OAB, repeat("O", 1/30, 1/15))
-    qgrid[26] = (OABC, repeat("O", 1/21, 4/105, 27/840))
-    qgrid[50] = (OABCD, repeat("O", 4/315, 64/2835, 27/1280, 14641/725760))
-    qgrid[12] = (IAB, repeat("I", 1/12, 1/12))
-    qgrid[32] = (IABC, repeat("I", 5/168, 5/168, 27/840))
-    
+    qgrid[6] = (OA, repeat("O", 1 / 6))
+    qgrid[18] = (OAB, repeat("O", 1 / 30, 1 / 15))
+    qgrid[26] = (OABC, repeat("O", 1 / 21, 4 / 105, 27 / 840))
+    qgrid[50] = (OABCD, repeat("O", 4 / 315, 64 / 2835, 27 / 1280, 14641 / 725760))
+    qgrid[12] = (IAB, repeat("I", 1 / 12, 1 / 12))
+    qgrid[32] = (IABC, repeat("I", 5 / 168, 5 / 168, 27 / 840))
+
     return qgrid
 
 

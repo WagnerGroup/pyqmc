@@ -169,20 +169,19 @@ def translate_occ(x, orbitals, nocc):
 
 
 def pbc_determinants_from_casci(mc, orbitals, cutoff=0.05):
+    if hasattr(mc.ncore, "len"):
+        nocc = [c + e for c, e in zip(mc.ncore, mc.nelecas)]
+    else:
+        nocc = [mc.ncore + e for e in mc.nelecas]
+    if not hasattr(orbitals[0], "len"):
+        orbitals = [orbitals, orbitals]
     deters = fci.addons.large_ci(mc.ci, mc.ncas, mc.nelecas, tol=-1)
-    nocc = mc.ncore + mc.nelecas[0]
     determinants = []
     for x in deters:
         if abs(x[0]) > cutoff:
-            determinants.append(
-                (
-                    x[0],
-                    # Extra list is for k-point index
-                    [
-                        [translate_occ(x[1], orbitals, nocc)],
-                        [translate_occ(x[2], orbitals, nocc)],
-                    ],
-                )
-            )
+            allorbs = [
+                [translate_occ(x[1], orbitals[0], nocc[0])],
+                [translate_occ(x[2], orbitals[1], nocc[1])],
+            ]
+            determinants.append((x[0], *allorbs))
     return determinants
-

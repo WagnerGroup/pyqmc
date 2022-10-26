@@ -22,7 +22,6 @@ def OPTIMIZE(
     anchors=None,
     nconfig=1000,
     ci_checkfile=None,
-    cas_orbitals=None,
     load_parameters=None,
     S=None,
     jastrow_kws=None,
@@ -118,7 +117,6 @@ def VMC(
     output,
     nconfig=1000,
     ci_checkfile=None,
-    cas_orbitals=None,
     load_parameters=None,
     S=None,
     jastrow_kws=None,
@@ -146,7 +144,6 @@ def DMC(
     output,
     nconfig=1000,
     ci_checkfile=None,
-    cas_orbitals=None,
     load_parameters=None,
     S=None,
     jastrow_kws=None,
@@ -174,7 +171,6 @@ def initialize_qmc_objects(
     nconfig=1000,
     load_parameters=None,
     ci_checkfile=None,
-    cas_orbitals=None,
     S=None,
     jastrow_kws=None,
     slater_kws=None,
@@ -190,10 +186,9 @@ def initialize_qmc_objects(
         mol, mf, mc = pyscftools.recover_pyscf(dft_checkfile, ci_checkfile=ci_checkfile)
         if not hasattr(mc.ci, "shape"):
             mc.ci = mc.ci[target_root]
-        if cas_orbitals is not None:
-            mc.orbitals = cas_orbitals
         elif mc.orbitals is None:
             mc.orbitals = np.arange(mc.ncore, mc.ncore + mc.ncas)
+            print("Warning: 'orbitals' not found in mc object; using default")
 
     if S is not None:
         mol = supercell.get_supercell(mol, np.asarray(S))

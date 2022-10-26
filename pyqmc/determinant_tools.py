@@ -156,3 +156,33 @@ def compute_value(updets, dndets, det_coeffs):
     wf_sign = np.nan_to_num(wf_val / gpu.cp.abs(wf_val))
     wf_logval = np.nan_to_num(gpu.cp.log(gpu.cp.abs(wf_val)) + upref + dnref)
     return gpu.asnumpy(wf_sign), gpu.asnumpy(wf_logval)
+
+
+def translate_occ(x, orbitals, nocc):
+    a = binary_to_occ(x, 0)[0]
+    orbitals_without_active = list(range(nocc))
+    for o in orbitals:
+        if o in orbitals_without_active:
+            orbitals_without_active.remove(o)
+
+    return orbitals_without_active + [orbitals[i] for i in a]
+
+
+def pbc_determinants_from_casci(mc, orbitals, cutoff=0.05):
+    deters = fci.addons.large_ci(mc.ci, mc.ncas, mc.nelecas, tol=-1)
+    nocc = mc.ncore + mc.nelecas[0]
+    determinants = []
+    for x in deters:
+        if abs(x[0]) > cutoff:
+            determinants.append(
+                (
+                    x[0],
+                    # Extra list is for k-point index
+                    [
+                        [translate_occ(x[1], orbitals, nocc)],
+                        [translate_occ(x[2], orbitals, nocc)],
+                    ],
+                )
+            )
+    return determinants
+

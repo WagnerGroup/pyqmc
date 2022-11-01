@@ -185,6 +185,7 @@ def dmc_propagate(
         avg["weight"] = wavg
         avg["acceptance"] = np.mean(prob_acceptance)
         avg["tmove_acceptance"] = np.mean(tmove_acceptance)
+        avg["tdamp"] = np.mean(tdamp)
         df.append(avg)
     weight = np.asarray([d["weight"] for d in df])
     avg_weight = weight / np.mean(weight)

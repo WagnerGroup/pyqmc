@@ -42,7 +42,7 @@ def propose_drift_diffusion(wf, configs, tstep, e):
     # Compute reverse move
     g, wfratio, saved = wf.gradient_value(e, newepos)
     new_grad = limdrift(np.real(g.T), tstep)
-    forward = np.sum(gauss ** 2, axis=1)
+    forward = np.sum(gauss**2, axis=1)
     backward = np.sum((gauss + grad + new_grad) ** 2, axis=1)
     t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
 
@@ -262,7 +262,10 @@ def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **k
     weight = np.array([w["weight"] for w in allresults[0]]) * confweight
     weight_avg = weight / np.sum(weight)
     block_avg = {
-        k: np.sum([res[k] * ww for res, ww in zip(allresults[0], weight_avg)], axis=0,)
+        k: np.sum(
+            [res[k] * ww for res, ww in zip(allresults[0], weight_avg)],
+            axis=0,
+        )
         for k in allresults[0][0].keys()
     }
     block_avg["weight"] = np.mean(weight)

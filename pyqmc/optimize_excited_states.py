@@ -82,7 +82,7 @@ def collect_overlap_data(wfs, configs, energy, transforms):
         )
 
         weighted_dat[("dp2", wfi)][:, wfi, :] = (
-            np.einsum("cp,jc->pj", dp ** 2, weight[wfi, :, :], optimize=True) / nconfig
+            np.einsum("cp,jc->pj", dp**2, weight[wfi, :, :], optimize=True) / nconfig
         )
 
         weighted_dat[("dpH", wfi)][:, wfi, :] = (
@@ -143,7 +143,7 @@ def sample_overlap_worker(
                 )
                 grads = [np.real(g.T) for g in grads]
                 new_grad = mc.limdrift(np.mean(grads, axis=0))
-                forward = np.sum(gauss ** 2, axis=1)
+                forward = np.sum(gauss**2, axis=1)
                 backward = np.sum((gauss + tstep * (grad + new_grad)) ** 2, axis=1)
 
                 # Acceptance
@@ -462,8 +462,8 @@ def find_move_from_line(
     # print("norm",np.einsum('ijj->i', (overlap-1)**2 ))
     cost = (
         np.sum(energy.diagonal(axis1=1, axis2=2), axis=1)
-        + overlap_penalty * np.sum(np.triu(overlap ** 2, 1), axis=(1, 2))
-        + offdiagonal_energy_penalty * np.sum(np.triu(energy ** 2, 1), axis=(1, 2))
+        + overlap_penalty * np.sum(np.triu(overlap**2, 1), axis=(1, 2))
+        + offdiagonal_energy_penalty * np.sum(np.triu(energy**2, 1), axis=(1, 2))
         + norm_penalty * np.einsum("ijj->i", (overlap - 1) ** 2)
     )
 
@@ -600,9 +600,9 @@ class AdamMove:
 
     def update(self, g, m_old, v_old, t):
         m_new = self.beta1 * m_old + (1 - self.beta1) * g
-        v_new = self.beta2 * v_old + (1 - self.beta2) * g ** 2
-        mhat = m_new / (1 - self.beta1 ** t)
-        vhat = v_new / (1 - self.beta2 ** t)
+        v_new = self.beta2 * v_old + (1 - self.beta2) * g**2
+        mhat = m_new / (1 - self.beta1**t)
+        vhat = v_new / (1 - self.beta2**t)
         theta_move = -self.alpha * mhat / (np.sqrt(vhat) + self.epsilon)
         return theta_move, m_new, v_new
 

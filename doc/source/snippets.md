@@ -115,8 +115,8 @@ def H2_ccecp_uhf():
     )
     mf = scf.UHF(mol).run()
     return mol, mf
-
-mol, mf = H2_ccecp_uhf()
+if __name__=="__main__":
+    mol, mf = H2_ccecp_uhf()
 ```
 then create the wf object via:
 ```

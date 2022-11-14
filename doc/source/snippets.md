@@ -99,6 +99,39 @@ if __name__=="__main__":
     pyqmc.recipes.OPTIMIZE("mf.chk", "opt.chk", ci_checkfile="hci.chk", nconfig=1000)
 ```
 
+### Create a wavefunction with 3 body Jastrow factor.
+
+first create mol,mf objects using pyscf
+
+```
+def H2_ccecp_uhf():
+    r = 2
+    mol = gto.M(
+        atom="H 0. 0. 0.; H 0. 0. %g" % r,
+        ecp="ccecp",
+        basis="ccpvdz",
+        unit="bohr",
+        verbose=1,
+    )
+    mf = scf.UHF(mol).run()
+    return mol, mf
+
+mol, mf = H2_ccecp_uhf()
+```
+then create the wf object via:
+```
+#jastrow_kws have to be passed even if it's empty.
+wf, to_opt = wftools.generate_wf(mol, mf,jastrow=[generate_jastrow,wftools.generate_3_jastrow],jastrow_kws=[{},{}])
+```
+then you can can optimize with
+```
+nconf = 100
+wf, dfgrad = line_minimization(
+    wf, initial_guess(mol, nconf), gradient_generator(mol, wf, to_opt)
+)
+```
+
+
 
 ### MPI parallelization
 

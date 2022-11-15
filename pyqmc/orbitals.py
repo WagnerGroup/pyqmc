@@ -192,9 +192,9 @@ def select_orbitals_kpoints(determinants, mf, kinds):
     for wt, det in determinants:
         flattened_det = []
         for det_s, offset_s in zip(det, orb_offsets):
-            flattened = np.array(
+            flattened = np.concatenate(
                 [det_s[k] + offset_s[ki] for ki, k in enumerate(kinds)]
-            ).flatten()
+            ).flatten().astype(int)
             flattened_det.append(list(flattened))
         determinants_flat.append((wt, flattened_det))
     return mo_coeff, determinants_flat

@@ -1,5 +1,5 @@
 from dask.distributed import Client, LocalCluster
-import pyqmc
+import pyqmc.api as pyq
 from pyscf import gto, scf, lo, mcscf, lib
 import h5py
 import numpy as np
@@ -57,7 +57,7 @@ H ul
     mc.output = None
     mc.stdout = None
     # print(dir(mc))
-    with h5py.File(chkfile) as f:
+    with h5py.File(chkfile, "a") as f:
         f.attrs["uuid"] = identity
         f.attrs["r"] = r
         f.create_group("mc")
@@ -78,10 +78,10 @@ def pyqmc_from_hdf(chkfile):
         mc = mcscf.CASCI(mf, ncas=int(f["mc/ncas"][...]), nelecas=f["mc/nelecas"][...])
         mc.ci = f["mc/ci"][...]
 
-    wf, to_opt = pyqmc.default_msj(mol, mf, mc)
+    wf, to_opt = pyq.generate_wf(mol, mf, mc=mc)
 
     to_opt["wf1det_coeff"][...] = True
-    pgrad = pyqmc.gradient_generator(mol, wf, to_opt)
+    pgrad = pyq.gradient_generator(mol, wf, to_opt)
 
     return {"mol": mol, "mf": mf, "to_opt": to_opt, "wf": wf, "pgrad": pgrad}
 
@@ -103,7 +103,6 @@ def find_basis_evaluate(mfchk, hdf_opt, hdf_vmc, hdf_final):
     """Given a wave function in hdf_opt, compute the 1-RDM (stored in hdf_vmc) , generate a minimal atomic basis and compute the energy/OBDM/TBDM and store in hdf_final """
     from pyqmc.obdm import OBDMAccumulator
     from pyqmc.tbdm import TBDMAccumulator
-    from pyqmc import EnergyAccumulator
 
     sys = pyqmc_from_hdf(mfchk)
 
@@ -118,8 +117,8 @@ def find_basis_evaluate(mfchk, hdf_opt, hdf_vmc, hdf_final):
             for k in grp.keys():
                 sys["wf"].parameters[k] = np.array(grp[k])
 
-    configs = pyqmc.initial_guess(sys["mol"], 1000)
-    pyqmc.vmc(
+    configs = pyq.initial_guess(sys["mol"], 1000)
+    pyq.vmc(
         sys["wf"],
         configs,
         nsteps=500,
@@ -136,14 +135,14 @@ def find_basis_evaluate(mfchk, hdf_opt, hdf_vmc, hdf_final):
     obdm_down_acc = OBDMAccumulator(mol=mol, orb_coeff=basis_down, spin=1)
     tbdm = TBDMAccumulator(mol, np.array([basis_up, basis_down]), spin=(0, 1))
     acc = {
-        "energy": EnergyAccumulator(mol),
+        "energy": pyq.EnergyAccumulator(mol),
         "obdm_up": obdm_up_acc,
         "obdm_down": obdm_down_acc,
         "tbdm": tbdm,
     }
 
-    configs = pyqmc.initial_guess(sys["mol"], 1000)
-    pyqmc.vmc(sys["wf"], configs, nsteps=500, hdf_file=hdf_final, accumulators=acc)
+    configs = pyq.initial_guess(sys["mol"], 1000)
+    pyq.vmc(sys["wf"], configs, nsteps=500, hdf_file=hdf_final, accumulators=acc)
 
 
 ncore = 2
@@ -152,7 +151,6 @@ nconfig = ncore * 400
 if __name__ == "__main__":
     cluster = LocalCluster(n_workers=ncore, threads_per_worker=1)
     client = Client(cluster)
-    from pyqmc import vmc, line_minimization, optimize_orthogonal
 
     # from pyqmc.optimize_orthogonal import optimize_orthogonal
     from copy import deepcopy
@@ -179,15 +177,15 @@ if __name__ == "__main__":
     setuph2(savefiles["mf"], "test")
     sys = pyqmc_from_hdf(savefiles["mf"])
 
-    df, coords = vmc(
+    df, coords = pyq.vmc(
         sys["wf"],
-        pyqmc.initial_guess(sys["mol"], nconfig),
+        pyq.initial_guess(sys["mol"], nconfig),
         client=client,
         nsteps=10,
         npartitions=ncore,
     )
 
-    line_minimization(
+    pyq.line_minimization(
         sys["wf"],
         coords,
         sys["pgrad"],
@@ -199,7 +197,7 @@ if __name__ == "__main__":
 
     # First excited state
     wfs = [sys["wf"], deepcopy(sys["wf"])]
-    optimize_orthogonal(
+    pyq.optimize_orthogonal(
         wfs,
         coords,
         sys["pgrad"],
@@ -211,7 +209,7 @@ if __name__ == "__main__":
 
     # Second excited state
     wfs.append(deepcopy(sys["wf"]))
-    optimize_orthogonal(
+    pyq.optimize_orthogonal(
         wfs,
         coords,
         sys["pgrad"],

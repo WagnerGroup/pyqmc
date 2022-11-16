@@ -1,3 +1,4 @@
+from pyqmc import three_body_jastrow
 import pyqmc.slater as slater
 import pyqmc.multiplywf as multiplywf
 import pyqmc.addwf as addwf
@@ -103,6 +104,13 @@ def generate_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
     to_opt["bcoeff"] = np.ones(jastrow.parameters["bcoeff"].shape).astype(bool)
     to_opt["bcoeff"][0, [0, 1, 2]] = False  # Cusp conditions
     return jastrow, to_opt
+
+
+def generate_3_jastrow(mol, na=4, nb=3, rcut=None):
+    abasis, bbasis = default_jastrow_basis(mol, False,na, nb, rcut)
+    wf = three_body_jastrow.Three_Body_JastrowSpin(mol,abasis,bbasis)
+    to_opt = {"ccoeff":np.ones(wf.parameters["ccoeff"].shape).astype(bool)}
+    return wf, to_opt
 
 
 def generate_sj(mol, mf, optimize_orbitals=False, twist=None, **jastrow_kws):

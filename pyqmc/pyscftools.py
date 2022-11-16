@@ -1,6 +1,6 @@
 import pyscf
 import pyscf.pbc
-import pyscf.mcscf.casci as casci
+import pyscf.mcscf
 import h5py
 import json
 
@@ -66,7 +66,10 @@ def recover_pyscf(chkfile, ci_checkfile=None, cancel_outputs=True):
         if hci:
             mc = pyscf.hci.SCI(mol)
         else:
-            mc = casci.CASCI(mol, casdict["ncas"], casdict["nelecas"])
+            if len(casdict["mo_coeff"].shape) == 3:
+                mc = pyscf.mcscf.UCASCI(mol, casdict["ncas"], casdict["nelecas"])
+            else:
+                mc = pyscf.mcscf.CASCI(mol, casdict["ncas"], casdict["nelecas"])
         mc.__dict__.update(casdict)
 
         return mol, mf, mc

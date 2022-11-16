@@ -51,7 +51,9 @@ def choose_evaluator_from_pyscf(
         if mc is not None:
             if not hasattr(mc, "orbitals") or mc.orbitals is None:
                 mc.orbitals = np.arange(mc.ncore, mc.ncore + mc.ncas)
-            determinants = pyqmc.determinant_tools.pbc_determinants_from_casci(mc, mc.orbitals)
+            determinants = pyqmc.determinant_tools.pbc_determinants_from_casci(
+                mc, mc.orbitals
+            )
         return PBCOrbitalEvaluatorKpoints.from_mean_field(
             mol, mf, twist, determinants=determinants, tol=tol
         )
@@ -192,9 +194,11 @@ def select_orbitals_kpoints(determinants, mf, kinds):
     for wt, det in determinants:
         flattened_det = []
         for det_s, offset_s in zip(det, orb_offsets):
-            flattened = np.concatenate(
-                [det_s[k] + offset_s[ki] for ki, k in enumerate(kinds)]
-            ).flatten().astype(int)
+            flattened = (
+                np.concatenate([det_s[k] + offset_s[ki] for ki, k in enumerate(kinds)])
+                .flatten()
+                .astype(int)
+            )
             flattened_det.append(list(flattened))
         determinants_flat.append((wt, flattened_det))
     return mo_coeff, determinants_flat
@@ -318,7 +322,11 @@ class PBCOrbitalEvaluatorKpoints:
         wrap_phase = get_wrapphase_complex(kdotR)
         # k,coordinate, orbital
         ao = gpu.cp.asarray(
-            self._cell.eval_gto("PBC" + eval_str, primcoords, kpts=self._kpts,)
+            self._cell.eval_gto(
+                "PBC" + eval_str,
+                primcoords,
+                kpts=self._kpts,
+            )
         )
         ao = gpu.cp.einsum("k...,k...a->k...a", wrap_phase, ao)
         if len(ao.shape) == 4:  # if derivatives are included

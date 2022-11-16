@@ -106,7 +106,7 @@ def sample_overlap_worker(wfs, configs, pgrad, nsteps, tstep=0.5):
             )
             grads = [np.real(g.T) for g in grads]
             new_grad = mc.limdrift(np.mean(grads, axis=0))
-            forward = np.sum(gauss ** 2, axis=1)
+            forward = np.sum(gauss**2, axis=1)
             backward = np.sum((gauss + tstep * (grad + new_grad)) ** 2, axis=1)
 
             # Acceptance

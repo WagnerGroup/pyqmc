@@ -240,7 +240,11 @@ class Slater:
             self.parameters["det_coeff"],
             det_array,
         )
-        denom = gpu.cp.einsum("d,di->i...", self.parameters["det_coeff"], det_array,)
+        denom = gpu.cp.einsum(
+            "d,di->i...",
+            self.parameters["det_coeff"],
+            det_array,
+        )
 
         if len(numer.shape) == 2:
             denom = denom[:, gpu.cp.newaxis]
@@ -275,7 +279,11 @@ class Slater:
             self.parameters["det_coeff"],
             det_array,
         )
-        denom = gpu.cp.einsum("d,di->i...", self.parameters["det_coeff"], det_array,)
+        denom = gpu.cp.einsum(
+            "d,di->i...",
+            self.parameters["det_coeff"],
+            det_array,
+        )
         # curr_val = self.value()
 
         if len(numer.shape) == 3:

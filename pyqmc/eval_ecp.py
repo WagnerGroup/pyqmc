@@ -242,7 +242,7 @@ def generate_quadrature_grids():
     Generate quadrature grids from Mitas, Shirley, and Ceperley J. Chem. Phys. 95, 3467 (1991)
         https://doi.org/10.1063/1.460849
     All the grids in the Mitas paper are hard-coded here.
-    Returns a dictionary whose keys are naip (number of auxiliary points) and whose values are tuples of arrays (points, weights) 
+    Returns a dictionary whose keys are naip (number of auxiliary points) and whose values are tuples of arrays (points, weights)
     """
     # Generate in Cartesian grids for octahedral symmetry
     octpts = np.mgrid[-1:2, -1:2, -1:2].reshape(3, -1).T
@@ -263,8 +263,8 @@ def generate_quadrature_grids():
         return s * np.cos(p_), s * np.sin(p_), np.cos(t_)
 
     b_1 = np.arctan(2)
-    c_1 = np.arccos((2 + 5 ** 0.5) / (15 + 6 * 5 ** 0.5) ** 0.5)
-    c_2 = np.arccos(1 / (15 + 6 * 5 ** 0.5) ** 0.5)
+    c_1 = np.arccos((2 + 5**0.5) / (15 + 6 * 5**0.5) ** 0.5)
+    c_2 = np.arccos(1 / (15 + 6 * 5**0.5) ** 0.5)
     theta, phi = {}, {}
     theta["A"] = np.array([0, np.pi])
     phi["A"] = np.zeros(2)

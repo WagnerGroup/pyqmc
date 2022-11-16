@@ -114,7 +114,9 @@ class LinearTransform:
         n = 0
         m = self.nparams
         d = {}
-        frozen_parms = {k: gpu.asnumpy(wf.parameters[k])[~opt] for k, opt in self.to_opt.items()}
+        frozen_parms = {
+            k: gpu.asnumpy(wf.parameters[k])[~opt] for k, opt in self.to_opt.items()
+        }
 
         for k, opt in self.to_opt.items():
             opt_ = opt.flatten()
@@ -148,13 +150,13 @@ class PGradTransform:
         f = a * r ** 2 + b * r ** 4 + c * r ** 6
         """
         r = 1.0 / grad2
-        mask = r < self.nodal_cutoff ** 2
+        mask = r < self.nodal_cutoff**2
 
-        c = 7.0 / (self.nodal_cutoff ** 6)
-        b = -15.0 / (self.nodal_cutoff ** 4)
-        a = 9.0 / (self.nodal_cutoff ** 2)
+        c = 7.0 / (self.nodal_cutoff**6)
+        b = -15.0 / (self.nodal_cutoff**4)
+        a = 9.0 / (self.nodal_cutoff**2)
 
-        f = a * r + b * r ** 2 + c * r ** 3
+        f = a * r + b * r**2 + c * r**3
         f[np.logical_not(mask)] = 1.0
 
         return mask, f
@@ -243,7 +245,7 @@ class SqAccumulator:
         nelec = configs.configs.shape[1]
         exp_iqr = np.exp(1j * np.inner(configs.configs, self.qlist))
         sum_exp_iqr = exp_iqr.sum(axis=1)
-        return {"Sq": (sum_exp_iqr.real ** 2 + sum_exp_iqr.imag ** 2) / nelec}
+        return {"Sq": (sum_exp_iqr.real**2 + sum_exp_iqr.imag**2) / nelec}
 
     def avg(self, configs, wf):
         return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}

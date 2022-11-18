@@ -3,6 +3,7 @@ import numpy as np
 import pyqmc.mc as mc
 import sys
 import h5py
+import logging
 
 
 def limdrift(g, tau, acyrus=0.25):
@@ -14,10 +15,10 @@ def limdrift(g, tau, acyrus=0.25):
     :parameter acyrus: the maximum magnitude
     :returns: The vector with the cut off applied and multiplied by tau.
     """
-    tot = np.linalg.norm(g, axis=1) * acyrus
-    mask = tot > 1e-8
-    taueff = np.ones(tot.shape) * tau
-    taueff[mask] = (np.sqrt(1 + 2 * tau * tot[mask]) - 1) / tot[mask]
+    v2 = np.sum(g**2, axis=1)
+    mask = v2 > 1e-8
+    taueff = np.ones(v2.shape) * tau
+    taueff[mask] = (np.sqrt(1 + 2 * tau * acyrus * v2[mask]) - 1) / (acyrus * v2[mask])
     return g * taueff[:, np.newaxis]
 
 
@@ -67,7 +68,7 @@ def propose_tmoves(wf, configs, energy_accumulator, tstep, e):
     """
     moves = energy_accumulator.nonlocal_tmoves(configs, wf, e, tstep)
     t_amplitudes = moves["ratio"] * moves["weight"]
-    # print(moves['ratio'])
+
     forward_probability = np.zeros_like(t_amplitudes)
     forward_probability[t_amplitudes > 0] = t_amplitudes[t_amplitudes > 0]
     norm = 1.0 + np.sum(forward_probability, axis=1)  # EQN 34
@@ -80,19 +81,28 @@ def propose_tmoves(wf, configs, energy_accumulator, tstep, e):
     selected_moves = np.apply_along_axis(select_walker, 1, cdf)
     move_selected = selected_moves < t_amplitudes.shape[1]
 
-    selected_moves[move_selected == False] = 0
     newpos = np.zeros((norm.shape[0], 3))
     reverse_ratio = np.zeros((norm.shape[0]))
+    backward_amplitudes = t_amplitudes.copy()
     for walker, move in enumerate(selected_moves):
-        newpos[walker, :] = moves["configs"].configs[walker, move, :]
-        reverse_ratio[walker] = moves["ratio"][walker, move]
+        if move_selected[walker]:
+            newpos[walker, :] = moves["configs"].configs[walker, move, :]
+            reverse_ratio[walker] = 1.0 / moves["ratio"][walker, move]
+            backward_amplitudes[walker, :] *= reverse_ratio[walker]
+            # This is the move back to the original position
+            backward_amplitudes[walker, move] = (
+                reverse_ratio[walker] * moves["weight"][walker, move]
+            )
+        else:
+            newpos[walker, :] = configs.configs[walker, e, :]
+            reverse_ratio[walker] = 0.0
 
     newpos = configs.make_irreducible(e, newpos)
 
-    backward_amplitude = t_amplitudes / reverse_ratio[:, np.newaxis]
-    backward_amplitude[backward_amplitude < 0] = 0.0
-    back_norm = 1.0 + np.sum(backward_amplitude, axis=1)
+    backward_amplitudes[backward_amplitudes < 0] = 0.0
+    back_norm = 1.0 + np.sum(backward_amplitudes, axis=1)
     acceptance = norm / back_norm
+    acceptance[move_selected == False] = 0.0
 
     return newpos, move_selected, acceptance, np.sum(t_amplitudes)
 
@@ -185,7 +195,6 @@ def dmc_propagate(
         avg["weight"] = wavg
         avg["acceptance"] = np.mean(prob_acceptance)
         avg["tmove_acceptance"] = np.mean(tmove_acceptance)
-        avg["tdamp"] = np.mean(tdamp)
         df.append(avg)
     weight = np.asarray([d["weight"] for d in df])
     avg_weight = weight / np.mean(weight)
@@ -284,15 +293,27 @@ def branch(configs, weights):
     """
 
     nconfig = configs.configs.shape[0]
+    if np.any(weights > 2.0):
+        logging.warning("Some weights are larger than 2")
     probability = np.cumsum(weights)
     wtot = probability[-1]
-    base = np.random.rand()
+
+    base = np.random.rand() * wtot
     newinds = np.searchsorted(
-        probability, (base + np.linspace(0, wtot, nconfig)) % wtot
+        probability, (base + np.linspace(0, wtot, nconfig, endpoint=False)) % wtot
     )
+    unique, counts = np.unique(newinds, return_counts=True)
+
     configs.resample(newinds)
     weights.fill(wtot / nconfig)
-    return configs, weights
+    return (
+        configs,
+        weights,
+        {
+            "max branches": np.max(counts),
+            "Number of walkers killed": nconfig - unique.shape[0],
+        },
+    )
 
 
 def dmc_file(hdf_file, data, attr, configs, weights):
@@ -462,11 +483,14 @@ def rundmc(
         df_["weight_std"] = np.std(weights)
         df_["nsteps"] = branchtime
 
-        dmc_file(hdf_file, df_, {}, configs, weights)
+        configs, weights, branch_info = branch(configs, weights)
+        df_.update(branch_info)
         df.append(df_)
+        dmc_file(hdf_file, df_, {}, configs, weights)
+        
         e_est = estimate_energy(hdf_file, df, ekey)
         e_trial = e_est - feedback * np.log(np.mean(weights)).real
-        configs, weights = branch(configs, weights)
+
         if verbose:
             print(
                 "energy",
@@ -478,6 +502,7 @@ def rundmc(
                 "sigma(w)",
                 df_["weight_std"],
             )
+            print(branch_info)
 
     df_ret = {k: np.asarray([d[k] for d in df]) for k in df[0].keys()}
     return df_ret, configs, weights

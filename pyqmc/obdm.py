@@ -176,7 +176,9 @@ class OBDMAccumulator:
         return self.orbitals.mos(ao, spin=0)
 
     def keys(self):
-        return set(["value", "norm"],)
+        return set(
+            ["value", "norm"],
+        )
 
     def shapes(self):
         norb = self.norb

@@ -49,8 +49,10 @@ def choose_evaluator_from_pyscf(
 
     if hasattr(mol, "a"):
         if mc is not None:
-            raise NotImplementedError(
-                "Do not support multiple determinants for k-points orbital evaluator"
+            if not hasattr(mc, "orbitals") or mc.orbitals is None:
+                mc.orbitals = np.arange(mc.ncore, mc.ncore + mc.ncas)
+            determinants = pyqmc.determinant_tools.pbc_determinants_from_casci(
+                mc, mc.orbitals
             )
         return PBCOrbitalEvaluatorKpoints.from_mean_field(
             mol, mf, twist, determinants=determinants, tol=tol
@@ -192,9 +194,11 @@ def select_orbitals_kpoints(determinants, mf, kinds):
     for wt, det in determinants:
         flattened_det = []
         for det_s, offset_s in zip(det, orb_offsets):
-            flattened = np.array(
-                [det_s[k] + offset_s[ki] for ki, k in enumerate(kinds)]
-            ).flatten()
+            flattened = (
+                np.concatenate([det_s[k] + offset_s[ki] for ki, k in enumerate(kinds)])
+                .flatten()
+                .astype(int)
+            )
             flattened_det.append(list(flattened))
         determinants_flat.append((wt, flattened_det))
     return mo_coeff, determinants_flat
@@ -249,6 +253,14 @@ class PBCOrbitalEvaluatorKpoints:
             twist = np.zeros(3)
         else:
             twist = np.dot(np.linalg.inv(cell.a), np.mod(twist, 1.0)) * 2 * np.pi
+        if not hasattr(mf, "kpts"):
+            mf.kpts = np.zeros((1, 3))
+            if len(mf.mo_occ.shape) == 1:
+                mf.mo_coeff = [mf.mo_coeff]
+                mf.mo_occ = [mf.mo_occ]
+            elif len(mf.mo_occ.shape) == 2:
+                mf.mo_coeff = [[c] for c in mf.mo_coeff]
+                mf.mo_occ = [[o] for o in mf.mo_occ]
         kinds = list(
             set(get_k_indices(cell, mf, supercell.get_supercell_kpts(cell) + twist))
         )
@@ -310,7 +322,11 @@ class PBCOrbitalEvaluatorKpoints:
         wrap_phase = get_wrapphase_complex(kdotR)
         # k,coordinate, orbital
         ao = gpu.cp.asarray(
-            self._cell.eval_gto("PBC" + eval_str, primcoords, kpts=self._kpts,)
+            self._cell.eval_gto(
+                "PBC" + eval_str,
+                primcoords,
+                kpts=self._kpts,
+            )
         )
         ao = gpu.cp.einsum("k...,k...a->k...a", wrap_phase, ao)
         if len(ao.shape) == 4:  # if derivatives are included

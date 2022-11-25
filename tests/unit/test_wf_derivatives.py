@@ -21,7 +21,7 @@ def run_tests(wf, epos, epsilon):
 
     testwf.test_mask(wf, 0, epos)
 
-    testwf.test_testvalue_many(wf,epos)
+    #testwf.test_testvalue_many(wf,epos)
 
     for fname, func in zip(
         ["gradient", "laplacian", "pgradient"],

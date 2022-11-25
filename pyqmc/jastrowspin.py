@@ -358,7 +358,7 @@ class JastrowSpin:
             grad += c[1 + edown] * gpu.cp.sum(bgrad[:, nup - eup :], axis=1).T
             lap += c[edown] * gpu.cp.sum(blap[:, : nup - eup], axis=(1, 2))
             lap += c[1 + edown] * gpu.cp.sum(blap[:, nup - eup :], axis=(1, 2))
-        return gpu.asnumpy(grad), gpu.asnumpy(lap + gpu.cp.sum(grad ** 2, axis=0))
+        return gpu.asnumpy(grad), gpu.asnumpy(lap + gpu.cp.sum(grad**2, axis=0))
 
     def laplacian(self, e, epos):
         return self.gradient_laplacian(e, epos)[1]

@@ -27,6 +27,7 @@ def generate_slater(
     """
     wf = slater.Slater(mol, mf, **kwargs)
     to_opt = {}
+    to_opt["det_coeff"] = np.zeros_like(wf.parameters["det_coeff"], dtype=bool)
     if optimize_determinants:
         to_opt["det_coeff"] = np.ones_like(wf.parameters["det_coeff"], dtype=bool)
         to_opt["det_coeff"][np.argmax(wf.parameters["det_coeff"])] = False

@@ -114,7 +114,10 @@ class Slater:
         self._mol = mol
         if hasattr(mc, "nelecas"):
             # In case nelecas overrode the information from the molecule object.
-            self._nelec = (mc.nelecas[0] + mc.ncore, mc.nelecas[1] + mc.ncore)
+            ncore = mc.ncore 
+            if not hasattr(ncore, "__len__"):
+                ncore = [ncore, ncore]
+            self._nelec = (mc.nelecas[0] + ncore[0], mc.nelecas[1] + ncore[1])
         else:
             self._nelec = mol.nelec
 
@@ -240,7 +243,11 @@ class Slater:
             self.parameters["det_coeff"],
             det_array,
         )
-        denom = gpu.cp.einsum("d,di->i...", self.parameters["det_coeff"], det_array,)
+        denom = gpu.cp.einsum(
+            "d,di->i...",
+            self.parameters["det_coeff"],
+            det_array,
+        )
 
         if len(numer.shape) == 2:
             denom = denom[:, gpu.cp.newaxis]
@@ -275,7 +282,11 @@ class Slater:
             self.parameters["det_coeff"],
             det_array,
         )
-        denom = gpu.cp.einsum("d,di->i...", self.parameters["det_coeff"], det_array,)
+        denom = gpu.cp.einsum(
+            "d,di->i...",
+            self.parameters["det_coeff"],
+            det_array,
+        )
         # curr_val = self.value()
 
         if len(numer.shape) == 3:

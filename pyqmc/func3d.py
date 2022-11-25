@@ -256,7 +256,9 @@ class PolyPadeFunction:
         grad = gpu.cp.zeros(rvec.shape)
         mask = r < self.parameters["rcut"]
         grad_rvec, value[mask] = polypadegradvalue(
-            r[mask], self.parameters["beta"], self.parameters["rcut"],
+            r[mask],
+            self.parameters["beta"],
+            self.parameters["rcut"],
         )
         grad[mask] = np.einsum("ij,i->ij", rvec[mask], grad_rvec)
         return grad, value
@@ -447,9 +449,9 @@ class CutoffCuspFunction:
         c = 1 / (1 + gamma * b) ** 2 / (rcut * r)
 
         temp = 2 * y1 / (rcut * r)
-        temp -= a / r ** 2
+        temp -= a / r**2
         temp -= 2 * a * a * c * gamma * (1 + gamma * b)
-        lap[mask] = -rcut * c * (a + rvec ** 2 * temp)
+        lap[mask] = -rcut * c * (a + rvec**2 * temp)
         return lap
 
     def gradient_laplacian(self, rvec, r):
@@ -476,9 +478,9 @@ class CutoffCuspFunction:
 
         grad[mask] = -rcut * a * c * rvec
         temp = 2 * y1 / (rcut * r)
-        temp -= a / r ** 2
+        temp -= a / r**2
         temp -= 2 * a * a * c * gamma * (1 + gamma * b)
-        lap[mask] = -rcut * c * (a + rvec ** 2 * temp)
+        lap[mask] = -rcut * c * (a + rvec**2 * temp)
         return grad, lap
 
     def pgradient(self, rvec, r):

@@ -20,7 +20,14 @@ def ecp(mol, configs, wf, threshold, naip=None):
 
 
 def compute_tmoves(mol, configs, wf, e, threshold, tau, naip=None):
-    """"""
+    """
+    For a given electron, evaluate all possible t-moves.
+
+    returns a dictionary: 
+       ratio: psi(R')/psi(R) for each move
+       weight: The symmetric part of Eqn 31 in Anderson and Umrigar (i.e., ratio * weight gives the amplitude for the t-move)
+       configs: positions of the move
+    """
     nconfig = configs.configs.shape[0]
     if mol._ecp != {}:
         data = [
@@ -29,7 +36,7 @@ def compute_tmoves(mol, configs, wf, e, threshold, tau, naip=None):
             if atom[0] in mol._ecp.keys()
         ]
     else:
-        return {"ratio": np.zeros((nconfig, 0)), "weight": np.zeros((nconfig, 0))}
+        return {"ratio": np.ones((nconfig, 0)), "weight": np.zeros((nconfig, 0))}
 
     # we want to make a data set which is a list of possible positions, the wave function
     # ratio, and the masks for each

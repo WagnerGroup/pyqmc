@@ -42,7 +42,7 @@ def test_obc_wfs(LiH_sto3g_rhf, epsilon=1e-5, nconf=10):
     """
     Ensure that the wave function objects are consistent in several situations.
     """
-    
+
     mol, mf = LiH_sto3g_rhf
     a_basis, b_basis=default_jastrow_basis(mol)
     for wf in [

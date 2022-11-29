@@ -23,6 +23,7 @@ def test_testvalue_many(wf, configs, tol=1e-6):
     :type configs: (nconf, nelec, 3) array
     :returns: max abs errors
     :rtype: dictionary
+
     """
     nconf, ne, ndim = configs.configs.shape
     val1 = wf.recompute(configs)
@@ -114,7 +115,7 @@ def test_wf_gradient(wf, configs, delta=1e-5):
 
     wf.testvalue(e,epos) should return a ratio: the wf value at the position where electron e is moved to epos divided by the current value
     wf.gradient(e,epos) should return grad ln Psi(epos), while keeping all the other electrons at current position. epos may be different from the current position of electron e
-    
+
     :returns: max abs errors
     :rtype: dictionary
     """
@@ -187,7 +188,7 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
 
     wf.gradient(e,epos) should return grad ln Psi(epos), while keeping all the other electrons at current position. epos may be different from the current position of electron e
     wf.laplacian(e,epos) should behave the same as gradient, except lap(Psi(epos))/Psi(epos)
-    
+
     :returns: max abs errors
     :rtype: dictionary
     """

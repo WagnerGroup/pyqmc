@@ -101,9 +101,24 @@ if __name__=="__main__":
 
 ### Create a wavefunction with 3 body Jastrow factor.
 
-first create mol,mf objects using pyscf
-
 ```
+import pyscf.gto as gto
+import pyscf.scf as scf
+import pyqmc.api as pyq
+import pyqmc.wftools as wftools
+import pyqmc.mc as mc
+
+def linemin(mol,mf):
+    #create wavefunction object. note jastrow_kws have to be passed even if empty
+    wf, to_opt = wftools.generate_wf(mol, mf,jastrow=[wftools.generate_jastrow,wftools.generate_jastrow3],jastrow_kws=[{},{}]
+)                   
+    nconf = 100
+    configs = mc.initial_guess(mol, nconf)
+    wf, dfgrad = pyq.line_minimization(
+        wf, configs, pyq.gradient_generator(mol, wf, to_opt),max_iterations=50,verbose=True,hdf_file='3_jastrow.chk'
+    )
+
+  
 def H2_ccecp_uhf():
     r = 2
     mol = gto.M(
@@ -115,22 +130,12 @@ def H2_ccecp_uhf():
     )
     mf = scf.UHF(mol).run()
     return mol, mf
-if __name__=="__main__":
-    mol, mf = H2_ccecp_uhf()
-```
-then create the wf object via:
-```
-#jastrow_kws have to be passed even if it's empty.
-wf, to_opt = wftools.generate_wf(mol, mf,jastrow=[generate_jastrow,wftools.generate_3_jastrow],jastrow_kws=[{},{}])
-```
-then you can can optimize with
-```
-nconf = 100
-wf, dfgrad = line_minimization(
-    wf, initial_guess(mol, nconf), gradient_generator(mol, wf, to_opt)
-)
-```
 
+
+if __name__ == "__main__":
+    mol,mf = H2_ccecp_uhf()
+    linemin(mol,mf)
+```
 
 
 ### MPI parallelization

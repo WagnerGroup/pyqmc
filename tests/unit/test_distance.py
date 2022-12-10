@@ -1,9 +1,9 @@
 import pyqmc.mc as mc
 
 
-def test_distance(LiH_sto3g_uhf):
-    """ dupdown is the (nup,ndown) shaped array of electron distances between up spin and down spin electrons
-    ij_updown is a list of tuples (i,j) where i<nup, j<ndown 
+def test_pairwise(LiH_sto3g_uhf):
+    """dupdown is the (nup,ndown) shaped array of electron distances between up spin and down spin electrons
+    ij_updown is a list of tuples (i,j) where i<nup, j<ndown
     each element (i,j) of ij_updown indicates that the corresponding element of dupdown is the distance between jth component of
     configs2 and ith component of configs1
     This test checks whether this is true.

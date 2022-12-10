@@ -15,7 +15,8 @@ def test_mask(wf, e, epos, mask=None, tolerance=1e-6):
     assert np.all(error < tolerance)
     print("testcase for test_value() with mask passed")
 
-def test_testvalue_many(wf,configs,tol=1e-6):
+
+def test_testvalue_many(wf, configs, tol=1e-6):
     """
     :parameter wf: a wave function object to be tested
     :parameter configs: electron positions
@@ -28,17 +29,18 @@ def test_testvalue_many(wf,configs,tol=1e-6):
     val1 = wf.recompute(configs)
     wfcopy = copy.copy(wf)
 
-    delta=1e-2
-    tval = np.zeros((nconf,ne))
+    delta = 1e-2
+    tval = np.zeros((nconf, ne))
     epos = configs.make_irreducible(0, configs.configs[:, 0, :] + delta)
     for e in range(ne):
-        tval[:,e], savedvals = wf.testvalue(e, epos)
-    
+        tval[:, e], savedvals = wf.testvalue(e, epos)
+
     e_all = np.arange(ne)
 
-    tmany= wfcopy.testvalue_many(e_all,epos)
-    terr=tmany-tval
-    assert np.max(np.abs(terr))<tol
+    tmany = wfcopy.testvalue_many(e_all, epos)
+    terr = tmany - tval
+    assert np.max(np.abs(terr)) < tol
+
 
 def test_updateinternals(wf, configs):
     """

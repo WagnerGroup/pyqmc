@@ -55,6 +55,12 @@ Jastrow factor
  
 
 ----------------------
+Three body jastrow factor
+----------------------
+
+.. automodule:: pyqmc.three_body_jastrow
+   :members:
+----------------------
 Multipy wave function
 ----------------------
 

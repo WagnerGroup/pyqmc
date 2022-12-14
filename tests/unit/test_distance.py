@@ -3,7 +3,6 @@ import pyscf.gto as gto
 import pyscf.scf as scf
 
 
-
 def test_pairwise(LiH_sto3g_uhf, tol=1e-10):
     """dupdown is the (nup,ndown) shaped array of electron distances between up spin and down spin electrons
     ij_updown is a list of tuples (i,j) where i<nup, j<ndown
@@ -23,7 +22,4 @@ def test_pairwise(LiH_sto3g_uhf, tol=1e-10):
 
     for index, ij in enumerate(ij_updown):
         i, j = ij
-        assert (dupdown[:, index] - (configs2[:, j] - configs1[:, i])<tol).all()
-
-
-
+        assert (dupdown[:, index] - (configs2[:, j] - configs1[:, i]) < tol).all()

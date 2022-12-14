@@ -60,7 +60,7 @@ class RawDistance:
         ij = []
         for i in range(n2):
             vs.append(self.dist_i(config1, config2[:, i, :]))
-            ij.extend([(i, j) for j in range(n1)])
+            ij.extend([(j, i) for j in range(n1)])
         vs = np.concatenate(vs, axis=1)
 
         return vs, ij

@@ -42,7 +42,7 @@ def test_info_functions_pbc(H_pbc_sto3g_krks):
     accumulators = {
         "pgrad": pyq.gradient_generator(mol, wf, to_opt, ewald_gmax=10),
         "obdm": OBDMAccumulator(mol, dm_orbs, kpts=mf.kpts[kinds]),
-        "Sq": SqAccumulator(mol.lattice_vectors()),
+        "Sq": SqAccumulator(mol.nelec, mol.lattice_vectors()),
     }
     info_functions(mol, wf, accumulators)
 

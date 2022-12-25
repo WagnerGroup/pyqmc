@@ -73,15 +73,18 @@ def test_big_cell():
     df = run(Lvecs, configs, 8)
     df = df.groupby("qmag").mean().reset_index()
 
-    large_q = df[-35:-10]["Sq"]
-    mean = np.mean(large_q - 1)
-    rms = np.sqrt(np.mean((large_q - 1) ** 2))
-    assert np.abs(mean) < 0.01, mean
-    assert rms < 0.1, rms
+    for k in ["Sq", "spinSq"]:
+        large_q = df[-35:-10][k]
+        mean = np.mean(large_q - 1)
+        rms = np.sqrt(np.mean((large_q - 1) ** 2))
+        assert np.abs(mean) < 0.01, mean
+        assert rms < 0.1, rms
 
 
 def run(Lvecs, configs, nq):
-    sqacc = SqAccumulator(Lvecs=Lvecs, nq=nq)
+    nelec = configs.shape[1]
+    nelec_pair = (int(nelec / 2), nelec - int(nelec / 2))
+    sqacc = SqAccumulator(nelec_pair, Lvecs=Lvecs, nq=nq)
     configs = PeriodicConfigs(configs, Lvecs)
     sqavg = sqacc.avg(configs, None)
     df = {"qmag": np.linalg.norm(sqacc.qlist, axis=1)}

@@ -82,9 +82,6 @@ def test_big_cell():
 
     df = run(cell, configs, 8)
     df = df.groupby("qmag").mean().reset_index()
-    df.plot("qmag", "Sq")
-    df.plot("qmag", "spinSq")
-    plt.show()
 
     for k in ["Sq", "spinSq"]:
         large_q = df[-35:-10][k]

@@ -3,7 +3,6 @@ from pyqmc.coord import PeriodicConfigs
 import numpy as np
 import pandas as pd
 import pyscf.pbc
-import matplotlib.pyplot as plt
 
 
 def test_config():

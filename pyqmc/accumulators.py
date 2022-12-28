@@ -224,9 +224,10 @@ class SqAccumulator:
 
     """
 
-    def __init__(self, nelec_pair, qlist=None, Lvecs=None, nq=4):
+    def __init__(self, cell, nq=4, qlist=None):
         """
         Inputs:
+            cell: pyscf Cell object
             qlist: (n, 3) array-like. If qlist is provided, Lvecs and nq are ignored
             Lvecs: (3, 3) array-like of lattice vectors. Required if qlist is None
             nq: int, if qlist is nonzero, use a uniform grid of shape (nq, nq, nq)
@@ -234,15 +235,10 @@ class SqAccumulator:
         if qlist is not None:
             self.qlist = qlist
         else:
-            assert (
-                Lvecs is not None
-            ), "need to provide either list of q vectors or lattice vectors"
-            Gvecs = np.linalg.inv(Lvecs).T * 2 * np.pi
-            qvecs = list(map(np.ravel, np.meshgrid(*[np.arange(nq)] * 3)))
-            qvecs = np.stack(qvecs, axis=1)
-            self.qlist = np.dot(qvecs, Gvecs)
-        nup = nelec_pair[0]
-        self.nelec = sum(nelec_pair)
+            recvec = np.linalg.inv(cell.lattice_vectors()).T
+            self.qlist = ewald.generate_positive_gpoints(nq, recvec)
+        nup = cell.nelec[0]
+        self.nelec = sum(cell.nelec)
         self.spins = np.ones((2, self.nelec))
         self.spins[1, nup:] = -1
 

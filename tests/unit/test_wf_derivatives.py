@@ -7,6 +7,8 @@ from pyqmc.addwf import AddWF
 from pyqmc.j3 import J3
 from pyqmc.wftools import generate_jastrow
 import pyqmc.api as pyq
+from pyqmc.three_body_jastrow import Three_Body_JastrowSpin
+from pyqmc.wftools import default_jastrow_basis
 
 
 def run_tests(wf, epos, epsilon):
@@ -18,6 +20,7 @@ def run_tests(wf, epos, epsilon):
         assert item < epsilon
 
     testwf.test_mask(wf, 0, epos)
+    #testwf.test_testvalue_many(wf,epos)
 
     for fname, func in zip(
         ["gradient", "laplacian", "pgradient"],
@@ -41,11 +44,13 @@ def test_obc_wfs(LiH_sto3g_rhf, epsilon=1e-5, nconf=10):
     """
 
     mol, mf = LiH_sto3g_rhf
+    a_basis, b_basis=default_jastrow_basis(mol)
     for wf in [
         generate_jastrow(mol)[0],
-        J3(mol),
+        J3(mol),Three_Body_JastrowSpin(mol, a_basis, b_basis),
         MultiplyWF(Slater(mol, mf), generate_jastrow(mol)[0]),
         MultiplyWF(Slater(mol, mf), generate_jastrow(mol)[0], J3(mol)),
+        MultiplyWF(Slater(mol, mf), generate_jastrow(mol)[0], Three_Body_JastrowSpin(mol, a_basis, b_basis)),
         Slater(mol, mf),
     ]:
         for k in wf.parameters:

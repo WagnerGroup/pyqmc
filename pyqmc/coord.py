@@ -222,8 +222,8 @@ class PeriodicConfigs:
 
     def to_hdf(self, hdf):
         hdf["configs"].resize(self.configs.shape)
-        hdf["configs"].resize(self.wrap.shape)
         hdf["configs"][...] = self.configs
+        hdf["wrap"].resize(self.wrap.shape)
         hdf["wrap"][...] = self.wrap
 
     def load_hdf(self, hdf):

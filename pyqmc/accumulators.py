@@ -228,9 +228,8 @@ class SqAccumulator:
         """
         Inputs:
             cell: pyscf Cell object
-            qlist: (n, 3) array-like. If qlist is provided, Lvecs and nq are ignored
-            Lvecs: (3, 3) array-like of lattice vectors. Required if qlist is None
-            nq: int, if qlist is nonzero, use a uniform grid of shape (nq, nq, nq)
+            nq: int. If qlist is nonzero, use a uniform grid of shape (nq, nq, nq)
+            qlist: (n, 3) array-like. If qlist is provided, nq is ignored
         """
         if qlist is not None:
             self.qlist = qlist

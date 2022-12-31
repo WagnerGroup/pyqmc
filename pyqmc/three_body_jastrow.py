@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class Three_Body_JastrowSpin:
+class ThreeBodyJastrow:
     r"""
     3 body jastrow factor
 

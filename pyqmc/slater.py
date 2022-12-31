@@ -114,7 +114,10 @@ class Slater:
         self._mol = mol
         if hasattr(mc, "nelecas"):
             # In case nelecas overrode the information from the molecule object.
-            self._nelec = (mc.nelecas[0] + mc.ncore, mc.nelecas[1] + mc.ncore)
+            ncore = mc.ncore 
+            if not hasattr(ncore, "__len__"):
+                ncore = [ncore, ncore]
+            self._nelec = (mc.nelecas[0] + ncore[0], mc.nelecas[1] + ncore[1])
         else:
             self._nelec = mol.nelec
 
@@ -162,7 +165,7 @@ class Slater:
                 )
                 # print(configs.configs[])
                 print(f"zero {is_zero/np.prod(compute.shape)}")
-            self._inverse.append(np.zeros(mo_vals.shape, dtype=mo_vals.dtype))
+            self._inverse.append(gpu.cp.zeros(mo_vals.shape, dtype=mo_vals.dtype))
             for d in range(compute.shape[1]):
                 self._inverse[s][compute[:, d], d, :, :] = gpu.cp.linalg.inv(
                     mo_vals[compute[:, d], d, :, :]
@@ -410,7 +413,7 @@ class Slater:
             self._dets[1][:, :, self._det_map[1]],
         )
 
-        d["det_coeff"] = np.zeros(dets[0].shape[1:], dtype=dets[0].dtype)
+        d["det_coeff"] = gpu.cp.zeros(dets[0].shape[1:], dtype=dets[0].dtype)
         d["det_coeff"][nonzero, :] = (
             dets[0][0, nonzero, :]
             * dets[1][0, nonzero, :]

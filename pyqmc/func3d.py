@@ -211,7 +211,7 @@ def polypadegradvalue(r, beta, rcut):
     dbdp = -(1 + beta) * obp * obp
     dzdx_rvec = 1 / (r * rcut)
     grad_rvec = dbdp * dpdz * dzdx_rvec
-    value = (1 - p)  * obp
+    value = (1 - p) * obp
     return grad_rvec, value
 
 

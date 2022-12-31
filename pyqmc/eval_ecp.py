@@ -20,7 +20,14 @@ def ecp(mol, configs, wf, threshold, naip=None):
 
 
 def compute_tmoves(mol, configs, wf, e, threshold, tau, naip=None):
-    """"""
+    """
+    For a given electron, evaluate all possible t-moves.
+
+    returns a dictionary: 
+       ratio: psi(R')/psi(R) for each move
+       weight: The symmetric part of Eqn 31 in Anderson and Umrigar (i.e., ratio * weight gives the amplitude for the t-move)
+       configs: positions of the move
+    """
     nconfig = configs.configs.shape[0]
     if mol._ecp != {}:
         data = [
@@ -29,7 +36,7 @@ def compute_tmoves(mol, configs, wf, e, threshold, tau, naip=None):
             if atom[0] in mol._ecp.keys()
         ]
     else:
-        return {"ratio": np.zeros((nconfig, 0)), "weight": np.zeros((nconfig, 0))}
+        return {"ratio": np.ones((nconfig, 0)), "weight": np.zeros((nconfig, 0))}
 
     # we want to make a data set which is a list of possible positions, the wave function
     # ratio, and the masks for each
@@ -242,7 +249,7 @@ def generate_quadrature_grids():
     Generate quadrature grids from Mitas, Shirley, and Ceperley J. Chem. Phys. 95, 3467 (1991)
         https://doi.org/10.1063/1.460849
     All the grids in the Mitas paper are hard-coded here.
-    Returns a dictionary whose keys are naip (number of auxiliary points) and whose values are tuples of arrays (points, weights) 
+    Returns a dictionary whose keys are naip (number of auxiliary points) and whose values are tuples of arrays (points, weights)
     """
     # Generate in Cartesian grids for octahedral symmetry
     octpts = np.mgrid[-1:2, -1:2, -1:2].reshape(3, -1).T
@@ -263,8 +270,8 @@ def generate_quadrature_grids():
         return s * np.cos(p_), s * np.sin(p_), np.cos(t_)
 
     b_1 = np.arctan(2)
-    c_1 = np.arccos((2 + 5**.5) / (15 + 6 * 5**.5)**.5)
-    c_2 = np.arccos(1 / (15 + 6 * 5**.5)**.5)
+    c_1 = np.arccos((2 + 5**0.5) / (15 + 6 * 5**0.5) ** 0.5)
+    c_2 = np.arccos(1 / (15 + 6 * 5**0.5) ** 0.5)
     theta, phi = {}, {}
     theta["A"] = np.array([0, np.pi])
     phi["A"] = np.zeros(2)
@@ -282,17 +289,18 @@ def generate_quadrature_grids():
     lens = {}
     lens["O"] = [len(x) for x in [OA, OB, OC, OD]]
     lens["I"] = [len(I[s]) for s in "ABC"]
+
     def repeat(s, *args):
         return np.concatenate([np.repeat(w, l) for w, l in zip(args, lens[s])])
 
     qgrid = {}
-    qgrid[6] =  (OA, repeat("O", 1/6))
-    qgrid[18] = (OAB, repeat("O", 1/30, 1/15))
-    qgrid[26] = (OABC, repeat("O", 1/21, 4/105, 27/840))
-    qgrid[50] = (OABCD, repeat("O", 4/315, 64/2835, 27/1280, 14641/725760))
-    qgrid[12] = (IAB, repeat("I", 1/12, 1/12))
-    qgrid[32] = (IABC, repeat("I", 5/168, 5/168, 27/840))
-    
+    qgrid[6] = (OA, repeat("O", 1 / 6))
+    qgrid[18] = (OAB, repeat("O", 1 / 30, 1 / 15))
+    qgrid[26] = (OABC, repeat("O", 1 / 21, 4 / 105, 27 / 840))
+    qgrid[50] = (OABCD, repeat("O", 4 / 315, 64 / 2835, 27 / 1280, 14641 / 725760))
+    qgrid[12] = (IAB, repeat("I", 1 / 12, 1 / 12))
+    qgrid[32] = (IABC, repeat("I", 5 / 168, 5 / 168, 27 / 840))
+
     return qgrid
 
 

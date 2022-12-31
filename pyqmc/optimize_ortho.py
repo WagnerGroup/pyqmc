@@ -508,6 +508,9 @@ def optimize_orthogonal(
         max_step=max_step,
     )
     conditioner = pyqmc.linemin.sd_update
+    if npartitions is None:
+        npartitions = sum(client.nthreads().values())
+
 
     if sample_options is None:
         sample_options = {}

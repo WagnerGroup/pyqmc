@@ -131,14 +131,13 @@ def line_minimization(
     if update_kws is None:
         update_kws = {}
     if warmup_options is None:
-        warmup_options = dict(nblocks=3, nsteps_per_block=10, verbose=verbose)
+        warmup_options = dict(nblocks=1, nsteps_per_block=100)
     if "tstep" not in warmup_options and "tstep" in vmcoptions:
         warmup_options["tstep"] = vmcoptions["tstep"]
     assert npts >= 3, f"linemin npts={npts}; need npts >= 3 for correlated sampling"
 
-    # Restart
     iteration_offset = 0
-    if hdf_file is not None and os.path.isfile(hdf_file):
+    if hdf_file is not None and os.path.isfile(hdf_file): #restarting -- read in data
         with h5py.File(hdf_file, "r") as hdf:
             if "wf" in hdf.keys():
                 grp = hdf["wf"]
@@ -146,6 +145,20 @@ def line_minimization(
                     wf.parameters[k] = gpu.cp.asarray(grp[k])
             if "iteration" in hdf.keys():
                 iteration_offset = np.max(hdf["iteration"][...]) + 1
+            coords.load_hdf(hdf)
+    else: #not restarting -- VMC warm up period
+        if verbose:
+            print("starting warmup")
+        _, coords = pyqmc.mc.vmc(
+            wf,
+            coords,
+            accumulators={},
+            client=client,
+            npartitions=npartitions,
+            **warmup_options,
+        )
+        if verbose:
+            print("finished warmup", flush=True)
 
     # Attributes for linemin
     attr = dict(max_iterations=max_iterations, npts=npts, steprange=steprange)
@@ -180,19 +193,6 @@ def line_minimization(
 
     x0 = pgrad_acc.transform.serialize_parameters(wf.parameters)
 
-    # VMC warm up period
-    if verbose:
-        print("starting warmup")
-    data, coords = pyqmc.mc.vmc(
-        wf,
-        coords,
-        accumulators={},
-        client=client,
-        npartitions=npartitions,
-        **warmup_options,
-    )
-    if verbose:
-        print("finished warmup", flush=True)
     df = []
     # Gradient descent cycles
     for it in range(max_iterations):

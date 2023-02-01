@@ -220,8 +220,9 @@ class PBCOrbitalEvaluatorKpoints:
         self.Lprim = self._cell.lattice_vectors()
 
         self._kpts = [0, 0, 0] if kpts is None else kpts
+        nelec_per_kpt = [np.asarray([m.shape[1] for m in mo]) for mo in mo_coeff]
         self.param_split = [
-            np.cumsum(np.asarray([m.shape[1] for m in mo_coeff[spin]]))
+            np.cumsum(nelec_per_kpt[spin])
             for spin in [0, 1]
         ]
         self.parm_names = ["_alpha", "_beta"]
@@ -351,9 +352,12 @@ class PBCOrbitalEvaluatorKpoints:
             self.param_split[spin],
             axis=-1,
         )
-        return gpu.cp.concatenate(
-            [ak.dot(mok) for ak, mok in zip(ao, p[0:-1])], axis=-1
-        )
+        ps = [0] + list(self.param_split[spin])
+        nelec = self.parameters[f"mo_coeff{self.parm_names[spin]}"].shape[1]
+        out = gpu.cp.zeros([nelec, *ao[0].shape[:-1]], dtype=complex)
+        for i, ak, mok in zip(range(len(ao)), ao, p[:-1]):
+            gpu.cp.einsum("...a,an->n...",ak, mok, out=out[ps[i]:ps[i+1]])
+        return out.transpose([*np.arange(1, len(out.shape)), 0])
 
     def pgradient(self, ao, spin):
         """

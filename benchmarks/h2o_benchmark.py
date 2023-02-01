@@ -1,7 +1,7 @@
 # Write the benchmarking functions here.
 # See "Writing benchmarks" in the asv docs for more information.
 import pyscf
-import pyqmc
+import pyqmc.api as pyq
 
 class H2OSuite:
     """
@@ -10,10 +10,10 @@ class H2OSuite:
     def setup(self):
         self.mol = pyscf.gto.M(atom="O 0 0 0; H 0 -2.757 2.587; H 0 2.757 2.587", basis=f'ccecpccpvdz', ecp='ccecp')
         self.mf = pyscf.scf.RHF(self.mol).run()
-        self.configs = pyqmc.initial_guess(self.mol, 500)
-        self.slater, self.slater_to_opt =  pyqmc.default_slater(self.mol, self.mf, optimize_orbitals=True)
-        self.jastrow, self.jastrow_to_opt =  pyqmc.default_jastrow(self.mol)
-        self.pgrad_acc = pyqmc.gradient_generator(self.mol, self.slater, self.slater_to_opt)
+        self.configs = pyq.initial_guess(self.mol, 500)
+        self.slater, self.slater_to_opt =  pyq.generate_slater(self.mol, self.mf, optimize_orbitals=True)
+        self.jastrow, self.jastrow_to_opt =  pyq.generate_jastrow(self.mol)
+        self.pgrad_acc = pyq.gradient_generator(self.mol, self.slater, self.slater_to_opt)
         self.slater.recompute(self.configs)
         self.jastrow.recompute(self.configs)
 

@@ -3,6 +3,7 @@ import pyqmc.gpu as gpu
 import pyqmc.energy as energy
 import pyqmc.ewald as ewald
 import pyqmc.eval_ecp as eval_ecp
+import copy
 
 
 def gradient_generator(mol, wf, to_opt=None, nodal_cutoff=1e-3, **ewald_kwargs):
@@ -258,3 +259,37 @@ class SqAccumulator:
 
     def shapes(self):
         return {"Sq": (len(self.qlist),), "spinSq": (len(self.qlist),)}
+
+
+class SymmetryAccumulator:
+    """
+    Accumulates the many-body symmetry of the wave function
+    For example, rotation or reflection about the z-axis
+    """
+
+    def __init__(self, symm_matrix_repr):
+        """
+        Inputs:
+            symm_matrix_repr: (3,3) numpy array. Matrix representation of the symmetry operator in real space
+        """
+        self.rot_matrix = symm_matrix_repr
+
+    def __call__(self, configs, wf):
+        configs_copy = copy.deepcopy(configs)
+        wf_copy = copy.deepcopy(wf)
+        original_value = wf_copy.value()
+        configs_copy.configs = np.einsum(
+            "ijk,kl->ijl", configs_copy.configs, self.rot_matrix
+        )
+        new_value = wf_copy.recompute(configs_copy)
+        symm = (new_value[0] / original_value[0]) * np.exp(
+            new_value[1] - original_value[1]
+        )
+        return {"": symm}
+
+    def avg(self, configs, wf):
+        return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
+
+    def keys(self):
+        return self.shapes().keys()
+

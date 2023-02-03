@@ -213,23 +213,26 @@ class PBCOrbitalEvaluatorKpoints:
 
     """
 
-    def __init__(self, cell, mo_coeff, kpts=None):
+    def __init__(self, cell, mo_coeff=None, kpts=None):
         self.iscomplex = True
         self._cell = cell.original_cell
         self.S = cell.S
         self.Lprim = self._cell.lattice_vectors()
 
         self._kpts = [0, 0, 0] if kpts is None else kpts
-        nelec_per_kpt = [np.asarray([m.shape[1] for m in mo]) for mo in mo_coeff]
-        self.param_split = [
-            np.cumsum(nelec_per_kpt[spin])
-            for spin in [0, 1]
-        ]
-        self.parm_names = ["_alpha", "_beta"]
-        self.parameters = {
-            "mo_coeff_alpha": gpu.cp.asarray(np.concatenate(mo_coeff[0], axis=1)),
-            "mo_coeff_beta": gpu.cp.asarray(np.concatenate(mo_coeff[1], axis=1)),
-        }
+        if mo_coeff is None:
+            print("Orbitals initialized without MOs. Can only evaluate AOs")
+        else:
+            nelec_per_kpt = [np.asarray([m.shape[1] for m in mo]) for mo in mo_coeff]
+            self.param_split = [
+                np.cumsum(nelec_per_kpt[spin])
+                for spin in [0, 1]
+            ]
+            self.parm_names = ["_alpha", "_beta"]
+            self.parameters = {
+                "mo_coeff_alpha": gpu.cp.asarray(np.concatenate(mo_coeff[0], axis=1)),
+                "mo_coeff_beta": gpu.cp.asarray(np.concatenate(mo_coeff[1], axis=1)),
+            }
 
         Ls = self._cell.get_lattice_Ls(dimension=3)
         self.Ls = Ls[np.argsort(pyscf.lib.norm(Ls, axis=1))]
@@ -313,15 +316,6 @@ class PBCOrbitalEvaluatorKpoints:
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
         primcoords, primwrap = pbc.enforce_pbc(self.Lprim, mycoords)
-        # coordinate, dimension
-        wrap = configs.wrap if mask is None else configs.wrap[mask]
-        wrap = np.dot(wrap, self.S)
-        wrap = wrap.reshape((-1, wrap.shape[-1])) + primwrap
-        kdotR = np.linalg.multi_dot(
-            (self._kpts, self._cell.lattice_vectors().T, wrap.T)
-        )
-        # k, coordinate
-        wrap_phase = get_wrapphase_complex(kdotR)
         # k,coordinate, orbital
         ao = gpu.cp.asarray(
             pyscf.pbc.gto.eval_gto.eval_gto(
@@ -333,7 +327,17 @@ class PBCOrbitalEvaluatorKpoints:
                 Ls=self.Ls,
             )
         )
-        ao = gpu.cp.einsum("k...,k...a->k...a", wrap_phase, ao)
+        # coordinate, dimension
+        if np.abs(self._kpts).sum() > 1e-9:
+            wrap = configs.wrap if mask is None else configs.wrap[mask]
+            wrap = np.dot(wrap, self.S)
+            wrap = wrap.reshape((-1, wrap.shape[-1])) + primwrap
+            kdotR = np.linalg.multi_dot(
+                (self._kpts, self._cell.lattice_vectors().T, wrap.T)
+            )
+            # k, coordinate
+            wrap_phase = get_wrapphase_complex(kdotR)
+            ao = gpu.cp.einsum("k...,k...a->k...a", wrap_phase, ao)
         if len(ao.shape) == 4:  # if derivatives are included
             return ao.reshape(
                 (ao.shape[0], ao.shape[1], *mycoords.shape[:-1], ao.shape[-1])

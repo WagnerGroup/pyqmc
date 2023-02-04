@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.stats.stats import WeightedTauResult
 import pyqmc.mc as mc
 import scipy.stats
 import pyqmc.linemin as linemin

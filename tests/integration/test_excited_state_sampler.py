@@ -78,7 +78,7 @@ def test_sampler(H2_casci):
     )
 
     overlap_ref = np.sum(mc1.ci * mc2.ci)
-    print("overlap test", overlap_ref, terms["overlap"][0, 1])
+    #print("overlap test", overlap_ref, terms["overlap"][0, 1])
     assert abs(overlap_ref - terms["overlap"][0, 1]) < overlap_tolerance
 
     overlap_derivative_ref = mc1.ci.flatten() - 0.5 * overlap_ref * norm_derivative_ref
@@ -93,7 +93,7 @@ def test_sampler(H2_casci):
         - overlap_tolerance
     )
     derivative = objective_function_derivative(
-        terms, overlap_penalty=1.0, norm_penalty=1.0, offdiagonal_energy_penalty=0.1
+        terms, overlap_penalty=1.0, norm_penalty=1.0, offdiagonal_energy_penalty=0.1, lagrange_multiplier=0.1
     )
 
 

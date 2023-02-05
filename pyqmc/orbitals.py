@@ -220,9 +220,7 @@ class PBCOrbitalEvaluatorKpoints:
         self.Lprim = self._cell.lattice_vectors()
 
         self._kpts = [0, 0, 0] if kpts is None else kpts
-        if mo_coeff is None:
-            print("Orbitals initialized without MOs. Can only evaluate AOs")
-        else:
+        if mo_coeff is not None:
             nelec_per_kpt = [np.asarray([m.shape[1] for m in mo]) for mo in mo_coeff]
             self.param_split = [
                 np.cumsum(nelec_per_kpt[spin])

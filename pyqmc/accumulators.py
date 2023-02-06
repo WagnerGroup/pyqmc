@@ -270,26 +270,28 @@ class SymmetryAccumulator:
     def __init__(self, symm_matrix_repr):
         """
         Inputs:
-            symm_matrix_repr: (3,3) numpy array. Matrix representation of the symmetry operator in real space
+            symm_matrix_repr: (3,3) numpy array. Matrix representation of the symmetry operator S in real space
         """
         self.rot_matrix = symm_matrix_repr
 
     def __call__(self, configs, wf):
         configs_copy = copy.deepcopy(configs)
-        wf_copy = copy.deepcopy(wf)
-        original_value = wf_copy.value()
+        original_value = wf.value()
         configs_copy.configs = np.einsum(
             "ijk,kl->ijl", configs_copy.configs, self.rot_matrix
         )
-        new_value = wf_copy.recompute(configs_copy)
-        symm = (new_value[0] / original_value[0]) * np.exp(
+        new_value = wf.recompute(configs_copy)
+        S_Psi_Over_Psi = (new_value[0] / original_value[0]) * np.exp(
             new_value[1] - original_value[1]
         )
-        return {"": symm}
+        return {"value": S_Psi_Over_Psi}
 
     def avg(self, configs, wf):
         return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
 
     def keys(self):
         return self.shapes().keys()
+
+    def shapes(self):  
+        return {"value": ()}
 

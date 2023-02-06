@@ -3,13 +3,13 @@ import pyqmc.gpu as gpu
 import pyqmc.orbitals
 
 
-class J3:
+class GeminalJastrow:
     """
     Jastrow factor defined by Casula, Attaccalite, and Sorella, J. Chem. Phys. 121, 7110 (2004); https://doi.org/10.1063/1.1794632
     """
     def __init__(self, mol, orbitals=None):
         if hasattr(mol, "lattice_vectors"):
-            raise NotImplementedError("J3 is not implemented for periodic systems")
+            raise NotImplementedError("GeminalJastrow is not implemented for periodic systems")
         self.mol = mol
         if orbitals is None:
             self.orbitals = pyqmc.orbitals.MoleculeOrbitalEvaluator(mol, [0, 0])

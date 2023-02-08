@@ -214,6 +214,11 @@ class PBCOrbitalEvaluatorKpoints:
     """
 
     def __init__(self, cell, mo_coeff=None, kpts=None):
+        """
+        :parameter cell: PyQMC supercell object (from get_supercell)
+        :parameter mo_coeff: (2, nk, nao, nelec) array. MO coefficients for all kpts of primitive cell. If None, this object can't evaluate mos(), but can still evaluate aos().
+        :parameter kpts: list of kpts to evaluate AOs
+        """
         self.iscomplex = True
         self._cell = cell.original_cell
         self.S = cell.S
@@ -325,7 +330,7 @@ class PBCOrbitalEvaluatorKpoints:
                 Ls=self.Ls,
             )
         )
-        # coordinate, dimension
+        # If gamma-point only, do not compute wrap_phase, keep AOs real-valued
         if np.abs(self._kpts).sum() > 1e-9:
             wrap = configs.wrap if mask is None else configs.wrap[mask]
             wrap = np.dot(wrap, self.S)

@@ -42,7 +42,7 @@ class ThreeBodyJastrow:
         self.parameters["ccoeff"] = np.zeros(
             (self._mol.natm, len(a_basis), len(a_basis), len(b_basis), 3)
         )
-        self.iscomplex = False
+        self.dtype = float
 
     def recompute(self, configs):
         r"""

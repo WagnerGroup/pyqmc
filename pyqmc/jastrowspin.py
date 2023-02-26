@@ -31,7 +31,7 @@ class JastrowSpin:
         self._mol = mol
         self.parameters["bcoeff"] = gpu.cp.zeros((len(b_basis), 3))
         self.parameters["acoeff"] = gpu.cp.zeros((self._mol.natm, len(a_basis), 2))
-        self.iscomplex = False
+        self.dtype = float
 
     def recompute(self, configs):
         r"""

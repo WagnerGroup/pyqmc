@@ -68,12 +68,16 @@ def choose_evaluator_from_pyscf(
 
 class MoleculeOrbitalEvaluator:
     def __init__(self, mol, mo_coeff):
-        self.iscomplex = False
         self.parameters = {
             "mo_coeff_alpha": gpu.cp.asarray(mo_coeff[0]),
             "mo_coeff_beta": gpu.cp.asarray(mo_coeff[1]),
         }
         self.parm_names = ["_alpha", "_beta"]
+        self.iscomplex = bool(
+            sum(map(gpu.cp.iscomplexobj, self.parameters.values()))
+        )
+        self.ao_dtype = True
+        self.mo_dtype = complex if self.iscomplex else float
 
         self._mol = mol
 

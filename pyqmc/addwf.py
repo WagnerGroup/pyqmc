@@ -14,11 +14,11 @@ class AddWF:
         self.coeffs = coeffs
         self.wf_components = wf_components
         self.parameters = Parameters([wf.parameters for wf in wf_components])
-        self.iscomplex = bool(
-            sum(wf.iscomplex for wf in wf_components)
+        iscomplex = bool(
+            sum(wf.dtype==complex for wf in wf_components)
             + sum([isinstance(c, complex) * 1 for c in coeffs])
         )
-        self.dtype = complex if self.iscomplex else float
+        self.dtype = complex if iscomplex else float
 
     def recompute(self, configs):
         """

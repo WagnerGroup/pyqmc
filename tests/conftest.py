@@ -6,7 +6,7 @@ import pytest
 from pyscf import lib, gto, scf
 import pyscf.pbc
 import numpy as np
-import pyscf.hci
+#import pyscf.hci
 
 """ 
 In this file, we set up several pyscf objects that can be reused across the 

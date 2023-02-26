@@ -16,6 +16,7 @@ class J3:
         dim = mol.eval_gto("GTOval_cart", randpos).shape[-1]
         self.parameters = {"gcoeff": gpu.cp.zeros((dim, dim))}
         self.iscomplex = False
+        self.dtype = float
         self.optimize = "greedy"
 
     def recompute(self, configs):

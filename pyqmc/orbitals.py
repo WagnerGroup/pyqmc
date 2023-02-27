@@ -4,6 +4,7 @@ import pyqmc.pbc as pbc
 import pyqmc.supercell as supercell
 import pyqmc.determinant_tools
 import pyscf.pbc.gto.eval_gto
+import pyscf.pbc.addons
 import pyscf.lib
 import pyqmc.pbc
 import pyqmc.twists as twists
@@ -49,18 +50,90 @@ def choose_evaluator_from_pyscf(
     """
 
     if hasattr(mol, "a"):
-        if mc is not None:
-            if not hasattr(mc, "orbitals") or mc.orbitals is None:
-                mc.orbitals = np.arange(mc.ncore, mc.ncore + mc.ncas)
+        return create_pbc_expansion(
+            mol, mf, mc=mc, twist=twist, determinants=determinants, tol=tol
+        )
+    else:
+        return create_mol_expansion(mol, mf, mc=mc, determinants=determinants, tol=tol)
+
+
+def create_mol_expansion(self, mol, mf, mc=None, tol=-1, determinants=None):
+    """
+    mol: A Mole object
+    mf: An object with mo_coeff and mo_occ.
+    mc: (optional) a CI object from pyscf
+
+    """
+    if determinants is not None:
+        detcoeff, occup, det_map = pyqmc.determinant_tools.create_packed_objects(
+            determinants, tol=tol, format="list"
+        )
+    elif mc is not None:
+        detcoeff, occup, det_map = pyqmc.determinant_tools.interpret_ci(mc, tol)
+    else:
+        detcoeff = gpu.cp.array([1.0])
+        det_map = gpu.cp.array([[0], [0]])
+        # occup
+        if len(mf.mo_occ.shape) == 2:
+            _occup = [mf.mo_occ[spin] > 0.5 for spin in [0, 1]]
+        else:
+            _occup = [mf.mo_occ > 0.5 + spin for spin in [0, 1]]
+        occup = [[list(np.argwhere(occupied)[:, 0] for occupied in _occup]]
+
+    max_orb = [int(np.max(occup[s], initial=0) + 1) for s in [0, 1]]
+    _mo_coeff = mc.mo_coeff if hasattr(mc, "mo_coeff") else mf.mo_coeff
+    if len(mo_coeff[0].shape) == 2:
+        mo_coeff = [_mo_coeff[spin][:, 0 : max_orb[spin]] for spin in [0, 1]]
+    else:
+        mo_coeff = [_mo_coeff[:, 0 : max_orb[spin]] for spin in [0, 1]]
+
+    return detcoeff, occup, det_map, MoleculeOrbitalEvaluator(mol, mo_coeff)
+
+
+def create_pbc_expansion(self, cell, mf, mc=None, twist=0, determinants=None, tol=-1):
+    """
+    mf is expected to be a KUHF, KRHF, or equivalent DFT objects.
+    Selects occupied orbitals from a given twist
+    If cell is a supercell, will automatically choose the folded k-points that correspond to that twist.
+
+    """
+
+    if not hasattr(cell, "original_cell"):
+        cell = supercell.get_supercell(cell, np.eye(3))
+    if mc is not None:
+        if not hasattr(mc, "orbitals") or mc.orbitals is None:
+            mc.orbitals = np.arange(mc.ncore, mc.ncore + mc.ncas)
+        if determinants is None:
             determinants = pyqmc.determinant_tools.pbc_determinants_from_casci(
                 mc, mc.orbitals
             )
-        return PBCOrbitalEvaluatorKpoints.from_mean_field(
-            mol, mf, twist, determinants=determinants, tol=tol
+    if not hasattr(mf, "kpts"):
+        mf = pyqmc.pbc.addons.convert_to_khf(mf)
+    kinds = twists.create_supercell_twists(cell, mf)['primitive_ks'][twist]
+    if len(kinds) != cell.scale:
+        raise ValueError(
+            f"Found {len(kinds)} k-points but should have found {cell.scale}."
         )
-    return MoleculeOrbitalEvaluator.from_pyscf(
-        mol, mf, mc=mc, determinants=determinants, tol=tol
+    kpts = mf.kpts[kinds]
+
+    if determinants is None:
+        det = pyqmc.determinant_tools.create_pbc_determinant(cell, mf, [])
+        determinants = [(1.0, det)]
+
+    mo_coeff, determinants_flat = select_orbitals_kpoints(determinants, mf, kinds)
+    detcoeff, occup, det_map = pyqmc.determinant_tools.create_packed_objects(
+        determinants_flat, format="list", tol=tol
     )
+    # Check
+    for s, (occ_s, nelec_s) in enumerate(zip(occup, cell.nelec)):
+        for determinant in occ_s:
+            if len(determinant) != nelec_s:
+                raise RuntimeError(
+                    f"The number of electrons of spin {s} should be {nelec_s}, but found {len(determinant)} orbital[s]. You may have used a large smearing value.. Please pass your own determinants list. "
+                    )
+
+    evaluator = PBCOrbitalEvaluatorKpoints(cell, mo_coeff, kpts)
+    return detcoeff, occup, det_map, evaluator
 
 
 class MoleculeOrbitalEvaluator:
@@ -77,42 +150,6 @@ class MoleculeOrbitalEvaluator:
         self.mo_dtype = complex if iscomplex else float
 
         self._mol = mol
-
-    @classmethod
-    def from_pyscf(self, mol, mf, mc=None, tol=-1, determinants=None):
-        """
-        mol: A Mole object
-        mf: An object with mo_coeff and mo_occ.
-        mc: (optional) a CI object from pyscf
-
-        """
-        obj = mc if hasattr(mc, "mo_coeff") else mf
-        if mc is not None:
-            detcoeff, occup, det_map = pyqmc.determinant_tools.interpret_ci(mc, tol)
-        elif determinants is not None:
-            detcoeff, occup, det_map = pyqmc.determinant_tools.create_packed_objects(
-                determinants, tol, format="list"
-            )
-        else:
-            detcoeff = gpu.cp.array([1.0])
-            det_map = gpu.cp.array([[0], [0]])
-            # occup
-            if len(mf.mo_occ.shape) == 2:
-                occup = [
-                    [list(np.argwhere(mf.mo_occ[spin] > 0.5)[:, 0])] for spin in [0, 1]
-                ]
-            else:
-                occup = [
-                    [list(np.argwhere(mf.mo_occ > 0.5 + spin)[:, 0])] for spin in [0, 1]
-                ]
-
-        max_orb = [int(np.max(occup[s], initial=0) + 1) for s in [0, 1]]
-        if len(obj.mo_coeff[0].shape) == 2:
-            mo_coeff = [obj.mo_coeff[spin][:, 0 : max_orb[spin]] for spin in [0, 1]]
-        else:
-            mo_coeff = [obj.mo_coeff[:, 0 : max_orb[spin]] for spin in [0, 1]]
-
-        return detcoeff, occup, det_map, MoleculeOrbitalEvaluator(mol, mo_coeff)
 
     def nmo(self):
         return [
@@ -134,30 +171,8 @@ class MoleculeOrbitalEvaluator:
         return ao[0].dot(self.parameters[f"mo_coeff{self.parm_names[spin]}"])
 
     def pgradient(self, ao, spin):
-        return (
-            gpu.cp.array(
-                [self.parameters[f"mo_coeff{self.parm_names[spin]}"].shape[1]]
-            ),
-            ao,
-        )
-
-
-
-def pbc_single_determinant(mf, kinds):
-    detcoeff = np.array([1.0])
-    det_map = np.array([[0], [0]])
-
-    if len(mf.mo_coeff[0][0].shape) == 2:
-        occup_k = [
-            [[list(np.argwhere(mf.mo_occ[spin][k] > 0.5)[:, 0])] for k in kinds]
-            for spin in [0, 1]
-        ]
-    elif len(mf.mo_coeff[0][0].shape) == 1:
-        occup_k = [
-            [[list(np.argwhere(mf.mo_occ[k] > 1.5 - spin)[:, 0])] for k in kinds]
-            for spin in [0, 1]
-        ]
-    return detcoeff, det_map, occup_k
+        nelec = [self.parameters[f"mo_coeff{self.parm_names[spin]}"].shape[1]]
+        return (gpu.cp.array(nelec), ao)
 
 
 def select_orbitals_kpoints(determinants, mf, kinds):
@@ -233,63 +248,6 @@ class PBCOrbitalEvaluatorKpoints:
         Ls = self._cell.get_lattice_Ls(dimension=3)
         self.Ls = Ls[np.argsort(pyscf.lib.norm(Ls, axis=1))]
         self.rcut = pyscf.pbc.gto.eval_gto._estimate_rcut(self._cell)
-
-    @classmethod
-    def from_mean_field(self, cell, mf, twist=None, determinants=None, tol=None):
-        """
-        mf is expected to be a KUHF, KRHF, or equivalent DFT objects.
-        Selects occupied orbitals from a given twist
-        If cell is a supercell, will automatically choose the folded k-points that correspond to that twist.
-
-        """
-
-        cell = (
-            cell
-            if hasattr(cell, "original_cell")
-            else supercell.get_supercell(
-                cell, np.asarray([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-            )
-        )
-        if twist is None:
-            twist = 0 
-        if not hasattr(mf, "kpts"):
-            mf.kpts = np.zeros((1, 3))
-            if len(mf.mo_occ.shape) == 1:
-                mf.mo_coeff = [mf.mo_coeff]
-                mf.mo_occ = [mf.mo_occ]
-            elif len(mf.mo_occ.shape) == 2:
-                mf.mo_coeff = [[c] for c in mf.mo_coeff]
-                mf.mo_occ = [[o] for o in mf.mo_occ]
-        kinds = twists.create_supercell_twists(cell, mf)['primitive_ks'][twist]
-        if len(kinds) != cell.scale:
-            raise ValueError(
-                f"Found {len(kinds)} k-points but should have found {cell.scale}."
-            )
-        kpts = mf.kpts[kinds]
-
-        if determinants is None:
-            determinants = [
-                (1.0, pyqmc.determinant_tools.create_pbc_determinant(cell, mf, []))
-            ]
-
-        mo_coeff, determinants_flat = select_orbitals_kpoints(determinants, mf, kinds)
-        detcoeff, occup, det_map = pyqmc.determinant_tools.create_packed_objects(
-            determinants_flat, format="list", tol=tol
-        )
-        # Check
-        for s, (occ_s, nelec_s) in enumerate(zip(occup, cell.nelec)):
-            for determinant in occ_s:
-                if len(determinant) != nelec_s:
-                    raise RuntimeError(
-                        f"The number of electrons of spin {s} should be {nelec_s}, but found {len(determinant)} orbital[s]. You may have used a large smearing value.. Please pass your own determinants list. "
-                    )
-
-        return (
-            detcoeff,
-            occup,
-            det_map,
-            PBCOrbitalEvaluatorKpoints(cell, mo_coeff, kpts),
-        )
 
     def nmo(self):
         return [

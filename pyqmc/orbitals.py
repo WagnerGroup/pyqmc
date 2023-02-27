@@ -64,22 +64,19 @@ def create_mol_expansion(self, mol, mf, mc=None, tol=-1, determinants=None):
     mc: (optional) a CI object from pyscf
 
     """
-    if determinants is not None:
+    if mc is not None:
+        detcoeff, occup, det_map = pyqmc.determinant_tools.interpret_ci(mc, tol)
+    else: 
+        if determinants is None:
+            if len(mf.mo_occ.shape) == 2:
+                _occup = [mf.mo_occ[spin] > 0.5 for spin in [0, 1]]
+            else:
+                _occup = [mf.mo_occ > 0.5 + spin for spin in [0, 1]]
+            determinants = [[list(np.argwhere(occupied)[:, 0] for occupied in _occup]]
         detcoeff, occup, det_map = pyqmc.determinant_tools.create_packed_objects(
             determinants, tol=tol, format="list"
         )
-    elif mc is not None:
-        detcoeff, occup, det_map = pyqmc.determinant_tools.interpret_ci(mc, tol)
-    else:
-        detcoeff = gpu.cp.array([1.0])
-        det_map = gpu.cp.array([[0], [0]])
-        # occup
-        if len(mf.mo_occ.shape) == 2:
-            _occup = [mf.mo_occ[spin] > 0.5 for spin in [0, 1]]
-        else:
-            _occup = [mf.mo_occ > 0.5 + spin for spin in [0, 1]]
-        occup = [[list(np.argwhere(occupied)[:, 0] for occupied in _occup]]
-
+         
     max_orb = [int(np.max(occup[s], initial=0) + 1) for s in [0, 1]]
     _mo_coeff = mc.mo_coeff if hasattr(mc, "mo_coeff") else mf.mo_coeff
     if len(mo_coeff[0].shape) == 2:

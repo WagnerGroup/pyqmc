@@ -5,7 +5,8 @@ import pyqmc.supercell as supercell
 import pyqmc.determinant_tools
 import pyscf.pbc.gto.eval_gto
 import pyscf.lib
-
+import pyqmc.pbc
+import pyqmc.twists as twists
 
 """
 The evaluators have the concept of a 'set' of atomic orbitals, that may apply to 
@@ -145,13 +146,6 @@ class MoleculeOrbitalEvaluator:
         )
 
 
-def get_k_indices(cell, mf, kpts, tol=1e-6):
-    """Given a list of kpts, return inds such that mf.kpts[inds] is a list of kpts equivalent to the input list"""
-    kdiffs = mf.kpts[np.newaxis] - kpts[:, np.newaxis]
-    frac_kdiffs = np.dot(kdiffs, cell.lattice_vectors().T) / (2 * np.pi)
-    kdiffs = np.mod(frac_kdiffs + 0.5, 1) - 0.5
-    return np.nonzero(np.linalg.norm(kdiffs, axis=-1) < tol)[1]
-
 
 def pbc_single_determinant(mf, kinds):
     detcoeff = np.array([1.0])
@@ -261,9 +255,7 @@ class PBCOrbitalEvaluatorKpoints:
             )
         )
         if twist is None:
-            twist = np.zeros(3)
-        else:
-            twist = np.dot(np.linalg.inv(cell.a), np.mod(twist, 1.0)) * 2 * np.pi
+            twist = 0 
         if not hasattr(mf, "kpts"):
             mf.kpts = np.zeros((1, 3))
             if len(mf.mo_occ.shape) == 1:
@@ -272,9 +264,7 @@ class PBCOrbitalEvaluatorKpoints:
             elif len(mf.mo_occ.shape) == 2:
                 mf.mo_coeff = [[c] for c in mf.mo_coeff]
                 mf.mo_occ = [[o] for o in mf.mo_occ]
-        kinds = list(
-            set(get_k_indices(cell, mf, supercell.get_supercell_kpts(cell) + twist))
-        )
+        kinds = twists.create_supercell_twists(cell, mf)['primitive_ks'][twist]
         if len(kinds) != cell.scale:
             raise ValueError(
                 f"Found {len(kinds)} k-points but should have found {cell.scale}."

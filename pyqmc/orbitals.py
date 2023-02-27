@@ -58,12 +58,8 @@ def choose_evaluator_from_pyscf(
         return PBCOrbitalEvaluatorKpoints.from_mean_field(
             mol, mf, twist, determinants=determinants, tol=tol
         )
-    if mc is None:
-        return MoleculeOrbitalEvaluator.from_pyscf(
-            mol, mf, determinants=determinants, tol=tol
-        )
     return MoleculeOrbitalEvaluator.from_pyscf(
-        mol, mf, mc, determinants=determinants, tol=tol
+        mol, mf, mc=mc, determinants=determinants, tol=tol
     )
 
 

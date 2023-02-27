@@ -142,7 +142,7 @@ class MoleculeOrbitalEvaluator:
             "mo_coeff_alpha": gpu.cp.asarray(mo_coeff[0]),
             "mo_coeff_beta": gpu.cp.asarray(mo_coeff[1]),
         }
-        self.parm_names = ["_alpha", "_beta"]
+        self.parm_names = ["mo_coeff_alpha", "mo_coeff_beta"]
         iscomplex = bool(
             sum(map(gpu.cp.iscomplexobj, self.parameters.values()))
         )
@@ -168,10 +168,10 @@ class MoleculeOrbitalEvaluator:
             return aos.reshape((1, *mycoords.shape[:-1], aos.shape[-1]))
 
     def mos(self, ao, spin):
-        return ao[0].dot(self.parameters[f"mo_coeff{self.parm_names[spin]}"])
+        return ao[0].dot(self.parameters[self.parm_names[spin]])
 
     def pgradient(self, ao, spin):
-        nelec = [self.parameters[f"mo_coeff{self.parm_names[spin]}"].shape[1]]
+        nelec = [self.parameters[self.parm_names[spin]].shape[1]]
         return (gpu.cp.array(nelec), ao)
 
 
@@ -233,7 +233,7 @@ class PBCOrbitalEvaluatorKpoints:
             np.cumsum(nelec_per_kpt[spin])
             for spin in [0, 1]
         ]
-        self.parm_names = ["_alpha", "_beta"]
+        self.parm_names = ["mo_coeff_alpha", "mo_coeff_beta"]
         self.parameters = {
             "mo_coeff_alpha": gpu.cp.asarray(np.concatenate(mo_coeff[0], axis=1)),
             "mo_coeff_beta": gpu.cp.asarray(np.concatenate(mo_coeff[1], axis=1)),
@@ -301,12 +301,12 @@ class PBCOrbitalEvaluatorKpoints:
         In the derivative case, returns [d,..., mo]
         """
         p = np.split(
-            self.parameters[f"mo_coeff{self.parm_names[spin]}"],
+            self.parameters[self.parm_names[spin]],
             self.param_split[spin],
             axis=-1,
         )
         ps = [0] + list(self.param_split[spin])
-        nelec = self.parameters[f"mo_coeff{self.parm_names[spin]}"].shape[1]
+        nelec = self.parameters[self.parm_names[spin]].shape[1]
         out = gpu.cp.zeros([nelec, *ao[0].shape[:-1]], dtype=self.mo_dtype)
         for i, ak, mok in zip(range(len(ao)), ao, p[:-1]):
             gpu.cp.einsum("...a,an->n...",ak, mok, out=out[ps[i]:ps[i+1]])

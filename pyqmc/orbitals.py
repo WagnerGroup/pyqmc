@@ -98,13 +98,6 @@ def create_pbc_expansion(cell, mf, mc=None, twist=0, determinants=None, tol=-1):
 
     if not hasattr(cell, "original_cell"):
         cell = supercell.get_supercell(cell, np.eye(3))
-    if mc is not None:
-        if not hasattr(mc, "orbitals") or mc.orbitals is None:
-            mc.orbitals = np.arange(mc.ncore, mc.ncore + mc.ncas)
-        if determinants is None:
-            determinants = pyqmc.determinant_tools.pbc_determinants_from_casci(
-                mc, mc.orbitals
-            )
     if not hasattr(mf, "kpts"):
         mf = pyqmc.pbc.scf.addons.convert_to_khf(mf)
     kinds = twists.create_supercell_twists(cell, mf)['primitive_ks'][twist]
@@ -114,7 +107,14 @@ def create_pbc_expansion(cell, mf, mc=None, twist=0, determinants=None, tol=-1):
         )
     kpts = mf.kpts[kinds]
 
-    if determinants is None:
+    if mc is not None:
+        if not hasattr(mc, "orbitals") or mc.orbitals is None:
+            mc.orbitals = np.arange(mc.ncore, mc.ncore + mc.ncas)
+        if determinants is None:
+            determinants = pyqmc.determinant_tools.pbc_determinants_from_casci(
+                mc, mc.orbitals
+            )
+    elif determinants is None:
         det = pyqmc.determinant_tools.create_pbc_determinant(cell, mf, [])
         determinants = [(1.0, det)]
 

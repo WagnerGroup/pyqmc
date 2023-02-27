@@ -4,7 +4,7 @@ import pyqmc.pbc as pbc
 import pyqmc.supercell as supercell
 import pyqmc.determinant_tools
 import pyscf.pbc.gto.eval_gto
-import pyscf.pbc.addons
+import pyscf.pbc.scf.addons
 import pyscf.lib
 import pyqmc.pbc
 import pyqmc.twists as twists
@@ -33,7 +33,7 @@ def get_complex_phase(x):
 
 
 def choose_evaluator_from_pyscf(
-    mol, mf, mc=None, twist=None, determinants=None, tol=None
+    mol, mf, mc=None, twist=0, determinants=None, tol=None
 ):
     """
     mol: A Mole object
@@ -57,7 +57,7 @@ def choose_evaluator_from_pyscf(
         return create_mol_expansion(mol, mf, mc=mc, determinants=determinants, tol=tol)
 
 
-def create_mol_expansion(self, mol, mf, mc=None, tol=-1, determinants=None):
+def create_mol_expansion(mol, mf, mc=None, tol=-1, determinants=None):
     """
     mol: A Mole object
     mf: An object with mo_coeff and mo_occ.
@@ -72,14 +72,15 @@ def create_mol_expansion(self, mol, mf, mc=None, tol=-1, determinants=None):
                 _occup = [mf.mo_occ[spin] > 0.5 for spin in [0, 1]]
             else:
                 _occup = [mf.mo_occ > 0.5 + spin for spin in [0, 1]]
-            determinants = [[list(np.argwhere(occupied)[:, 0] for occupied in _occup]]
+            occup = [list(np.argwhere(occupied)[:, 0]) for occupied in _occup]
+            determinants = [(1.0, occup)]
         detcoeff, occup, det_map = pyqmc.determinant_tools.create_packed_objects(
             determinants, tol=tol, format="list"
         )
          
     max_orb = [int(np.max(occup[s], initial=0) + 1) for s in [0, 1]]
     _mo_coeff = mc.mo_coeff if hasattr(mc, "mo_coeff") else mf.mo_coeff
-    if len(mo_coeff[0].shape) == 2:
+    if len(_mo_coeff[0].shape) == 2:
         mo_coeff = [_mo_coeff[spin][:, 0 : max_orb[spin]] for spin in [0, 1]]
     else:
         mo_coeff = [_mo_coeff[:, 0 : max_orb[spin]] for spin in [0, 1]]
@@ -87,7 +88,7 @@ def create_mol_expansion(self, mol, mf, mc=None, tol=-1, determinants=None):
     return detcoeff, occup, det_map, MoleculeOrbitalEvaluator(mol, mo_coeff)
 
 
-def create_pbc_expansion(self, cell, mf, mc=None, twist=0, determinants=None, tol=-1):
+def create_pbc_expansion(cell, mf, mc=None, twist=0, determinants=None, tol=-1):
     """
     mf is expected to be a KUHF, KRHF, or equivalent DFT objects.
     Selects occupied orbitals from a given twist
@@ -105,7 +106,7 @@ def create_pbc_expansion(self, cell, mf, mc=None, twist=0, determinants=None, to
                 mc, mc.orbitals
             )
     if not hasattr(mf, "kpts"):
-        mf = pyqmc.pbc.addons.convert_to_khf(mf)
+        mf = pyqmc.pbc.scf.addons.convert_to_khf(mf)
     kinds = twists.create_supercell_twists(cell, mf)['primitive_ks'][twist]
     if len(kinds) != cell.scale:
         raise ValueError(

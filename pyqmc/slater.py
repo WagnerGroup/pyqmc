@@ -101,7 +101,7 @@ class Slater:
 
     """
 
-    def __init__(self, mol, mf, mc=None, tol=None, twist=None, determinants=None):
+    def __init__(self, mol, mf, mc=None, tol=None, twist=0, determinants=None):
         """
         determinants should be a list of tuples, for example
         [ (1.0, [0,1],[0,1]),

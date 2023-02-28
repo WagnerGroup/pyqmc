@@ -45,93 +45,21 @@ def choose_evaluator_from_pyscf(
 
     You cannot pass both mc/tol and determinants.
 
-    Returns:
-    an orbital evaluator chosen based on the inputs.
+    :returns:
+        * detwt: array of weights for each determinant
+        * occup: which orbitals go in which determinants
+        * map_dets: given a determinant in detwt, which determinant in occup it corresponds to
+        * an orbital evaluator chosen based on the inputs.
     """
 
     if hasattr(mol, "a"):
-        return create_pbc_expansion(
+        return pyqmc.determinant_tools.create_pbc_expansion(
             mol, mf, mc=mc, twist=twist, determinants=determinants, tol=tol
         )
     else:
-        return create_mol_expansion(mol, mf, mc=mc, determinants=determinants, tol=tol)
-
-
-def create_mol_expansion(mol, mf, mc=None, tol=-1, determinants=None):
-    """
-    mol: A Mole object
-    mf: An object with mo_coeff and mo_occ.
-    mc: (optional) a CI object from pyscf
-
-    """
-    if mc is not None:
-        detcoeff, occup, det_map = pyqmc.determinant_tools.interpret_ci(mc, tol)
-    else: 
-        if determinants is None:
-            if len(mf.mo_occ.shape) == 2:
-                _occup = [mf.mo_occ[spin] > 0.5 for spin in [0, 1]]
-            else:
-                _occup = [mf.mo_occ > 0.5 + spin for spin in [0, 1]]
-            occup = [list(np.argwhere(occupied)[:, 0]) for occupied in _occup]
-            determinants = [(1.0, occup)]
-        detcoeff, occup, det_map = pyqmc.determinant_tools.create_packed_objects(
-            determinants, tol=tol, format="list"
+        return pyqmc.determinant_tools.create_mol_expansion(
+            mol, mf, mc=mc, determinants=determinants, tol=tol
         )
-         
-    max_orb = [int(np.max(occup[s], initial=0) + 1) for s in [0, 1]]
-    _mo_coeff = mc.mo_coeff if hasattr(mc, "mo_coeff") else mf.mo_coeff
-    if len(_mo_coeff[0].shape) == 2:
-        mo_coeff = [_mo_coeff[spin][:, 0 : max_orb[spin]] for spin in [0, 1]]
-    else:
-        mo_coeff = [_mo_coeff[:, 0 : max_orb[spin]] for spin in [0, 1]]
-
-    return detcoeff, occup, det_map, MoleculeOrbitalEvaluator(mol, mo_coeff)
-
-
-def create_pbc_expansion(cell, mf, mc=None, twist=0, determinants=None, tol=-1):
-    """
-    mf is expected to be a KUHF, KRHF, or equivalent DFT objects.
-    Selects occupied orbitals from a given twist
-    If cell is a supercell, will automatically choose the folded k-points that correspond to that twist.
-
-    """
-
-    if not hasattr(cell, "original_cell"):
-        cell = supercell.get_supercell(cell, np.eye(3))
-    if not hasattr(mf, "kpts"):
-        mf = pyqmc.pbc.scf.addons.convert_to_khf(mf)
-    kinds = twists.create_supercell_twists(cell, mf)['primitive_ks'][twist]
-    if len(kinds) != cell.scale:
-        raise ValueError(
-            f"Found {len(kinds)} k-points but should have found {cell.scale}."
-        )
-    kpts = mf.kpts[kinds]
-
-    if mc is not None:
-        if not hasattr(mc, "orbitals") or mc.orbitals is None:
-            mc.orbitals = np.arange(mc.ncore, mc.ncore + mc.ncas)
-        if determinants is None:
-            determinants = pyqmc.determinant_tools.pbc_determinants_from_casci(
-                mc, mc.orbitals
-            )
-    elif determinants is None:
-        det = pyqmc.determinant_tools.create_pbc_determinant(cell, mf, [])
-        determinants = [(1.0, det)]
-
-    mo_coeff, determinants_flat = select_orbitals_kpoints(determinants, mf, kinds)
-    detcoeff, occup, det_map = pyqmc.determinant_tools.create_packed_objects(
-        determinants_flat, format="list", tol=tol
-    )
-    # Check
-    for s, (occ_s, nelec_s) in enumerate(zip(occup, cell.nelec)):
-        for determinant in occ_s:
-            if len(determinant) != nelec_s:
-                raise RuntimeError(
-                    f"The number of electrons of spin {s} should be {nelec_s}, but found {len(determinant)} orbital[s]. You may have used a large smearing value.. Please pass your own determinants list. "
-                    )
-
-    evaluator = PBCOrbitalEvaluatorKpoints(cell, mo_coeff, kpts)
-    return detcoeff, occup, det_map, evaluator
 
 
 class MoleculeOrbitalEvaluator:
@@ -171,44 +99,6 @@ class MoleculeOrbitalEvaluator:
     def pgradient(self, ao, spin):
         nelec = [self.parameters[self.parm_names[spin]].shape[1]]
         return (gpu.cp.array(nelec), ao)
-
-
-def select_orbitals_kpoints(determinants, mf, kinds):
-    """
-    Based on the k-point indices in `kinds`, select the MO coefficients that correspond to those k-points,
-    and the determinants.
-    The determinant indices are flattened so that the indices refer to the concatenated MO coefficients.
-    """
-    max_orb = [
-        [[np.max(orb_k) + 1 if len(orb_k) > 0 else 0 for orb_k in spin] for spin in det]
-        for wt, det in determinants
-    ]
-    max_orb = np.amax(max_orb, axis=0)
-
-    if len(mf.mo_coeff[0][0].shape) == 2:
-        mf_mo_coeff = mf.mo_coeff
-    elif len(mf.mo_coeff[0][0].shape) == 1:
-        mf_mo_coeff = [mf.mo_coeff, mf.mo_coeff]
-    mo_coeff = [
-        [mf_mo_coeff[s][k][:, 0 : max_orb[s][k]] for ki, k in enumerate(kinds)]
-        for s in range(2)
-    ]
-
-    # and finally, we remove the k-index from determinants
-    determinants_flat = []
-    orb_offsets = np.cumsum(max_orb[:, kinds], axis=1)
-    orb_offsets = np.pad(orb_offsets[:, :-1], ((0, 0), (1, 0)))
-    for wt, det in determinants:
-        flattened_det = []
-        for det_s, offset_s in zip(det, orb_offsets):
-            flattened = (
-                np.concatenate([det_s[k] + offset_s[ki] for ki, k in enumerate(kinds)])
-                .flatten()
-                .astype(int)
-            )
-            flattened_det.append(list(flattened))
-        determinants_flat.append((wt, flattened_det))
-    return mo_coeff, determinants_flat
 
 
 class PBCOrbitalEvaluatorKpoints:

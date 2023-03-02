@@ -141,19 +141,21 @@ def create_single_determinant(mf):
 
 
 def pbc_determinants_from_casci(mc, orbitals, cutoff=0.05):
+    if not hasattr(mc, "orbitals") or mc.orbitals is None:
+        mc.orbitals = np.arange(mc.ncore, mc.ncore + mc.ncas)
     if hasattr(mc.ncore, "__len__"):
         nocc = [c + e for c, e in zip(mc.ncore, mc.nelecas)]
     else:
         nocc = [mc.ncore + e for e in mc.nelecas]
-    if not hasattr(orbitals[0], "__len__"):
-        orbitals = [orbitals, orbitals]
+    if not hasattr(mc.orbitals[0], "__len__"):
+        mc.orbitals = [mc.orbitals, mc.orbitals]
     deters = fci.addons.large_ci(mc.ci, mc.ncas, mc.nelecas, tol=-1)
     determinants = []
     for x in deters:
         if abs(x[0]) > cutoff:
             allorbs = [
-                [translate_occ(x[1], orbitals[0], nocc[0])],
-                [translate_occ(x[2], orbitals[1], nocc[1])],
+                [translate_occ(x[1], mc.orbitals[0], nocc[0])],
+                [translate_occ(x[2], mc.orbitals[1], nocc[1])],
             ]
             determinants.append((x[0], allorbs))
     return determinants
@@ -205,15 +207,11 @@ def create_pbc_expansion(cell, mf, mc=None, twist=0, determinants=None, tol=-1):
         )
     kpts = mf.kpts[kinds]
 
-    if mc is not None:
-        if not hasattr(mc, "orbitals") or mc.orbitals is None:
-            mc.orbitals = np.arange(mc.ncore, mc.ncore + mc.ncas)
-        if determinants is None:
-            determinants = pbc_determinants_from_casci(
-                mc, mc.orbitals
-            )
-    if mc is None and determinants is None:
-        determinants = create_single_determinant(mf)
+    if determinants is None:
+        if mc is None:
+            determinants = create_single_determinant(mf)
+        else:
+            determinants = pbc_determinants_from_casci(mc)
 
     mo_coeff, determinants_flat = select_orbitals_kpoints(determinants, mf, kinds)
     detcoeff, occup, det_map = create_packed_objects(
@@ -256,11 +254,7 @@ def select_orbitals_kpoints(determinants, mf, kinds):
     for wt, det in determinants:
         flattened_det = []
         for det_s, offset_s in zip(det, orb_offsets):
-            flattened = (
-                np.concatenate([det_s[k] + offset_s[ki] for ki, k in enumerate(kinds)])
-                .flatten()
-                .astype(int)
-            )
-            flattened_det.append(list(flattened))
+            detlist = [det_s[k] + offset_s[ki] for ki, k in enumerate(kinds)]
+            flattened_det.append(list(np.concatenate(detlist).flatten().astype(int)))
         determinants_flat.append((wt, flattened_det))
     return mo_coeff, determinants_flat

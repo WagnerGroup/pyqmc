@@ -67,11 +67,9 @@ def runtest(mol, mf, kind=0):
     for k in ent.keys():
         difft = ent[k] - entnew[k]
         if k == "ecp":
-            for l, diff in [("0", difft), ("t", difft)]:
-                mad = np.mean(np.abs(diff))
-                if True:  # mad > 1e-12:
-                    print("ecp%s diff" % l, mad, np.linalg.norm(diff))
-                    assert mad < 1e-3, diff
+            mad = np.mean(np.abs(difft))
+            print("ecp%s diff" % l, mad, np.linalg.norm(difft))
+            assert mad < 1e-3, difft
         else:
             assert np.mean(np.abs(difft)) < 1e-6, difft
 

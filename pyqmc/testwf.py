@@ -56,10 +56,9 @@ def test_updateinternals(wf, configs):
     nconf, ne, ndim = configs.configs.shape
     delta = 1e-2
 
-    iscomplex = 1j if wf.iscomplex else 1
-    updatevstest = np.zeros((ne, nconf)) * iscomplex
-    recomputevstest = np.zeros((ne, nconf)) * iscomplex
-    recomputevsupdate = np.zeros((ne, nconf)) * iscomplex
+    updatevstest = np.zeros((ne, nconf), dtype=wf.dtype)
+    recomputevstest = np.zeros((ne, nconf), dtype=wf.dtype)
+    recomputevsupdate = np.zeros((ne, nconf), dtype=wf.dtype)
     wfcopy = copy.copy(wf)
     val1 = wf.recompute(configs)
     for e in range(ne):
@@ -120,11 +119,10 @@ def test_wf_gradient(wf, configs, delta=1e-5):
     :rtype: dictionary
     """
     nconf, nelec = configs.configs.shape[0:2]
-    iscomplex = 1j if wf.iscomplex else 1
     wf.recompute(configs)
     maxerror = 0
-    grad = np.zeros(configs.configs.shape) * iscomplex
-    numeric = np.zeros(configs.configs.shape) * iscomplex
+    grad = np.zeros(configs.configs.shape, dtype=wf.dtype)
+    numeric = np.zeros(configs.configs.shape, dtype=wf.dtype)
     for e in range(nelec):
         grad[:, e, :] = wf.gradient(e, configs.electron(e)).T
         for d in range(0, 3):
@@ -142,7 +140,6 @@ def test_wf_gradient(wf, configs, delta=1e-5):
 
 
 def test_wf_pgradient(wf, configs, delta=1e-5):
-    dtype = complex if wf.iscomplex else float
     baseval = wf.recompute(configs)
     gradient = wf.pgradient()
     error = {}
@@ -150,7 +147,7 @@ def test_wf_pgradient(wf, configs, delta=1e-5):
         flt = wf.parameters[k].reshape(-1)
         # print(flt.shape,wf.parameters[k].shape,gradient[k].shape)
         nparms = len(flt)
-        numgrad = np.zeros((configs.configs.shape[0], nparms), dtype=dtype)
+        numgrad = np.zeros((configs.configs.shape[0], nparms), dtype=wf.dtype)
         for i, c in enumerate(flt):
             flt[i] += delta
             wf.parameters[k] = flt.reshape(wf.parameters[k].shape)
@@ -193,11 +190,10 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
     :rtype: dictionary
     """
     nconf, nelec = configs.configs.shape[0:2]
-    iscomplex = 1j if wf.iscomplex else 1
     wf.recompute(configs)
     maxerror = 0
-    lap = np.zeros(configs.configs.shape[:2]) * iscomplex
-    numeric = np.zeros(configs.configs.shape[:2]) * iscomplex
+    lap = np.zeros(configs.configs.shape[:2], dtype=wf.dtype)
+    numeric = np.zeros(configs.configs.shape[:2], dtype=wf.dtype)
 
     for e in range(nelec):
         lap[:, e] = wf.laplacian(e, configs.electron(e))
@@ -221,13 +217,12 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
 
 def test_wf_gradient_laplacian(wf, configs):
     nconf, nelec = configs.configs.shape[0:2]
-    iscomplex = 1j if wf.iscomplex else 1
     wf.recompute(configs)
     maxerror = 0
-    lap = np.zeros(configs.configs.shape[:2]) * iscomplex
-    grad = np.zeros(configs.configs.shape).transpose((1, 2, 0)) * iscomplex
-    andlap = np.zeros(configs.configs.shape[:2]) * iscomplex
-    andgrad = np.zeros(configs.configs.shape).transpose((1, 2, 0)) * iscomplex
+    lap = np.zeros(configs.configs.shape[:2], dtype=wf.dtype)
+    grad = np.zeros(configs.configs.shape, dtype=wf.dtype).transpose((1, 2, 0))
+    andlap = np.zeros(configs.configs.shape[:2], dtype=wf.dtype)
+    andgrad = np.zeros(configs.configs.shape, dtype=wf.dtype).transpose((1, 2, 0))
 
     tsep = 0
     ttog = 0
@@ -262,14 +257,13 @@ def compare_nested_saved_vals(saved1, saved2):
 
 def test_wf_gradient_value(wf, configs):
     nconf, nelec = configs.configs.shape[0:2]
-    iscomplex = 1j if wf.iscomplex else 1
     wf.recompute(configs)
     maxerror = 0
-    val = np.zeros(configs.configs.shape[:2]) * iscomplex
-    grad = np.zeros(configs.configs.shape).transpose((1, 2, 0)) * iscomplex
-    andval = np.zeros(configs.configs.shape[:2]) * iscomplex
-    andgrad = np.zeros(configs.configs.shape).transpose((1, 2, 0)) * iscomplex
-    saved_diff = np.zeros(configs.configs.shape[0])
+    val = np.zeros(configs.configs.shape[:2], dtype=wf.dtype)
+    grad = np.zeros(configs.configs.shape, dtype=wf.dtype).transpose((1, 2, 0))
+    andval = np.zeros(configs.configs.shape[:2], dtype=wf.dtype)
+    andgrad = np.zeros(configs.configs.shape, dtype=wf.dtype).transpose((1, 2, 0))
+    saved_diff = np.zeros(configs.configs.shape[0], dtype=wf.dtype)
 
     tsep = 0
     ttog = 0

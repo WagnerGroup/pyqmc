@@ -1,7 +1,7 @@
 # Write the benchmarking functions here.
 # See "Writing benchmarks" in the asv docs for more information.
 import pyscf
-import pyqmc
+import pyqmc.api as pyq
 import pyscf.pbc
 import numpy as np
 import pyqmc.eval_ecp
@@ -28,8 +28,8 @@ class SiSuite:
         self.cell.exp_to_discard=0.2
         self.cell.build()
 
-        self.configs = pyqmc.initial_guess(self.cell, 500)
-        self.jastrow, self.jastrow_to_opt =  pyqmc.default_jastrow(self.cell)
+        self.configs = pyq.initial_guess(self.cell, 500)
+        self.jastrow, self.jastrow_to_opt =  pyq.generate_jastrow(self.cell)
         self.jastrow.recompute(self.configs)
 
     def time_ecp_jastrow(self):

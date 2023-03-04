@@ -23,21 +23,35 @@ def run_si_scf(chkfile="si_scf.chk", a=5.43):
 
 Run QMC on `n_conventional` conventional unit cells of silicon.
 ```
-import pyqmc.recipes
+import pyqmc.api as pyq
 import numpy as np
 
 def run_si_qmc(chkfile="si_scf.chk", n_conventional=2):
     # Define periodic supercell in PyQMC
     conventional_S = np.ones((3, 3)) - 2 * np.eye(3)
     S = n_conventional * conventional_S
-    pyqmc.recipes.OPTIMIZE(chkfile, "si_opt.chk", S=S)
-    pyqmc.recipes.DMC(chkfile, "si_dmc.chk", load_parameters="si_opt.chk", S=S)
+
+    pyq.OPTIMIZE(chkfile, "si_opt.chk", S=S)
+    pyq.DMC(chkfile, "si_dmc.chk", load_parameters="si_opt.chk", S=S, slater_kws={'twist':0} )
 ```
+
+To get the available twists: 
+```
+import pyqmc.api as pyq
+cell, mf = pyq.recover_pyqmc("si_scf.chk")
+conventional_S = np.ones((3, 3)) - 2 * np.eye(3)
+S = n_conventional * conventional_S
+cell = pyq.get_supercell(cell, S)
+twists=pyq.create_supercell_twists(cell,mf)
+print(twists)
+```
+
+
 
 ### Orbital optimization
 
 ```
-pyqmc.recipes.OPTIMIZE(chkfile, "opt.chk",slater_kws={'optimize_orbitals':True,'optimize_zeros':False})
+pyq.OPTIMIZE(chkfile, "opt.chk",slater_kws={'optimize_orbitals':True,'optimize_zeros':False})
 ```
 
 ### Selected CI wave function
@@ -52,10 +66,9 @@ pip install git+git://github.com/pyscf/naive-hci
 to get the simple selected CI method.
 
 ```
-import pyqmc
+import pyqmc.api as pyq
 import pyscf
 import pyscf.hci
-import pyqmc.recipes
 import numpy as np
 from pyscf import gto, scf
 
@@ -96,7 +109,7 @@ def run_hci(hf_chkfile, chkfile, select_cutoff=0.1, nroots=4):
 if __name__=="__main__":
     run_mf("mf.chk")
     run_hci("mf.chk","hci.chk")
-    pyqmc.recipes.OPTIMIZE("mf.chk", "opt.chk", ci_checkfile="hci.chk", nconfig=1000)
+    pyq.OPTIMIZE("mf.chk", "opt.chk", ci_checkfile="hci.chk", nconfig=1000)
 ```
 
 ### Create a wavefunction with 3 body Jastrow factor.

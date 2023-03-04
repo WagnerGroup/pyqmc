@@ -8,7 +8,7 @@ def ecp(mol, configs, wf, threshold, naip=None):
     :returns: ECP value, summed over all the electrons and atoms.
     """
     nconf, nelec = configs.configs.shape[0:2]
-    ecp_tot = np.zeros(nconf, dtype=complex if wf.iscomplex else float)
+    ecp_tot = np.zeros(nconf, dtype=wf.dtype)
     if mol._ecp != {}:
         for atom in mol._atom:
             if atom[0] in mol._ecp.keys():
@@ -65,7 +65,7 @@ def ecp_ea(mol, configs, wf, e, atom, threshold, naip=None):
     TODO: update documentation
     """
     nconf = configs.configs.shape[0]
-    ecp_val = np.zeros(nconf, dtype=complex if wf.iscomplex else float)
+    ecp_val = np.zeros(nconf, dtype=wf.dtype)
 
     at_name, apos = atom
     apos = np.asarray(apos)

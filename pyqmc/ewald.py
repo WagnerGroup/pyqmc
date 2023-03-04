@@ -121,28 +121,8 @@ class Ewald:
         self.alpha = 5.0 / smallestheight
 
         # Determine G points to include in reciprocal Ewald sum
-        gptsXpos = gpu.cp.meshgrid(
-            gpu.cp.arange(1, ewald_gmax + 1),
-            *[gpu.cp.arange(-ewald_gmax, ewald_gmax + 1)] * 2,
-            indexing="ij"
-        )
-        zero = gpu.cp.asarray([0])
-        gptsX0Ypos = gpu.cp.meshgrid(
-            zero,
-            gpu.cp.arange(1, ewald_gmax + 1),
-            gpu.cp.arange(-ewald_gmax, ewald_gmax + 1),
-            indexing="ij",
-        )
-        gptsX0Y0Zpos = gpu.cp.meshgrid(
-            zero, zero, gpu.cp.arange(1, ewald_gmax + 1), indexing="ij"
-        )
-        gs = zip(
-            *[
-                select_big(x, cellvolume, recvec, self.alpha)
-                for x in (gptsXpos, gptsX0Ypos, gptsX0Y0Zpos)
-            ]
-        )
-        self.gpoints, self.gweight = [gpu.cp.concatenate(x, axis=0) for x in gs]
+        gpoints = generate_positive_gpoints(ewald_gmax, recvec)
+        self.gpoints, self.gweight = select_big(gpoints, cellvolume, self.alpha)
         self.set_ewald_constants(cellvolume)
 
     def set_ewald_constants(self, cellvolume):
@@ -380,12 +360,20 @@ class Ewald:
         return self.e_single(nelec) + self.ewalde_separated
 
 
-def select_big(gpts, cellvolume, recvec, alpha):
-    gpoints = gpu.cp.einsum(
-        "j...,jk->...k", gpu.cp.asarray(gpts), gpu.cp.asarray(recvec) * 2 * np.pi
-    )
-    gsquared = gpu.cp.einsum("...k,...k->...", gpoints, gpoints)
+def select_big(gpoints, cellvolume, alpha):
+    gsquared = gpu.cp.einsum("jk,jk->j", gpoints, gpoints)
     gweight = 4 * np.pi * gpu.cp.exp(-gsquared / (4 * alpha**2))
     gweight /= cellvolume * gsquared
     bigweight = gweight > 1e-10
     return gpoints[bigweight], gweight[bigweight]
+
+
+def generate_positive_gpoints(gmax, recvec):
+    gXpos = gpu.cp.mgrid[1:gmax+1, -gmax:gmax+1, -gmax:gmax+1].reshape(3, -1)
+    gX0Ypos = gpu.cp.mgrid[0:1, 1:gmax+1, -gmax:gmax+1].reshape(3, -1)
+    gX0Y0Zpos = gpu.cp.mgrid[0:1, 0:1, 1:gmax+1].reshape(3, -1)
+    gpts = gpu.cp.concatenate([gXpos, gX0Ypos, gX0Y0Zpos], axis=1)
+    gpoints = gpu.cp.einsum(
+        "ji,jk->ik", gpts, gpu.cp.asarray(recvec) * 2 * np.pi
+    )
+    return gpoints

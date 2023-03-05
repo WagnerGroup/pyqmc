@@ -73,26 +73,20 @@ def create_packed_objects(deters, ncore=0, tol=0, format="binary"):
         if np.abs(x[0]) > tol:
             detwt.append(x[0])
             if format == "binary":
-                alpha_occ, __ = binary_to_occ(x[1], ncore)
-                beta_occ, __ = binary_to_occ(x[2], ncore)
+                spin_occ = binary_to_occ(x[1], ncore)[0], binary_to_occ(x[2], ncore)[0]
             elif format == "list":
-                alpha_occ = x[1][0]
-                beta_occ = x[1][1]
+                spin_occ = x[1]
             else:
                 raise ValueError(
                     "create_packed_objects: Options for format are binary or list"
                 )
-            if alpha_occ not in occup[0]:
-                map_dets[0].append(len(occup[0]))
-                occup[0].append(alpha_occ)
-            else:
-                map_dets[0].append(occup[0].index(alpha_occ))
+            for s in [0, 1]:
+                if spin_occ[s] not in occup[s]:
+                    map_dets[s].append(len(occup[s]))
+                    occup[s].append(alpha_occ)
+                else:
+                    map_dets[s].append(occup[s].index(spin_occ[s]))
 
-            if beta_occ not in occup[1]:
-                map_dets[1].append(len(occup[1]))
-                occup[1].append(beta_occ)
-            else:
-                map_dets[1].append(occup[1].index(beta_occ))
     return np.array(detwt), occup, np.array(map_dets)
 
 
@@ -125,11 +119,7 @@ def translate_occ(x, orbitals, nocc):
 
 def create_single_determinant(mf):
     """
-    excitations should be a list of tuples with
-    (s,ka,a,ki,i),
-    s is the spin (0 or 1),
-    ka, a is the occupied orbital,
-    and ki, i is the unoccupied orbital.
+    Creates a determinant list for a single determinant from SCF object
     """
     coeff = mf.mo_coeff[0][0] if hasattr(mf, "kpts") else mf.mo_coeff[0]
     if len(coeff.shape) == 2:
@@ -140,7 +130,7 @@ def create_single_determinant(mf):
     return [(1.0, occupation)]
 
 
-def pbc_determinants_from_casci(mc, orbitals, cutoff=0.05):
+def pbc_determinants_from_casci(mc, cutoff=0.05):
     if not hasattr(mc, "orbitals") or mc.orbitals is None:
         mc.orbitals = np.arange(mc.ncore, mc.ncore + mc.ncas)
     if hasattr(mc.ncore, "__len__"):

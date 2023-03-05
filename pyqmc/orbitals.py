@@ -237,10 +237,12 @@ class PBCOrbitalEvaluatorKpoints:
                 "mo_coeff_alpha": gpu.cp.asarray(np.concatenate(mo_coeff[0], axis=1)),
                 "mo_coeff_beta": gpu.cp.asarray(np.concatenate(mo_coeff[1], axis=1)),
             }
+            self.iscomplex = (not self.isgamma) or bool(
+                sum(map(gpu.cp.iscomplexobj, self.parameters.values()))
+            )
+        else:
+            self.iscomplex = (not self.isgamma) 
 
-        self.iscomplex = (not self.isgamma) or bool(
-            sum(map(gpu.cp.iscomplexobj, self.parameters.values()))
-        )
         self.ao_dtype = float if self.isgamma else complex
         self.mo_dtype = complex if self.iscomplex else float
         Ls = self._cell.get_lattice_Ls(dimension=3)

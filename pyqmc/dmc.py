@@ -49,7 +49,7 @@ def propose_drift_diffusion(wf, configs, tstep, e):
 
     # Acceptance -- fixed-node: reject if wf changes sign
     ratio = np.abs(wfratio) ** 2 * t_prob
-    if not wf.iscomplex:
+    if wf.dtype == float:
         ratio *= np.sign(wfratio)
     accept = ratio > np.random.rand(nconfig)
     r2 = np.sum((gauss + grad) ** 2, axis=1)

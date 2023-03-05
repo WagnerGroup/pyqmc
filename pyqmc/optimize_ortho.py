@@ -263,7 +263,7 @@ def correlated_sample(wfs, configs, parameters, pgrad):
 
     wt0 = 1.0 / np.sum(np.exp(-2 * (log_values0[:, np.newaxis] - log_values0)), axis=1)
     weight = np.mean(wt0, axis=1)
-    dtype = complex if wfs[-1].iscomplex else float
+    dtype = wfs[-1].dtype
 
     data = {
         "total": np.zeros(nparms),
@@ -545,7 +545,7 @@ def optimize_orthogonal(
 
     # One set of configurations for every wave function
     allcoords = [coords.copy() for _ in wfs[:-1]]
-    dtype = np.complex if wfs[-1].iscomplex else np.float
+    dtype = wfs[-1].dtype
 
     for step in range(max_iterations):
         # we iterate until the normalization is reasonable

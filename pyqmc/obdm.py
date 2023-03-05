@@ -84,7 +84,7 @@ class OBDMAccumulator:
                 mol, [orb_coeff, orb_coeff], kpts
             )
 
-        self.iscomplex = self.orbitals.iscomplex
+        self.dtype = self.orbitals.mo_dtype
 
         self._tstep = tstep
         self.nelec = len(self._electrons)
@@ -118,9 +118,8 @@ class OBDMAccumulator:
             self.warm_up(naux)
             self._warmed_up = True
 
-        dtype = complex if self.iscomplex else float
         results = {
-            "value": np.zeros((nconf, self.norb, self.norb), dtype=dtype),
+            "value": np.zeros((nconf, self.norb, self.norb), dtype=self.dtype),
             "norm": np.zeros((nconf, self.norb)),
         }
         naux = self._extra_config.configs.shape[0]

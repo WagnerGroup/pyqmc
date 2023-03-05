@@ -68,12 +68,16 @@ def choose_evaluator_from_pyscf(
 
 class MoleculeOrbitalEvaluator:
     def __init__(self, mol, mo_coeff):
-        self.iscomplex = False
         self.parameters = {
             "mo_coeff_alpha": gpu.cp.asarray(mo_coeff[0]),
             "mo_coeff_beta": gpu.cp.asarray(mo_coeff[1]),
         }
         self.parm_names = ["_alpha", "_beta"]
+        iscomplex = bool(
+            sum(map(gpu.cp.iscomplexobj, self.parameters.values()))
+        )
+        self.ao_dtype = True
+        self.mo_dtype = complex if iscomplex else float
 
         self._mol = mol
 
@@ -225,7 +229,7 @@ class PBCOrbitalEvaluatorKpoints:
 
         self._kpts = [0, 0, 0] if kpts is None else kpts
         # If gamma-point only, AOs are real-valued
-        self.isgamma = np.abs(self._kpts).sum() < 1e-9
+        isgamma = np.abs(self._kpts).sum() < 1e-9
         if mo_coeff is not None:
             nelec_per_kpt = [np.asarray([m.shape[1] for m in mo]) for mo in mo_coeff]
             self.param_split = [
@@ -237,14 +241,14 @@ class PBCOrbitalEvaluatorKpoints:
                 "mo_coeff_alpha": gpu.cp.asarray(np.concatenate(mo_coeff[0], axis=1)),
                 "mo_coeff_beta": gpu.cp.asarray(np.concatenate(mo_coeff[1], axis=1)),
             }
-            self.iscomplex = (not self.isgamma) or bool(
+            iscomplex = (not isgamma) or bool(
                 sum(map(gpu.cp.iscomplexobj, self.parameters.values()))
             )
         else:
-            self.iscomplex = (not self.isgamma) 
+            iscomplex = (not isgamma) 
 
-        self.ao_dtype = float if self.isgamma else complex
-        self.mo_dtype = complex if self.iscomplex else float
+        self.ao_dtype = float if isgamma else complex
+        self.mo_dtype = complex if iscomplex else float
         Ls = self._cell.get_lattice_Ls(dimension=3)
         self.Ls = Ls[np.argsort(pyscf.lib.norm(Ls, axis=1))]
         self.rcut = pyscf.pbc.gto.eval_gto._estimate_rcut(self._cell)
@@ -327,7 +331,6 @@ class PBCOrbitalEvaluatorKpoints:
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
         primcoords, primwrap = pbc.enforce_pbc(self.Lprim, mycoords)
-        # k,coordinate, orbital
         ao = gpu.cp.asarray(
             pyscf.pbc.gto.eval_gto.eval_gto(
                 self._cell,
@@ -338,8 +341,7 @@ class PBCOrbitalEvaluatorKpoints:
                 Ls=self.Ls,
             )
         )
-        # If gamma-point only, do not compute wrap_phase, keep AOs real-valued
-        if not self.isgamma:
+        if self.ao_dtype == complex:
             wrap = configs.wrap if mask is None else configs.wrap[mask]
             wrap = np.dot(wrap, self.S)
             wrap = wrap.reshape((-1, wrap.shape[-1])) + primwrap

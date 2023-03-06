@@ -16,7 +16,7 @@ def gradient_generator(mol, wf, to_opt=None, nodal_cutoff=1e-3, **ewald_kwargs):
 class EnergyAccumulator:
     """Returns local energy of each configuration in a dictionary."""
 
-    def __init__(self, mol, threshold=10,naip=None, **kwargs):
+    def __init__(self, mol, threshold=10, naip=None, **kwargs):
         self.mol = mol
         self.threshold = threshold
         self.naip = naip
@@ -75,7 +75,6 @@ class LinearTransform:
             to_opt = {k: np.ones(p.shape, dtype=bool) for k, p in parameters.items()}
         self.to_opt = {k: o for k, o in to_opt.items() if np.any(o)}
 
-
         self.shapes = {k: parameters[k].shape for k in self.to_opt}
         self.slices = {k: np.prod(s) for k, s in self.shapes.items()}
         self.dtypes = {k: parameters[k].dtype for k in self.to_opt}
@@ -106,7 +105,7 @@ class LinearTransform:
 
     def deserialize(self, wf, parameters):
         """Convert serialized parameters to dictionary.
-        Inputs: 
+        Inputs:
         wf object (this is needed to fill in the frozen parameters)
         serialized parameters
 
@@ -115,7 +114,9 @@ class LinearTransform:
         n = 0
         m = self.nparams
         d = {}
-        frozen_parms = {k: wf.parameters[k][~opt] for k, opt in self.to_opt.items()}
+        frozen_parms = {
+            k: gpu.asnumpy(wf.parameters[k])[~opt] for k, opt in self.to_opt.items()
+        }
 
         for k, opt in self.to_opt.items():
             opt_ = opt.flatten()
@@ -134,7 +135,7 @@ class LinearTransform:
 
 
 class PGradTransform:
-    """   """
+    """ """
 
     def __init__(self, enacc, transform, nodal_cutoff=1e-3):
         self.enacc = enacc
@@ -149,13 +150,13 @@ class PGradTransform:
         f = a * r ** 2 + b * r ** 4 + c * r ** 6
         """
         r = 1.0 / grad2
-        mask = r < self.nodal_cutoff ** 2
+        mask = r < self.nodal_cutoff**2
 
-        c = 7.0 / (self.nodal_cutoff ** 6)
-        b = -15.0 / (self.nodal_cutoff ** 4)
-        a = 9.0 / (self.nodal_cutoff ** 2)
+        c = 7.0 / (self.nodal_cutoff**6)
+        b = -15.0 / (self.nodal_cutoff**4)
+        a = 9.0 / (self.nodal_cutoff**2)
 
-        f = a * r + b * r ** 2 + c * r ** 3
+        f = a * r + b * r**2 + c * r**3
         f[np.logical_not(mask)] = 1.0
 
         return mask, f
@@ -218,39 +219,42 @@ class SqAccumulator:
     Accumulates structure factor
 
     .. math:: S(\vec{q}) = \langle \rho_{\vec{q}} \rho_{-\vec{q}} \rangle
-                         = \langle \left| \sum_{j=1}^{N_e} e^{i\vec{q}\cdot\vec{r}_j} \right| \rangle
+                         = \langle \left| \sum_{j=1}^{N_e} e^{i\vec{q}\cdot\vec{r}_j} \right|^2 \rangle
+    .. math:: S_{\rm spin}(\vec{q}) = \langle \left| \sum_{j=1}^{N_e} s_j e^{i\vec{q}\cdot\vec{r}_j} \right|^2 \rangle
 
     """
 
-    def __init__(self, qlist=None, Lvecs=None, nq=4):
+    def __init__(self, cell, nq=4, qlist=None):
         """
         Inputs:
-            qlist: (n, 3) array-like. If qlist is provided, Lvecs and nq are ignored
-            Lvecs: (3, 3) array-like of lattice vectors. Required if qlist is None
-            nq: int, if qlist is nonzero, use a uniform grid of shape (nq, nq, nq)
+            cell: pyscf Cell object
+            nq: int. If qlist is nonzero, use a uniform grid of shape (nq, nq, nq)
+            qlist: (n, 3) array-like. If qlist is provided, nq is ignored
         """
         if qlist is not None:
             self.qlist = qlist
         else:
-            assert (
-                Lvecs is not None
-            ), "need to provide either list of q vectors or lattice vectors"
-            Gvecs = np.linalg.inv(Lvecs).T * 2 * np.pi
-            qvecs = list(map(np.ravel, np.meshgrid(*[np.arange(nq)] * 3)))
-            qvecs = np.stack(qvecs, axis=1)
-            self.qlist = np.dot(qvecs, Gvecs)
+            recvec = np.linalg.inv(cell.lattice_vectors()).T
+            self.qlist = ewald.generate_positive_gpoints(nq, recvec)
+        nup = cell.nelec[0]
+        self.nelec = sum(cell.nelec)
+        self.spins = np.ones((2, self.nelec))
+        self.spins[1, nup:] = -1
 
     def __call__(self, configs, wf):
-        nelec = configs.configs.shape[1]
         exp_iqr = np.exp(1j * np.inner(configs.configs, self.qlist))
-        sum_exp_iqr = exp_iqr.sum(axis=1)
-        return {"Sq": (sum_exp_iqr.real ** 2 + sum_exp_iqr.imag ** 2) / nelec}
+        sum_exp_iqr = np.einsum("ijk,sj->sik", exp_iqr, self.spins)
+        Sq = (sum_exp_iqr.real**2 + sum_exp_iqr.imag**2) / self.nelec
+        return {"Sq": Sq[0], "spinSq": Sq[1]}
 
     def avg(self, configs, wf):
-        return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
+        exp_iqr = np.exp(1j * np.inner(configs.configs, self.qlist))
+        sum_exp_iqr = np.einsum("ijk,sj->sik", exp_iqr, self.spins)
+        Sq = (sum_exp_iqr.real**2 + sum_exp_iqr.imag**2).mean(axis=1) / self.nelec
+        return {"Sq": Sq[0], "spinSq": Sq[1]}
 
     def keys(self):
-        return set(["Sq"])
+        return set(["Sq", "spinSq"])
 
     def shapes(self):
-        return {"Sq": (len(self.qlist),)}
+        return {"Sq": (len(self.qlist),), "spinSq": (len(self.qlist),)}

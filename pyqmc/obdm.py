@@ -8,9 +8,9 @@ import pyqmc.supercell as supercell
 
 
 class OBDMAccumulator:
-    r"""Return the obdm as an array with indices rho[spin][i][j] = <c_{spin,i}c^+_{spin,j}>
+    r"""Return the obdm as an array with indices rho[spin][i][j] = <c^+_{spin,i}c_{spin,j}>
 
-    .. math:: \rho^\sigma_{ij} = \langle c_{\sigma, i} c^\dagger_{\sigma, j} \rangle
+    .. math:: \rho^\sigma_{ij} = \langle c^\dagger_{\sigma, i} c_{\sigma, j} \rangle
 
     We are measuring the amplitude of moving one electron (e.g. the first one) from orbital :math:`\phi_i` to orbital :math:`\phi_j` (Eq (7) of DOI:10.1063/1.4793531)
 
@@ -84,7 +84,7 @@ class OBDMAccumulator:
                 mol, [orb_coeff, orb_coeff], kpts
             )
 
-        self.iscomplex = self.orbitals.iscomplex
+        self.dtype = self.orbitals.mo_dtype
 
         self._tstep = tstep
         self.nelec = len(self._electrons)
@@ -118,9 +118,8 @@ class OBDMAccumulator:
             self.warm_up(naux)
             self._warmed_up = True
 
-        dtype = complex if self.iscomplex else float
         results = {
-            "value": np.zeros((nconf, self.norb, self.norb), dtype=dtype),
+            "value": np.zeros((nconf, self.norb, self.norb), dtype=self.dtype),
             "norm": np.zeros((nconf, self.norb)),
         }
         naux = self._extra_config.configs.shape[0]
@@ -189,7 +188,7 @@ class OBDMAccumulator:
 
 
 def sample_onebody(configs, orbitals, spin, nsamples=1, tstep=0.5):
-    r""" For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i \phi_i(r)^2`. """
+    r"""For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i \phi_i(r)^2`."""
     n = configs.configs.shape[0]
     ao = orbitals.aos("GTOval_sph", configs)
     borb = orbitals.mos(ao, spin=spin)

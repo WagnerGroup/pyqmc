@@ -58,7 +58,7 @@ def OPTIMIZE(
         linemin.line_minimization(wf, configs, acc, **linemin_kws)
     else:
         wfs = []
-        for i,a in enumerate(anchors):
+        for i, a in enumerate(anchors):
             wfs.append(
                 initialize_qmc_objects(
                     dft_checkfile,
@@ -70,12 +70,12 @@ def OPTIMIZE(
                     target_root=i,
                 )[0]
             )
-        #wfs = [wftools.read_wf(copy.deepcopy(wf), a) for a in anchors]
+        # wfs = [wftools.read_wf(copy.deepcopy(wf), a) for a in anchors]
         wfs.append(wf)
         optimize_ortho.optimize_orthogonal(wfs, configs, acc, **linemin_kws)
 
 
-def generate_accumulators(mol, mf, energy=True, rdm1=False, extra_accumulators=None):
+def generate_accumulators(mol, mf, energy=True, rdm1=False, extra_accumulators=None, twist=0):
     acc = {} if extra_accumulators is None else extra_accumulators
 
     if hasattr(mf, "kpts") and len(mf.mo_coeff[0][0].shape) < 2:
@@ -90,12 +90,27 @@ def generate_accumulators(mol, mf, energy=True, rdm1=False, extra_accumulators=N
             raise Exception("Found energy in extra_accumulators and energy is True")
         acc["energy"] = pyqmc.accumulators.EnergyAccumulator(mol)
     if rdm1:
+        if hasattr(mol, "a"):
+            from pyqmc.twists import create_supercell_twists
+
+            kinds = create_supercell_twists(mol, mf)['primitive_ks'][twist]
+            kpts = mf.kpts[kinds]
+            mo_coeff = [[mo_coeff[0][k] for k in kinds], 
+                         [mo_coeff[1][k] for k in kinds]
+                       ]
+        else:
+            kpts = None
+
         if "rdm1_up" in acc.keys() or "rdm1_down" in acc.keys():
             raise Exception(
                 "Found rdm1_up or rdm1_down in extra_accumulators and rdm1 is True"
             )
-        acc["rdm1_up"] = obdm.OBDMAccumulator(mol, orb_coeff=mo_coeff[0], spin=0)
-        acc["rdm1_down"] = obdm.OBDMAccumulator(mol, orb_coeff=mo_coeff[1], spin=1)
+        acc["rdm1_up"] = obdm.OBDMAccumulator(
+            mol, orb_coeff=mo_coeff[0], spin=0, kpts=kpts
+        )
+        acc["rdm1_down"] = obdm.OBDMAccumulator(
+            mol, orb_coeff=mo_coeff[1], spin=1, kpts=kpts
+        )
 
     return acc
 
@@ -172,7 +187,11 @@ def initialize_qmc_objects(
         mc = None
     else:
         mol, mf, mc = pyscftools.recover_pyscf(dft_checkfile, ci_checkfile=ci_checkfile)
-        mc.ci = mc.ci[target_root]
+        if not hasattr(mc.ci, "shape"):
+            mc.ci = mc.ci[target_root]
+        elif mc.orbitals is None:
+            mc.orbitals = np.arange(mc.ncore, mc.ncore + mc.ncas)
+            print("Warning: 'orbitals' not found in mc object; using default")
 
     if S is not None:
         mol = supercell.get_supercell(mol, np.asarray(S))
@@ -191,7 +210,11 @@ def initialize_qmc_objects(
     else:
         if accumulators == None:
             accumulators = {}
-        acc = generate_accumulators(mol, mf, **accumulators)
+        if slater_kws is not None and 'twist' in slater_kws.keys():
+            twist = slater_kws['twist']
+        else:
+            twist=0
+        acc = generate_accumulators(mol, mf, twist=twist, **accumulators)
 
     return wf, configs, acc
 

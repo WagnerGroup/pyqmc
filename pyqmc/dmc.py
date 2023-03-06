@@ -3,6 +3,7 @@ import numpy as np
 import pyqmc.mc as mc
 import sys
 import h5py
+import logging
 
 
 def limdrift(g, tau, acyrus=0.25):
@@ -14,10 +15,10 @@ def limdrift(g, tau, acyrus=0.25):
     :parameter acyrus: the maximum magnitude
     :returns: The vector with the cut off applied and multiplied by tau.
     """
-    tot = np.linalg.norm(g, axis=1) * acyrus
-    mask = tot > 1e-8
-    taueff = np.ones(tot.shape) * tau
-    taueff[mask] = (np.sqrt(1 + 2 * tau * tot[mask]) - 1) / tot[mask]
+    v2 = np.sum(g**2, axis=1)
+    mask = v2 > 1e-8
+    taueff = np.ones(v2.shape) * tau
+    taueff[mask] = (np.sqrt(1 + 2 * tau * acyrus * v2[mask]) - 1) / (acyrus * v2[mask])
     return g * taueff[:, np.newaxis]
 
 
@@ -40,20 +41,20 @@ def propose_drift_diffusion(wf, configs, tstep, e):
     newepos = configs.make_irreducible(e, eposnew)
 
     # Compute reverse move
-    g, wfratio = wf.gradient_value(e, newepos)
+    g, wfratio, saved = wf.gradient_value(e, newepos)
     new_grad = limdrift(np.real(g.T), tstep)
-    forward = np.sum(gauss ** 2, axis=1)
+    forward = np.sum(gauss**2, axis=1)
     backward = np.sum((gauss + grad + new_grad) ** 2, axis=1)
     t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
 
     # Acceptance -- fixed-node: reject if wf changes sign
     ratio = np.abs(wfratio) ** 2 * t_prob
-    if not wf.iscomplex:
+    if wf.dtype == float:
         ratio *= np.sign(wfratio)
     accept = ratio > np.random.rand(nconfig)
     r2 = np.sum((gauss + grad) ** 2, axis=1)
 
-    return newepos, accept, r2
+    return newepos, accept, r2, saved
 
 
 def propose_tmoves(wf, configs, energy_accumulator, tstep, e):
@@ -67,7 +68,7 @@ def propose_tmoves(wf, configs, energy_accumulator, tstep, e):
     """
     moves = energy_accumulator.nonlocal_tmoves(configs, wf, e, tstep)
     t_amplitudes = moves["ratio"] * moves["weight"]
-    # print(moves['ratio'])
+
     forward_probability = np.zeros_like(t_amplitudes)
     forward_probability[t_amplitudes > 0] = t_amplitudes[t_amplitudes > 0]
     norm = 1.0 + np.sum(forward_probability, axis=1)  # EQN 34
@@ -80,19 +81,28 @@ def propose_tmoves(wf, configs, energy_accumulator, tstep, e):
     selected_moves = np.apply_along_axis(select_walker, 1, cdf)
     move_selected = selected_moves < t_amplitudes.shape[1]
 
-    selected_moves[move_selected == False] = 0
     newpos = np.zeros((norm.shape[0], 3))
     reverse_ratio = np.zeros((norm.shape[0]))
+    backward_amplitudes = t_amplitudes.copy()
     for walker, move in enumerate(selected_moves):
-        newpos[walker, :] = moves["configs"].configs[walker, move, :]
-        reverse_ratio[walker] = moves["ratio"][walker, move]
+        if move_selected[walker]:
+            newpos[walker, :] = moves["configs"].configs[walker, move, :]
+            reverse_ratio[walker] = 1.0 / moves["ratio"][walker, move]
+            backward_amplitudes[walker, :] *= reverse_ratio[walker]
+            # This is the move back to the original position
+            backward_amplitudes[walker, move] = (
+                reverse_ratio[walker] * moves["weight"][walker, move]
+            )
+        else:
+            newpos[walker, :] = configs.configs[walker, e, :]
+            reverse_ratio[walker] = 0.0
 
     newpos = configs.make_irreducible(e, newpos)
 
-    backward_amplitude = t_amplitudes / reverse_ratio[:, np.newaxis]
-    backward_amplitude[backward_amplitude < 0] = 0.0
-    back_norm = 1.0 + np.sum(backward_amplitude, axis=1)
+    backward_amplitudes[backward_amplitudes < 0] = 0.0
+    back_norm = 1.0 + np.sum(backward_amplitudes, axis=1)
     acceptance = norm / back_norm
+    acceptance[move_selected == False] = 0.0
 
     return newpos, move_selected, acceptance, np.sum(t_amplitudes)
 
@@ -153,9 +163,9 @@ def dmc_propagate(
                 tmove_acceptance += accept / nelec
 
         for e in range(nelec):  # drift-diffusion
-            newepos, accept, r2 = propose_drift_diffusion(wf, configs, tstep, e)
+            newepos, accept, r2, saved = propose_drift_diffusion(wf, configs, tstep, e)
             configs.move(e, newepos, accept)
-            wf.updateinternals(e, newepos, configs, mask=accept)
+            wf.updateinternals(e, newepos, configs, mask=accept, saved_values=saved)
             r2_proposed += r2
             r2_accepted[accept] += r2[accept]
             prob_acceptance += accept / nelec
@@ -288,15 +298,27 @@ def branch(configs, weights):
     """
 
     nconfig = configs.configs.shape[0]
+    if np.any(weights > 2.0):
+        logging.warning("Some weights are larger than 2")
     probability = np.cumsum(weights)
     wtot = probability[-1]
-    base = np.random.rand()
+
+    base = np.random.rand() * wtot
     newinds = np.searchsorted(
-        probability, (base + np.linspace(0, wtot, nconfig)) % wtot
+        probability, (base + np.linspace(0, wtot, nconfig, endpoint=False)) % wtot
     )
+    unique, counts = np.unique(newinds, return_counts=True)
+
     configs.resample(newinds)
     weights.fill(wtot / nconfig)
-    return configs, weights
+    return (
+        configs,
+        weights,
+        {
+            "max branches": np.max(counts),
+            "Number of walkers killed": nconfig - unique.shape[0],
+        },
+    )
 
 
 def dmc_file(hdf_file, data, attr, configs, weights):
@@ -314,26 +336,24 @@ def dmc_file(hdf_file, data, attr, configs, weights):
             hdf["weights"][:] = weights
 
 
-
 def evaluate_energy_worker(configs, wf, en):
     wf.recompute(configs)
     return en(configs, wf)
 
-def evaluate_energies(wf, configs, en, client, npartitions): 
-    if client is None: 
+
+def evaluate_energies(wf, configs, en, client, npartitions):
+    if client is None:
         return evaluate_energy_worker(configs, wf, en)
 
-    else: 
+    else:
         config = configs.split(npartitions)
-        runs = [
-            client.submit(evaluate_energy_worker, conf, wf, en)
-            for conf in config
-            ]
+        runs = [client.submit(evaluate_energy_worker, conf, wf, en) for conf in config]
         ret = {}
         data = [r.result() for r in runs]
         for k in data[0].keys():
             ret[k] = np.concatenate([d[k] for d in data])
         return ret
+
 
 def rundmc(
     wf,
@@ -410,13 +430,15 @@ def rundmc(
             client=client,
             npartitions=npartitions,
             verbose=verbose,
-            nblocks=vmc_warmup
+            nblocks=vmc_warmup,
         )
-        en = evaluate_energies(wf, configs, accumulators[ekey[0]], client, npartitions)[ekey[1]]
+        en = evaluate_energies(wf, configs, accumulators[ekey[0]], client, npartitions)[
+            ekey[1]
+        ]
         eref = np.mean(en).real
         e_trial = eref
         e_est = eref
-        esigma = np.std(en) 
+        esigma = np.std(en)
         if verbose:
             print("eref start", eref, "esigma", esigma)
 
@@ -466,11 +488,14 @@ def rundmc(
         df_["weight_std"] = np.std(weights)
         df_["nsteps"] = branchtime
 
-        dmc_file(hdf_file, df_, {}, configs, weights)
+        configs, weights, branch_info = branch(configs, weights)
+        df_.update(branch_info)
         df.append(df_)
+        dmc_file(hdf_file, df_, {}, configs, weights)
+        
         e_est = estimate_energy(hdf_file, df, ekey)
         e_trial = e_est - feedback * np.log(np.mean(weights)).real
-        configs, weights = branch(configs, weights)
+
         if verbose:
             print(
                 "energy",
@@ -482,6 +507,7 @@ def rundmc(
                 "sigma(w)",
                 df_["weight_std"],
             )
+            print(branch_info)
 
     df_ret = {k: np.asarray([d[k] for d in df]) for k in df[0].keys()}
     return df_ret, configs, weights

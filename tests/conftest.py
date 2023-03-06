@@ -6,7 +6,7 @@ import pytest
 from pyscf import lib, gto, scf
 import pyscf.pbc
 import numpy as np
-import pyscf.hci
+#import pyscf.hci
 
 """ 
 In this file, we set up several pyscf objects that can be reused across the 
@@ -186,7 +186,7 @@ def li_cubic_ccecp():
     mf = pyscf.pbc.scf.KRKS(cell, kpts)
     mf.xc = "pbe"
     #mf = mf.density_fit()
-    mf = pyscf.pbc.dft.multigrid.multigrid(mf)
+    #mf = pyscf.pbc.dft.multigrid.multigrid(mf)
     mf = mf.run()
     return cell, mf
 
@@ -232,7 +232,7 @@ def h_noncubic_sto3g_triplet():
     kpts = mol.make_kpts(nk)
     mf = pyscf.pbc.scf.KUKS(mol, kpts)
     mf.xc = "pbe"
-    mf = pyscf.pbc.dft.multigrid.multigrid(mf)
+    #mf = pyscf.pbc.dft.multigrid.multigrid(mf)
     mf = mf.run()
     print(mf.mo_occ)
     return mol, mf

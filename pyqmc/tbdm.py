@@ -9,12 +9,14 @@ import warnings
 
 
 class TBDMAccumulator:
-    """Returns one spin sector of the tbdm[s1,s2] as an array (norb_s1,norb_s1,norb_s2,norb_s2)
+    r"""Returns one spin sector of the tbdm[s1,s2] as an array (norb_s1,norb_s1,norb_s2,norb_s2)
 
     We use PySCF's index convention (note that Eq. 10 in DOI:10.1063/1.4793531 uses QWalk's).
     PySCF -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,k} c_{s2,l} c_{s1,j} > = \phi*_{s1,j} \phi*_{s2,l} \phi_{s2,k} \phi_{s1,i}
 
     .. math:: \rho_{ijkl}^{\sigma_1\sigma_2} = \left\langle c^\dagger_{\sigma_1, i} c^\dagger_{\sigma_2, k} c_{\sigma_2, l} c_{\sigma_1, j} \right\rangle = \phi^*_{\sigma_1,j} \phi^*_{\sigma_2,l} \phi_{\sigma_2,k} \phi_{\sigma_1,i}.
+
+    .. math:: \rho_{ijkl} = \left\langle \sum_{a<b} \frac{\Psi(\mathbf{R}'_{ab})}{\Psi(\mathbf{R})} \frac{\phi^*_{j}(\mathbf{r}_a') \phi^*_{l}(\mathbf{r}_b') \phi_{i}(\mathbf{r}_a) \phi_{k}(\mathbf{r}_b) }{\rho_{\rm aux}(\mathbf{r}_a')\rho_{\rm aux}(\mathbf{r}_b')} \right\rangle_{\begin{subarray}{l}\mathbf{R}\sim|\Psi|^2;\\ \mathbf{r}_a'\sim\rho_{\rm aux}\end{subarray}},
 
     QWalk -> tbdm[s1,s2,i,j,k,l] = < c^+_{s1,i} c^+_{s2,j} c_{s2,l} c_{s1,k} > = \phi*_{s1,k} \phi*_{s2,l} \phi_{s2,j} \phi_{s1,i}
 
@@ -79,7 +81,7 @@ class TBDMAccumulator:
             norb_up = np.sum([o.shape[1] for o in orb_coeff[0]])
             norb_down = np.sum([o.shape[1] for o in orb_coeff[1]])
 
-        self.dtype = complex if self.orbitals.iscomplex else float
+        self.dtype = self.orbitals.mo_dtype
         self._spin_sector = spin
         self._electrons = [
             np.arange(spin[s] * mol.nelec[0], mol.nelec[0] + spin[s] * mol.nelec[1])
@@ -163,7 +165,7 @@ class TBDMAccumulator:
         It should be of length [nsweeps,nconf], and contain integers between 0 and naux.
         """
 
-        nconf = configs.configs.shape[0]
+        nconf, nelec = configs.configs.shape[:2]
         if not self._warmed_up:
             naux = nconf if self._naux is None else self._naux
             self.warm_up(naux)
@@ -188,6 +190,10 @@ class TBDMAccumulator:
         orb_configs = [orb_configs[s][:, :, self._ijkl[2 * s]] for s in [0, 1]]
 
         down_start = [np.min(self._electrons[s]) for s in [0, 1]]
+
+        _, saved0 = list(
+            zip(*[wf.testvalue(e, configs.electron(e)) for e in range(nelec)])
+        )
         for sweep in range(self._nsweeps):
             fsum = [
                 gpu.cp.sum(gpu.cp.abs(aux["orbs"][spin][sweep]) ** 2, axis=1)
@@ -206,10 +212,12 @@ class TBDMAccumulator:
                 electrons_b = self._electrons[1][self._electrons[1] != ea]
                 epos_a = aux["configs"][0][sweep].electron(0)
                 epos_b = aux["configs"][1][sweep].electron(0)
-                wfratio_a = wf.testvalue(ea, epos_a)
-                wf.updateinternals(ea, epos_a, configs)
+                wfratio_a, saved_a = wf.testvalue(ea, epos_a)
+                wf.updateinternals(ea, epos_a, configs, saved_values=saved_a)
                 wfratio_b = wf.testvalue_many(electrons_b, epos_b)
-                wf.updateinternals(ea, configs.electron(ea), configs)
+                wf.updateinternals(
+                    ea, configs.electron(ea), configs, saved_values=saved0[ea]
+                )
                 wfratio.append(wfratio_a[:, np.newaxis] * wfratio_b)
                 electrons_a_ind.extend([ea - down_start[0]] * len(electrons_b))
                 electrons_b_ind.extend(electrons_b - down_start[1])
@@ -227,8 +235,8 @@ class TBDMAccumulator:
                 "nio,nio,no,no,n ->nio",
                 orb_configs[0][:, electrons_a_ind, :],  # phi_i(r1)
                 orb_configs[1][:, electrons_b_ind, :],  # phi_k(r2)
-                phi_j_r1p,  # phi_j
-                phi_l_r2p,  # phi_l
+                phi_j_r1p.conj(),  # phi_j^*(r1)
+                phi_l_r2p.conj(),  # phi_l^*(r2)
                 rho1rho2,
             )
 

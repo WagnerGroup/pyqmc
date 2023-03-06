@@ -112,9 +112,7 @@ def test_ewald_CaF2():
 
 def compute_ewald_shifted(x, delta, L=4.0):
     cell = gto.Cell(
-        atom="""H     {0}      {0}      {0} """.format(
-            x * L,
-        ),
+        atom="""H     {0}      {0}      {0} """.format(x * L,),
         basis="ccecpccpvdz",
         ecp="ccecp",
         spin=1,
@@ -125,7 +123,8 @@ def compute_ewald_shifted(x, delta, L=4.0):
     configs = np.full((1, 1, 3), x * L) + delta
     configs = PeriodicConfigs(configs, cell.lattice_vectors())
     evaluator = pyqmc.ewald.Ewald(cell, ewald_gmax=25)
-    return evaluator.energy(configs)
+    energy = evaluator.energy(configs)
+    return np.concatenate([np.ravel(a) for a in energy])
 
 
 def test_ewald_shifted():

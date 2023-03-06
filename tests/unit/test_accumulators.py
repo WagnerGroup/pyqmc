@@ -5,6 +5,7 @@ from pyqmc.tbdm import TBDMAccumulator
 import pyqmc.api as pyq
 import copy
 
+
 def test_transform(LiH_sto3g_rhf):
     """Tests that the shapes are ok"""
     mol, mf = LiH_sto3g_rhf
@@ -18,9 +19,6 @@ def test_transform(LiH_sto3g_rhf):
     gradtrans = transform.serialize_gradients(pgrad)
     assert gradtrans.shape[1] == len(x)
     assert gradtrans.shape[0] == nconfig
-
-
-
 
 
 def test_info_functions_mol(LiH_sto3g_rhf):
@@ -44,7 +42,7 @@ def test_info_functions_pbc(H_pbc_sto3g_krks):
     accumulators = {
         "pgrad": pyq.gradient_generator(mol, wf, to_opt, ewald_gmax=10),
         "obdm": OBDMAccumulator(mol, dm_orbs, kpts=mf.kpts[kinds]),
-        "Sq": SqAccumulator(mol.lattice_vectors()),
+        "Sq": SqAccumulator(mol),
     }
     info_functions(mol, wf, accumulators)
 

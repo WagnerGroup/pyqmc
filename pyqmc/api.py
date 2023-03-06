@@ -13,3 +13,4 @@ from pyqmc.slater import Slater
 from pyqmc.jastrowspin import JastrowSpin
 from pyqmc.multiplywf import MultiplyWF
 from pyqmc.addwf import AddWF
+from pyqmc.twists import create_supercell_twists

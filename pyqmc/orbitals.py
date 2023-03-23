@@ -5,7 +5,8 @@ import pyqmc.supercell as supercell
 import pyqmc.determinant_tools
 import pyscf.pbc.gto.eval_gto
 import pyscf.lib
-
+import pyqmc.pbc
+import pyqmc.twists as twists
 
 """
 The evaluators have the concept of a 'set' of atomic orbitals, that may apply to 
@@ -70,12 +71,16 @@ def choose_evaluator_from_pyscf(
 
 class MoleculeOrbitalEvaluator:
     def __init__(self, mol, mo_coeff):
-        self.iscomplex = False
         self.parameters = {
             "mo_coeff_alpha": gpu.cp.asarray(mo_coeff[0]),
             "mo_coeff_beta": gpu.cp.asarray(mo_coeff[1]),
         }
         self.parm_names = ["_alpha", "_beta"]
+        iscomplex = bool(
+            sum(map(gpu.cp.iscomplexobj, self.parameters.values()))
+        )
+        self.ao_dtype = True
+        self.mo_dtype = complex if iscomplex else float
 
         self._mol = mol
 
@@ -143,13 +148,6 @@ class MoleculeOrbitalEvaluator:
         )
 
 
-def get_k_indices(cell, mf, kpts, tol=1e-6):
-    """Given a list of kpts, return inds such that mf.kpts[inds] is a list of kpts equivalent to the input list"""
-    kdiffs = mf.kpts[np.newaxis] - kpts[:, np.newaxis]
-    frac_kdiffs = np.dot(kdiffs, cell.lattice_vectors().T) / (2 * np.pi)
-    kdiffs = np.mod(frac_kdiffs + 0.5, 1) - 0.5
-    return np.nonzero(np.linalg.norm(kdiffs, axis=-1) < tol)[1]
-
 
 def pbc_single_determinant(mf, kinds):
     detcoeff = np.array([1.0])
@@ -215,24 +213,38 @@ class PBCOrbitalEvaluatorKpoints:
 
     """
 
-    def __init__(self, cell, mo_coeff, kpts=None):
-        self.iscomplex = True
+    def __init__(self, cell, mo_coeff=None, kpts=None):
+        """
+        :parameter cell: PyQMC supercell object (from get_supercell)
+        :parameter mo_coeff: (2, nk, nao, nelec) array. MO coefficients for all kpts of primitive cell. If None, this object can't evaluate mos(), but can still evaluate aos().
+        :parameter kpts: list of kpts to evaluate AOs
+        """
         self._cell = cell.original_cell
         self.S = cell.S
         self.Lprim = self._cell.lattice_vectors()
 
         self._kpts = [0, 0, 0] if kpts is None else kpts
-        nelec_per_kpt = [np.asarray([m.shape[1] for m in mo]) for mo in mo_coeff]
-        self.param_split = [
-            np.cumsum(nelec_per_kpt[spin])
-            for spin in [0, 1]
-        ]
-        self.parm_names = ["_alpha", "_beta"]
-        self.parameters = {
-            "mo_coeff_alpha": gpu.cp.asarray(np.concatenate(mo_coeff[0], axis=1)),
-            "mo_coeff_beta": gpu.cp.asarray(np.concatenate(mo_coeff[1], axis=1)),
-        }
+        # If gamma-point only, AOs are real-valued
+        isgamma = np.abs(self._kpts).sum() < 1e-9
+        if mo_coeff is not None:
+            nelec_per_kpt = [np.asarray([m.shape[1] for m in mo]) for mo in mo_coeff]
+            self.param_split = [
+                np.cumsum(nelec_per_kpt[spin])
+                for spin in [0, 1]
+            ]
+            self.parm_names = ["_alpha", "_beta"]
+            self.parameters = {
+                "mo_coeff_alpha": gpu.cp.asarray(np.concatenate(mo_coeff[0], axis=1)),
+                "mo_coeff_beta": gpu.cp.asarray(np.concatenate(mo_coeff[1], axis=1)),
+            }
+            iscomplex = (not isgamma) or bool(
+                sum(map(gpu.cp.iscomplexobj, self.parameters.values()))
+            )
+        else:
+            iscomplex = (not isgamma) 
 
+        self.ao_dtype = float if isgamma else complex
+        self.mo_dtype = complex if iscomplex else float
         Ls = self._cell.get_lattice_Ls(dimension=3)
         self.Ls = Ls[np.argsort(pyscf.lib.norm(Ls, axis=1))]
         self.rcut = pyscf.pbc.gto.eval_gto._estimate_rcut(self._cell)
@@ -254,9 +266,7 @@ class PBCOrbitalEvaluatorKpoints:
             )
         )
         if twist is None:
-            twist = np.zeros(3)
-        else:
-            twist = np.dot(np.linalg.inv(cell.a), np.mod(twist, 1.0)) * 2 * np.pi
+            twist = 0 
         if not hasattr(mf, "kpts"):
             mf.kpts = np.zeros((1, 3))
             if len(mf.mo_occ.shape) == 1:
@@ -265,9 +275,7 @@ class PBCOrbitalEvaluatorKpoints:
             elif len(mf.mo_occ.shape) == 2:
                 mf.mo_coeff = [[c] for c in mf.mo_coeff]
                 mf.mo_occ = [[o] for o in mf.mo_occ]
-        kinds = list(
-            set(get_k_indices(cell, mf, supercell.get_supercell_kpts(cell) + twist))
-        )
+        kinds = twists.create_supercell_twists(cell, mf)['primitive_ks'][twist]
         if len(kinds) != cell.scale:
             raise ValueError(
                 f"Found {len(kinds)} k-points but should have found {cell.scale}."
@@ -315,16 +323,6 @@ class PBCOrbitalEvaluatorKpoints:
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
         primcoords, primwrap = pbc.enforce_pbc(self.Lprim, mycoords)
-        # coordinate, dimension
-        wrap = configs.wrap if mask is None else configs.wrap[mask]
-        wrap = np.dot(wrap, self.S)
-        wrap = wrap.reshape((-1, wrap.shape[-1])) + primwrap
-        kdotR = np.linalg.multi_dot(
-            (self._kpts, self._cell.lattice_vectors().T, wrap.T)
-        )
-        # k, coordinate
-        wrap_phase = get_wrapphase_complex(kdotR)
-        # k,coordinate, orbital
         ao = gpu.cp.asarray(
             pyscf.pbc.gto.eval_gto.eval_gto(
                 self._cell,
@@ -335,7 +333,16 @@ class PBCOrbitalEvaluatorKpoints:
                 Ls=self.Ls,
             )
         )
-        ao = gpu.cp.einsum("k...,k...a->k...a", wrap_phase, ao)
+        if self.ao_dtype == complex:
+            wrap = configs.wrap if mask is None else configs.wrap[mask]
+            wrap = np.dot(wrap, self.S)
+            wrap = wrap.reshape((-1, wrap.shape[-1])) + primwrap
+            kdotR = np.linalg.multi_dot(
+                (self._kpts, self._cell.lattice_vectors().T, wrap.T)
+            )
+            # k, coordinate
+            wrap_phase = get_wrapphase_complex(kdotR)
+            ao = gpu.cp.einsum("k...,k...a->k...a", wrap_phase, ao)
         if len(ao.shape) == 4:  # if derivatives are included
             return ao.reshape(
                 (ao.shape[0], ao.shape[1], *mycoords.shape[:-1], ao.shape[-1])
@@ -356,7 +363,7 @@ class PBCOrbitalEvaluatorKpoints:
         )
         ps = [0] + list(self.param_split[spin])
         nelec = self.parameters[f"mo_coeff{self.parm_names[spin]}"].shape[1]
-        out = gpu.cp.zeros([nelec, *ao[0].shape[:-1]], dtype=complex)
+        out = gpu.cp.zeros([nelec, *ao[0].shape[:-1]], dtype=self.mo_dtype)
         for i, ak, mok in zip(range(len(ao)), ao, p[:-1]):
             gpu.cp.einsum("...a,an->n...",ak, mok, out=out[ps[i]:ps[i+1]])
         return out.transpose([*np.arange(1, len(out.shape)), 0])

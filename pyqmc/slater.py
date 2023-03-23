@@ -133,11 +133,11 @@ class Slater:
 
         self.parameters = JoinParameters([self.myparameters, self.orbitals.parameters])
 
-        self.iscomplex = self.orbitals.iscomplex or bool(
+        iscomplex = self.orbitals.mo_dtype==complex or bool(
             sum(map(gpu.cp.iscomplexobj, self.parameters.values()))
         )
-        self.dtype = complex if self.iscomplex else float
-        self.get_phase = get_complex_phase if self.iscomplex else gpu.cp.sign
+        self.dtype = complex if iscomplex else float
+        self.get_phase = get_complex_phase if iscomplex else gpu.cp.sign
 
     def recompute(self, configs):
         """This computes the value from scratch. Returns the logarithm of the wave function as

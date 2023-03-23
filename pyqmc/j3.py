@@ -1,21 +1,27 @@
 import numpy as np
 import pyqmc.gpu as gpu
 import pyqmc.orbitals
+import pyqmc.supercell
 
 
 class J3:
     def __init__(self, mol, orbitals=None):
-        if hasattr(mol, "lattice_vectors"):
-            raise NotImplementedError("J3 is not implemented for periodic systems")
-        self.mol = mol
         if orbitals is None:
-            self.orbitals = pyqmc.orbitals.MoleculeOrbitalEvaluator(mol, [0, 0])
+            if hasattr(mol, "lattice_vectors"):
+                if not hasattr(mol, "original_cell"):
+                    mol = pyqmc.supercell.get_supercell(mol, np.eye(3))
+                else:
+                    mol = make_pbc_supercell_for_gamma_aos(mol)
+                kpts = [[0, 0, 0]]
+                self.orbitals = pyqmc.orbitals.PBCOrbitalEvaluatorKpoints(mol, kpts=kpts)
+            else:
+                self.orbitals = pyqmc.orbitals.MoleculeOrbitalEvaluator(mol, [0, 0])
         else:
             self.orbitals = orbitals
         randpos = np.random.random((1, 3))
         dim = mol.eval_gto("GTOval_cart", randpos).shape[-1]
         self.parameters = {"gcoeff": gpu.cp.zeros((dim, dim))}
-        self.iscomplex = False
+        self.dtype = float
         self.optimize = "greedy"
 
     def recompute(self, configs):
@@ -125,3 +131,31 @@ class J3:
             optimize=self.optimize,
         )
         return gpu.asnumpy(gpu.cp.exp((new_val.T - curr_val).T)), new_ao_val
+
+
+def make_pbc_supercell_for_gamma_aos(scell, S=None, **kwargs):
+    import pyscf.pbc.gto as gto
+    cell = scell.original_cell
+    if S is None:
+        S = scell.S
+    scale = np.abs(int(np.round(np.linalg.det(S))))
+    superlattice = np.dot(S, cell.lattice_vectors())
+    Rpts = pyqmc.supercell.get_supercell_copies(cell.lattice_vectors(), S)
+    atom = []
+    for (name, xyz) in cell._atom:
+        atom.extend([(name, xyz + R) for R in Rpts])
+
+    newcell = gto.Cell(
+        atom=atom,
+        a=superlattice,
+        unit="Bohr",
+        spin = cell.spin * scale,
+    )
+    for k in ["basis", "ecp", "exp_to_discard"]:
+        if k not in kwargs.keys() and k in cell.__dict__.keys():
+            kwargs[k] = cell.__dict__[k]
+    for k, v in kwargs.items():
+        newcell.__dict__[k] = v
+    newcell.build()
+    newsupercell = pyqmc.supercell.get_supercell(newcell, np.eye(3))
+    return newsupercell

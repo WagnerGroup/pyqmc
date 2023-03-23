@@ -42,7 +42,7 @@ class ThreeBodyJastrow:
         self.parameters["ccoeff"] = np.zeros(
             (self._mol.natm, len(a_basis), len(a_basis), len(b_basis), 3)
         )
-        self.iscomplex = False
+        self.dtype = float
 
     def recompute(self, configs):
         r"""
@@ -155,7 +155,7 @@ class ThreeBodyJastrow:
         e_partial: partial sum of U with respect to electron e. array of shape [nelec-1,nelec,...,nconfig].
 
         .. math::
-            \text{e_partial}_{ji} = \sum_{Iklm \sigma_i \sigma_j} c_{klmI\sigma_j\sigma_i} a_k(r_{iI}) a_l(r_{jI}) b_m(r_{ij})
+            \text{e\_partial}_{ji} = \sum_{Iklm \sigma_i \sigma_j} c_{klmI\sigma_j\sigma_i} a_k(r_{iI}) a_l(r_{jI}) b_m(r_{ij})
 
         ae: new a_values for distances of electron e with ion. array of shape [nconfig,n_Ions,n_abasis]
 
@@ -219,7 +219,7 @@ class ThreeBodyJastrow:
         e_partial: partial sum of U with respect to electron e. array of shape [nelec-1,nelec,...,nconfig].
 
         .. math::
-            \text{e_partial}_{ji}  =  \sum_{Iklm \sigma_i \sigma_j} c_{klmI\sigma_j\sigma_i} a_k(r_{iI}) a_l(r_{jI}) b_m(r_{ij})
+            \text{e\_partial}_{ji}  =  \sum_{Iklm \sigma_i \sigma_j} c_{klmI\sigma_j\sigma_i} a_k(r_{iI}) a_l(r_{jI}) b_m(r_{ij})
 
         ae: new a_values for distances of electron e with ion. array of shape [nconfig,n_Ions,n_abasis]
 

@@ -54,6 +54,8 @@ def choose_evaluator_from_pyscf(
             determinants = pyqmc.determinant_tools.pbc_determinants_from_casci(
                 mc, mc.orbitals
             )
+            if hasattr(mc, "mo_coeff"):
+                mf.mo_coeff = mc.mo_coeff
         return PBCOrbitalEvaluatorKpoints.from_mean_field(
             mol, mf, twist, determinants=determinants, tol=tol
         )

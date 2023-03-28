@@ -612,7 +612,7 @@ def optimize_orthogonal(
             overlaps[i + 1] = deriv_data["S"][-1, 0]
             overlap_errors[i + 1] = deriv_data["S_error"][-1, 0]
             overlap_derivatives[i + 1] = deriv_data["S_derivative"][0, :]
-            total_energy_error = np.sqrt(np.sum(total_energy_error_squared))
+        total_energy_error = np.sqrt(np.sum(total_energy_error_squared))
         if verbose:
             print("normalization", normalization)
 

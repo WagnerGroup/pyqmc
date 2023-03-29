@@ -293,13 +293,12 @@ class SymmetryAccumulator:
         configs_copy = copy.deepcopy(configs)
         for S_name, S_matrix in self.symmetry_operators.items():
             configs_copy.configs = np.einsum(
-                "ijk,kl->ijl", configs_copy.configs, S_matrix
+                "ijk,kl->ijl", configs.configs, S_matrix
             )
             transformed_wf_value = wf.recompute(configs_copy)
             symmetry_observables[S_name] = (transformed_wf_value[0] / original_wf_value[0]) * np.exp(
                 transformed_wf_value[1] - original_wf_value[1]
             )
-            configs_copy = configs
         wf.recompute(configs)
         return symmetry_observables
 

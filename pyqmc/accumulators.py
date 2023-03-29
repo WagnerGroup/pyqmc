@@ -263,7 +263,8 @@ class SqAccumulator:
 
 class SymmetryAccumulator:
     """
-    Accumulates <S Psi / Psi> for many-body symmetry operator S
+    Accumulates S * Psi / Psi for many-body symmetry operator S
+    Evaluates S * Psi by transforming all electron coordinates and recomputing the wf
     When defining a SymmetryAccumulator object, pass in the 3x3 unitary matrix corresponding to S
     For example, to evaluate a rotation of angle theta about the z-axis, pass in
     rotation_z = np.array(
@@ -275,7 +276,7 @@ class SymmetryAccumulator:
     )
     or to evaluate mirror reflection about the yz plane, pass in
     reflection_yz = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, 1]])
-    To accumulate <S Psi / Psi> for both of these symmetry operations, define two separate SymmetryAccumulator objects as
+    To accumulate S * Psi / Psi for both of these symmetry operations, define two separate SymmetryAccumulator objects as
     acc = {
         "rotation_z": SymmetryAccumulator(transformation_matrix=rotation_z),
         "reflection_yz": SymmetryAccumulator(transformation_matrix=reflection_yz),
@@ -285,21 +286,22 @@ class SymmetryAccumulator:
     def __init__(self, transformation_matrix):
         """
         Inputs:
-            transformation_matrix: (3, 3) numpy array. Unitary transformation matrix correspondong to symmetry operator S
+            transformation_matrix: (3, 3) numpy array. Unitary transformation matrix corresponding to symmetry operator S
         """
         self.transformation_matrix = transformation_matrix
 
     def __call__(self, configs, wf):
         configs_copy = copy.deepcopy(configs)
-        original_value = wf.value()
+        original_wf_value = wf.value()
         configs_copy.configs = np.einsum(
             "ijk,kl->ijl", configs_copy.configs, self.transformation_matrix
         )
-        new_value = wf.recompute(configs_copy)
-        S_Psi_Over_Psi = (new_value[0] / original_value[0]) * np.exp(
-            new_value[1] - original_value[1]
+        transformed_wf_value = wf.recompute(configs_copy)
+        S_Psi_Over_Psi = (transformed_wf_value[0] / original_wf_value[0]) * np.exp(
+            transformed_wf_value[1] - original_wf_value[1]
         )
-        return {"S_Psi_Over_Psi": S_Psi_Over_Psi}
+        wf.recompute(configs)
+        return {"value": S_Psi_Over_Psi}
 
     def avg(self, configs, wf):
         return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
@@ -308,5 +310,5 @@ class SymmetryAccumulator:
         return self.shapes().keys()
 
     def shapes(self):  
-        return {"S_Psi_Over_Psi": ()}
+        return {"value": ()}
 

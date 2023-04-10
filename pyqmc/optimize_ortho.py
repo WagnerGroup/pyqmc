@@ -272,7 +272,9 @@ def correlated_sample(wfs, configs, parameters, pgrad):
         "rhoprime": np.zeros(nparms),
     }
     data["base_weight"] = weight
+    current_state = np.random.get_state()
     for p, parameter in enumerate(parameters):
+        np.random.set_state(current_state)
         wf = wfs[-1]
         for k, it in pgrad.transform.deserialize(wf, parameter).items():
             wf.parameters[k] = it

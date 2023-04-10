@@ -266,7 +266,9 @@ def correlated_compute(wf, configs, params, pgrad_acc):
     data = []
     psi0 = wf.recompute(configs)[1]  # recompute gives logdet
 
+    current_state = np.random.get_state()
     for p in params:
+        np.random.set_state(current_state)
         newparms = pgrad_acc.transform.deserialize(wf, p)
         for k in newparms:
             wf.parameters[k] = newparms[k]

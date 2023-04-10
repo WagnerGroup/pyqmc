@@ -407,7 +407,9 @@ def correlated_sampling_worker(wfs, configs, energy, transforms, parameters):
 
     energy_final = []
     overlap_final = []
+    current_state = np.random.get_state()
     for p, parameter in enumerate(parameters):
+        np.random.set_state(current_state)
         for wf, transform, wf_parm in zip(wfs, transforms, parameter):
             for k, it in transform.deserialize(wf, wf_parm).items():
                 wf.parameters[k] = it

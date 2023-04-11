@@ -4,7 +4,7 @@ from pyqmc.gpu import cp, asnumpy
 from pyqmc.slater import Slater
 from pyqmc.multiplywf import MultiplyWF
 from pyqmc.addwf import AddWF
-from pyqmc.j3 import J3
+from pyqmc.geminaljastrow import GeminalJastrow
 from pyqmc.wftools import generate_jastrow
 import pyqmc.api as pyq
 from pyqmc.three_body_jastrow import ThreeBodyJastrow
@@ -47,9 +47,9 @@ def test_obc_wfs(LiH_sto3g_rhf, epsilon=1e-5, nconf=10):
     a_basis, b_basis=default_jastrow_basis(mol)
     for wf in [
         generate_jastrow(mol)[0],
-        J3(mol),ThreeBodyJastrow(mol, a_basis, b_basis),
+        GeminalJastrow(mol),ThreeBodyJastrow(mol, a_basis, b_basis),
         MultiplyWF(Slater(mol, mf), generate_jastrow(mol)[0]),
-        MultiplyWF(Slater(mol, mf), generate_jastrow(mol)[0], J3(mol)),
+        MultiplyWF(Slater(mol, mf), generate_jastrow(mol)[0], GeminalJastrow(mol)),
         MultiplyWF(Slater(mol, mf), generate_jastrow(mol)[0], ThreeBodyJastrow(mol, a_basis, b_basis)),
         Slater(mol, mf),
     ]:
@@ -71,7 +71,7 @@ def test_pbc_wfs(H_pbc_sto3g_krks, epsilon=1e-5, nconf=10):
     epos = pyq.initial_guess(supercell, nconf)
     for wf in [
         MultiplyWF(Slater(supercell, mf), generate_jastrow(supercell)[0]),
-        MultiplyWF(Slater(supercell, mf), generate_jastrow(supercell)[0], J3(supercell)),
+        MultiplyWF(Slater(supercell, mf), generate_jastrow(supercell)[0], GeminalJastrow(supercell)),
         Slater(supercell, mf),
     ]:
         for k in wf.parameters:

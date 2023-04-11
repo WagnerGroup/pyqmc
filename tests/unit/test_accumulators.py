@@ -1,5 +1,5 @@
 import numpy as np
-from pyqmc.accumulators import EnergyAccumulator, LinearTransform, SqAccumulator
+from pyqmc.accumulators import EnergyAccumulator, LinearTransform, SqAccumulator, SymmetryAccumulator
 from pyqmc.obdm import OBDMAccumulator
 from pyqmc.tbdm import TBDMAccumulator
 import pyqmc.api as pyq
@@ -24,10 +24,13 @@ def test_transform(LiH_sto3g_rhf):
 def test_info_functions_mol(LiH_sto3g_rhf):
     mol, mf = LiH_sto3g_rhf
     wf, to_opt = pyq.generate_wf(mol, mf)
+    reflection_yz = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, 1]])
+    symmetry_operators = {"reflection_yz": reflection_yz}
     accumulators = {
         "pgrad": pyq.gradient_generator(mol, wf, to_opt),
         "obdm": OBDMAccumulator(mol, orb_coeff=mf.mo_coeff),
         "tbdm_updown": TBDMAccumulator(mol, np.asarray([mf.mo_coeff] * 2), (0, 1)),
+        "symmetry": SymmetryAccumulator(symmetry_operators=symmetry_operators),
     }
     info_functions(mol, wf, accumulators)
 

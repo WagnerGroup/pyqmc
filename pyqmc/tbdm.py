@@ -81,7 +81,7 @@ class TBDMAccumulator:
             norb_up = np.sum([o.shape[1] for o in orb_coeff[0]])
             norb_down = np.sum([o.shape[1] for o in orb_coeff[1]])
 
-        self.dtype = complex if self.orbitals.iscomplex else float
+        self.dtype = self.orbitals.mo_dtype
         self._spin_sector = spin
         self._electrons = [
             np.arange(spin[s] * mol.nelec[0], mol.nelec[0] + spin[s] * mol.nelec[1])

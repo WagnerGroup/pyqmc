@@ -83,7 +83,7 @@ def create_packed_objects(deters, ncore=0, tol=0, format="binary"):
             for s in [0, 1]:
                 if spin_occ[s] not in occup[s]:
                     map_dets[s].append(len(occup[s]))
-                    occup[s].append(alpha_occ)
+                    occup[s].append(spin_occ[s])
                 else:
                     map_dets[s].append(occup[s].index(spin_occ[s]))
 

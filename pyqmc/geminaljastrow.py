@@ -4,7 +4,10 @@ import pyqmc.orbitals
 import pyqmc.supercell
 
 
-class J3:
+class GeminalJastrow:
+    """
+    Jastrow factor defined by Casula, Attaccalite, and Sorella, J. Chem. Phys. 121, 7110 (2004); https://doi.org/10.1063/1.1794632
+    """
     def __init__(self, mol, orbitals=None):
         if orbitals is None:
             if hasattr(mol, "lattice_vectors"):

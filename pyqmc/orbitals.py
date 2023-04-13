@@ -175,7 +175,7 @@ def select_orbitals_kpoints(determinants, mo_coeff, kinds):
     elif len(mo_coeff[0][0].shape) == 1:
         mf_mo_coeff = [mo_coeff, mo_coeff]
     else:
-         print(mo_coeff[0][0].shape, "mo_coeff has unexpected number of array dimensions"); quit()
+         raise ValueError(f"mo_coeff[0][0] has unexpected number of array dimensions: {mo_coeff[0][0].shape}")
     mo_coeff = [
         [mf_mo_coeff[s][k][:, 0 : max_orb[s][k]] for ki, k in enumerate(kinds)]
         for s in range(2)

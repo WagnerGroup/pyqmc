@@ -110,27 +110,36 @@ class PBCOrbitalEvaluatorKpoints:
 
     """
 
-    def __init__(self, cell, mo_coeff, kpts=None):
+    def __init__(self, cell, mo_coeff=None, kpts=None):
+        """
+        :parameter cell: PyQMC supercell object (from get_supercell)
+        :parameter mo_coeff: (2, nk, nao, nelec) array. MO coefficients for all kpts of primitive cell. If None, this object can't evaluate mos(), but can still evaluate aos().
+        :parameter kpts: list of kpts to evaluate AOs
+        """
         self._cell = cell.original_cell
         self.S = cell.S
         self.Lprim = self._cell.lattice_vectors()
 
         self._kpts = [0, 0, 0] if kpts is None else kpts
-        nelec_per_kpt = [np.asarray([m.shape[1] for m in mo]) for mo in mo_coeff]
-        self.param_split = [
-            np.cumsum(nelec_per_kpt[spin])
-            for spin in [0, 1]
-        ]
-        self.parm_names = ["mo_coeff_alpha", "mo_coeff_beta"]
-        self.parameters = {
-            "mo_coeff_alpha": gpu.cp.asarray(np.concatenate(mo_coeff[0], axis=1)),
-            "mo_coeff_beta": gpu.cp.asarray(np.concatenate(mo_coeff[1], axis=1)),
-        }
-
+        # If gamma-point only, AOs are real-valued
         isgamma = np.abs(self._kpts).sum() < 1e-9
-        iscomplex = (not isgamma) or bool(
-            sum(map(gpu.cp.iscomplexobj, self.parameters.values()))
-        )
+        if mo_coeff is not None:
+            nelec_per_kpt = [np.asarray([m.shape[1] for m in mo]) for mo in mo_coeff]
+            self.param_split = [
+                np.cumsum(nelec_per_kpt[spin])
+                for spin in [0, 1]
+            ]
+            self.parm_names = ["mo_coeff_alpha", "mo_coeff_beta"]
+            self.parameters = {
+                "mo_coeff_alpha": gpu.cp.asarray(np.concatenate(mo_coeff[0], axis=1)),
+                "mo_coeff_beta": gpu.cp.asarray(np.concatenate(mo_coeff[1], axis=1)),
+            }
+            iscomplex = (not isgamma) or bool(
+                sum(map(gpu.cp.iscomplexobj, self.parameters.values()))
+            )
+        else:
+            iscomplex = (not isgamma) 
+
         self.ao_dtype = float if isgamma else complex
         self.mo_dtype = complex if iscomplex else float
         Ls = self._cell.get_lattice_Ls(dimension=3)
@@ -173,7 +182,6 @@ class PBCOrbitalEvaluatorKpoints:
             )
             # k, coordinate
             wrap_phase = get_wrapphase_complex(kdotR)
-            # k,coordinate, orbital
             ao = gpu.cp.einsum("k...,k...a->k...a", wrap_phase, ao)
         if len(ao.shape) == 4:  # if derivatives are included
             return ao.reshape(

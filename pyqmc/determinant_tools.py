@@ -203,7 +203,17 @@ def create_pbc_expansion(cell, mf, mc=None, twist=0, determinants=None, tol=0.05
         else:
             determinants = pbc_determinants_from_casci(mc, cutoff=tol)
 
-    mo_coeff, determinants_flat = select_orbitals_kpoints(determinants, mf, kinds)
+    f = lambda a: np.max(a, initial=0) + 1
+    max_orb = [[[f(k) for k in s] for s in det] for wt, det in determinants]
+    max_orb = np.amax(max_orb, axis=0)
+
+    if len(mo_coeff[0][0].shape) == 1:
+        mo_coeff = [mo_coeff, mo_coeff]
+    elif len(mo_coeff[0][0].shape) != 2:
+         raise ValueError(f"mo_coeff[0][0] has unexpected number of array dimensions: {mo_coeff[0][0].shape}")
+    _mo_coeff = [[mo_coeff[s][k][:, 0 : max_orb[s][k]] for k in kinds] for s in [0, 1]]
+
+    mo_coeff, determinants_flat = flatten_determinants(determinants, max_orb, kinds)
     detcoeff, occup, det_map = create_packed_objects(
         determinants_flat, format="list", tol=tol
     )
@@ -219,23 +229,10 @@ def create_pbc_expansion(cell, mf, mc=None, twist=0, determinants=None, tol=0.05
     return detcoeff, occup, det_map, evaluator
 
 
-def select_orbitals_kpoints(determinants, mo_coeff, kinds):
+def flatted_determinants(determinants, max_orb, kinds):
     """
-    Based on the k-point indices in `kinds`, select the MO coefficients that correspond to those k-points,
-    and the determinants.
     The determinant indices are flattened so that the indices refer to the concatenated MO coefficients.
     """
-    max_orb = [
-        [[np.max(orb_k, initial=0) + 1 for orb_k in orb_s] for orb_s in det]
-        for wt, det in determinants
-    ]
-    max_orb = np.amax(max_orb, axis=0)
-
-    if len(mo_coeff[0][0].shape) == 1:
-        mo_coeff = [mo_coeff, mo_coeff]
-    _mo_coeff = [[mo_coeff[s][k][:, 0 : max_orb[s][k]] for k in kinds] for s in [0, 1]]
-
-    # and finally, we remove the k-index from determinants
     determinants_flat = []
     orb_offsets = np.cumsum(max_orb[:, kinds], axis=1)
     orb_offsets = np.pad(orb_offsets[:, :-1], ((0, 0), (1, 0)))
@@ -245,4 +242,4 @@ def select_orbitals_kpoints(determinants, mo_coeff, kinds):
             detlist = [det_s[k] + offset_s[ki] for ki, k in enumerate(kinds)]
             flattened_det.append(list(np.concatenate(detlist).flatten().astype(int)))
         determinants_flat.append((wt, flattened_det))
-    return _mo_coeff, determinants_flat
+    return determinants_flat

@@ -130,28 +130,28 @@ def create_single_determinant(mf):
     return [(1.0, occupation)]
 
 
-def pbc_determinants_from_casci(mc, cutoff=0.05):
-    if not hasattr(mc, "orbitals") or mc.orbitals is None:
-        mc.orbitals = np.arange(mc.ncore, mc.ncore + mc.ncas)
+def pbc_determinants_from_casci(mc, orbitals=None, cutoff=0.05):
     if hasattr(mc.ncore, "__len__"):
         nocc = [c + e for c, e in zip(mc.ncore, mc.nelecas)]
     else:
         nocc = [mc.ncore + e for e in mc.nelecas]
-    if not hasattr(mc.orbitals[0], "__len__"):
-        mc.orbitals = [mc.orbitals, mc.orbitals]
+    if orbitals is None:
+        orbitals = np.arange(mc.ncore, mc.ncore + mc.ncas)
+    if not hasattr(orbitals[0], "__len__"):
+        orbitals = [orbitals, orbitals]
     deters = fci.addons.large_ci(mc.ci, mc.ncas, mc.nelecas, tol=-1)
     determinants = []
     for x in deters:
         if abs(x[0]) > cutoff:
             allorbs = [
-                [translate_occ(x[1], mc.orbitals[0], nocc[0])],
-                [translate_occ(x[2], mc.orbitals[1], nocc[1])],
+                [translate_occ(x[1], orbitals[0], nocc[0])],
+                [translate_occ(x[2], orbitals[1], nocc[1])],
             ]
             determinants.append((x[0], allorbs))
     return determinants
 
 
-def create_mol_expansion(mol, mf, mc=None, tol=-1, determinants=None):
+def create_mol_expansion(mol, mf, mc=None, determinants=None, tol=-1):
     """
     mol: A Mole object
     mf: An object with mo_coeff and mo_occ.
@@ -160,25 +160,25 @@ def create_mol_expansion(mol, mf, mc=None, tol=-1, determinants=None):
     """
     if mc is not None:
         detcoeff, occup, det_map = interpret_ci(mc, tol)
+        _mo_coeff = mc.mo_coeff
     else: 
         if determinants is None:
             determinants = create_single_determinant(mf)
         detcoeff, occup, det_map = create_packed_objects(
             determinants, tol=tol, format="list"
         )
+        _mo_coeff = mf.mo_coeff
          
     max_orb = [int(np.max(occup[s], initial=0) + 1) for s in [0, 1]]
-    _mo_coeff = mc.mo_coeff if hasattr(mc, "mo_coeff") else mf.mo_coeff
-    if len(_mo_coeff[0].shape) == 2:
-        mo_coeff = [_mo_coeff[spin][:, 0 : max_orb[spin]] for spin in [0, 1]]
-    else:
-        mo_coeff = [_mo_coeff[:, 0 : max_orb[spin]] for spin in [0, 1]]
+    if len(_mo_coeff[0].shape) == 1:
+        _mo_coeff = [_mo_coeff, _mo_coeff]
+    mo_coeff = [_mo_coeff[spin][:, 0 : max_orb[spin]] for spin in [0, 1]]
 
     evaluator = pyqmc.orbitals.MoleculeOrbitalEvaluator(mol, mo_coeff)
     return detcoeff, occup, det_map, evaluator
 
 
-def create_pbc_expansion(cell, mf, mc=None, twist=0, determinants=None, tol=-1):
+def create_pbc_expansion(cell, mf, mc=None, twist=0, determinants=None, tol=0.05):
     """
     mf is expected to be a KUHF, KRHF, or equivalent DFT objects.
     Selects occupied orbitals from a given twist
@@ -201,7 +201,7 @@ def create_pbc_expansion(cell, mf, mc=None, twist=0, determinants=None, tol=-1):
         if mc is None:
             determinants = create_single_determinant(mf)
         else:
-            determinants = pbc_determinants_from_casci(mc)
+            determinants = pbc_determinants_from_casci(mc, cutoff=tol)
 
     mo_coeff, determinants_flat = select_orbitals_kpoints(determinants, mf, kinds)
     detcoeff, occup, det_map = create_packed_objects(
@@ -219,7 +219,7 @@ def create_pbc_expansion(cell, mf, mc=None, twist=0, determinants=None, tol=-1):
     return detcoeff, occup, det_map, evaluator
 
 
-def select_orbitals_kpoints(determinants, mf, kinds):
+def select_orbitals_kpoints(determinants, mo_coeff, kinds):
     """
     Based on the k-point indices in `kinds`, select the MO coefficients that correspond to those k-points,
     and the determinants.
@@ -231,11 +231,9 @@ def select_orbitals_kpoints(determinants, mf, kinds):
     ]
     max_orb = np.amax(max_orb, axis=0)
 
-    if len(mf.mo_coeff[0][0].shape) == 2:
-        _coeff = mf.mo_coeff
-    elif len(mf.mo_coeff[0][0].shape) == 1:
-        _coeff = [mf.mo_coeff, mf.mo_coeff]
-    mo_coeff = [[_coeff[s][k][:, 0 : max_orb[s][k]] for k in kinds] for s in [0, 1]]
+    if len(mo_coeff[0][0].shape) == 1:
+        mo_coeff = [mo_coeff, mo_coeff]
+    _mo_coeff = [[mo_coeff[s][k][:, 0 : max_orb[s][k]] for k in kinds] for s in [0, 1]]
 
     # and finally, we remove the k-index from determinants
     determinants_flat = []
@@ -247,4 +245,4 @@ def select_orbitals_kpoints(determinants, mf, kinds):
             detlist = [det_s[k] + offset_s[ki] for ki, k in enumerate(kinds)]
             flattened_det.append(list(np.concatenate(detlist).flatten().astype(int)))
         determinants_flat.append((wt, flattened_det))
-    return mo_coeff, determinants_flat
+    return _mo_coeff, determinants_flat

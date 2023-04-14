@@ -207,7 +207,6 @@ def create_pbc_expansion(cell, mf, mc=None, twist=0, determinants=None, tol=0.05
     f = lambda a: np.max(a, initial=0) + 1 if len(a) > 0 else 0
     max_orb = [[[f(k) for k in s] for s in det] for wt, det in determinants]
     max_orb = np.amax(max_orb, axis=0)
-    for wt, det in determinants:
 
     _mo_coeff = mf.mo_coeff if mc is None else mc.mo_coeff
     if len(_mo_coeff[0][0].shape) == 1:

@@ -11,7 +11,8 @@ import time
 
 def test_ecp_sj(C2_ccecp_rhf, nconf=10000):
     """test whether the cutoff saves us time without changing the energy too much.
-    Because it's a stochastic evaluation, random choices can make a big difference, so we only require 10% agreement between these two."""
+    Because it's a stochastic evaluation, random choices can make a big difference, so we only require 10% agreement between these two.
+    """
     mol, mf = C2_ccecp_rhf
     THRESHOLDS = [1e15, 10]
 

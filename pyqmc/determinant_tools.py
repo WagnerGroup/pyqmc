@@ -161,15 +161,14 @@ def create_mol_expansion(mol, mf, mc=None, determinants=None, tol=-1):
     """
     if mc is not None:
         detcoeff, occup, det_map = interpret_ci(mc, tol)
-        _mo_coeff = mc.mo_coeff
     else: 
         if determinants is None:
             determinants = create_single_determinant(mf)
         detcoeff, occup, det_map = create_packed_objects(
             determinants, tol=tol, format="list"
         )
-        _mo_coeff = mf.mo_coeff
          
+    _mo_coeff = mc.mo_coeff if hasattr(mc, "mo_coeff") else mf.mo_coeff
     f = lambda a: int(np.max(a, initial=0)) + 1 if len(a) > 0 else 0
     max_orb = [f(s_occ) for s_occ in occup]
     if len(_mo_coeff[0].shape) == 1:
@@ -209,7 +208,7 @@ def create_pbc_expansion(cell, mf, mc=None, twist=0, determinants=None, tol=0.05
     max_orb = [[[f(k) for k in s] for s in det] for wt, det in determinants]
     max_orb = np.amax(max_orb, axis=0)
 
-    _mo_coeff = mf.mo_coeff if mc is None else mc.mo_coeff
+    _mo_coeff = mc.mo_coeff if hasattr(mc, "mo_coeff") else mf.mo_coeff
     if len(_mo_coeff[0][0].shape) == 1:
         _mo_coeff = [_mo_coeff, _mo_coeff]
     mo_coeff = [[_mo_coeff[s][k][:, 0 : max_orb[s][k]] for k in kinds] for s in [0, 1]]

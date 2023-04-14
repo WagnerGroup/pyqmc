@@ -1,7 +1,6 @@
 import numpy as np
 import pyqmc.gpu as gpu
 import pyqmc.pbc as pbc
-import pyqmc.determinant_tools
 import pyscf.pbc.gto.eval_gto
 import pyscf.pbc.scf.addons
 import pyscf.lib
@@ -28,36 +27,6 @@ def get_wrapphase_complex(x):
 
 def get_complex_phase(x):
     return x / np.abs(x)
-
-
-def choose_evaluator_from_pyscf(
-    mol, mf, mc=None, twist=0, determinants=None, tol=None
-):
-    """
-    mol: A Mole object
-    mf: a pyscf mean-field object
-    mc: a pyscf multiconfigurational object. Supports HCI and CAS
-    twist: the twist of the calculation (units?)
-    determinants: A list of determinants suitable to pass into create_packed_objects
-    tol: smallest determinant weight to include in the wave function.
-
-    You cannot pass both mc/tol and determinants.
-
-    :returns:
-        * detwt: array of weights for each determinant
-        * occup: which orbitals go in which determinants
-        * map_dets: given a determinant in detwt, which determinant in occup it corresponds to
-        * an orbital evaluator chosen based on the inputs.
-    """
-
-    if hasattr(mol, "a"):
-        return pyqmc.determinant_tools.create_pbc_expansion(
-            mol, mf, mc=mc, twist=twist, determinants=determinants, tol=tol
-        )
-    else:
-        return pyqmc.determinant_tools.create_mol_expansion(
-            mol, mf, mc=mc, determinants=determinants, tol=tol
-        )
 
 
 class MoleculeOrbitalEvaluator:

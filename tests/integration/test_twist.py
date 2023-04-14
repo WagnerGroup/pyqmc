@@ -18,7 +18,7 @@ def test_noncubic(diamond_primitive, kind=1):
 def runtest(mol, mf, kind=0):
     supercell = pyq.get_supercell(mol, np.identity(3))
     twists = pyq.create_supercell_twists(supercell, mf, 12)
-    kpt = twists['twists'][kind]
+    kpt = twists["twists"][kind]
     wft = Slater(mol, mf, twist=kind)
 
     #####################################
@@ -31,11 +31,11 @@ def runtest(mol, mf, kind=0):
     coords = PeriodicConfigs(epos, coords.lvecs)
 
     # Move the atoms by random lattice constants.
-    # The value should change by phase and the 
+    # The value should change by phase and the
     # local energy should not change.
     L = np.random.randint(10, size=coords.configs.shape) - 5
     shift = np.dot(L, mol.lattice_vectors())
-    phase = np.exp(1.0j*np.einsum("ijk,k->ij", shift, kpt))
+    phase = np.exp(1.0j * np.einsum("ijk,k->ij", shift, kpt))
     epos, wrap = enforce_pbc(coords.lvecs, epos + shift)
     newcoords = PeriodicConfigs(epos, coords.lvecs, wrap=wrap)
 
@@ -50,7 +50,7 @@ def runtest(mol, mf, kind=0):
     ratt = wft.testvalue(e, newcoords.electron(e))[0]
     rattdiff = ratt - phase[:, e]
     print("phase", phase[:, e])
-    assert np.linalg.norm(rattdiff)/nconfig < 1e-9, [
+    assert np.linalg.norm(rattdiff) / nconfig < 1e-9, [
         np.round(rattdiff, 10),
         np.amax(np.abs(rattdiff)),
     ]
@@ -72,6 +72,3 @@ def runtest(mol, mf, kind=0):
             assert mad < 1e-3, difft
         else:
             assert np.mean(np.abs(difft)) < 1e-6, difft
-
-
-    

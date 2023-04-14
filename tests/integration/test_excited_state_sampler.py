@@ -26,14 +26,13 @@ def take_derivative_casci_energy(mc, civec, delta=1e-4):
             # citest /= np.linalg.norm(citest)
             entest = mc.fcisolver.energy(
                 h1e=h1e, eri=eri, fcivec=citest, norb=2, nelec=(1, 1)
-            ) / np.sum(citest ** 2)
+            ) / np.sum(citest**2)
             derivative = (entest - enbase) / delta
             en_derivative.append(derivative)
     return np.asarray(en_derivative).reshape(civec.shape)
 
 
 def test_sampler(H2_casci):
-
     mol, mf, mc = H2_casci
 
     ci_energies = mc.e_tot
@@ -92,12 +91,15 @@ def test_sampler(H2_casci):
         - overlap_tolerance
     )
     derivative = objective_function_derivative(
-        terms, overlap_penalty=1.0, norm_penalty=1.0, offdiagonal_energy_penalty=0.1, lagrange_multiplier=0.1
+        terms,
+        overlap_penalty=1.0,
+        norm_penalty=1.0,
+        offdiagonal_energy_penalty=0.1,
+        lagrange_multiplier=0.1,
     )
 
 
 def test_correlated_sampling(H2_casci):
-
     mol, mf, mc = H2_casci
 
     ci_energies = mc.e_tot

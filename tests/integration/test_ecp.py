@@ -7,7 +7,6 @@ import pandas as pd
 
 
 def test_ecp():
-
     mol = gto.M(atom="C 0. 0. 0.", ecp="bfd", basis="bfd_vtz")
     mf = scf.RHF(mol).run()
     nconf = 5000

@@ -267,7 +267,7 @@ class SymmetryAccumulator:
     Makes use of the equivariance property S * Psi(R) = Psi(S * R) by transforming all electron coordinates R and recomputing the wf
     When defining a SymmetryAccumulator object, pass in a dictionary of symmetry operator names and their respective 3x3 unitary matrices
     For example, to evaluate a rotation of angle theta about the z-axis and mirror reflection about the yz plane, use the code
-    
+
     rotation_z = np.array(
         [
             [np.cos(theta), -np.sin(theta), 0],
@@ -292,13 +292,11 @@ class SymmetryAccumulator:
         original_wf_value = wf.value()
         configs_copy = copy.deepcopy(configs)
         for S_name, S_matrix in self.symmetry_operators.items():
-            configs_copy.configs = np.einsum(
-                "ijk,kl->ijl", configs.configs, S_matrix
-            )
+            configs_copy.configs = np.einsum("ijk,kl->ijl", configs.configs, S_matrix)
             transformed_wf_value = wf.recompute(configs_copy)
-            symmetry_observables[S_name] = (transformed_wf_value[0] / original_wf_value[0]) * np.exp(
-                transformed_wf_value[1] - original_wf_value[1]
-            )
+            symmetry_observables[S_name] = (
+                transformed_wf_value[0] / original_wf_value[0]
+            ) * np.exp(transformed_wf_value[1] - original_wf_value[1])
         wf.recompute(configs)
         return symmetry_observables
 
@@ -310,4 +308,3 @@ class SymmetryAccumulator:
 
     def shapes(self):
         return {S: () for S in self.symmetry_operators.keys()}
-

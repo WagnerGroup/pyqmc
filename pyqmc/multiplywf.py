@@ -5,7 +5,7 @@ class Parameters:
     def __init__(self, dicts):
         self.data = {}
         self.wf_count = len(dicts)
-        for (i, d) in enumerate(dicts):
+        for i, d in enumerate(dicts):
             self.data["wf" + str(i + 1)] = d
 
     def __setitem__(self, idx, value):
@@ -62,7 +62,7 @@ class MultiplyWF:
     def __init__(self, *wf_factors):
         self.wf_factors = [*wf_factors]
         self.parameters = Parameters([wf.parameters for wf in wf_factors])
-        iscomplex = bool(sum(wf.dtype==complex for wf in wf_factors))
+        iscomplex = bool(sum(wf.dtype == complex for wf in wf_factors))
         self.dtype = complex if iscomplex else float
 
     def recompute(self, configs):

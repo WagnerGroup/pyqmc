@@ -487,7 +487,7 @@ def rundmc(
         df_.update(branch_info)
         df.append(df_)
         dmc_file(hdf_file, df_, {}, configs, weights)
-        
+
         e_est = estimate_energy(hdf_file, df, ekey)
         e_trial = e_est - feedback * np.log(np.mean(weights)).real
 

@@ -108,9 +108,9 @@ def generate_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
 
 
 def generate_jastrow3(mol, na=4, nb=3, rcut=None):
-    abasis, bbasis = default_jastrow_basis(mol, False,na, nb, rcut)
-    wf = three_body_jastrow.ThreeBodyJastrow(mol,abasis,bbasis)
-    to_opt = {"ccoeff":np.ones(wf.parameters["ccoeff"].shape).astype(bool)}
+    abasis, bbasis = default_jastrow_basis(mol, False, na, nb, rcut)
+    wf = three_body_jastrow.ThreeBodyJastrow(mol, abasis, bbasis)
+    to_opt = {"ccoeff": np.ones(wf.parameters["ccoeff"].shape).astype(bool)}
     return wf, to_opt
 
 

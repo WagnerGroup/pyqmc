@@ -8,6 +8,7 @@ class GeminalJastrow:
     """
     Jastrow factor defined by Casula, Attaccalite, and Sorella, J. Chem. Phys. 121, 7110 (2004); https://doi.org/10.1063/1.1794632
     """
+
     def __init__(self, mol, orbitals=None):
         if orbitals is None:
             if hasattr(mol, "lattice_vectors"):
@@ -16,7 +17,9 @@ class GeminalJastrow:
                 else:
                     mol = make_pbc_supercell_for_gamma_aos(mol)
                 kpts = [[0, 0, 0]]
-                self.orbitals = pyqmc.orbitals.PBCOrbitalEvaluatorKpoints(mol, kpts=kpts)
+                self.orbitals = pyqmc.orbitals.PBCOrbitalEvaluatorKpoints(
+                    mol, kpts=kpts
+                )
             else:
                 self.orbitals = pyqmc.orbitals.MoleculeOrbitalEvaluator(mol, [0, 0])
         else:
@@ -138,6 +141,7 @@ class GeminalJastrow:
 
 def make_pbc_supercell_for_gamma_aos(scell, S=None, **kwargs):
     import pyscf.pbc.gto as gto
+
     cell = scell.original_cell
     if S is None:
         S = scell.S
@@ -145,14 +149,14 @@ def make_pbc_supercell_for_gamma_aos(scell, S=None, **kwargs):
     superlattice = np.dot(S, cell.lattice_vectors())
     Rpts = pyqmc.supercell.get_supercell_copies(cell.lattice_vectors(), S)
     atom = []
-    for (name, xyz) in cell._atom:
+    for name, xyz in cell._atom:
         atom.extend([(name, xyz + R) for R in Rpts])
 
     newcell = gto.Cell(
         atom=atom,
         a=superlattice,
         unit="Bohr",
-        spin = cell.spin * scale,
+        spin=cell.spin * scale,
     )
     for k in ["basis", "ecp", "exp_to_discard"]:
         if k not in kwargs.keys() and k in cell.__dict__.keys():

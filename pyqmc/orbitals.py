@@ -7,7 +7,6 @@ import pyscf.pbc.gto.eval_gto
 import pyscf.pbc.scf.addons
 import pyscf.lib
 import pyqmc.pbc
-import pyqmc.twists as twists
 
 """
 The evaluators have the concept of a 'set' of atomic orbitals, that may apply to 

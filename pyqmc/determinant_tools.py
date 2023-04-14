@@ -2,6 +2,7 @@ import numpy as np
 import pyqmc.gpu as gpu
 import pyscf.fci as fci
 import pyqmc.orbitals
+import pyqmc.twists as twists
 
 
 def binary_to_occ(S, ncore):
@@ -117,17 +118,16 @@ def translate_occ(x, orbitals, nocc):
     return orbitals_without_active + [orbitals[i] for i in a]
 
 
-def create_single_determinant(mf):
+def create_single_determinant(mf, weight=1.):
     """
     Creates a determinant list for a single determinant from SCF object
     """
-    coeff = mf.mo_coeff[0][0] if hasattr(mf, "kpts") else mf.mo_coeff[0]
-    if len(coeff.shape) == 2:
-        _occup = [mf.mo_occ[spin] > 0.5 for spin in [0, 1]]
-    elif len(coeff.shape) == 1:
-        _occup = [mf.mo_occ > 0.5 + spin for spin in [0, 1]]
-    occupation = [list(np.argwhere(occupied)[0]) for occupied in _occup]
-    return [(1.0, occupation)]
+    mf = mf.to_uhf()
+    if hasattr(mf, "kpts"):
+        occupation = [[list(np.nonzero(k > 0.5)[0]) for k in s] for s in mf.mo_occ]
+    else:
+        occupation = [list(np.nonzero(s > 0.5)[0]) for s in mf.mo_occ]
+    return [(weight, occupation)]
 
 
 def pbc_determinants_from_casci(mc, orbitals=None, cutoff=0.05):
@@ -169,7 +169,8 @@ def create_mol_expansion(mol, mf, mc=None, determinants=None, tol=-1):
         )
         _mo_coeff = mf.mo_coeff
          
-    max_orb = [int(np.max(occup[s], initial=0) + 1) for s in [0, 1]]
+    f = lambda a: int(np.max(a, initial=0)) + 1 if len(a) > 0 else 0
+    max_orb = [f(s_occ) for s_occ in occup]
     if len(_mo_coeff[0].shape) == 1:
         _mo_coeff = [_mo_coeff, _mo_coeff]
     mo_coeff = [_mo_coeff[spin][:, 0 : max_orb[spin]] for spin in [0, 1]]
@@ -203,17 +204,20 @@ def create_pbc_expansion(cell, mf, mc=None, twist=0, determinants=None, tol=0.05
         else:
             determinants = pbc_determinants_from_casci(mc, cutoff=tol)
 
-    f = lambda a: np.max(a, initial=0) + 1
+    f = lambda a: np.max(a, initial=0) + 1 if len(a) > 0 else 0
     max_orb = [[[f(k) for k in s] for s in det] for wt, det in determinants]
     max_orb = np.amax(max_orb, axis=0)
+    print("max_orb", max_orb.shape)
+    for wt, det in determinants:
+        print("det", det)
 
-    if len(mo_coeff[0][0].shape) == 1:
-        mo_coeff = [mo_coeff, mo_coeff]
-    elif len(mo_coeff[0][0].shape) != 2:
-         raise ValueError(f"mo_coeff[0][0] has unexpected number of array dimensions: {mo_coeff[0][0].shape}")
-    _mo_coeff = [[mo_coeff[s][k][:, 0 : max_orb[s][k]] for k in kinds] for s in [0, 1]]
+    _mo_coeff = mf.mo_coeff if mc is None else mc.mo_coeff
+    if len(_mo_coeff[0][0].shape) == 1:
+        _mo_coeff = [_mo_coeff, _mo_coeff]
+    mo_coeff = [[_mo_coeff[s][k][:, 0 : max_orb[s][k]] for k in kinds] for s in [0, 1]]
 
-    mo_coeff, determinants_flat = flatten_determinants(determinants, max_orb, kinds)
+    print(determinants)
+    determinants_flat = flatten_determinants(determinants, max_orb, kinds)
     detcoeff, occup, det_map = create_packed_objects(
         determinants_flat, format="list", tol=tol
     )
@@ -229,7 +233,7 @@ def create_pbc_expansion(cell, mf, mc=None, twist=0, determinants=None, tol=0.05
     return detcoeff, occup, det_map, evaluator
 
 
-def flatted_determinants(determinants, max_orb, kinds):
+def flatten_determinants(determinants, max_orb, kinds):
     """
     The determinant indices are flattened so that the indices refer to the concatenated MO coefficients.
     """

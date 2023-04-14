@@ -3,6 +3,7 @@ import pyqmc.gpu as gpu
 import pyscf.fci as fci
 import pyqmc.orbitals
 import pyqmc.twists as twists
+import pyqmc.supercell as supercell
 
 
 def binary_to_occ(S, ncore):

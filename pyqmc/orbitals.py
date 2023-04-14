@@ -1,7 +1,6 @@
 import numpy as np
 import pyqmc.gpu as gpu
 import pyqmc.pbc as pbc
-import pyqmc.supercell as supercell
 import pyqmc.determinant_tools
 import pyscf.pbc.gto.eval_gto
 import pyscf.pbc.scf.addons

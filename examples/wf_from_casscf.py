@@ -40,6 +40,12 @@ def run_casci(scf_checkfile, ci_checkfile):
     return mc
 
 
+def make_wf_object(scf_checkfile, ci_checkfile):
+    mol, mf, mc = pyq.recover_pyscf(scf_checkfile, ci_checkfile=ci_checkfile)
+    wf, _ = pyq.generate_wf(mol, mf, mc=mc)
+    return wf
+
+
 if __name__ == "__main__":
     scf_checkfile = "scf.chk"
     ci_checkfile = "ci.chk"

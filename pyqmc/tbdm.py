@@ -56,7 +56,6 @@ class TBDMAccumulator:
         ijkl=None,
         kpts=None,
     ):
-
         self._mol = mol
         self._tstep = tstep
         self._nsweeps = nsweeps

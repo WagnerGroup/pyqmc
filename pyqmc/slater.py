@@ -150,7 +150,7 @@ class Slater:
         self._mol = mol
         if hasattr(mc, "nelecas"):
             # In case nelecas overrode the information from the molecule object.
-            ncore = mc.ncore 
+            ncore = mc.ncore
             if not hasattr(ncore, "__len__"):
                 ncore = [ncore, ncore]
             self._nelec = (mc.nelecas[0] + ncore[0], mc.nelecas[1] + ncore[1])
@@ -169,7 +169,7 @@ class Slater:
 
         self.parameters = JoinParameters([self.myparameters, self.orbitals.parameters])
 
-        iscomplex = self.orbitals.mo_dtype==complex or bool(
+        iscomplex = self.orbitals.mo_dtype == complex or bool(
             sum(map(gpu.cp.iscomplexobj, self.parameters.values()))
         )
         self.dtype = complex if iscomplex else float

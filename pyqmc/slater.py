@@ -96,8 +96,44 @@ class Slater:
         h2 = pyscf.ao2mo.full(mol, mf.mo_coeff)
         e, civec = cisolver.kernel(h1, h2, nmo, nelec, verbose=4)
         cisolver.ci = civec[0]
-        wf = pyqmc.multislater.MultiSlater(mol, mf, cisolver, tol=0.1)
+        wf = pyqmc.slater.Slater(mol, mf, cisolver, tol=0.1)
 
+    How to use with CASCI/CASSCF
+
+    .. code-block:: python
+
+        cell, mf = pyq.recover_pyscf(scf_checkfile, cancel_outputs=False)
+        mc = mcscf.CASCI(mf, 2, 2)
+        mc.kernel()
+        wf = pyqmc.slater.Slater(mol, mf, mc, tol=0.1)
+
+    To use saved results, attributes of CASCI/CASSCF objects need to be saved
+
+    .. code-block:: python
+
+        cell, mf = pyq.recover_pyscf(scf_checkfile, cancel_outputs=False)
+
+        mc = mcscf.CASCI(mf, 2, 2)
+        mc.kernel()
+        with h5py.File(casci_checkfile, "a") as f:
+            f.create_group("ci")
+            f["ci/nelecas"] = list(mc.nelecas)
+            f["ci/ci"] = mc.ci
+            f["ci/ncas"] = mc.ncas
+            f["ci/mo_coeff"] = mc.mo_coeff
+
+        mc = mcscf.CASSCF(mf, 2, 2)
+        mc.chkfile = casscf_checkfile # only CASSCF saves results
+        mc.kernel()
+        with h5py.File(casscf_checkfile, "a") as f:
+            f["mcscf/nelecas"] = list(mc.nelecas)
+            f["mcscf/ci"] = mc.ci
+
+    Note that when using CASCI/CASSCF, the `mc` object needs to have these four attributes: 
+        * ``nelecas``: list of 2 ints
+        * ``ci``: :math:`N_{\rm det} \times N_{\rm det}` matrix of ci coefficients 
+        * ``ncas``: int
+        * ``mo_coeff``: `N_{\rm AO} \times N_{\rm AO}` array
 
     """
 

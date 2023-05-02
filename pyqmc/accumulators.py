@@ -3,6 +3,7 @@ import pyqmc.gpu as gpu
 import pyqmc.energy as energy
 import pyqmc.ewald as ewald
 import pyqmc.eval_ecp as eval_ecp
+import copy
 
 
 def gradient_generator(mol, wf, to_opt=None, nodal_cutoff=1e-3, **ewald_kwargs):
@@ -258,3 +259,55 @@ class SqAccumulator:
 
     def shapes(self):
         return {"Sq": (len(self.qlist),), "spinSq": (len(self.qlist),)}
+
+
+class SymmetryAccumulator:
+    """
+    Evaluates S * Psi(R) / Psi(R) for each many-body symmetry operator S given in a dictionary
+    Makes use of the equivariance property S * Psi(R) = Psi(S * R) by transforming all electron coordinates R and recomputing the wf
+    When defining a SymmetryAccumulator object, pass in a dictionary of symmetry operator names and their respective 3x3 unitary matrices
+    For example, to evaluate a rotation of angle theta about the z-axis and mirror reflection about the yz plane, use the code
+    
+    rotation_z = np.array(
+        [
+            [np.cos(theta), -np.sin(theta), 0],
+            [np.sin(theta), np.cos(theta), 0],
+            [0, 0, 1],
+        ]
+    )
+    reflection_yz = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, 1]])
+    symmetry_operators = {"rotation_z": rotation_z, "reflection_yz": reflection_yz}
+    acc = {"symmetry": SymmetryAccumulator(symmetry_operators=symmetry_operators)}
+    """
+
+    def __init__(self, symmetry_operators):
+        """
+        Inputs:
+            symmetry_operators: dictionary of symmetry operator names and their respective unitary transformation matrices of shape (3,3)
+        """
+        self.symmetry_operators = symmetry_operators
+
+    def __call__(self, configs, wf):
+        symmetry_observables = {}
+        original_wf_value = wf.value()
+        configs_copy = copy.deepcopy(configs)
+        for S_name, S_matrix in self.symmetry_operators.items():
+            configs_copy.configs = np.einsum(
+                "ijk,kl->ijl", configs.configs, S_matrix
+            )
+            transformed_wf_value = wf.recompute(configs_copy)
+            symmetry_observables[S_name] = (transformed_wf_value[0] / original_wf_value[0]) * np.exp(
+                transformed_wf_value[1] - original_wf_value[1]
+            )
+        wf.recompute(configs)
+        return symmetry_observables
+
+    def avg(self, configs, wf):
+        return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
+
+    def keys(self):
+        return self.shapes().keys()
+
+    def shapes(self):
+        return {S: () for S in self.symmetry_operators.keys()}
+

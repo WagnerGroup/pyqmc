@@ -189,9 +189,6 @@ def initialize_qmc_objects(
         mol, mf, mc = pyscftools.recover_pyscf(dft_checkfile, ci_checkfile=ci_checkfile)
         if not hasattr(mc.ci, "shape"):
             mc.ci = mc.ci[target_root]
-        elif mc.orbitals is None:
-            mc.orbitals = np.arange(mc.ncore, mc.ncore + mc.ncas)
-            print("Warning: 'orbitals' not found in mc object; using default")
 
     if S is not None:
         mol = supercell.get_supercell(mol, np.asarray(S))

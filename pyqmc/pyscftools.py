@@ -61,6 +61,8 @@ def recover_pyscf(chkfile, ci_checkfile=None, cancel_outputs=True):
 
     if ci_checkfile is not None:
         casdict = pyscf.lib.chkfile.load(ci_checkfile, "ci")
+        if casdict is None:
+            casdict = pyscf.lib.chkfile.load(ci_checkfile, "mcscf")
         with h5py.File(ci_checkfile, "r") as f:
             hci = "ci/_strs" in f.keys()
         if hci:

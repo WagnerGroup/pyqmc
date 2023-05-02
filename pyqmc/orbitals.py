@@ -49,14 +49,8 @@ def choose_evaluator_from_pyscf(
     """
 
     if hasattr(mol, "a"):
-        if mc is not None:
-            if not hasattr(mc, "orbitals") or mc.orbitals is None:
-                mc.orbitals = np.arange(mc.ncore, mc.ncore + mc.ncas)
-            determinants = pyqmc.determinant_tools.pbc_determinants_from_casci(
-                mc, mc.orbitals
-            )
         return PBCOrbitalEvaluatorKpoints.from_mean_field(
-            mol, mf, twist, determinants=determinants, tol=tol
+            mol, mf, mc=mc, twist=twist, determinants=determinants, tol=tol
         )
     if mc is None:
         return MoleculeOrbitalEvaluator.from_pyscf(
@@ -164,7 +158,7 @@ def pbc_single_determinant(mf, kinds):
     return detcoeff, det_map, occup_k
 
 
-def select_orbitals_kpoints(determinants, mf, kinds):
+def select_orbitals_kpoints(determinants, mo_coeff, kinds):
     """
     Based on the k-point indices in `kinds`, select the MO coefficients that correspond to those k-points,
     and the determinants.
@@ -176,10 +170,12 @@ def select_orbitals_kpoints(determinants, mf, kinds):
     ]
     max_orb = np.amax(max_orb, axis=0)
 
-    if len(mf.mo_coeff[0][0].shape) == 2:
-        mf_mo_coeff = mf.mo_coeff
-    elif len(mf.mo_coeff[0][0].shape) == 1:
-        mf_mo_coeff = [mf.mo_coeff, mf.mo_coeff]
+    if len(mo_coeff[0][0].shape) == 2:
+        mf_mo_coeff = mo_coeff
+    elif len(mo_coeff[0][0].shape) == 1:
+        mf_mo_coeff = [mo_coeff, mo_coeff]
+    else:
+         raise ValueError(f"mo_coeff[0][0] has unexpected number of array dimensions: {mo_coeff[0][0].shape}")
     mo_coeff = [
         [mf_mo_coeff[s][k][:, 0 : max_orb[s][k]] for ki, k in enumerate(kinds)]
         for s in range(2)
@@ -211,27 +207,36 @@ class PBCOrbitalEvaluatorKpoints:
 
     """
 
-    def __init__(self, cell, mo_coeff, kpts=None):
+    def __init__(self, cell, mo_coeff=None, kpts=None):
+        """
+        :parameter cell: PyQMC supercell object (from get_supercell)
+        :parameter mo_coeff: (2, nk, nao, nelec) array. MO coefficients for all kpts of primitive cell. If None, this object can't evaluate mos(), but can still evaluate aos().
+        :parameter kpts: list of kpts to evaluate AOs
+        """
         self._cell = cell.original_cell
         self.S = cell.S
         self.Lprim = self._cell.lattice_vectors()
 
         self._kpts = [0, 0, 0] if kpts is None else kpts
-        nelec_per_kpt = [np.asarray([m.shape[1] for m in mo]) for mo in mo_coeff]
-        self.param_split = [
-            np.cumsum(nelec_per_kpt[spin])
-            for spin in [0, 1]
-        ]
-        self.parm_names = ["_alpha", "_beta"]
-        self.parameters = {
-            "mo_coeff_alpha": gpu.cp.asarray(np.concatenate(mo_coeff[0], axis=1)),
-            "mo_coeff_beta": gpu.cp.asarray(np.concatenate(mo_coeff[1], axis=1)),
-        }
-
+        # If gamma-point only, AOs are real-valued
         isgamma = np.abs(self._kpts).sum() < 1e-9
-        iscomplex = (not isgamma) or bool(
-            sum(map(gpu.cp.iscomplexobj, self.parameters.values()))
-        )
+        if mo_coeff is not None:
+            nelec_per_kpt = [np.asarray([m.shape[1] for m in mo]) for mo in mo_coeff]
+            self.param_split = [
+                np.cumsum(nelec_per_kpt[spin])
+                for spin in [0, 1]
+            ]
+            self.parm_names = ["_alpha", "_beta"]
+            self.parameters = {
+                "mo_coeff_alpha": gpu.cp.asarray(np.concatenate(mo_coeff[0], axis=1)),
+                "mo_coeff_beta": gpu.cp.asarray(np.concatenate(mo_coeff[1], axis=1)),
+            }
+            iscomplex = (not isgamma) or bool(
+                sum(map(gpu.cp.iscomplexobj, self.parameters.values()))
+            )
+        else:
+            iscomplex = (not isgamma) 
+
         self.ao_dtype = float if isgamma else complex
         self.mo_dtype = complex if iscomplex else float
         Ls = self._cell.get_lattice_Ls(dimension=3)
@@ -239,7 +244,7 @@ class PBCOrbitalEvaluatorKpoints:
         self.rcut = pyscf.pbc.gto.eval_gto._estimate_rcut(self._cell)
 
     @classmethod
-    def from_mean_field(self, cell, mf, twist=None, determinants=None, tol=None):
+    def from_mean_field(self, cell, mf, mc=None, twist=None, determinants=None, tol=None):
         """
         mf is expected to be a KUHF, KRHF, or equivalent DFT objects.
         Selects occupied orbitals from a given twist
@@ -264,6 +269,7 @@ class PBCOrbitalEvaluatorKpoints:
             elif len(mf.mo_occ.shape) == 2:
                 mf.mo_coeff = [[c] for c in mf.mo_coeff]
                 mf.mo_occ = [[o] for o in mf.mo_occ]
+
         kinds = twists.create_supercell_twists(cell, mf)['primitive_ks'][twist]
         if len(kinds) != cell.scale:
             raise ValueError(
@@ -272,11 +278,22 @@ class PBCOrbitalEvaluatorKpoints:
         kpts = mf.kpts[kinds]
 
         if determinants is None:
-            determinants = [
-                (1.0, pyqmc.determinant_tools.create_pbc_determinant(cell, mf, []))
-            ]
+            if mc is not None:
+                if not hasattr(mc, "orbitals") or mc.orbitals is None:
+                    mc.orbitals = np.arange(mc.ncore, mc.ncore + mc.ncas)
+                determinants = pyqmc.determinant_tools.pbc_determinants_from_casci(
+                    mc, mc.orbitals
+                )
+            else:
+                determinants = [
+                    (1.0, pyqmc.determinant_tools.create_pbc_determinant(cell, mf, []))
+                ]
 
-        mo_coeff, determinants_flat = select_orbitals_kpoints(determinants, mf, kinds)
+        if mc is not None:
+            mo_coeff = [mc.mo_coeff] # kpt list
+        else:
+            mo_coeff = mf.mo_coeff
+        mo_coeff, determinants_flat = select_orbitals_kpoints(determinants, mo_coeff, kinds)
         detcoeff, occup, det_map = pyqmc.determinant_tools.create_packed_objects(
             determinants_flat, format="list", tol=tol
         )
@@ -331,7 +348,6 @@ class PBCOrbitalEvaluatorKpoints:
             )
             # k, coordinate
             wrap_phase = get_wrapphase_complex(kdotR)
-            # k,coordinate, orbital
             ao = gpu.cp.einsum("k...,k...a->k...a", wrap_phase, ao)
         if len(ao.shape) == 4:  # if derivatives are included
             return ao.reshape(

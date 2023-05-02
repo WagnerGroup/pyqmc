@@ -8,49 +8,23 @@ to any variational parameters the funtion has.
 They should implement the following functions, all of which take input values (x, r).
 x should be of dimension (nconf,...,3).
 
-value(x):
-    returns f(x)
-
-gradient(x)
-    returns grad f(x) (nconf,...,3)
-
-laplacian(x)
-    returns diagonals of Hessian (nconf,...,3)
-
-pgradient(x)
-    returns dp f(x) as a dictionary corresponding to the keys of self.parameters
 """
 
 
 class GaussianFunction:
     r"""A representation of a Gaussian:
+    :math:`f(r) = \exp(-\alpha r^2)`
 
-    :math:`\exp(-\alpha r^2)`
     where :math:`\alpha` can be accessed through parameters['exponent']
-
     """
 
     def __init__(self, exponent):
         self.parameters = {"exponent": exponent}
 
     def value(self, x, r):
-        """Returns function exp(-exponent*r^2).
-
-        :parameter x: (nconfig,...,3)
-        :parameter r: (nconfig,...)
-        :returns: function value
-        :rtype: (nconfig,...) array
-        """
         return np.exp(-self.parameters["exponent"] * r * r)
 
     def gradient(self, x, r):
-        """Returns gradient of function.
-
-        :parameter x: (nconfig,...,3)
-        :parameter r: (nconfig,...)
-        :returns: gradient
-        :rtype: (nconfig,...,3)
-        """
         v = self.value(x, r)
         return -2 * self.parameters["exponent"] * x * v[..., np.newaxis]
 
@@ -66,25 +40,11 @@ class GaussianFunction:
         return g, v
 
     def laplacian(self, x, r):
-        """Returns laplacian of function.
-
-        :parameter x: (nconfig,...,3)
-        :parameter r: (nconfig,...)
-        :returns: laplacian (components of laplacian d^2/dx_i^2 separately)
-        :rtype: (nconfig,...,3)
-        """
         v = self.value(x, r)
         alpha = self.parameters["exponent"]
         return (4 * alpha * alpha * x * x - 2 * alpha) * v[..., np.newaxis]
 
     def gradient_laplacian(self, x, r):
-        """Returns gradient and laplacian of function.
-
-        :parameter x: (nconfig,...,3)
-        :parameter r: (nconfig,...)
-        :returns: gradient and laplacian
-        :rtype: tuple of two (nconfig,...,3) arrays (components of laplacian d^2/dx_i^2 separately)
-        """
         v = self.value(x, r)[..., np.newaxis]
         alpha = self.parameters["exponent"]
         grad = -2 * alpha * x * v
@@ -92,11 +52,11 @@ class GaussianFunction:
         return grad, lap
 
     def pgradient(self, x, r):
-        """Returns parameters gradient.
+        r"""Returns parameters gradient.
 
         :parameter x: (nconfig,...,3)
         :parameter r: (nconfig,...)
-        :returns: parameter gradient {'exponent': d/dexponent}
+        :returns: parameter gradient {'exponent': :math:`\frac{\partial f}{\partial \alpha}`}
         :rtype: dictionary
         """
         r2 = r * r
@@ -181,11 +141,11 @@ class PadeFunction:
         return grad, lap
 
     def pgradient(self, rvec, r):
-        """Returns gradient with respect to parameter alphak
+        r"""Returns gradient with respect to parameter alphak
 
         :parameter rvec: (nconfig,...,3)
         :parameter r: (nconfig,...)
-        :returns: parameter gradient  {'alphak': akderiv}
+        :returns: parameter gradient  {'alphak': :math:`\frac{\partial a_k}{\partial \alpha_k}`}
         :rtype: dictionary
         """
         a = self.parameters["alphak"] * r
@@ -217,10 +177,10 @@ def polypadegradvalue(r, beta, rcut):
 
 class PolyPadeFunction:
     r"""
-    :math:`b(r) = \frac{1-p(z)}{1+\beta p(z)}`
-    :math:`z = r/r_{\rm cut}`
-    where
-    :math:`p(z) = 6z^2 - 8z^3 + 3z^4`
+
+    .. math:: b(r) = \frac{1-p(z)}{1+\beta p(z)}, \quad z = r/r_{\rm cut} 
+
+    where :math:`p(z) = 6z^2 - 8z^3 + 3z^4`
 
     This function is positive at small r, and is zero for :math:`r \ge r_{\rm cut}`.
     """
@@ -232,13 +192,6 @@ class PolyPadeFunction:
         }
 
     def value(self, rvec, r):
-        """Returns function (1-p(r/rcut))/(1+beta*p(r/rcut))
-
-        :parameter rvec: (nconfig,...,3)
-        :parameter r: (nconfig,...)
-        :returns: function value
-        :rtype: (nconfig,...) array
-        """
         mask = r < self.parameters["rcut"]
         z = r[mask] / self.parameters["rcut"]
         func = gpu.cp.zeros(r.shape)
@@ -293,13 +246,6 @@ class PolyPadeFunction:
         return self.gradient_laplacian(rvec, r)[1]
 
     def gradient_laplacian(self, rvec, r):
-        """Returns gradient and laplacian of function.
-
-        :parameter x: (nconfig,...,3)
-        :parameter r: (nconfig,...)
-        :returns: gradient and laplacian
-        :rtype: tuple of two (nconfig,...,3) arrays (components of laplacian d^2/dx_i^2 separately)
-        """
         grad = gpu.cp.zeros(rvec.shape)
         lap = gpu.cp.zeros(rvec.shape)
         mask = r < self.parameters["rcut"]
@@ -327,12 +273,9 @@ class PolyPadeFunction:
         return grad, lap
 
     def pgradient(self, rvec, r):
-        """Returns gradient of self.value with respect to all parameters
-
-        :parameter rvec: (nconf,...,3)
-        :parameter r: (nconf,...)
-
-        :return paramderivs: dictionary {'rcut':d/drcut,'beta':d/dbeta}
+        r"""
+        :returns: parameter gradient {'rcut': :math:`\frac{\partial b}{\partial r_{\rm cut}}`, 'beta': :math:`\frac{\partial b}{\partial \beta}`}
+        :rtype: dictionary
         """
         mask = r >= self.parameters["rcut"]
         z = r / self.parameters["rcut"]
@@ -354,7 +297,8 @@ class PolyPadeFunction:
 
 class CutoffCuspFunction:
     r"""
-    :math:`b(r) = -\frac{p(r/r_{\rm cut})}{1+\gamma*p(r/r_{\rm cut})} + \frac{1}{3+\gamma}`
+    .. math:: b(r) = -\frac{p(r/r_{\rm cut})}{1+\gamma*p(r/r_{\rm cut})} + \frac{1}{3+\gamma} 
+
     where
     :math:`p(y) = y - y^2 + y^3/3`
 
@@ -365,13 +309,6 @@ class CutoffCuspFunction:
         self.parameters = {"gamma": gamma, "rcut": rcut}
 
     def value(self, rvec, r):
-        """Returns function  p(r/rcut)/(1+gamma*p(r/rcut))
-
-        :parameter rvec: (nconfig,...,3)
-        :parameter r: (nconfig,...)
-        :returns: function value
-        :rtype: (nconfig,...) array
-        """
         mask = r < self.parameters["rcut"]
         y = r[mask] / self.parameters["rcut"]
         gamma = self.parameters["gamma"]
@@ -455,13 +392,6 @@ class CutoffCuspFunction:
         return lap
 
     def gradient_laplacian(self, rvec, r):
-        """Returns gradient and laplacian of function.
-
-        :parameter rvec: (nconfig,...,3)
-        :parameter r: (nconfig,...)
-        :returns: gradient and laplacian
-        :rtype: tuple of two (nconfig,...,3) arrays (components of laplacian d^2/dx_i^2 separately)
-        """
         grad = gpu.cp.zeros(rvec.shape)
         lap = gpu.cp.zeros(rvec.shape)
         rcut = self.parameters["rcut"]
@@ -484,11 +414,11 @@ class CutoffCuspFunction:
         return grad, lap
 
     def pgradient(self, rvec, r):
-        """Returns gradient of self.value with respect to all parameters
+        r"""
 
         :parameter rvec: (nconf,...,3)
         :parameter r: (nconfig,...)
-        :returns: parameter derivatives {'rcut':d/drcut,'gamma':d/dgamma}
+        :returns: parameter derivatives {'rcut': :math:`\frac{\partial b}{\partial r_{\rm cut}}`, 'gamma': :math:`\frac{\partial b}{\partial \gamma}`}
         :rtype: dict
         """
         rcut = self.parameters["rcut"]

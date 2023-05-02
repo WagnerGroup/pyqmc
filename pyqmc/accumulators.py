@@ -63,11 +63,10 @@ class LinearTransform:
     :parameter dict to_opt: is a dictionary with the keys to optimize, and its values are boolean arrays indicating which specific elements to optimize
 
     Note:
-        to_opt[k] can't be boolean scalar; it has to be an array with the same dimension as parameters[k].
 
-        to_opt doesn't have to have all the keys of parameters, but all keys of to_opt must be keys of parameters.
-
-        If you change wf.parameters, then all serializations will be out of date. For example, if you serialize, then change wf.paramaters, then deserialize, the deserialization will be incorrect.
+    * to_opt[k] can't be boolean scalar; it has to be an array with the same dimension as parameters[k].
+    * to_opt doesn't have to have all the keys of parameters, but all keys of to_opt must be keys of parameters.
+    * If you change wf.parameters, then all serializations will be out of date. For example, if you serialize, then change wf.paramaters, then deserialize, the deserialization will be incorrect.
     """
 
     def __init__(self, parameters, to_opt=None):

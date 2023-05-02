@@ -121,7 +121,6 @@ Note that when using CASCI/CASSCF, the `mc` object needs to have these four attr
   - `ncas` - int
   - `mo_coeff` - array of orbital coefficients
 
-`..math:: N_{\rm det} \times N_{\rm det} 
 
 ```
 def run_casci(scf_checkfile, ci_checkfile):

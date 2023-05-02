@@ -565,7 +565,7 @@ class ThreeBodyJastrow:
             self.a_values[not_e][sep:],
             b_double_ders[:, sep:],
         )
-        return grad, lap + np.sum(grad ** 2, axis=0)
+        return grad, lap + np.sum(grad**2, axis=0)
 
     def laplacian(self, e, epos):
         r"""We compute the laplacian for U with electron e moved to epos, with respect to e as

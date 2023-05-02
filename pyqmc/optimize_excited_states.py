@@ -302,7 +302,11 @@ def collect_terms(avg, error):
 
 
 def objective_function_derivative(
-    terms, overlap_penalty, norm_penalty, offdiagonal_energy_penalty, lagrange_multiplier
+    terms,
+    overlap_penalty,
+    norm_penalty,
+    offdiagonal_energy_penalty,
+    lagrange_multiplier,
 ):
     """
     terms are output from generate_terms
@@ -318,7 +322,9 @@ def objective_function_derivative(
         * 2
         * np.sum(np.triu(terms[("dp_overlap", i)] * terms["overlap"], 1), axis=(1, 2))
         + norm_penalty * 2 * (terms["norm"][i] - 1) * terms[("dp_norm", i)]
-        + np.sum(np.triu(lagrange_multiplier*terms[("dp_overlap", i)], 1), axis=(1, 2))
+        + np.sum(
+            np.triu(lagrange_multiplier * terms[("dp_overlap", i)], 1), axis=(1, 2)
+        )
         + offdiagonal_energy_penalty
         * 2.0
         * np.sum(np.triu(terms["energy"] * terms[("dp_energy", i)], 1), axis=(1, 2))
@@ -331,7 +337,6 @@ import h5py
 
 
 def hdf_save(hdf_file, data, attr, wfs):
-
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
             if "energy" not in hdf.keys():
@@ -466,7 +471,7 @@ def find_move_from_line(
     cost = (
         np.sum(energy.diagonal(axis1=1, axis2=2), axis=1)
         + overlap_penalty * np.sum(np.triu(overlap**2, 1), axis=(1, 2))
-        + np.sum(lagrange_multiplier*np.triu(overlap, 1), axis=(1, 2))
+        + np.sum(lagrange_multiplier * np.triu(overlap, 1), axis=(1, 2))
         + offdiagonal_energy_penalty * np.sum(np.triu(energy**2, 1), axis=(1, 2))
         + norm_penalty * np.einsum("ijj->i", (overlap - 1) ** 2)
     )
@@ -489,7 +494,7 @@ def optimize(
     transforms,
     hdf_file,
     overlap_penalty=0.5,
-    lagrange_multiplier = 0.0,
+    lagrange_multiplier=0.0,
     nsteps=40,
     max_tstep=0.1,
     condition_epsilon=0.1,
@@ -530,7 +535,11 @@ def optimize(
         print("norm", terms["norm"])
         print("overlap", terms["overlap"][0, 1])
         derivative = objective_function_derivative(
-            terms, overlap_penalty, norm_penalty, offdiagonal_energy_penalty, lagrange_multiplier
+            terms,
+            overlap_penalty,
+            norm_penalty,
+            offdiagonal_energy_penalty,
+            lagrange_multiplier,
         )
         derivative_conditioned = [
             d / (terms[("condition", i)] + condition_epsilon)
@@ -560,7 +569,7 @@ def optimize(
             overlap_penalty,
             norm_penalty,
             offdiagonal_energy_penalty,
-            lagrange_multiplier
+            lagrange_multiplier,
         )
         print("line search", x, cost)
         print("choosing to move", xmin)

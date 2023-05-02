@@ -112,6 +112,64 @@ if __name__=="__main__":
     pyq.OPTIMIZE("mf.chk", "opt.chk", ci_checkfile="hci.chk", nconfig=1000)
 ```
 
+### CASCI/CASSCF wave function
+
+Note that when using CASCI/CASSCF, the `mc` object needs to have these four attributes: 
+
+  - `nelecas` - list of 2 ints
+  - `ci` -  matrix of ci coefficients 
+  - `ncas` - int
+  - `mo_coeff` - array of orbital coefficients
+
+`..math:: N_{\rm det} \times N_{\rm det} 
+
+```
+def run_casci(scf_checkfile, ci_checkfile):
+    mol, mf = pyq.recover_pyscf(scf_checkfile, cancel_outputs=False)
+    mc = mcscf.CASCI(mf, 2, 2)
+    mc.kernel()
+
+    with h5py.File(ci_checkfile, "a") as f:
+        f.create_group("mc")
+        f["mc/ncas"] = mc.ncas
+        f["mc/nelecas"] = list(mc.nelecas)
+        f["mc/ci"] = mc.ci
+        f["mc/mo_coeff"] = mc.mo_coeff
+    return mc
+
+
+def run_casscf(scf_checkfile, ci_checkfile):
+    mol, mf = pyq.recover_pyscf(scf_checkfile, cancel_outputs=False)
+    mc = mcscf.CASSCF(mf, 2, 2)
+    mc.chkfile = ci_checkfile
+    mc.kernel()
+
+    with h5py.File(mc.chkfile, "a") as f:
+        f["mcscf/nelecas"] = list(mc.nelecas)
+        f["mcscf/ci"] = mc.ci
+    return mc
+
+
+if __name__ == "__main__":
+    run_mf("mf.chk")
+    run_casscf("mf.chk", "cas.chk")
+    pyq.OPTIMIZE("mf.chk", "opt.chk", ci_checkfile="cas.chk", nconfig=1000)
+```
+
+You can also generate the wave function directly from the object without saving the results.
+
+```
+if __name__ == "__main__":
+    mol = gto.M(
+        atom="""H 0.0, 0.0, 0.0; H 0.7, 0.0, 0.0 """,
+        basis="ccecp-ccpvdz",
+    )
+    mf = scf.RHF(mol).run()
+    mc = mcscf.CASSCF(mf, 2, 2)
+    mc.kernel()
+    wf, _ = pyq.generate_wf(mol, mf, mc=mc)
+```
+
 ### Create a wavefunction with 3 body Jastrow factor.
 
 ```

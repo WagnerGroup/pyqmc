@@ -80,7 +80,7 @@ def sherman_morrison_ms(e, inv, vec):
 
 
 class Slater:
-    """
+    r"""
     A multi-determinant wave function object initialized
     via an SCF calculation.
 
@@ -129,11 +129,11 @@ class Slater:
             f["mcscf/nelecas"] = list(mc.nelecas)
             f["mcscf/ci"] = mc.ci
 
-    Note that when using CASCI/CASSCF, the `mc` object needs to have these four attributes: 
+    Note that when using CASCI/CASSCF, the ``mc`` object needs to have these four attributes: 
         * ``nelecas``: list of 2 ints
-        * ``ci``: :math:`N_{\rm det} \times N_{\rm det}` matrix of ci coefficients 
+        * ``ci``: :math:`(N_{\rm det}, N_{\rm det})` matrix of ci coefficients 
         * ``ncas``: int
-        * ``mo_coeff``: `N_{\rm AO} \times N_{\rm AO}` array
+        * ``mo_coeff``: :math:`(N_{\rm AO}, N_{\rm AO})` array
 
     """
 

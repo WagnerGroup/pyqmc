@@ -129,11 +129,11 @@ def run_casci(scf_checkfile, ci_checkfile):
     mc.kernel()
 
     with h5py.File(ci_checkfile, "a") as f:
-        f.create_group("mc")
-        f["mc/ncas"] = mc.ncas
-        f["mc/nelecas"] = list(mc.nelecas)
-        f["mc/ci"] = mc.ci
-        f["mc/mo_coeff"] = mc.mo_coeff
+        f.create_group("ci")
+        f["ci/ncas"] = mc.ncas
+        f["ci/nelecas"] = list(mc.nelecas)
+        f["ci/ci"] = mc.ci
+        f["ci/mo_coeff"] = mc.mo_coeff
     return mc
 
 

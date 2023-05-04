@@ -7,7 +7,6 @@ import os
 
 
 def ortho_hdf(hdf_file, data, attr, configs, parameters):
-
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
             if "configs" not in hdf.keys():
@@ -299,7 +298,6 @@ def correlated_sample(wfs, configs, parameters, pgrad):
 
 
 def dist_correlated_sample(wfs, configs, *args, client, npartitions=None, **kwargs):
-
     if npartitions is None:
         npartitions = sum(client.nthreads().values())
 
@@ -520,7 +518,6 @@ def optimize_orthogonal(
     if npartitions is None:
         npartitions = sum(client.nthreads().values())
 
-
     if sample_options is None:
         sample_options = {}
     if correlated_options is None:
@@ -587,7 +584,9 @@ def optimize_orthogonal(
                 normalization[0] = tmp_deriv["N"][-1]
                 normalization_error[0] = tmp_deriv["N_error"][-1]
                 total_energy += tmp_deriv["total"] / (nwf - 1)
-                total_energy_error_squared += (tmp_deriv["total_error"] / (nwf - 1)) ** 2
+                total_energy_error_squared += (
+                    tmp_deriv["total_error"] / (nwf - 1)
+                ) ** 2
                 energy_derivative = tmp_deriv["energy_derivative"] / (nwf - 1)
                 N_derivative += tmp_deriv["N_derivative"] / (nwf - 1)
                 condition += tmp_deriv["condition"] / (nwf - 1)

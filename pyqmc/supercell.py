@@ -41,7 +41,7 @@ def get_supercell(cell, S):
     superlattice = np.dot(S, cell.lattice_vectors())
     Rpts = get_supercell_copies(cell.lattice_vectors(), S)
     atom = []
-    for (name, xyz) in cell._atom:
+    for name, xyz in cell._atom:
         atom.extend([(name, xyz + R) for R in Rpts])
     supercell = pyscf.pbc.gto.Cell()
     supercell.a = superlattice

@@ -34,7 +34,7 @@ def test_linemin_three_body(H2_ccecp_uhf):
     mfen = mf.energy_tot()
     enfinal = dfgrad["energy"].values[-1]
     enfinal_err = dfgrad["energy_error"].values[-1]
-    assert mfen > enfinal-enfinal_err
+    assert mfen > enfinal - enfinal_err
 
 
 if __name__ == "__main__":

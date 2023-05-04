@@ -38,7 +38,6 @@ def recover_pyscf(chkfile, ci_checkfile=None, cancel_outputs=True):
         else:
             raise Exception("Couldn't determine type from chkfile")
     else:
-
         mol = pyscf.pbc.lib.chkfile.load_cell(chkfile)
         with h5py.File(chkfile, "r") as f:
             has_kpts = "mo_occ__from_list__" in f["/scf"].keys()

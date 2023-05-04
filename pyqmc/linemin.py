@@ -137,7 +137,7 @@ def line_minimization(
     assert npts >= 3, f"linemin npts={npts}; need npts >= 3 for correlated sampling"
 
     iteration_offset = 0
-    if hdf_file is not None and os.path.isfile(hdf_file): #restarting -- read in data
+    if hdf_file is not None and os.path.isfile(hdf_file):  # restarting -- read in data
         with h5py.File(hdf_file, "r") as hdf:
             if "wf" in hdf.keys():
                 grp = hdf["wf"]
@@ -146,7 +146,7 @@ def line_minimization(
             if "iteration" in hdf.keys():
                 iteration_offset = np.max(hdf["iteration"][...]) + 1
             coords.load_hdf(hdf)
-    else: #not restarting -- VMC warm up period
+    else:  # not restarting -- VMC warm up period
         if verbose:
             print("starting warmup")
         _, coords = pyqmc.mc.vmc(

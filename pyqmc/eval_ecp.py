@@ -23,7 +23,7 @@ def compute_tmoves(mol, configs, wf, e, threshold, tau, naip=None):
     """
     For a given electron, evaluate all possible t-moves.
 
-    returns a dictionary: 
+    returns a dictionary:
        ratio: psi(R')/psi(R) for each move
        weight: The symmetric part of Eqn 31 in Anderson and Umrigar (i.e., ratio * weight gives the amplitude for the t-move)
        configs: positions of the move

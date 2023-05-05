@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.abspath('../../'))
 # -- Project information -----------------------------------------------------
 
 project = 'pyQMC'
-copyright = '2019, pyQMC authors'
+copyright = '2023, pyQMC authors'
 author = 'pyQMC authors'
 
 
@@ -52,7 +52,7 @@ master_doc = 'index'
 #extensions.append("faculty_sphinx_theme")
 #html_theme = "faculty-sphinx-theme"
 
-html_theme = 'classic'
+html_theme = 'sphinxdoc'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,

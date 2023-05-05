@@ -60,3 +60,15 @@ html_theme = 'classic'
 html_static_path = ['_static']
 
 
+
+#import mock
+ 
+autodoc_mock_imports = ['numpy', 'scipy', 'matplotlib', 
+                'matplotlib.pyplot', 'scipy.optimize',
+                'scipy.linalg','scipy.spatial.transform', 
+                'scipy.special',
+                'scipy.stats', 'pyscf', 'pyscf.gto', 'pyscf.fci',
+                'pyscf.pbc','pyscf.pbc.gto', 'pyscf.pbc.gto.eval_gto','pyscf.lib','h5py',
+                'numpy', 'numpy.linalg', 'numpy']
+#for mod_name in MOCK_MODULES:
+#    sys.modules[mod_name] = mock.Mock()

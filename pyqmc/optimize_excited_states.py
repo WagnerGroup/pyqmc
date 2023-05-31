@@ -103,13 +103,7 @@ def invert_list_of_dicts(A):
     {'A':[1,3], 'B':[2,5]}.
     If not all keys are present in all lists, error.
     """
-    final_dict = {}
-    for k in A[0].keys():
-        final_dict[k] = []
-    for a in A:
-        for k, v in a.items():
-            final_dict[k].append(v)
-    return final_dict
+    return dict(zip(A[0].keys(), zip(a.values() for a in A)))
 
 
 def sample_overlap_worker(

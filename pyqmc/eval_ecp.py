@@ -236,9 +236,10 @@ def get_rot(nconf, naip):
         rot = scipy.spatial.transform.Rotation.random(nconf).as_matrix()
     else:
         rot = np.zeros((0, 3, 3))
+    quadrature_grid = generate_quadrature_grids()
 
     if naip not in quadrature_grid.keys():
-        raise ValueError("Do not support naip!= 6 or 12")
+        raise ValueError(f"Possible AIPs are one of {quadrature_grid.keys()}")
     points, weights = quadrature_grid[naip]
     rot_vec = np.einsum("jkl,ik->jil", rot, points)
     return weights, rot_vec
@@ -304,4 +305,3 @@ def generate_quadrature_grids():
     return qgrid
 
 
-quadrature_grid = generate_quadrature_grids()

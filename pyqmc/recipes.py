@@ -75,7 +75,9 @@ def OPTIMIZE(
         optimize_ortho.optimize_orthogonal(wfs, configs, acc, **linemin_kws)
 
 
-def generate_accumulators(mol, mf, energy=True, rdm1=False, extra_accumulators=None, twist=0):
+def generate_accumulators(
+    mol, mf, energy=True, rdm1=False, extra_accumulators=None, twist=0
+):
     acc = {} if extra_accumulators is None else extra_accumulators
 
     if hasattr(mf, "kpts") and len(mf.mo_coeff[0][0].shape) < 2:
@@ -93,11 +95,12 @@ def generate_accumulators(mol, mf, energy=True, rdm1=False, extra_accumulators=N
         if hasattr(mol, "a"):
             from pyqmc.twists import create_supercell_twists
 
-            kinds = create_supercell_twists(mol, mf)['primitive_ks'][twist]
+            kinds = create_supercell_twists(mol, mf)["primitive_ks"][twist]
             kpts = mf.kpts[kinds]
-            mo_coeff = [[mo_coeff[0][k] for k in kinds], 
-                         [mo_coeff[1][k] for k in kinds]
-                       ]
+            mo_coeff = [
+                [mo_coeff[0][k] for k in kinds],
+                [mo_coeff[1][k] for k in kinds],
+            ]
         else:
             kpts = None
 
@@ -187,11 +190,8 @@ def initialize_qmc_objects(
         mc = None
     else:
         mol, mf, mc = pyscftools.recover_pyscf(dft_checkfile, ci_checkfile=ci_checkfile)
-        if not hasattr(mc.ci, "shape"):
+        if not hasattr(mc.ci, "shape") or len(mc.ci.shape) == 3:
             mc.ci = mc.ci[target_root]
-        elif mc.orbitals is None:
-            mc.orbitals = np.arange(mc.ncore, mc.ncore + mc.ncas)
-            print("Warning: 'orbitals' not found in mc object; using default")
 
     if S is not None:
         mol = supercell.get_supercell(mol, np.asarray(S))
@@ -210,10 +210,10 @@ def initialize_qmc_objects(
     else:
         if accumulators == None:
             accumulators = {}
-        if slater_kws is not None and 'twist' in slater_kws.keys():
-            twist = slater_kws['twist']
+        if slater_kws is not None and "twist" in slater_kws.keys():
+            twist = slater_kws["twist"]
         else:
-            twist=0
+            twist = 0
         acc = generate_accumulators(mol, mf, twist=twist, **accumulators)
 
     return wf, configs, acc

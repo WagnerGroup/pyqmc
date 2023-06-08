@@ -15,7 +15,7 @@ class AddWF:
         self.wf_components = wf_components
         self.parameters = Parameters([wf.parameters for wf in wf_components])
         iscomplex = bool(
-            sum(wf.dtype==complex for wf in wf_components)
+            sum(wf.dtype == complex for wf in wf_components)
             + sum([isinstance(c, complex) * 1 for c in coeffs])
         )
         self.dtype = complex if iscomplex else float

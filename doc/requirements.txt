@@ -1,5 +1,2 @@
-scipy
-pandas
-pyscf
-h5py==3.2.1
 nbsphinx
+recommonmark

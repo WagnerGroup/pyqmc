@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.abspath('../../'))
 # -- Project information -----------------------------------------------------
 
 project = 'pyQMC'
-copyright = '2019, pyQMC authors'
+copyright = '2023, pyQMC authors'
 author = 'pyQMC authors'
 
 
@@ -52,7 +52,7 @@ master_doc = 'index'
 #extensions.append("faculty_sphinx_theme")
 #html_theme = "faculty-sphinx-theme"
 
-html_theme = 'classic'
+html_theme = 'sphinxdoc'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -60,3 +60,15 @@ html_theme = 'classic'
 html_static_path = ['_static']
 
 
+
+#import mock
+ 
+autodoc_mock_imports = ['numpy', 'scipy', 'matplotlib', 
+                'matplotlib.pyplot', 'scipy.optimize',
+                'scipy.linalg','scipy.spatial.transform', 
+                'scipy.special',
+                'scipy.stats', 'pyscf', 'pyscf.gto', 'pyscf.fci',
+                'pyscf.pbc','pyscf.pbc.gto', 'pyscf.pbc.gto.eval_gto','pyscf.lib','h5py',
+                'numpy', 'numpy.linalg', 'numpy']
+#for mod_name in MOCK_MODULES:
+#    sys.modules[mod_name] = mock.Mock()

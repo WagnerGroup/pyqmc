@@ -4,7 +4,7 @@ from pyqmc.gpu import cp, asnumpy
 from pyqmc.slater import Slater
 from pyqmc.multiplywf import MultiplyWF
 from pyqmc.addwf import AddWF
-from pyqmc.j3 import J3
+from pyqmc.geminaljastrow import GeminalJastrow
 from pyqmc.wftools import generate_jastrow
 import pyqmc.api as pyq
 from pyqmc.three_body_jastrow import ThreeBodyJastrow
@@ -12,7 +12,6 @@ from pyqmc.wftools import default_jastrow_basis
 
 
 def run_tests(wf, epos, epsilon):
-
     _, epos = pyq.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node
 
     for k, item in testwf.test_updateinternals(wf, epos).items():
@@ -20,18 +19,25 @@ def run_tests(wf, epos, epsilon):
         assert item < epsilon
 
     testwf.test_mask(wf, 0, epos)
-    #testwf.test_testvalue_many(wf,epos)
+    # testwf.test_testvalue_many(wf,epos)
 
     for fname, func in zip(
         ["gradient", "laplacian", "pgradient"],
-        [testwf.test_wf_gradient, testwf.test_wf_laplacian, testwf.test_wf_pgradient,],
+        [
+            testwf.test_wf_gradient,
+            testwf.test_wf_laplacian,
+            testwf.test_wf_pgradient,
+        ],
     ):
         err = [func(wf, epos, delta) for delta in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8]]
         assert min(err) < epsilon, "epsilon {0}".format(epsilon)
 
     for fname, func in zip(
         ["gradient_value", "gradient_laplacian"],
-        [testwf.test_wf_gradient_value, testwf.test_wf_gradient_laplacian,],
+        [
+            testwf.test_wf_gradient_value,
+            testwf.test_wf_gradient_laplacian,
+        ],
     ):
         d = func(wf, epos)
         for k, v in d.items():
@@ -44,13 +50,18 @@ def test_obc_wfs(LiH_sto3g_rhf, epsilon=1e-5, nconf=10):
     """
 
     mol, mf = LiH_sto3g_rhf
-    a_basis, b_basis=default_jastrow_basis(mol)
+    a_basis, b_basis = default_jastrow_basis(mol)
     for wf in [
         generate_jastrow(mol)[0],
-        J3(mol),ThreeBodyJastrow(mol, a_basis, b_basis),
+        GeminalJastrow(mol),
+        ThreeBodyJastrow(mol, a_basis, b_basis),
         MultiplyWF(Slater(mol, mf), generate_jastrow(mol)[0]),
-        MultiplyWF(Slater(mol, mf), generate_jastrow(mol)[0], J3(mol)),
-        MultiplyWF(Slater(mol, mf), generate_jastrow(mol)[0], ThreeBodyJastrow(mol, a_basis, b_basis)),
+        MultiplyWF(Slater(mol, mf), generate_jastrow(mol)[0], GeminalJastrow(mol)),
+        MultiplyWF(
+            Slater(mol, mf),
+            generate_jastrow(mol)[0],
+            ThreeBodyJastrow(mol, a_basis, b_basis),
+        ),
         Slater(mol, mf),
     ]:
         for k in wf.parameters:
@@ -71,7 +82,11 @@ def test_pbc_wfs(H_pbc_sto3g_krks, epsilon=1e-5, nconf=10):
     epos = pyq.initial_guess(supercell, nconf)
     for wf in [
         MultiplyWF(Slater(supercell, mf), generate_jastrow(supercell)[0]),
-        MultiplyWF(Slater(supercell, mf), generate_jastrow(supercell)[0], J3(supercell)),
+        MultiplyWF(
+            Slater(supercell, mf),
+            generate_jastrow(supercell)[0],
+            GeminalJastrow(supercell),
+        ),
         Slater(supercell, mf),
     ]:
         for k in wf.parameters:

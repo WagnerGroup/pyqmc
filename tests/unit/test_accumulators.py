@@ -1,5 +1,10 @@
 import numpy as np
-from pyqmc.accumulators import EnergyAccumulator, LinearTransform, SqAccumulator, SymmetryAccumulator
+from pyqmc.accumulators import (
+    EnergyAccumulator,
+    LinearTransform,
+    SqAccumulator,
+    SymmetryAccumulator,
+)
 from pyqmc.obdm import OBDMAccumulator
 from pyqmc.tbdm import TBDMAccumulator
 import pyqmc.api as pyq

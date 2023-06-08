@@ -5,8 +5,47 @@ import pyqmc.supercell
 
 
 class GeminalJastrow:
-    """
+    r"""
     Jastrow factor defined by Casula, Attaccalite, and Sorella, J. Chem. Phys. 121, 7110 (2004); https://doi.org/10.1063/1.1794632
+
+    ..math:: \widetilde{J}_G(\mathbf{R}) = \sum_{i\ne j} \sum_{mn} g_{mn} \chi_m(\mathbf{r}_i) \chi_n(\mathbf{r}_j)
+
+    :math:`\chi_m(\mathbf{r})` is a set of basis orbitals
+
+    There is a redundancy since :math:`\chi_m(\mathbf{r}_i) \chi_n(\mathbf{r}_j) = \chi_n(\mathbf{r}_j) \chi_m(\mathbf{r}_i)`, so the effective coefficient is :math:`g_{mn} + g_{nm}`.
+    It is important to remove the extra degree of freedom in :math:`g_{mn}` to be able to optimize the function.
+    This can be done by summing only over indices :math:`i<j` or :math:`m\le n`.
+    Under the second constraint, the case of :math:`m=n` will count the pair :math:`(i,j)` twice, whereas it will only be conuted once under the first constraint.
+    This factor of two can be absorbed into the parameter :math:`g_{mm}` and doesn't give rise to an extra degree of freedom, so it's not a problem.
+    
+    Jastrow factors are required to be symmetric under particle exchange.
+    So the term :math:`\chi_m(\mathbf{r}_i) \chi_n(\mathbf{r}_j)` must appear together with its exchanged version :math:`\chi_m(\mathbf{r}_j) \chi_n(\mathbf{r}_i)`.
+    Either of the above index restrictions :math:`i<j` or :math:`m\le n` satisfies this symmetry requirement.
+    It is obvious that the restriction :math:`m\le n` satisfies this symmetry requirement, since we are explicitly including both of these terms in the sum.
+    The restriction :math:`i<j` is equivalent. Starting from the :math:`m\le n` form, we can take all terms having :math:`j<i` and exchange the two orbitals in the product so that :math:`m\ge n` and :math:`i<j:. 
+    
+    
+    ..math:: J_G(\mathbf{R}) = \sum_{m\le n} \sum_{i\ne j} g_{mn} \chi_m(\mathbf{r}_i) \chi_n(\mathbf{r}_j)
+
+    ..math:: J_G(\mathbf{R}) = \sum_{m\le n} \sum_{i< j} g_{mn} \chi_m(\mathbf{r}_i) \chi_n(\mathbf{r}_j)
+                             + \sum_{m\le n} \sum_{i> j} g_{mn} \chi_m(\mathbf{r}_i) \chi_n(\mathbf{r}_j)
+
+    ..math:: J_G(\mathbf{R}) = \sum_{m\le n} \sum_{i< j} g_{mn} \chi_m(\mathbf{r}_i) \chi_n(\mathbf{r}_j)
+                             + \sum_{m\le n} \sum_{i< j} g_{mn} \chi_m(\mathbf{r}_j) \chi_n(\mathbf{r}_i)
+
+    ..math:: J_G(\mathbf{R}) = \sum_{m\le n} \sum_{i< j} g_{mn} \chi_m(\mathbf{r}_i) \chi_n(\mathbf{r}_j)
+                             + \sum_{m\le n} \sum_{i< j} g_{mn} \chi_n(\mathbf{r}_i) \chi_m(\mathbf{r}_j)
+
+    ..math:: J_G(\mathbf{R}) = \sum_{m\le n} \sum_{i< j} g_{mn} \chi_m(\mathbf{r}_i) \chi_n(\mathbf{r}_j)
+                             + \sum_{m\ge n} \sum_{i< j} g_{mn} \chi_m(\mathbf{r}_i) \chi_n(\mathbf{r}_j)
+
+    ..math:: J_G(\mathbf{R}) = \sum_{mn} \sum_{i< j} g_{mn} \chi_m(\mathbf{r}_i) \chi_n(\mathbf{r}_j)
+                             + \sum_{m} \sum_{i< j} g_{mm} \chi_m(\mathbf{r}_i) \chi_m(\mathbf{r}_j)
+
+    ..math:: J_G(\mathbf{R}) = \sum_{i<j} \sum_{mn} g_{mn} \chi_m(\mathbf{r}_i) \chi_n(\mathbf{r}_j)
+
+    In both cases, we need to evaluate every orbital at the position of all electrons, so neither form appears preferable for efficiency.
+    However, the case :math:`m\le n` contains about half the parameters, meaning that the :math:`S_{ij}` matrix formed during optimization is four times smaller, so the :math:`m\le n` choice is preferable.
     """
 
     def __init__(self, mol, orbitals=None):

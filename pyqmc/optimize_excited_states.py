@@ -200,7 +200,7 @@ def sample_overlap(
     nblocks=10,
     tstep=0.5,
     client=None,
-    npartitions=0,
+    npartitions=None,
 ):
     """ """
     if client is None:

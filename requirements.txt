@@ -1,4 +1,4 @@
-scipy==1.10
+scipy
 pandas
 pyscf
 h5py==3.2.1

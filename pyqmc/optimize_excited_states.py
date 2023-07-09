@@ -471,7 +471,7 @@ def find_move_from_line(
     # print("offdiagonal_energy", energy)
     # print("norm",np.einsum('ijj->i', (overlap-1)**2 ))
     cost = (
-        np.einsum("i->", np.einsum("i,nii->n", energy_weights, energy))
+        np.einsum("n->", np.einsum("i,nii->n", energy_weights, energy))
         + overlap_penalty * np.sum(np.triu(overlap**2, 1), axis=(1, 2))
         + np.sum(lagrange_multiplier * np.triu(overlap, 1), axis=(1, 2))
         + offdiagonal_energy_penalty * np.sum(np.triu(energy**2, 1), axis=(1, 2))

@@ -27,7 +27,7 @@ class GeminalJastrow:
 
     .. math:: J_G(\mathbf{R}) = \sum_{i< j} \sum_{mn} (\tilde g_{mn}+\tilde g_{nm}) \chi_m(\mathbf{r}_i) \chi_n(\mathbf{r}_j)
 
-    .. math:: J_G(\mathbf{R}) = \sum_{i< j} \sum_{m\le n} g_{mn} \chi_m(\mathbf{r}_i) \chi_n(\mathbf{r}_j)
+    .. math:: J_G(\mathbf{R}) = \sum_{i< j} \sum_{m\le n} g_{mn} [\chi_m(\mathbf{r}_i) \chi_n(\mathbf{r}_j) + \chi_n(\mathbf{r}_i) \chi_m(\mathbf{r}_j)]
 
     The independent parameters are :math:`g_{mn} = \tilde g_{mn} + \tilde g_{nm}, \; m \le n`.
     """

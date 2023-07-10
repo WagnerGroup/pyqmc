@@ -65,6 +65,7 @@ class GeminalJastrow:
         self.gcoeff = gpu.cp.zeros((aos.shape[-1], aos.shape[-1]))
         triu_inds = gpu.cp.triu_indices(aos.shape[-1])
         self.gcoeff[triu_inds] = self.parameters["gcoeff"]
+        self.gcoeff = self.gcoeff + self.gcoeff.T
         
         return self.value()
 
@@ -182,6 +183,7 @@ class GeminalJastrow:
         coeff_grad = gpu.cp.einsum(
             "cim, cjn, ij-> cmn", self.ao_val, self.ao_val, mask, optimize=self.optimize
         )
+        coeff_grad = coeff_grad + coeff_grad.transpose(0, 2, 1)
         tui = gpu.cp.triu_indices(coeff_grad.shape[-1]) # select only m <= n
         return {"gcoeff": coeff_grad[:, tui[0], tui[1]]}
 

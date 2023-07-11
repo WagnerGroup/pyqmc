@@ -1,7 +1,6 @@
 
 ![Python package](https://github.com/WagnerGroup/pyqmc/workflows/Python%20package/badge.svg)
 [![Documentation Status](https://readthedocs.org/projects/pyqmc/badge/?version=latest)](https://pyqmc.readthedocs.io/en/latest/?badge=latest)
-[![Gitter chat](https://badges.gitter.im/gitterHQ/gitter.png)](https://gitter.im//pyqmc/community)
 
 ## PyQMC
 

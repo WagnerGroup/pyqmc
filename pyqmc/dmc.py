@@ -511,7 +511,10 @@ def rundmc(
             )
             print(branch_info)
 
-    df_ret = {k: np.asarray([d[k] for d in df]) for k in df[0].keys()}
+    if len(df) > 0:
+        df_ret = {k: np.asarray([d[k] for d in df]) for k in df[0].keys()}
+    else:
+        df_ret = {}
     return df_ret, configs, weights
 
 

@@ -60,6 +60,7 @@ def test_dmc_restarts(H_pbc_sto3g_krks, nconf=10):
     configs = pyq.initial_guess(mol, nconf)
     wf, _ = pyq.generate_wf(mol, mf, jastrow_kws=dict(na=0, nb=0))
     enacc = pyq.EnergyAccumulator(mol)
+    pyq.rundmc(wf, configs, nblocks=2, hdf_file=fname, accumulators={"energy": enacc})
     pyq.rundmc(wf, configs, nblocks=4, hdf_file=fname, accumulators={"energy": enacc})
     pyq.rundmc(wf, configs, nblocks=4, hdf_file=fname, accumulators={"energy": enacc})
     os.remove(fname)

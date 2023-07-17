@@ -245,6 +245,7 @@ def vmc(
         print("vmc done")
 
     df_return = {}
-    for k in df[0].keys():
-        df_return[k] = np.asarray([d[k] for d in df])
+    if len(df) > 0:
+        for k in df[0].keys():
+            df_return[k] = np.asarray([d[k] for d in df])
     return df_return, configs

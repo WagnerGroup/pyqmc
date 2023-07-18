@@ -172,14 +172,14 @@ def vmc(
     """Run a Monte Carlo sample of a given wave function.
 
     :parameter wf: trial wave function for VMC
-    :type wf: a PyQMC wave-function-like class
-    :parameter configs: Initial electron coordinates
+    :type wf: a PyQMC wave-function-like object
+    :parameter configs: (nconfig, nelec, 3) - initial electron coordinates to start calculation.
     :type configs: PyQMC configs object
     :parameter float tstep: Time step for move proposals. Only affects efficiency.
-    :parameter int nblocks: Number of VMC blocks to run
+    :parameter int nblocks: Number of VMC blocks to run. If a calculation is continued (either from continue_from or from using the same hdf_file as a previous call), nblocks includes the blocks from previous calls; i.e., nblocks is the total number of blocks run over all the calls to vmc.
     :parameter int nsteps_per_block: Number of steps to run per block
-    :parameter int nsteps: (Deprecated) Number of steps to run, maps to nblocks = 1, nsteps_per_block = nsteps
-    :parameter int blockoffset: If continuing a run, what to start the step numbering at.
+    :parameter int nsteps: (Deprecated) Number of steps to run, maps to nblocks = nsteps, nsteps_per_block = 1
+    :parameter int blockoffset: If continuing a run, what to start the block numbering at. The calculation will stop when the block number reaches nblocks.
     :parameter accumulators: A dictionary of functor objects that take in (configs,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If None, then the coordinates will only be propagated with acceptance information.
     :parameter boolean verbose: Print out step information
     :parameter str hdf_file: Hdf_file to store vmc output.

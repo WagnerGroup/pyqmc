@@ -112,7 +112,7 @@ def line_minimization(
     :parameter coords: initial configurations
     :parameter pgrad_acc: A PGradAccumulator-like object
     :parameter float steprange: How far to search in the line minimization
-    :parameter int max_iterations: (maximum) number of steps in the gradient descent
+    :parameter int max_iterations: (maximum) number of steps in the gradient descent. If the calculation is continued from the same hdf file, the iterations from previous runs are included in the total, i.e. when calling line_minimization multiple times with the same hdf_file, max_iterations is the total number of iterations that will be run. 
     :parameter int warmup_options: kwargs to use for vmc warmup
     :parameter dict vmcoptions: a dictionary of options for the vmc method
     :parameter dict lmoptions: a dictionary of options for the lm method

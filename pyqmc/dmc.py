@@ -377,13 +377,15 @@ def rundmc(
     """
     Run DMC
 
-    :parameter wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as anything (such as laplacian() ) used by accumulators
-    :parameter configs: (nconfig, nelec, 3) - initial coordinates to start calculation.
+    :parameter wf: trial wave function for DMC. recompute(), gradient(), and updateinternals() are used, as well as anything (such as laplacian() ) used by accumulators
+    :type wf: a PyQMC wave-function-like object
+    :parameter configs: (nconfig, nelec, 3) - initial electron coordinates to start calculation.
+    :type configs: PyQMC configs object
     :parameter weights: (nconfig,) - initial weights to start calculation, defaults to uniform.
-    :parameter tstep: Time step for move proposals. Introduces time step error.
-    :parameter nblocks: number of DMC blocks to run; branching is performed at the end of each block
-    :parameter nsteps_per_block: number of steps to take between branching; branching is performed at the end of each block
-    :parameter int blockoffset: If continuing a run, what to start the block numbering at.
+    :parameter float tstep: Time step for move proposals. Introduces time step error.
+    :parameter int nblocks: number of DMC blocks to run; branching is performed at the end of each block. If a calculation is continued (either from continue_from or from using the same hdf_file as a previous call), nblocks includes the blocks from previous calls; i.e., nblocks is the total number of blocks run over all the calls to rundmc.
+    :parameter int nsteps_per_block: number of steps to take between branching; branching is performed at the end of each block
+    :parameter int blockoffset: If continuing a run, what to start the block numbering at. The calculation will stop when the block number reaches nblocks.
     :parameter accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
     :parameter boolean verbose: Print out step information
     :parameter str hdf_file: Hdf_file to store vmc output.
@@ -391,7 +393,7 @@ def rundmc(
     :parameter client: an object with submit() functions that return futures
     :parameter int npartitions: the number of workers to submit at a time
     :parameter ekey: tuple of strings; energy is needed for DMC weights. Access total energy by accumulators[ekey[0]](configs, wf)[ekey[1]
-    :parameter vmc_warmup: If starting a run, how many VMC warmup blocks to run
+    :parameter int vmc_warmup: If starting a run, how many VMC warmup blocks to run
     :parameter int branchcut_start: Used in computing weights. Recommended for "experts only".
     :parameter float feedback: Feedback strength for controlling normalization. Recommended for "experts only".
     :returns: (df,coords,weights)

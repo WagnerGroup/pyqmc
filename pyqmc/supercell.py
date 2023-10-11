@@ -38,6 +38,7 @@ def get_supercell(cell, S):
     import pyscf.pbc
 
     scale = np.abs(int(np.round(np.linalg.det(S))))
+
     superlattice = np.dot(S, cell.lattice_vectors())
     Rpts = get_supercell_copies(cell.lattice_vectors(), S)
     atom = []
@@ -57,6 +58,12 @@ def get_supercell(cell, S):
     supercell.scale = scale
     supercell.output = None
     supercell.stdout = None
+    supercell.dimension = cell.dimension
+    supercell.low_dim_ft_type = cell.low_dim_ft_type
+    if cell.dimension == 2 and cell.low_dim_ft_type == 'inf_vacuum':
+        supercell.latvecs = superlattice[:2, :2]
+    else:
+        supercell.latvecs = superlattice
     return supercell
 
 

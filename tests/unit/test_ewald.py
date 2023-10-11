@@ -8,7 +8,7 @@ from pyscf.pbc import gto, scf
 def get_ewald_energy(cell, S, configs):
     supercell = get_supercell(cell, S)
     ewald = pyqmc.ewald.Ewald(supercell)
-    configs = PeriodicConfigs(configs, supercell.lattice_vectors())
+    configs = PeriodicConfigs(configs, supercell.latvecs)
     ee, ei, ii = ewald.energy(configs)
     etot = ee + ei + ii
     print(dict(ee=ee, ei=ei, ii=ii))
@@ -47,6 +47,26 @@ def test_ewald_NaCl():
     print("correct answer: ", 4 * nacl_answer)
     assert np.abs(etot / 4 + nacl_answer) < 1e-4
 
+def test_ewald_NaCl_2d():
+    nacl_answer = 1.6155
+    Lz = 30 # large cell height to simulate 2D
+    cell = gto.Cell(
+        atom="""H     {0} {0} {0}""".format(0.0),
+        basis="sto-3g",
+        unit="bohr",
+        spin=1,
+        dimension=2,
+        low_dim_ft_type='inf_vacuum'
+    )
+    cell.spin = 1
+    cell.build(a=np.array([[1, 1, 0], [-1, 1, 0], [0, 0, Lz]]), spin=1)
+    cell.spin = 1 # has to build twice to enable protected attributes in `cell`
+
+    S = np.eye(3)
+    configs = np.asarray([[[1, 0]]])
+    etot = get_ewald_energy(cell, S, configs)
+    print("correct answer: ", nacl_answer)
+    assert np.abs(etot + nacl_answer) < 1e-4
 
 def test_ewald_CaF2():
     r"""
@@ -127,15 +147,14 @@ def compute_ewald_shifted(x, delta, L=4.0):
     energy = evaluator.energy(configs)
     return np.concatenate([np.ravel(a) for a in energy])
 
-
 def test_ewald_shifted():
     xvals = [0.1, 0.2]
     d = [compute_ewald_shifted(x, np.array([0.1, 0.2, 0.1])) for x in xvals]
     d = np.asarray(d)
     assert np.linalg.norm(d[1] - d[0]) < 1e-14
 
-
 if __name__ == "__main__":
     import cProfile
 
     cProfile.run("test_ewald_NaCl()", "ewaldtest.prof")
+    cProfile.run("test_ewald_NaCl_2d()", "ewaldtest.prof")

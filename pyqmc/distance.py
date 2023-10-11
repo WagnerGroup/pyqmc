@@ -18,7 +18,19 @@ class RawDistance:
             v = vec[:, np.newaxis, :]
         return v - configs
 
-    def dist_matrix(self, configs):
+    def dist_matrix_large(self, configs):
+        """
+        calculate minimal distance between electrons
+
+        :param configs: electron coordinate with shape [N_ele * 3]
+        :return: vs: electron coordinate diffs with shape [N_ele, N_ele,  3]
+        """
+        vs = self.dist_i(configs, configs)
+        vs = vs * (1 - np.eye(vs.shape[0]))[..., None]
+        return vs
+
+
+    def dist_matrix(self, configs, count_self=False):
         """
         All pairwise distances within the set of positions.
 
@@ -28,18 +40,18 @@ class RawDistance:
 
           ij : list of size n(n-1)/2 tuples that document i,j
         """
-        nconf, n = configs.shape[:2]
-        npairs = int(n * (n - 1) / 2)
+        nconf, n, dimension = configs.shape
+        npairs = int(n * (n + 1) / 2) if count_self else int(n * (n - 1) / 2)
         if npairs == 0:
-            return np.zeros((nconf, 0, 3)), []
+            return np.zeros((nconf, 0, dimension)), []
 
         vs = []
         ij = []
         for i in range(n):
-            vs.append(self.dist_i(configs[:, i + 1 :, :], configs[:, i, :]))
-            ij.extend([(i, j) for j in range(i + 1, n)])
+            idx_start = i if count_self else i + 1
+            vs.append(self.dist_i(configs[:, idx_start:, :], configs[:, i, :]))
+            ij.extend([(i, j) for j in range(idx_start, n)])
         vs = np.concatenate(vs, axis=1)
-
         return vs, ij
 
     def pairwise(self, config1, config2):
@@ -82,26 +94,27 @@ class MinimalImageDistance(RawDistance):
         """
         ortho_tol = 1e-10
         diagonal = np.all(np.abs(latvec - np.diag(np.diagonal(latvec))) < ortho_tol)
+        self.dimension = latvec.shape[-1]
         if diagonal:
             self.dist_i = self.diagonal_dist_i
         else:
-            orthogonal = (
-                np.abs(np.dot(latvec[0], latvec[1])) < ortho_tol
-                and np.abs(np.dot(latvec[1], latvec[2])) < ortho_tol
-                and np.abs(np.dot(latvec[2], latvec[0])) < ortho_tol
-            )
+            orthogonal = np.dot(latvec[0], latvec[1]) < ortho_tol
+            if self.dimension == 3:
+                orthogonal = orthogonal and np.dot(latvec[1], latvec[2]) < ortho_tol and np.dot(latvec[2], latvec[0]) < ortho_tol
             if orthogonal:
                 self.dist_i = self.orthogonal_dist_i
-                # print("Orthogonal lattics vectors")
+                # print("Orthogonal lattice vectors")
             else:
                 self.dist_i = self.general_dist_i
-                # print("Non-orthogonal lattics vectors")
+                # print("Non-orthogonal lattice vectors")
         self._latvec = latvec
         self._invvec = np.linalg.inv(latvec)
         # list of all 26 neighboring cells
-        self.point_list = (
-            np.array([m.ravel() for m in np.meshgrid(*[[0, 1, 2]] * 3)]).T - 1
-        )
+        # self.point_list = (
+        #     np.array([m.ravel() for m in np.meshgrid(*[[0, 1, 2]] * 3)]).T - 1
+        # )
+        mesh_grid = np.meshgrid(*[np.array(range(self.dimension)) for _ in range(self.dimension)])
+        self.point_list = np.stack([m.ravel() for m in mesh_grid], axis=0).T - 1
         self.shifts = np.dot(self.point_list, self._latvec)
         # TODO build a minimal list instead of using all 27
 
@@ -109,6 +122,8 @@ class MinimalImageDistance(RawDistance):
         """returns a list of electron-electron distances from an electron at position 'vec'
         configs will most likely be [nconfig,electron,dimension], and vec will be [nconfig,dimension]
         """
+        configs_test = configs.reshape([1, -1, self.dimension]).real
+        v_test = vec.reshape([-1, 1, self.dimension]).real
         if len(vec.shape) == 3:
             v = vec.transpose((1, 0, 2))[:, :, np.newaxis]
         else:
@@ -125,6 +140,9 @@ class MinimalImageDistance(RawDistance):
         """Like dist_i, but assuming lattice vectors are orthogonal
         It's about 10x faster than the general one checking all 27 lattice points
         """
+        configs_test = configs.reshape([1, -1, self.dimension]).real
+        v_test = vec.reshape([-1, 1, self.dimension]).real
+
         if len(vec.shape) == 3:
             v = vec.transpose((1, 0, 2))[:, :, np.newaxis]
         else:

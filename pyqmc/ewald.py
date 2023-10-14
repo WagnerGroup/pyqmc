@@ -84,15 +84,15 @@ class Ewald:
         :parameter int ewald_gmax: how far to take reciprocal sum; probably never needs to be changed.
         :parameter int nlatvec: how far to take real-space sum; probably never needs to be changed.
         """
+        self.low_dim_ft_type = cell.low_dim_ft_type
+        self.latvec = cell.lattice_vectors()
+        self.atom_coords = cell.atom_coords()
         self.dimension = cell.dimension
         self.nelec = np.array(cell.nelec)
-        self.atom_coords = cell.atom_coords()[:, :self.dimension]
         self.atom_charges = gpu.cp.asarray(cell.atom_charges())
-        self.latvec = cell.lattice_vectors()[:self.dimension, :self.dimension]
         self.dist = pyqmc.distance.MinimalImageDistance(self.latvec)
         self.set_lattice_displacements(nlatvec)
         self.set_up_reciprocal_ewald_sum(ewald_gmax)
-
 
     def set_lattice_displacements(self, nlatvec):
         """
@@ -102,6 +102,8 @@ class Ewald:
         """
         XYZ = np.meshgrid(*[np.arange(-nlatvec, nlatvec + 1)] * self.dimension, indexing="ij")
         xyz = np.stack(XYZ, axis=-1).reshape((-1, self.dimension))
+        z_zeros = np.zeros((xyz.shape[0], 1))
+        xyz = np.concatenate([xyz, z_zeros], axis=1)
         self.lattice_displacements = gpu.cp.asarray(np.dot(xyz, self.latvec))
 
     def set_up_reciprocal_ewald_sum(self, ewald_gmax):
@@ -116,8 +118,12 @@ class Ewald:
 
         :parameter int ewald_gmax: max number of reciprocal lattice vectors to check away from 0
         """
-        cellvolume = np.linalg.det(self.latvec)
         recvec = np.linalg.inv(self.latvec).T
+        if self.dimension == 2 and self.low_dim_ft_type == 'inf_vacuum':
+            cellvolume = np.linalg.det(self.latvec[:2, :2])
+            recvec[2, 2] = 0
+        else:
+            cellvolume = np.linalg.det(self.latvec)
 
         # Determine alpha
         smallestheight = np.amin(1 / np.linalg.norm(recvec, axis=1))
@@ -392,8 +398,8 @@ def generate_positive_gpoints(gmax, recvec, dim):
         gX0Y0Zpos = gpu.cp.mgrid[0:1, 0:1, 1 : gmax + 1].reshape(3, -1)
         pos_list = [gXpos, gX0Ypos, gX0Y0Zpos]
     elif dim == 2:
-        gXpos = gpu.cp.mgrid[1 : gmax + 1, -gmax: gmax + 1].reshape(2, -1)
-        gX0Ypos = gpu.cp.mgrid[0:1, 1: gmax + 1].reshape(2, -1)
+        gXpos = gpu.cp.mgrid[1 : gmax + 1, -gmax: gmax + 1, 0:1].reshape(3, -1)
+        gX0Ypos = gpu.cp.mgrid[0:1, 1: gmax + 1, 0:1].reshape(3, -1)
         pos_list = [gXpos, gX0Ypos]
     gpts = gpu.cp.concatenate(pos_list, axis=1)
     gpoints = gpu.cp.einsum("ji,jk->ik", gpts, gpu.cp.asarray(recvec) * 2 * np.pi)

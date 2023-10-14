@@ -60,10 +60,6 @@ def get_supercell(cell, S):
     supercell.stdout = None
     supercell.dimension = cell.dimension
     supercell.low_dim_ft_type = cell.low_dim_ft_type
-    if cell.dimension == 2 and cell.low_dim_ft_type == 'inf_vacuum':
-        supercell.latvecs = superlattice[:2, :2]
-    else:
-        supercell.latvecs = superlattice
     return supercell
 
 

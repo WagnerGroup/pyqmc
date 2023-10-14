@@ -102,8 +102,9 @@ class Ewald:
         """
         XYZ = np.meshgrid(*[np.arange(-nlatvec, nlatvec + 1)] * self.dimension, indexing="ij")
         xyz = np.stack(XYZ, axis=-1).reshape((-1, self.dimension))
-        z_zeros = np.zeros((xyz.shape[0], 1))
-        xyz = np.concatenate([xyz, z_zeros], axis=1)
+        if self.dimension == 2:
+            z_zeros = np.zeros((xyz.shape[0], 1))
+            xyz = np.concatenate([xyz, z_zeros], axis=1)
         self.lattice_displacements = gpu.cp.asarray(np.dot(xyz, self.latvec))
 
     def set_up_reciprocal_ewald_sum(self, ewald_gmax):
@@ -120,17 +121,15 @@ class Ewald:
         """
         recvec = np.linalg.inv(self.latvec).T
         if self.dimension == 2 and self.low_dim_ft_type == 'inf_vacuum':
-            cellvolume = np.linalg.det(self.latvec[:2, :2])
             recvec[2, 2] = 0
-        else:
-            cellvolume = np.linalg.det(self.latvec)
 
         # Determine alpha
-        smallestheight = np.amin(1 / np.linalg.norm(recvec, axis=1))
+        smallestheight = np.amin(1 / np.linalg.norm(recvec[:self.dimension, :self.dimension], axis=1))
         self.alpha = 5.0 / smallestheight
 
         # Determine G points to include in reciprocal Ewald sum
         gpoints = generate_positive_gpoints(ewald_gmax, recvec, self.dimension)
+        cellvolume = np.linalg.det(self.latvec[:self.dimension, :self.dimension])
         self.gpoints, self.gweight = select_big(gpoints, cellvolume, self.alpha, self.dimension)
         self.set_ewald_constants(cellvolume)
 

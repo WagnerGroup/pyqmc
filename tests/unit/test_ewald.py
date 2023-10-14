@@ -8,7 +8,7 @@ from pyscf.pbc import gto, scf
 def get_ewald_energy(cell, S, configs):
     supercell = get_supercell(cell, S)
     ewald = pyqmc.ewald.Ewald(supercell)
-    configs = PeriodicConfigs(configs, supercell.latvecs)
+    configs = PeriodicConfigs(configs, supercell.lattice_vectors())
     ee, ei, ii = ewald.energy(configs)
     etot = ee + ei + ii
     print(dict(ee=ee, ei=ei, ii=ii))
@@ -63,7 +63,7 @@ def test_ewald_NaCl_2d():
     cell.spin = 1 # has to build twice to enable protected attributes in `cell`
 
     S = np.eye(3)
-    configs = np.asarray([[[1, 0]]])
+    configs = np.asarray([[[1, 0, 0]]])
     etot = get_ewald_energy(cell, S, configs)
     print("correct answer: ", nacl_answer)
     assert np.abs(etot + nacl_answer) < 1e-4

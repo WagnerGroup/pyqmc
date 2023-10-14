@@ -18,18 +18,6 @@ class RawDistance:
             v = vec[:, np.newaxis, :]
         return v - configs
 
-    def dist_matrix_large(self, configs):
-        """
-        calculate minimal distance between electrons
-
-        :param configs: electron coordinate with shape [N_ele * 3]
-        :return: vs: electron coordinate diffs with shape [N_ele, N_ele,  3]
-        """
-        vs = self.dist_i(configs, configs)
-        vs = vs * (1 - np.eye(vs.shape[0]))[..., None]
-        return vs
-
-
     def dist_matrix(self, configs):
         """
         All pairwise distances within the set of positions.

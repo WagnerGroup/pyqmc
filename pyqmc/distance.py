@@ -30,7 +30,7 @@ class RawDistance:
         return vs
 
 
-    def dist_matrix(self, configs, count_self=False):
+    def dist_matrix(self, configs):
         """
         All pairwise distances within the set of positions.
 
@@ -41,16 +41,14 @@ class RawDistance:
           ij : list of size n(n-1)/2 tuples that document i,j
         """
         nconf, n, dimension = configs.shape
-        npairs = int(n * (n + 1) / 2) if count_self else int(n * (n - 1) / 2)
+        npairs = int(n * (n - 1) / 2)
         if npairs == 0:
             return np.zeros((nconf, 0, dimension)), []
-
         vs = []
         ij = []
         for i in range(n):
-            idx_start = i if count_self else i + 1
-            vs.append(self.dist_i(configs[:, idx_start:, :], configs[:, i, :]))
-            ij.extend([(i, j) for j in range(idx_start, n)])
+            vs.append(self.dist_i(configs[:, i + 1:, :], configs[:, i, :]))
+            ij.extend([(i, j) for j in range(i + 1, n)])
         vs = np.concatenate(vs, axis=1)
         return vs, ij
 

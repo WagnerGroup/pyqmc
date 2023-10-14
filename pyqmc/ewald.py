@@ -164,15 +164,15 @@ class Ewald:
 
         """
         self.i_sum = np.sum(self.atom_charges)
-        ii_sum2 = np.sum(self.atom_charges**2)
-        ii_sum = (self.i_sum**2 - ii_sum2) / 2
+        self.ii_sum2 = np.sum(self.atom_charges**2)
+        ii_sum = (self.i_sum**2 - self.ii_sum2) / 2
         if self.dimension == 3:
             self.ijconst = -np.pi / (cellvolume * self.alpha**2)
         elif self.dimension == 2:
             self.ijconst = -2*np.pi**0.5 / (cellvolume * self.alpha)
         self.squareconst = -self.alpha / np.sqrt(np.pi) + self.ijconst / 2
 
-        self.ii_const = ii_sum * self.ijconst + ii_sum2 * self.squareconst
+        self.ii_const = ii_sum * self.ijconst + self.ii_sum2 * self.squareconst
         self.e_single_test = -self.i_sum * self.ijconst + self.squareconst
         self.ion_ion = self.ewald_ion()
 
@@ -213,7 +213,7 @@ class Ewald:
         if len(self.atom_charges) == 1:
             ion_ion_real = 0
         else:
-            ion_distances, ion_inds = self.dist.dist_matrix(self.atom_coords[np.newaxis], count_self=False)
+            ion_distances, ion_inds = self.dist.dist_matrix(self.atom_coords[np.newaxis])
             ion_distances = gpu.cp.asarray(ion_distances)
             rvec = ion_distances[:, :, np.newaxis, :] + self.lattice_displacements
             r = gpu.cp.linalg.norm(rvec, axis=-1)
@@ -230,12 +230,17 @@ class Ewald:
             ion_ion_rec = gpu.cp.dot(self.gweight, gpu.cp.abs(self.ion_exp) ** 2)
 
         elif self.dimension == 2:
-            ion_distances, ion_inds = self.dist.dist_matrix(self.atom_coords[np.newaxis], count_self=True)
-            ion_distances = gpu.cp.asarray(ion_distances)
-            Gdotr_ij = np.dot(ion_distances, self.gpoints.T)
-            mul_weight = np.dot(np.exp(1j * Gdotr_ij), self.gweight)
-            charge_ij = gpu.cp.prod(self.atom_charges[np.asarray(ion_inds)], axis=1)
-            ion_ion_rec = np.sum(charge_ij * mul_weight).real
+            ion_distances, ion_inds = self.dist.dist_matrix(self.atom_coords[np.newaxis])
+            if len(ion_inds) == 0:
+                ion_ion_rec_cross = 0
+            else:
+                ion_distances = gpu.cp.asarray(ion_distances)
+                Gdotr_ij = np.dot(ion_distances, self.gpoints.T)
+                mul_weight = np.dot(np.exp(1j * Gdotr_ij), self.gweight)
+                charge_ij = gpu.cp.prod(self.atom_charges[np.asarray(ion_inds)], axis=1)
+                ion_ion_rec_cross = np.sum(charge_ij * mul_weight).real
+            ion_ion_rec_self = self.ii_sum2 * np.sum(self.gweight)
+            ion_ion_rec = ion_ion_rec_self + ion_ion_rec_cross
 
         ion_ion = ion_ion_real + ion_ion_rec
         return ion_ion

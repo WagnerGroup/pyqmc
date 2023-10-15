@@ -383,7 +383,7 @@ class Ewald:
         nelec = configs.configs.shape[1]
         return self.e_single(nelec) + self.ewalde_separated
 
-def select_big(gpoints, cellvolume, alpha, dim, tol=1e-10):
+def select_big(gpoints, cellvolume, alpha, dim=3, tol=1e-10):
     gsquared = gpu.cp.einsum("jk,jk->j", gpoints, gpoints)
     if dim == 3:
         gweight = 4 * np.pi * gpu.cp.exp(-gsquared / (4 * alpha**2))
@@ -395,7 +395,7 @@ def select_big(gpoints, cellvolume, alpha, dim, tol=1e-10):
     bigweight = gweight > tol
     return gpoints[bigweight], gweight[bigweight]
 
-def generate_positive_gpoints(gmax, recvec, dim):
+def generate_positive_gpoints(gmax, recvec, dim=3):
     if dim == 3:
         gXpos = gpu.cp.mgrid[1 : gmax + 1, -gmax : gmax + 1, -gmax : gmax + 1].reshape(3, -1)
         gX0Ypos = gpu.cp.mgrid[0:1, 1 : gmax + 1, -gmax : gmax + 1].reshape(3, -1)

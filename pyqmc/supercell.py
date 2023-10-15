@@ -38,7 +38,6 @@ def get_supercell(cell, S):
     import pyscf.pbc
 
     scale = np.abs(int(np.round(np.linalg.det(S))))
-
     superlattice = np.dot(S, cell.lattice_vectors())
     Rpts = get_supercell_copies(cell.lattice_vectors(), S)
     atom = []

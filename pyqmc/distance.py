@@ -108,8 +108,6 @@ class MinimalImageDistance(RawDistance):
         """returns a list of electron-electron distances from an electron at position 'vec'
         configs will most likely be [nconfig,electron,dimension], and vec will be [nconfig,dimension]
         """
-        configs_test = configs.reshape([1, -1, self.dimension]).real
-        v_test = vec.reshape([-1, 1, self.dimension]).real
         if len(vec.shape) == 3:
             v = vec.transpose((1, 0, 2))[:, :, np.newaxis]
         else:
@@ -126,9 +124,6 @@ class MinimalImageDistance(RawDistance):
         """Like dist_i, but assuming lattice vectors are orthogonal
         It's about 10x faster than the general one checking all 27 lattice points
         """
-        configs_test = configs.reshape([1, -1, self.dimension]).real
-        v_test = vec.reshape([-1, 1, self.dimension]).real
-
         if len(vec.shape) == 3:
             v = vec.transpose((1, 0, 2))[:, :, np.newaxis]
         else:

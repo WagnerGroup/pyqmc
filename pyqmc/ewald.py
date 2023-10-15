@@ -241,7 +241,6 @@ class Ewald:
                 ion_ion_rec_cross = np.sum(charge_ij * mul_weight).real
             ion_ion_rec_self = self.ii_sum2 * np.sum(self.gweight)
             ion_ion_rec = ion_ion_rec_self + ion_ion_rec_cross
-
         ion_ion = ion_ion_real + ion_ion_rec
         return ion_ion
 

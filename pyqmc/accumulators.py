@@ -63,11 +63,10 @@ class LinearTransform:
     :parameter dict to_opt: is a dictionary with the keys to optimize, and its values are boolean arrays indicating which specific elements to optimize
 
     Note:
-        to_opt[k] can't be boolean scalar; it has to be an array with the same dimension as parameters[k].
 
-        to_opt doesn't have to have all the keys of parameters, but all keys of to_opt must be keys of parameters.
-
-        If you change wf.parameters, then all serializations will be out of date. For example, if you serialize, then change wf.paramaters, then deserialize, the deserialization will be incorrect.
+    * to_opt[k] can't be boolean scalar; it has to be an array with the same dimension as parameters[k].
+    * to_opt doesn't have to have all the keys of parameters, but all keys of to_opt must be keys of parameters.
+    * If you change wf.parameters, then all serializations will be out of date. For example, if you serialize, then change wf.paramaters, then deserialize, the deserialization will be incorrect.
     """
 
     def __init__(self, parameters, to_opt=None):
@@ -267,7 +266,7 @@ class SymmetryAccumulator:
     Makes use of the equivariance property S * Psi(R) = Psi(S * R) by transforming all electron coordinates R and recomputing the wf
     When defining a SymmetryAccumulator object, pass in a dictionary of symmetry operator names and their respective 3x3 unitary matrices
     For example, to evaluate a rotation of angle theta about the z-axis and mirror reflection about the yz plane, use the code
-    
+
     rotation_z = np.array(
         [
             [np.cos(theta), -np.sin(theta), 0],
@@ -292,13 +291,11 @@ class SymmetryAccumulator:
         original_wf_value = wf.value()
         configs_copy = copy.deepcopy(configs)
         for S_name, S_matrix in self.symmetry_operators.items():
-            configs_copy.configs = np.einsum(
-                "ijk,kl->ijl", configs.configs, S_matrix
-            )
+            configs_copy.configs = np.einsum("ijk,kl->ijl", configs.configs, S_matrix)
             transformed_wf_value = wf.recompute(configs_copy)
-            symmetry_observables[S_name] = (transformed_wf_value[0] / original_wf_value[0]) * np.exp(
-                transformed_wf_value[1] - original_wf_value[1]
-            )
+            symmetry_observables[S_name] = (
+                transformed_wf_value[0] / original_wf_value[0]
+            ) * np.exp(transformed_wf_value[1] - original_wf_value[1])
         wf.recompute(configs)
         return symmetry_observables
 
@@ -310,4 +307,3 @@ class SymmetryAccumulator:
 
     def shapes(self):
         return {S: () for S in self.symmetry_operators.keys()}
-

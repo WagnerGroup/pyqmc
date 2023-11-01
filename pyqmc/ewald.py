@@ -273,7 +273,7 @@ class Ewald:
             ee_distances, ee_inds = configs.dist.dist_matrix(configs.configs)
             ee_cij = self._real_cij(ee_distances)
 
-            for ((i, j), val) in zip(ee_inds, ee_cij.T):
+            for (i, j), val in zip(ee_inds, ee_cij.T):
                 ee_real_separated[:, i] += val
                 ee_real_separated[:, j] += val
             ee_real_separated /= 2
@@ -369,11 +369,11 @@ def select_big(gpoints, cellvolume, alpha):
 
 
 def generate_positive_gpoints(gmax, recvec):
-    gXpos = gpu.cp.mgrid[1:gmax+1, -gmax:gmax+1, -gmax:gmax+1].reshape(3, -1)
-    gX0Ypos = gpu.cp.mgrid[0:1, 1:gmax+1, -gmax:gmax+1].reshape(3, -1)
-    gX0Y0Zpos = gpu.cp.mgrid[0:1, 0:1, 1:gmax+1].reshape(3, -1)
-    gpts = gpu.cp.concatenate([gXpos, gX0Ypos, gX0Y0Zpos], axis=1)
-    gpoints = gpu.cp.einsum(
-        "ji,jk->ik", gpts, gpu.cp.asarray(recvec) * 2 * np.pi
+    gXpos = gpu.cp.mgrid[1 : gmax + 1, -gmax : gmax + 1, -gmax : gmax + 1].reshape(
+        3, -1
     )
+    gX0Ypos = gpu.cp.mgrid[0:1, 1 : gmax + 1, -gmax : gmax + 1].reshape(3, -1)
+    gX0Y0Zpos = gpu.cp.mgrid[0:1, 0:1, 1 : gmax + 1].reshape(3, -1)
+    gpts = gpu.cp.concatenate([gXpos, gX0Ypos, gX0Y0Zpos], axis=1)
+    gpoints = gpu.cp.einsum("ji,jk->ik", gpts, gpu.cp.asarray(recvec) * 2 * np.pi)
     return gpoints

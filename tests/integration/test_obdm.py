@@ -16,7 +16,6 @@ import pytest
 
 
 def test():
-
     mol = gto.M(
         atom="Li 0. 0. 0.; Li 0. 0. 1.5", basis="sto-3g", unit="bohr", verbose=0
     )

@@ -3,7 +3,6 @@ from pyqmc.pbc import enforce_pbc
 
 
 def test_enforce_pbcs():
-
     # TEST 1: Check if any electron in new config
     #         is out of the simulation box for set
     #         of non-orthogonal lattice vectors. We

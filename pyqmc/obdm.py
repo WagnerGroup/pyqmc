@@ -58,7 +58,6 @@ class OBDMAccumulator:
         electrons=None,
         kpts=None,
     ):
-
         if spin is not None:
             if spin == 0:
                 self._electrons = np.arange(0, mol.nelec[0])

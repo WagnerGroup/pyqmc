@@ -132,7 +132,7 @@ def line_minimization(
     if lmoptions is None:
         lmoptions = {}
     if correlatedoptions is None:
-        correlatedoptions = {}
+        correlatedoptions = dict(nblocks=1)
     if update_kws is None:
         update_kws = {}
     if warmup_options is None:

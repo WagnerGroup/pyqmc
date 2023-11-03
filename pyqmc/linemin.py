@@ -1,9 +1,11 @@
 import numpy as np
 import pyqmc.gpu as gpu
+import pyqmc.sample_many as sm
 import scipy
 import h5py
 import os
 import pyqmc.mc
+import copy
 
 
 def sr_update(pgrad, Sij, step, eps=0.1):
@@ -97,6 +99,7 @@ def line_minimization(
     warmup_options=None,
     vmcoptions=None,
     lmoptions=None,
+    correlatedoptions=None,
     update=sr_update,
     update_kws=None,
     verbose=False,
@@ -128,6 +131,8 @@ def line_minimization(
     vmcoptions.update({"verbose": verbose})
     if lmoptions is None:
         lmoptions = {}
+    if correlatedoptions is None:
+        correlatedoptions = {}
     if update_kws is None:
         update_kws = {}
     if warmup_options is None:
@@ -219,17 +224,21 @@ def line_minimization(
         # doing correlated sampling.
         steps = np.linspace(-steprange / (npts - 2), steprange, npts)
         params = [x0 + update(pgrad, Sij, step, **update_kws) for step in steps]
-        if client is None:
-            stepsdata = correlated_compute(wf, coords, params, pgrad_acc)
-        else:
-            stepsdata = correlated_compute_parallel(
-                wf, coords, params, pgrad_acc, client, npartitions
-            )
-
-        stepsdata["weight"] = (
-            stepsdata["weight"] / np.mean(stepsdata["weight"], axis=1)[:, np.newaxis]
+        stepsdata = correlated_compute(
+            wf, 
+            coords, 
+            params, 
+            pgrad_acc, 
+            client=client, 
+            npartitions=npartitions, 
+            **correlatedoptions,
         )
-        en = np.real(np.mean(stepsdata["total"] * stepsdata["weight"], axis=1))
+
+        #stepsdata["weight"] = (
+        #    stepsdata["weight"] / np.mean(stepsdata["weight"], axis=1)[:, np.newaxis]
+        #)
+        #en = np.real(np.mean(stepsdata["total"] * stepsdata["weight"], axis=1))
+        en = np.real(stepsdata["total"])
         yfit.extend(en)
         xfit.extend(steps)
         est_min = stable_fit(xfit, yfit)
@@ -250,9 +259,9 @@ def line_minimization(
     return wf, df
 
 
-def correlated_compute(wf, configs, params, pgrad_acc):
+def correlated_compute(wf, configs, params, pgrad_acc, **kws):
     """
-    Evaluates accumulator on the same set of configs for correlated sampling of different wave function parameters
+    Evaluates energy on the same set of configs for correlated sampling of different wave function parameters
 
     :parameter wf: wave function object
     :parameter configs: (nconf, nelec, 3) array
@@ -264,33 +273,13 @@ def correlated_compute(wf, configs, params, pgrad_acc):
     """
 
     data = []
-    psi0 = wf.recompute(configs)[1]  # recompute gives logdet
-
-    current_state = np.random.get_state()
-    for p in params:
-        np.random.set_state(current_state)
+    wfs = [copy.deepcopy(wf) for i in range(len(params))]
+    for p, wf_ in zip(params, wfs):
         newparms = pgrad_acc.transform.deserialize(wf, p)
         for k in newparms:
-            wf.parameters[k] = newparms[k]
-        psi = wf.recompute(configs)[1]  # recompute gives logdet
-        rawweights = np.exp(2 * (psi - psi0))  # convert from log(|psi|) to |psi|**2
-        df = pgrad_acc.enacc(configs, wf)
-        df["weight"] = rawweights
-        data.append(df)
-    data_ret = {}
-    for k in data[0].keys():
-        data_ret[k] = np.asarray([d[k] for d in data])
-    return data_ret
+            wf_.parameters[k] = newparms[k]
+    weighted, unweighted, _ = sm.sample_overlap(wfs, configs, pgrad_acc.enacc, **kws)
+    avg, error = sm.normalize(weighted, unweighted)
+    return dict(total=np.diag(avg["total"]))
 
 
-def correlated_compute_parallel(wf, configs, params, pgrad_acc, client, npartitions):
-    config = configs.split(npartitions)
-    runs = [
-        client.submit(correlated_compute, wf, conf, params, pgrad_acc)
-        for conf in config
-    ]
-    allresults = [r.result() for r in runs]
-    block_avg = {}
-    for k in allresults[0].keys():
-        block_avg[k] = np.hstack([res[k] for res in allresults])
-    return block_avg

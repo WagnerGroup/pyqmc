@@ -12,6 +12,7 @@ import pytest
 def test_linemin(H2_ccecp_uhf):
     """Optimize a Slater-Jastrow wave function and check that it's better than Hartree-Fock"""
     mol, mf = H2_ccecp_uhf
+    mol.output, mol.stdout = None, None
 
     wf, to_opt = generate_wf(mol, mf)
     nconf = 100

@@ -156,9 +156,10 @@ def sample_overlap_block(wfs, configs, tstep, nsteps, energy):
                 )
 
         # Collect rolling average
-        weighted_dat, unweighted_dat = collect_overlap_data(wfs, configs, energy)
-        rolling_average(weighted_block, weighted_dat, nsteps)
-        rolling_average(unweighted_block, unweighted_dat, nsteps)
+        if energy is not None:
+            weighted_dat, unweighted_dat = collect_overlap_data(wfs, configs, energy)
+            rolling_average(weighted_block, weighted_dat, nsteps)
+            rolling_average(unweighted_block, unweighted_dat, nsteps)
 
     return weighted_block, unweighted_block, configs
 

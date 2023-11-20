@@ -17,7 +17,7 @@ import copy
 
 def take_derivative_casci_energy(mc, civec, delta=1e-4):
     h1e = mc.get_h1cas()[0]
-    mo_coeff = mc.mo_coeff[:, mc.ncore:mc.ncore+mc.ncas]
+    mo_coeff = mc.mo_coeff[:, mc.ncore : mc.ncore + mc.ncas]
     eri = ao2mo.full(mc.mol, mo_coeff)
     enbase = mc.fcisolver.energy(h1e=h1e, eri=eri, fcivec=civec, norb=2, nelec=(1, 1))
     en_derivative = []

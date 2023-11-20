@@ -72,7 +72,7 @@ def test_correlated_sampling(H2_casci):
         wfs.append(wf)
         transforms.append(transform)
         parms.append(transform.serialize_parameters(wf.parameters))
-    
+
     configs = pyq.initial_guess(mol, 1000)
     _, configs = pyq.vmc(wfs[0], configs)
     energy = pyq.EnergyAccumulator(mol)
@@ -90,7 +90,7 @@ def test_correlated_sampling(H2_casci):
         sample_parameters.append([np.dot(A, parms), np.dot(A[::-1], parms)])
         AB = np.outer(A, A)
         energies_reference.append(AB * ci_energies[0] + AB[::-1, ::-1] * ci_energies[1])
-        overlap_reference.append(AB + AB[::-1,::-1])
+        overlap_reference.append(AB + AB[::-1, ::-1])
     energies_reference = np.asarray(energies_reference)[:, 0, 0]
     overlap_reference = np.asarray(overlap_reference)[:, 0, 0]
     sample_parameters = np.asarray(sample_parameters)[:, 0]

@@ -2,7 +2,7 @@
 
 import numpy as np
 from pyscf.pbc import gto, scf
-import pyqmc
+import pyqmc.api as pyq
 from pyqmc.supercell import get_supercell
 
 
@@ -35,19 +35,19 @@ if __name__ == "__main__":
     nconfig = 100
     S = np.eye(3) * 2  # 2x2x2 supercell
     supercell = get_supercell(cell, S)
-    wf, to_opt = pyqmc.default_sj(supercell, kmf)
-    configs = pyqmc.initial_guess(supercell, nconfig)
+    wf, to_opt = pyq.generate_wf(supercell, kmf)
+    configs = pyq.initial_guess(supercell, nconfig)
 
     # Initialize energy accumulator (and Ewald)
-    pgrad = pyqmc.gradient_generator(supercell, wf, to_opt=to_opt)
+    pgrad = pyq.gradient_generator(supercell, wf, to_opt=to_opt)
 
     # Optimize jastrow
-    wf, lm_df = pyqmc.line_minimization(
+    wf, lm_df = pyq.line_minimization(
         wf, configs, pgrad, hdf_file="pbc_he_linemin.hdf", verbose=True
     )
 
     # Run VMC
-    df, configs = pyqmc.vmc(
+    df, configs = pyq.vmc(
         wf,
         configs,
         nblocks=100,
@@ -57,7 +57,7 @@ if __name__ == "__main__":
     )
 
     # Run DMC
-    pyqmc.rundmc(
+    pyq.rundmc(
         wf,
         configs,
         nsteps=1000,

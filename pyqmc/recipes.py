@@ -190,7 +190,7 @@ def initialize_qmc_objects(
         mc = None
     else:
         mol, mf, mc = pyscftools.recover_pyscf(dft_checkfile, ci_checkfile=ci_checkfile)
-        if not hasattr(mc.ci, "shape"):
+        if not hasattr(mc.ci, "shape") or len(mc.ci.shape) == 3:
             mc.ci = mc.ci[target_root]
 
     if S is not None:

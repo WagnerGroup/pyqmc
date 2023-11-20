@@ -2,6 +2,7 @@
 # import pyscf.pbc
 import numpy as np
 from pyscf.fci.addons import overlap
+import pyscf.ao2mo as ao2mo
 import pyqmc.api as pyq
 import pyqmc.accumulators
 from pyqmc.optimize_excited_states import (
@@ -16,7 +17,8 @@ import copy
 
 def take_derivative_casci_energy(mc, civec, delta=1e-4):
     h1e = mc.get_h1cas()[0]
-    eri = mc.ao2mo()
+    mo_coeff = mc.mo_coeff[:, mc.ncore:mc.ncore+mc.ncas]
+    eri = ao2mo.full(mc.mol, mo_coeff)
     enbase = mc.fcisolver.energy(h1e=h1e, eri=eri, fcivec=civec, norb=2, nelec=(1, 1))
     en_derivative = []
     for i in range(civec.shape[0]):

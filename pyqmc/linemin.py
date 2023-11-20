@@ -223,12 +223,12 @@ def line_minimization(
         steps = np.linspace(-steprange / (npts - 2), steprange, npts)
         params = [x0 + update(pgrad, Sij, step, **update_kws) for step in steps]
         stepsdata = correlated_compute(
-            wf, 
-            coords, 
-            params, 
-            pgrad_acc, 
-            client=client, 
-            npartitions=npartitions, 
+            wf,
+            coords,
+            params,
+            pgrad_acc,
+            client=client,
+            npartitions=npartitions,
         )
 
         w = stepsdata["weight"]
@@ -252,7 +252,9 @@ def line_minimization(
     return wf, df
 
 
-def correlated_compute(wf, configs, params, pgrad_acc, client=None, npartitions=None, **kws):
+def correlated_compute(
+    wf, configs, params, pgrad_acc, client=None, npartitions=None, **kws
+):
     """
     Evaluates energy on the same set of configs for correlated sampling of different wave function parameters
 
@@ -270,15 +272,17 @@ def correlated_compute(wf, configs, params, pgrad_acc, client=None, npartitions=
     for p, wf_ in zip(params, wfs):
         set_wf_params(wf_, p, pgrad_acc)
     # sample combined distribution
-    _, _, configs = sm.sample_overlap(wfs, configs, None, client=client, npartitions=npartitions, **kws)
+    _, _, configs = sm.sample_overlap(
+        wfs, configs, None, client=client, npartitions=npartitions, **kws
+    )
 
     if client is None:
         return correlated_compute_worker(wf, configs, params, pgrad_acc)
     config = configs.split(npartitions)
-    runs = [ 
+    runs = [
         client.submit(correlated_compute_worker, wf, conf, params, pgrad_acc)
         for conf in config
-    ]   
+    ]
     allresults = [r.result() for r in runs]
     block_avg = {}
     for k in allresults[0].keys():
@@ -287,7 +291,7 @@ def correlated_compute(wf, configs, params, pgrad_acc, client=None, npartitions=
 
 
 def correlated_compute_worker(wf, configs, params, pgrad_acc):
-    """ 
+    """
     Evaluates accumulator on the same set of configs for correlated sampling of different wave function parameters
 
     :parameter wf: wave function object
@@ -306,7 +310,7 @@ def correlated_compute_worker(wf, configs, params, pgrad_acc):
         np.random.set_state(current_state)
         set_wf_params(wf, p, pgrad_acc)
         psi[i] = wf.recompute(configs)[1]  # recompute gives logdet
-        df = pgrad_acc.enacc(configs, wf) 
+        df = pgrad_acc.enacc(configs, wf)
         data.append(df)
 
     data_ret = sm.invert_list_of_dicts(data)
@@ -314,7 +318,7 @@ def correlated_compute_worker(wf, configs, params, pgrad_acc):
     ref = np.amax(psi, axis=0)
     psirel = np.exp(2 * (psi - ref))
     rho = np.mean([psirel[i] for i in [0, -1]], axis=0)
-    data_ret["weight"] = psirel / rho 
+    data_ret["weight"] = psirel / rho
     return data_ret
 
 
@@ -322,4 +326,3 @@ def set_wf_params(wf, params, pgrad_acc):
     newparms = pgrad_acc.transform.deserialize(wf, params)
     for k in newparms:
         wf.parameters[k] = newparms[k]
-    

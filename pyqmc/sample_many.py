@@ -2,7 +2,7 @@ import numpy as np
 import pyqmc.mc as mc
 import scipy.stats
 import pyqmc.linemin as linemin
-import pyqmc.gpu as gpu 
+import pyqmc.gpu as gpu
 import os
 import h5py
 
@@ -15,6 +15,7 @@ def run_vmc_many(wfs, configs, energy, nreps=1, **kwargs):
 
 def hdf_save(hdf_file, weighted, unweighted, attr, configs):
     import pyqmc.hdftools as hdftools
+
     if hdf_file is not None:
         fulldata = dict(weighted=weighted, unweighted=unweighted)
         with h5py.File(hdf_file, "a") as hdf:
@@ -33,7 +34,7 @@ def extend_hdf(f, data):
         if k not in f.keys():
             f.create_dataset(
                 k, (0, *it.shape[1:]), maxshape=(None, *it.shape[1:]), dtype=it.dtype
-            )   
+            )
         n = it.shape[0]
         f[k].resize((f[k].shape[0] + n), axis=0)
         f[k][-n:] = it
@@ -43,7 +44,7 @@ def collect_overlap_data(wfs, configs, energy):
     r"""
     First implementation: just evaluate energy; future generalize to other accs
 
-    Sample distribution: sum of wf probabilities. 
+    Sample distribution: sum of wf probabilities.
 
     .. math:: \rho(\mathbf{R}) = \sum_i |\Psi_i(\mathbf{R})|^2
 
@@ -52,13 +53,13 @@ def collect_overlap_data(wfs, configs, energy):
     Expectation values
 
     .. math:: \frac{\langle{\Psi_i | \hat O | \Psi_j\rangle}}{N_iN_j} = \frac{1}{N_iN_j} \int d\mathbf{R} d\mathbf{R}' \Psi_i^*(\mathbf{R}) O(\mathbf{R}, \mathbf{R}') \Psi_j(\mathbf{R}') = \frac{1}{N_iN_j} \int d\mathbf{R} \frac{\Psi_i^*(\mathbf{R}) \Psi_j(\mathbf{R})}{\rho(\mathbf{R})} d\mathbf{R}' \frac{O(\mathbf{R}, \mathbf{R}') \Psi_j(\mathbf{R}')}{\Psi_j(\mathbf{R})} \rho(\mathbf{R})
-                
+
     .. math:: \frac{\langle{\Psi_i | \hat O | \Psi_j\rangle}}{N_iN_j} = \frac{1}{N_iN_j} \int d\mathbf{R} w_{ij}(\mathbf{R}) O_j^L(\mathbf{R}) \rho(\mathbf{R}) = \frac{1}{N_iN_j} \langle w_{ij}(\mathbf{R}) O_j^L(\mathbf{R})\rangle_{\mathjbf{R} ~ \rho}
     """
     phase, log_vals = [
         np.nan_to_num(np.array(x)) for x in zip(*[wf.value() for wf in wfs])
     ]
-    ref = np.max(log_vals, axis=0) # for numerical stability
+    ref = np.max(log_vals, axis=0)  # for numerical stability
     rho = np.mean(np.nan_to_num(np.exp(2 * (log_vals - ref))), axis=0)
     psi = phase * np.nan_to_num(np.exp(log_vals - ref))
 
@@ -91,8 +92,8 @@ def invert_list_of_dicts(A, asarray=True):
         return {k: np.asarray([a[k] for a in A]) for k in A[0].keys()}
     else:
         return {k: [a[k] for a in A] for k in A[0].keys()}
-    
-    
+
+
 def sample_overlap_worker(wfs, configs, tstep, nsteps, nblocks, energy):
     r"""Run nstep Metropolis steps to sample a distribution proportional to
     :math:`\sum_i |\Psi_i|^2`, where :math:`\Psi_i` = wfs[i]
@@ -105,7 +106,7 @@ def sample_overlap_worker(wfs, configs, tstep, nsteps, nblocks, energy):
         weighted.append(w)
         unweighted.append(u)
 
-    # here we modify the data so that weighted and unweighted are dictionaries of arrays 
+    # here we modify the data so that weighted and unweighted are dictionaries of arrays
     # Access as weighted[quantity][block, ...]
     weighted = invert_list_of_dicts(weighted)
     unweighted = invert_list_of_dicts(unweighted)
@@ -116,7 +117,7 @@ def sample_overlap_block(wfs, configs, tstep, nsteps, energy):
     for wf in wfs:
         wf.recompute(configs)
     weighted_block = {}
-    unweighted_block = {"acceptance": 0.}
+    unweighted_block = {"acceptance": 0.0}
     nconf, nelec = configs.configs.shape[:2]
 
     for n in range(nsteps):
@@ -144,7 +145,7 @@ def sample_overlap_block(wfs, configs, tstep, nsteps, energy):
             weights = np.exp(2 * (log_values - log_values[0]))
             weights /= weights.sum(axis=0)
 
-            ratio = t_prob * np.sum(np.abs(vals)**2 * weights, axis=0)
+            ratio = t_prob * np.sum(np.abs(vals) ** 2 * weights, axis=0)
             accept = ratio > np.random.rand(nconf)
             unweighted_block["acceptance"] += accept.mean() / nelec
 
@@ -183,11 +184,11 @@ def sample_overlap(
     npartitions=None,
 ):
     """ """
-    if client is None: # otherwise running in parallel
+    if client is None:  # otherwise running in parallel
         w, u, _ = sample_overlap_worker(wfs, configs, tstep, nsteps, nblocks, energy)
         hdf_save(hdf_file, w, u, dict(tstep=tstep), configs)
         return w, u, configs
-    
+
     if npartitions is None:
         npartitions = sum(client.nthreads().values())
 
@@ -230,6 +231,3 @@ def normalize(weighted, unweighted):
         avg[k] = np.mean(it, axis=0) / Nij
         error[k] = scipy.stats.sem(it, axis=0) / Nij
     return avg, error
-
-
-

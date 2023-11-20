@@ -303,5 +303,3 @@ def generate_quadrature_grids():
     qgrid[32] = (IABC, repeat("I", 5 / 168, 5 / 168, 27 / 840))
 
     return qgrid
-
-

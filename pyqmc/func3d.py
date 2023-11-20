@@ -138,7 +138,7 @@ def polypadegradvalue(r, beta, rcut):
 class PolyPadeFunction:
     r"""
 
-    .. math:: b(r) = \frac{1-p(z)}{1+\beta p(z)}, \quad z = r/r_{\rm cut} 
+    .. math:: b(r) = \frac{1-p(z)}{1+\beta p(z)}, \quad z = r/r_{\rm cut}
 
     where :math:`p(z) = 6z^2 - 8z^3 + 3z^4`
 
@@ -238,7 +238,7 @@ class PolyPadeFunction:
 
 class CutoffCuspFunction:
     r"""
-    .. math:: b(r) = -\frac{p(r/r_{\rm cut})}{1+\gamma*p(r/r_{\rm cut})} + \frac{1}{3+\gamma} 
+    .. math:: b(r) = -\frac{p(r/r_{\rm cut})}{1+\gamma*p(r/r_{\rm cut})} + \frac{1}{3+\gamma}
 
     where
     :math:`p(y) = y - y^2 + y^3/3`

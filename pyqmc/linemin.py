@@ -187,7 +187,10 @@ def line_minimization(
         step_data["nconfig"] = coords.configs.shape[0]
 
         if verbose:
-            print("descent en", data['total'], data['total_err'])
+            myround = lambda x: np.around(x, 6)
+            print(it, "descent en", myround(en), myround(en_err), end=" ")
+            print("estimated sigma ", myround(sigma), end=" ")
+            print("|grad|", myround(np.linalg.norm(pgrad)), flush=True)
 
         # Correlated sampling line minimization.
         steps = np.linspace(-steprange / (npts - 2), steprange, npts)

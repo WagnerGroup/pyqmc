@@ -129,9 +129,9 @@ class Slater:
             f["mcscf/nelecas"] = list(mc.nelecas)
             f["mcscf/ci"] = mc.ci
 
-    Note that when using CASCI/CASSCF, the ``mc`` object needs to have these four attributes: 
+    Note that when using CASCI/CASSCF, the ``mc`` object needs to have these four attributes:
         * ``nelecas``: list of 2 ints
-        * ``ci``: :math:`(N_{\rm det}, N_{\rm det})` matrix of ci coefficients 
+        * ``ci``: :math:`(N_{\rm det}, N_{\rm det})` matrix of ci coefficients
         * ``ncas``: int
         * ``mo_coeff``: :math:`(N_{\rm AO}, N_{\rm AO})` array
 

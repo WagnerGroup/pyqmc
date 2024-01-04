@@ -314,8 +314,7 @@ def objective_function_derivative(
         energy_weights = np.ones(nwf) / nwf
 
     return [
-        energy_weights[i] 
-        * terms[("dp_energy", i)][:, i, i]
+        energy_weights[i] * terms[("dp_energy", i)][:, i, i]
         + overlap_penalty
         * 2
         * np.sum(np.triu(terms[("dp_overlap", i)] * terms["overlap"], 1), axis=(1, 2))

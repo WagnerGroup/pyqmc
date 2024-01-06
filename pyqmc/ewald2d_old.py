@@ -168,34 +168,6 @@ class Ewald:
         return cij
 
     def ewald_electron(self, configs):
-        r"""
-        Compute the Ewald sum for e-e and e-ion
-
-        Note: We ignore the constant term :math:`\frac{N_e}{2} C_{\rm self\ image}` in the real-space e-e sum corresponding to the interaction of an electron with its own image in other cells.
-
-        Real space e-e:
-
-        .. math:: E_{\rm real\ space}^{ee} = \sum_{\vec{n}} \sum_{i<j}^{N_e} \frac{{\rm erfc}(\alpha r_{ijn})}{r_{ijn}}
-
-        Real space e-i:
-
-        .. math:: E_{\rm real\ space}^{e\text{-ion}} = {\sum_{\vec{n}}} \sum_{i=1}^{N_e} \sum_{I=1}^{N_{ion}} -Z_I \frac{{\rm erfc}(\alpha r_{iIn})}{r_{iIn}}
-
-        Reciprocal space e-e:
-
-        .. math:: E_{\rm reciprocal\ space}^{ee} = \sum_{\vec{G}>0} W_G \left| \sum_{i=1}^{N_e} e^{-i\vec{k}\cdot\vec{x}_i} \right|^2
-
-        Reciprocal space e-i:
-
-        .. math:: E_{\rm reciprocal\ space}^{e\text{-ion}} = \sum_{\vec{G}>0} W_G {\rm Re} \left[ 2 \sum_{i=1}^{N_e} \sum_{I=1}^{N_{ion}} -Z_I e^{-i\vec{k}\cdot\vec{x}_i} e^{i\vec{k}\cdot\vec{x}_I} \right]
-
-        :parameter configs: electron positions (walkers)
-        :type configs: (nconf, nelec, 3) PeriodicConfigs object
-        :returns:
-            * ee: electron-electron part
-            * ei: electron-ion part
-        :rtype: float, float
-        """
         nconf, nelec, ndim = configs.configs.shape
 
         # Real space electron-ion part

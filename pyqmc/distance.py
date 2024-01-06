@@ -38,6 +38,7 @@ class RawDistance:
             vs.append(self.dist_i(configs[:, i + 1:, :], configs[:, i, :]))
             ij.extend([(i, j) for j in range(i + 1, n)])
         vs = np.concatenate(vs, axis=1)
+        ij = np.asarray(ij)
         return vs, ij
 
     def pairwise(self, config1, config2):

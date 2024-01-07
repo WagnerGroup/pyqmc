@@ -13,9 +13,9 @@ class Ewald:
         self.cell_volume = gpu.cp.linalg.det(self.latvec)
         self.recvec = gpu.cp.linalg.inv(self.latvec).T
         self.set_alpha()
+        self.set_constants()
         self.set_lattice_displacements(nlatvec)
         self.set_gpoints_gweight(gmax)
-        self.set_constants()
 
     def set_alpha(self):
         smallest_height = gpu.cp.amin(1 / gpu.cp.linalg.norm(self.recvec, axis=1))

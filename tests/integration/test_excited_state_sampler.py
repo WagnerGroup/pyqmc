@@ -2,6 +2,7 @@
 # import pyscf.pbc
 import numpy as np
 from pyscf.fci.addons import overlap
+import pyscf.ao2mo as ao2mo
 import pyqmc.api as pyq
 import pyqmc.accumulators
 from pyqmc.optimize_excited_states import (
@@ -16,7 +17,8 @@ import copy
 
 def take_derivative_casci_energy(mc, civec, delta=1e-4):
     h1e = mc.get_h1cas()[0]
-    eri = mc.ao2mo()
+    mo_coeff = mc.mo_coeff[:, mc.ncore : mc.ncore + mc.ncas]
+    eri = ao2mo.full(mc.mol, mo_coeff)
     enbase = mc.fcisolver.energy(h1e=h1e, eri=eri, fcivec=civec, norb=2, nelec=(1, 1))
     en_derivative = []
     for i in range(civec.shape[0]):
@@ -26,14 +28,13 @@ def take_derivative_casci_energy(mc, civec, delta=1e-4):
             # citest /= np.linalg.norm(citest)
             entest = mc.fcisolver.energy(
                 h1e=h1e, eri=eri, fcivec=citest, norb=2, nelec=(1, 1)
-            ) / np.sum(citest ** 2)
+            ) / np.sum(citest**2)
             derivative = (entest - enbase) / delta
             en_derivative.append(derivative)
     return np.asarray(en_derivative).reshape(civec.shape)
 
 
 def test_sampler(H2_casci):
-
     mol, mf, mc = H2_casci
 
     ci_energies = mc.e_tot
@@ -92,12 +93,15 @@ def test_sampler(H2_casci):
         - overlap_tolerance
     )
     derivative = objective_function_derivative(
-        terms, overlap_penalty=1.0, norm_penalty=1.0, offdiagonal_energy_penalty=0.1, lagrange_multiplier=0.1
+        terms,
+        overlap_penalty=1.0,
+        norm_penalty=1.0,
+        offdiagonal_energy_penalty=0.1,
+        lagrange_multiplier=0.1,
     )
 
 
 def test_correlated_sampling(H2_casci):
-
     mol, mf, mc = H2_casci
 
     ci_energies = mc.e_tot

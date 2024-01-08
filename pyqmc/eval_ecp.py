@@ -23,7 +23,7 @@ def compute_tmoves(mol, configs, wf, e, threshold, tau, naip=None):
     """
     For a given electron, evaluate all possible t-moves.
 
-    returns a dictionary: 
+    returns a dictionary:
        ratio: psi(R')/psi(R) for each move
        weight: The symmetric part of Eqn 31 in Anderson and Umrigar (i.e., ratio * weight gives the amplitude for the t-move)
        configs: positions of the move
@@ -236,9 +236,10 @@ def get_rot(nconf, naip):
         rot = scipy.spatial.transform.Rotation.random(nconf).as_matrix()
     else:
         rot = np.zeros((0, 3, 3))
+    quadrature_grid = generate_quadrature_grids()
 
     if naip not in quadrature_grid.keys():
-        raise ValueError("Do not support naip!= 6 or 12")
+        raise ValueError(f"Possible AIPs are one of {quadrature_grid.keys()}")
     points, weights = quadrature_grid[naip]
     rot_vec = np.einsum("jkl,ik->jil", rot, points)
     return weights, rot_vec
@@ -302,6 +303,3 @@ def generate_quadrature_grids():
     qgrid[32] = (IABC, repeat("I", 5 / 168, 5 / 168, 27 / 840))
 
     return qgrid
-
-
-quadrature_grid = generate_quadrature_grids()

@@ -12,7 +12,7 @@ import uuid
 
 @pytest.mark.slow
 def test():
-    """ Ensure that DMC obtains the exact result for a hydrogen atom """
+    """Ensure that DMC obtains the exact result for a hydrogen atom"""
     from pyscf import gto, scf
     from pyqmc.dmc import limdrift
     import pandas as pd

@@ -28,9 +28,7 @@ def append_hdf(f, data):
             )
         currshape = f[k].shape
         f[k].resize((currshape[0] + 1, *currshape[1:]))
-        f[k][
-            -1,
-        ] = it
+        f[k][-1,] = it
 
 
 if __name__ == "__main__":

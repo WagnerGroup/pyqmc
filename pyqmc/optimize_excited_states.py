@@ -103,13 +103,7 @@ def invert_list_of_dicts(A):
     {'A':[1,3], 'B':[2,5]}.
     If not all keys are present in all lists, error.
     """
-    final_dict = {}
-    for k in A[0].keys():
-        final_dict[k] = []
-    for a in A:
-        for k, v in a.items():
-            final_dict[k].append(v)
-    return final_dict
+    return {k: [a[k] for a in A] for k in A[0].keys()}
 
 
 def sample_overlap_worker(
@@ -206,7 +200,7 @@ def sample_overlap(
     nblocks=10,
     tstep=0.5,
     client=None,
-    npartitions=0,
+    npartitions=None,
 ):
     """ """
     if client is None:
@@ -302,7 +296,12 @@ def collect_terms(avg, error):
 
 
 def objective_function_derivative(
-    terms, overlap_penalty, norm_penalty, offdiagonal_energy_penalty, lagrange_multiplier
+    terms,
+    overlap_penalty,
+    norm_penalty,
+    offdiagonal_energy_penalty,
+    lagrange_multiplier,
+    energy_weights=None,
 ):
     """
     terms are output from generate_terms
@@ -311,14 +310,18 @@ def objective_function_derivative(
     offdiagonal_energy_penalty is the penalty on the off-diagonal matrix elements.
     """
     nwf = terms["energy"].shape[0]
+    if energy_weights is None:
+        energy_weights = np.ones(nwf) / nwf
 
     return [
-        terms[("dp_energy", i)][:, i, i]
+        energy_weights[i] * terms[("dp_energy", i)][:, i, i]
         + overlap_penalty
         * 2
         * np.sum(np.triu(terms[("dp_overlap", i)] * terms["overlap"], 1), axis=(1, 2))
         + norm_penalty * 2 * (terms["norm"][i] - 1) * terms[("dp_norm", i)]
-        + np.sum(np.triu(lagrange_multiplier*terms[("dp_overlap", i)], 1), axis=(1, 2))
+        + np.sum(
+            np.triu(lagrange_multiplier * terms[("dp_overlap", i)], 1), axis=(1, 2)
+        )
         + offdiagonal_energy_penalty
         * 2.0
         * np.sum(np.triu(terms["energy"] * terms[("dp_energy", i)], 1), axis=(1, 2))
@@ -331,7 +334,6 @@ import h5py
 
 
 def hdf_save(hdf_file, data, attr, wfs):
-
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
             if "energy" not in hdf.keys():
@@ -445,6 +447,7 @@ def find_move_from_line(
     norm_penalty,
     offdiagonal_energy_penalty,
     lagrange_multiplier,
+    energy_weights=None,
     max_norm_deviation=0.2,
 ):
     """
@@ -456,6 +459,9 @@ def find_move_from_line(
     """
     N = np.abs(data["overlap"].diagonal(axis1=1, axis2=2))
     Nij = np.asarray([np.sqrt(np.outer(a, a)) for a in N])
+    nwf = data["energy"].shape[-1]
+    if energy_weights is None:
+        energy_weights = np.ones(nwf) / nwf
 
     energy = data["energy"] / Nij
     overlap = data["overlap"]
@@ -464,9 +470,9 @@ def find_move_from_line(
     # print("offdiagonal_energy", energy)
     # print("norm",np.einsum('ijj->i', (overlap-1)**2 ))
     cost = (
-        np.sum(energy.diagonal(axis1=1, axis2=2), axis=1)
+        np.einsum("i,nii->n", energy_weights, energy)
         + overlap_penalty * np.sum(np.triu(overlap**2, 1), axis=(1, 2))
-        + np.sum(lagrange_multiplier*np.triu(overlap, 1), axis=(1, 2))
+        + np.sum(lagrange_multiplier * np.triu(overlap, 1), axis=(1, 2))
         + offdiagonal_energy_penalty * np.sum(np.triu(energy**2, 1), axis=(1, 2))
         + norm_penalty * np.einsum("ijj->i", (overlap - 1) ** 2)
     )
@@ -489,12 +495,13 @@ def optimize(
     transforms,
     hdf_file,
     overlap_penalty=0.5,
-    lagrange_multiplier = 0.0,
+    lagrange_multiplier=0.0,
     nsteps=40,
     max_tstep=0.1,
     condition_epsilon=0.1,
     norm_penalty=0.01,
     offdiagonal_energy_penalty=0.1,
+    energy_weights=None,
     vmc_options=None,
     client=None,
     npartitions=0,
@@ -530,7 +537,12 @@ def optimize(
         print("norm", terms["norm"])
         print("overlap", terms["overlap"][0, 1])
         derivative = objective_function_derivative(
-            terms, overlap_penalty, norm_penalty, offdiagonal_energy_penalty, lagrange_multiplier
+            terms,
+            overlap_penalty,
+            norm_penalty,
+            offdiagonal_energy_penalty,
+            lagrange_multiplier,
+            energy_weights,
         )
         derivative_conditioned = [
             d / (terms[("condition", i)] + condition_epsilon)
@@ -560,7 +572,8 @@ def optimize(
             overlap_penalty,
             norm_penalty,
             offdiagonal_energy_penalty,
-            lagrange_multiplier
+            lagrange_multiplier,
+            energy_weights,
         )
         print("line search", x, cost)
         print("choosing to move", xmin)
@@ -592,6 +605,7 @@ def optimize(
                 "overlap_penalty": overlap_penalty,
                 "norm_penalty": norm_penalty,
                 "offdiagonal_energy_penalty": offdiagonal_energy_penalty,
+                "energy_weights": energy_weights,
             },
             wfs,
         )

@@ -60,6 +60,16 @@ Three body jastrow factor
 
 .. automodule:: pyqmc.three_body_jastrow
    :members:
+
+
+----------------------
+Geminal jastrow factor
+----------------------
+
+.. automodule:: pyqmc.geminaljastrow
+   :members:
+
+
 ----------------------
 Multipy wave function
 ----------------------

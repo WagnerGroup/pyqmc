@@ -120,10 +120,26 @@ class Ewald:
 
     def energy(self, configs):
         nelec = configs.configs.shape[1]
+        # ii_const = self.ewald_ion_ion_charge() + self.ewald_ion_ion_real_self()
+        # ei_const = self.ewald_elec_ion_charge(nelec)
+        # ee_const = self.ewald_elec_elec_charge(nelec) + self.ewald_elec_elec_real_self(nelec)
+        # ii = self.ewald_ion_ion_real_cross() + self.ewald_ion_ion_recip() + ii_const
+        # ee = self.ewald_elec_elec_real_cross(configs) + self.ewald_elec_elec_recip(configs) + ee_const
+        # ei = self.ewald_elec_ion_real_cross(configs) + self.ewald_elec_ion_recip(configs) + ei_const
+
         ii_const = self.ewald_ion_ion_charge() + self.ewald_ion_ion_real_self()
-        ei_const = self.ewald_elec_ion_charge(nelec)
+        ii_real_cross = self.ewald_ion_ion_real_cross()
+        ii_recip = self.ewald_ion_ion_recip()
+        ii = ii_real_cross + ii_recip + ii_const
+
         ee_const = self.ewald_elec_elec_charge(nelec) + self.ewald_elec_elec_real_self(nelec)
-        ii = self.ewald_ion_ion_real_cross() + self.ewald_ion_ion_recip() + ii_const
-        ee = self.ewald_elec_elec_real_cross(configs) + self.ewald_elec_elec_recip(configs) + ee_const
-        ei = self.ewald_elec_ion_real_cross(configs) + self.ewald_elec_ion_recip(configs) + ei_const
+        ee_real_cross = self.ewald_elec_elec_real_cross(configs)
+        ee_recip = self.ewald_elec_elec_recip(configs)
+        ee = ee_real_cross + ee_recip + ee_const
+
+        ei_const = self.ewald_elec_ion_charge(nelec)
+        ei_real_cross = self.ewald_elec_ion_real_cross(configs)
+        ei_recip = self.ewald_elec_ion_recip(configs)
+        ei = ei_real_cross + ei_recip + ei_const
+        sum_e = ee + ei + ii
         return ee, ei, ii

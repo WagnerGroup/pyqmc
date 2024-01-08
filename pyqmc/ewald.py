@@ -163,7 +163,6 @@ class Ewald:
         ii_sum = (self.i_sum**2 - self.ii_sum2) / 2
         self.ijconst = -np.pi / (cellvolume * self.alpha**2)
         self.squareconst = -self.alpha / np.sqrt(np.pi) + self.ijconst / 2
-
         self.ii_const = ii_sum * self.ijconst + self.ii_sum2 * self.squareconst
         self.e_single_test = -self.i_sum * self.ijconst + self.squareconst
         self.ion_ion = self.ewald_ion()
@@ -174,9 +173,11 @@ class Ewald:
         # xc_correction = lambda ne: cexc / rs(ne)
 
     def ee_const(self, ne):
+        ee_const_test = ne * (ne - 1) / 2 * self.ijconst + ne * self.squareconst
         return ne * (ne - 1) / 2 * self.ijconst + ne * self.squareconst
 
     def ei_const(self, ne):
+        ei_const_test = -ne * self.i_sum * self.ijconst
         return -ne * self.i_sum * self.ijconst
 
     def e_single(self, ne):
@@ -285,7 +286,7 @@ class Ewald:
 
     def reciprocal_space_electron(self, configs):
         # Reciprocal space electron-electron part
-        e_GdotR = gpu.cp.einsum("hik,jk->hij", gpu.cp.asarray(configs), self.gpoints) # (nconf, npairs, nk)
+        e_GdotR = gpu.cp.einsum("hik,jk->hij", gpu.cp.asarray(configs), self.gpoints) # (nconf, nelec, nk)
 
         gweight = self.gweight
         sum_e_sin = gpu.cp.sin(e_GdotR).sum(axis=1) # (nconf, nk)

@@ -1,5 +1,8 @@
 import numpy as np
 import pyqmc.ewald
+import pyqmc.ewald2d
+import pyqmc.ewald2d_old
+import pyqmc.ewald3d
 from pyqmc.coord import PeriodicConfigs
 from pyqmc.supercell import get_supercell
 from pyscf.pbc import gto, scf
@@ -7,7 +10,10 @@ from pyscf.pbc import gto, scf
 
 def get_ewald_energy(cell, S, configs):
     supercell = get_supercell(cell, S)
-    ewald = pyqmc.ewald.Ewald(supercell)
+    if supercell.dimension == 2:
+        ewald = pyqmc.ewald2d.Ewald(supercell)
+    else:
+        ewald = pyqmc.ewald3d.Ewald(supercell)
     configs = PeriodicConfigs(configs, supercell.lattice_vectors())
     ee, ei, ii = ewald.energy(configs)
     etot = ee + ei + ii
@@ -55,7 +61,7 @@ def test_ewald_NaCl_2d():
         basis="sto-3g",
         unit="bohr",
         spin=1,
-        dimension=2,
+        dimension=2, # specify 2 dimensions to use the 2d ewald formula
         low_dim_ft_type='inf_vacuum'
     )
     cell.spin = 1
@@ -64,6 +70,27 @@ def test_ewald_NaCl_2d():
 
     S = np.eye(3)
     configs = np.asarray([[[1, 0, 0]]])
+    etot = get_ewald_energy(cell, S, configs)
+    print("correct answer: ", nacl_answer)
+    assert np.abs(etot + nacl_answer) < 1e-4
+
+def test_ewald_NaCl_slab():
+    nacl_answer = 1.7491
+    Lz = 30 # large cell height to simulate 2D
+    cell = gto.Cell(
+        atom="""H 0 0 0; H 1 0 1; H 1 0 -1""",
+        basis="sto-3g",
+        unit="bohr",
+        spin=1,
+        dimension=2,
+        low_dim_ft_type='inf_vacuum'
+    )
+    cell.spin = 1
+    cell.build(a=np.array([[1, 1, 0], [-1, 1, 0], [0, 0, Lz]]), spin=1)
+    cell.spin = 1 # has to build twice to enable protected attributes in `cell`
+
+    S = np.eye(3)
+    configs = np.asarray([[[1, 0, 0], [1, 1, 1], [1, 1, -1]]])
     etot = get_ewald_energy(cell, S, configs)
     print("correct answer: ", nacl_answer)
     assert np.abs(etot + nacl_answer) < 1e-4
@@ -156,5 +183,9 @@ def test_ewald_shifted():
 if __name__ == "__main__":
     import cProfile
 
-    cProfile.run("test_ewald_NaCl()", "ewaldtest.prof")
-    cProfile.run("test_ewald_NaCl_2d()", "ewaldtest.prof")
+    # cProfile.run("test_ewald_NaCl()", "ewaldtest.prof")
+    # cProfile.run("test_ewald_NaCl_2d()", "ewaldtest.prof")
+
+    # test_ewald_NaCl()
+    test_ewald_NaCl_2d()
+    # test_ewald_NaCl_slab()

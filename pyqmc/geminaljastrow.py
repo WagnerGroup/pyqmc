@@ -14,7 +14,7 @@ class GeminalJastrow:
 
     We can split the sum over all :math:`i, j` into two sums over all pairs :math:`i<j` (the second term exchanges all pairs of particles from the first, :math:`\mathbf{r}_i \leftrightarrow \mathbf{r}_j`)
 
-    .. math:: J_G(\mathbf{R}) = 
+    .. math:: J_G(\mathbf{R}) =
         \underbrace{\sum_{i< j} \sum_{mn} \tilde g_{mn} \chi_m(\mathbf{r}_i) \chi_n(\mathbf{r}_j)}_{J_G^1(\mathbf{R})}
       + \underbrace{\sum_{i< j} \sum_{mn} \tilde g_{mn} \chi_m(\mathbf{r}_j) \chi_n(\mathbf{r}_i)}_{J_G^2(\mathbf{R})}
 
@@ -22,7 +22,7 @@ class GeminalJastrow:
 
     .. math:: J_G^2(\mathbf{R}) = \sum_{i< j} \sum_{mn} \tilde g_{nm} \chi_m(\mathbf{r}_i) \chi_n(\mathbf{r}_j),
 
-    showing that exchanging two electrons is equivalent to exchanging the indices of :math:`\tilde g_{mn}`. 
+    showing that exchanging two electrons is equivalent to exchanging the indices of :math:`\tilde g_{mn}`.
     The coefficient matrix :math:`\tilde g_{mn}` has extra degrees of freedom: only the symmetric part contributes.
 
     .. math:: J_G(\mathbf{R}) = \sum_{i< j} \sum_{mn} (\tilde g_{mn}+\tilde g_{nm}) \chi_m(\mathbf{r}_i) \chi_n(\mathbf{r}_j)
@@ -49,7 +49,7 @@ class GeminalJastrow:
             self.orbitals = orbitals
         randpos = np.random.random((1, 3))
         dim = mol.eval_gto("GTOval_cart", randpos).shape[-1]
-        self.parameters = {"gcoeff": gpu.cp.zeros(int(dim*(dim+1)/2))}
+        self.parameters = {"gcoeff": gpu.cp.zeros(int(dim * (dim + 1) / 2))}
         self.dtype = float
         self.optimize = "greedy"
 
@@ -66,7 +66,7 @@ class GeminalJastrow:
         triu_inds = gpu.cp.triu_indices(aos.shape[-1])
         self.gcoeff[triu_inds] = self.parameters["gcoeff"]
         self.gcoeff = self.gcoeff + self.gcoeff.T
-        
+
         return self.value()
 
     def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
@@ -104,7 +104,7 @@ class GeminalJastrow:
         .. math:: \sum_{m\le n} \sum_{i<e} g_{mn} \chi_m(\mathbf{r}_e) \chi_n(\mathbf{r}_i)
                              + \sum_{e<j} g_{mn} \chi_n(\mathbf{r}_e) \chi_m(\mathbf{r}_j)
 
-        For derivatives, 
+        For derivatives,
 
         .. math:: \sum_{m\le n} \sum_{i<e} g_{mn} \nabla\chi_m(\mathbf{r}_e) \chi_n(\mathbf{r}_i)
                              + \sum_{e<j} g_{mn} \nabla\chi_n(\mathbf{r}_e) \chi_m(\mathbf{r}_j)
@@ -184,7 +184,7 @@ class GeminalJastrow:
             "cim, cjn, ij-> cmn", self.ao_val, self.ao_val, mask, optimize=self.optimize
         )
         coeff_grad = coeff_grad + coeff_grad.transpose(0, 2, 1)
-        tui = gpu.cp.triu_indices(coeff_grad.shape[-1]) # select only m <= n
+        tui = gpu.cp.triu_indices(coeff_grad.shape[-1])  # select only m <= n
         return {"gcoeff": coeff_grad[:, tui[0], tui[1]]}
 
     def testvalue(self, e, epos, mask=None):

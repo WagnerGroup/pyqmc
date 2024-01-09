@@ -225,6 +225,8 @@ def vmc(
 
     df = []
 
+    if blockoffset >= nblocks:
+        logger.warning(f"blockoffset {blockoffset} >= nblocks {nblocks}; no steps will be run.")
     for block in range(blockoffset, nblocks):
         if verbose:
             print(f"-", end="", flush=True)

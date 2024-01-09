@@ -373,6 +373,9 @@ def rundmc(
     vmc_warmup=10,
     branchcut_start=10,
     feedback=1.0,
+    branchtime=None,
+    stepoffset=None,
+    nsteps=None,
 ):
     """
     Run DMC
@@ -404,6 +407,17 @@ def rundmc(
       weights: The final weights from this calculation
     :rtype: list of dictionaries, pyqmc.coord.Configs, ndarray
     """
+    # Deprecated backwards compatibility
+    if branchtime is not None:
+        logging.warning("rundmc kwarg `branchtime` is deprecated. Use `nsteps_per_block` instead. Overriding `nsteps_per_block` if given.")
+        nsteps_per_block = branchtime
+    if nsteps is not None:
+        logging.warning("rundmc kwarg `nsteps` is deprecated. Use `nblocks` and `nsteps_per_block` instead. Overriding nblocks if given.")
+        nblocks = nsteps // nsteps_per_block
+    if stepoffset is not None:
+        logging.warning("rundmc kwarg `stepoffset` is deprecated. Use `blockoffset` and `nsteps_per_block` instead. Overriding blockoffset if given.")
+        blockoffset = stepoffset // nsteps_per_block
+
     # Don't continue onto a file that's already there.
     if continue_from is not None and hdf_file is not None and os.path.isfile(hdf_file):
         raise RuntimeError(
@@ -418,7 +432,12 @@ def rundmc(
     # to continue from, if given.
     if continue_from is not None:
         with h5py.File(continue_from, "r") as hdf:
-            blockoffset = hdf["block"][-1] + 1
+            if "block" not in hdf.keys() and "step" in hdf.keys() :
+                logging.warning("Warning: found deprecated key `step` in the restart file. In future versions, `block` key will be expected. All data from this run will be indexed by the key `block`.")
+                blockoffset = hdf["step"][-1] // nsteps_per_block + 1
+            else:
+                blockoffset = hdf["block"][-1] + 1
+                
             configs.load_hdf(hdf)
             weights = np.array(hdf["weights"])
             if "e_trial" not in hdf.keys():
@@ -454,6 +473,8 @@ def rundmc(
         weights = np.ones(nconfig)
 
     df = []
+    if blockoffset >= nblocks:
+        logger.warning(f"blockoffset {blockoffset} >= nblocks {nblocks}; no steps will be run.")
     for block in range(blockoffset, nblocks):
         if client is None:
             df_, configs, weights = dmc_propagate(

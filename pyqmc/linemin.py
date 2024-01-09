@@ -200,6 +200,8 @@ def line_minimization(
     x0 = pgrad_acc.transform.serialize_parameters(wf.parameters)
 
     df = []
+    if iteration_offset >= max_iterations:
+        logger.warning(f"iteration_offset {iteration_offset} >= max_iterations {max_iterations}; no steps will be run.")
     # Gradient descent cycles
     for it in range(iteration_offset, max_iterations):
         # Calculate gradient accurately

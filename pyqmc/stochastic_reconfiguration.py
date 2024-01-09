@@ -106,9 +106,12 @@ class StochasticReconfiguration:
         invSij = np.linalg.inv(Sij + self.eps * np.eye(Sij.shape[0]))
         v = np.einsum("ij,j->i", invSij, pgrad)
         dp = [step*v for step in steps]
+        report = {'pgrad': pgrad,
+                  'SRdot': np.dot(pgrad, v)/(np.linalg.norm(v)*np.linalg.norm(pgrad)),   } 
+        
         if verbose:
-            print("SR move norm: ", np.linalg.norm(v))
-            print("Dot product between gradient and SR step: ", np.dot(pgrad, v)/(np.linalg.norm(v)*np.linalg.norm(pgrad)))
-        return dp 
+            print("Gradient norm: ", np.linalg.norm(pgrad))
+            print("Dot product between gradient and SR step: ", report['SRdot'])
+        return dp, report
 
 

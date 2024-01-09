@@ -190,15 +190,13 @@ def line_minimization(
         if verbose:
             print("descent en", data['total'], data['total_err'])
 
-        xfit = []
-        yfit = []
-
         # Calculate samples to fit.
         # include near zero in the fit, and go backwards as well
         # We don't use the above computed value because we are
         # doing correlated sampling.
         steps = np.linspace(-steprange / (npts - 2), steprange, npts)
-        params = [x0 + dp for dp in pgrad_acc.delta_p(steps, data, verbose=True)]
+        dps, update_report = pgrad_acc.delta_p(steps, data, verbose=True)
+        params = [x0 + dp for dp in dps]
         stepsdata = correlated_compute(
             wf,
             coords,
@@ -211,13 +209,12 @@ def line_minimization(
         w = stepsdata["weight"]
         w = w / np.mean(w, axis=1, keepdims=True)
         en = np.real(np.mean(stepsdata["total"] * w, axis=1))
-        yfit.extend(en)
-        xfit.extend(steps)
-        est_min = stable_fit(xfit, yfit)
-        x0 = pgrad_acc.delta_p([est_min], data, verbose=False)[0] + x0
 
-        step_data["tau"] = xfit
-        step_data["yfit"] = yfit
+        est_min = stable_fit(steps, en)
+        x0 = pgrad_acc.delta_p([est_min], data, verbose=False)[0][0] + x0
+
+        step_data["tau"] = steps
+        step_data["yfit"] = en
         step_data["est_min"] = est_min
 
         opt_hdf(

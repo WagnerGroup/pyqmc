@@ -1,8 +1,15 @@
 import pyscf
 import pyscf.pbc
 import pyscf.mcscf
+import pyscf.fci
 import h5py
 import json
+import numpy as np
+import pyqmc.determinant_tools as determinant_tools
+import pyqmc.orbitals as orbitals
+import pyqmc.supercell as supercell
+import pyqmc.twists as twists
+import pyqmc.orbitals
 
 
 def recover_pyscf(chkfile, ci_checkfile=None, cancel_outputs=True):
@@ -75,3 +82,148 @@ def recover_pyscf(chkfile, ci_checkfile=None, cancel_outputs=True):
 
         return mol, mf, mc
     return mol, mf
+
+
+def orbital_evaluator_from_pyscf(
+    mol, mf, mc=None, twist=0, determinants=None, tol=None
+):
+    """
+    mol: A Mole object
+    mf: a pyscf mean-field object
+    mc: a pyscf multiconfigurational object. Supports HCI and CAS
+    twist: the twist of the calculation (units?)
+    determinants: A list of determinants suitable to pass into create_packed_objects
+    tol: smallest determinant weight to include in the wave function.
+
+    You cannot pass both mc/tol and determinants.
+
+    :returns:
+        * detwt: array of weights for each determinant
+        * occup: which orbitals go in which determinants
+        * map_dets: given a determinant in detwt, which determinant in occup it corresponds to
+        * an orbital evaluator chosen based on the inputs.
+    """
+
+    periodic = hasattr(mol, "a")
+    f_max_orb = lambda a: int(np.max(a, initial=0)) + 1 if len(a) > 0 else 0
+    _mo_coeff = mc.mo_coeff if hasattr(mc, "mo_coeff") else mf.mo_coeff
+    checkshape = _mo_coeff[0][0].shape if periodic else _mo_coeff[0].shape
+    if len(checkshape) == 1:
+        _mo_coeff = [_mo_coeff, _mo_coeff]
+
+    if determinants is None:
+        determinants = determinants_from_pyscf(mol, mf, mc=mc, tol=tol)
+    if periodic:
+        if not hasattr(mol, "original_cell"):
+            mol = supercell.get_supercell(mol, np.eye(3))
+        if not hasattr(mf, "kpts"):
+            mf = pyscf.pbc.scf.addons.convert_to_khf(mf)
+        kinds = twists.create_supercell_twists(mol, mf)['primitive_ks'][twist]
+        if len(kinds) != mol.scale:
+            raise ValueError(
+                f"Found {len(kinds)} k-points but should have found {mol.scale}."
+            )
+        kpts = mf.kpts[kinds]
+
+        max_orb = [[[f_max_orb(k) for k in s] for s in det] for wt, det in determinants]
+        max_orb = np.amax(max_orb, axis=0)
+        mo_coeff = [[_mo_coeff[s][k][:, 0 : max_orb[s][k]] for k in kinds] for s in [0, 1]]
+
+        evaluator = orbitals.PBCOrbitalEvaluatorKpoints(mol, mo_coeff, kpts)
+        determinants = determinant_tools.flatten_determinants(determinants, max_orb, kinds)
+    else:
+        max_orb = [[f_max_orb(s) for s in det] for wt, det in determinants]
+        max_orb = np.amax(max_orb, axis=0)
+        mo_coeff = [_mo_coeff[spin][:, 0 : max_orb[spin]] for spin in [0, 1]]
+        evaluator = orbitals.MoleculeOrbitalEvaluator(mol, mo_coeff)
+
+    detcoeff, occup, det_map = determinant_tools.create_packed_objects(
+        determinants, tol=tol
+    )
+    return detcoeff, occup, det_map, evaluator
+
+
+def determinants_from_pyscf(mol, mf, mc=None, tol=-1):
+    periodic = hasattr(mol, "a")
+    if mc is None:
+        determinants = single_determinant_from_mf(mf)
+    elif periodic:
+        determinants = pbc_determinants_from_casci(mc, cutoff=tol)
+
+    if mc is not None and not periodic:
+        determinants = interpret_ci(mc, tol)
+    return determinants
+
+
+def single_determinant_from_mf(mf, weight=1.):
+    """
+    Creates a determinant list for a single determinant from SCF object
+    """
+    mf = mf.to_uhf()
+    if hasattr(mf, "kpts"):
+        occupation = [[list(np.nonzero(k > 0.5)[0]) for k in s] for s in mf.mo_occ]
+    else:
+        occupation = [list(np.nonzero(s > 0.5)[0]) for s in mf.mo_occ]
+    return [(weight, occupation)]
+
+
+def pbc_determinants_from_casci(mc, orbitals=None, cutoff=0.05):
+    if hasattr(mc.ncore, "__len__"):
+        nocc = [c + e for c, e in zip(mc.ncore, mc.nelecas)]
+    else:
+        nocc = [mc.ncore + e for e in mc.nelecas]
+    if orbitals is None:
+        orbitals = np.arange(mc.ncore, mc.ncore + mc.ncas)
+    if not hasattr(orbitals[0], "__len__"):
+        orbitals = [orbitals, orbitals]
+    deters = pyscf.fci.addons.large_ci(mc.ci, mc.ncas, mc.nelecas, tol=-1)
+    determinants = []
+    for x in deters:
+        if abs(x[0]) > cutoff:
+            allorbs = [
+                [translate_occ(x[1], orbitals[0], nocc[0])],
+                [translate_occ(x[2], orbitals[1], nocc[1])],
+            ]
+            determinants.append((x[0], allorbs))
+    return determinants
+
+
+def translate_occ(x, orbitals, nocc):
+    a = determinant_tools.binary_to_occ(x, 0)[0]
+    orbitals_without_active = list(range(nocc))
+    for o in orbitals:
+        if o in orbitals_without_active:
+            orbitals_without_active.remove(o)
+    return orbitals_without_active + [orbitals[i] for i in a]
+
+
+def interpret_ci(mc, tol):
+    """
+    Copies over determinant coefficients and MO occupations
+    for a multi-configuration calculation mc.
+
+    returns:
+    detwt: array of weights for each determinant
+    occup: which orbitals go in which determinants
+    map_dets: given a determinant in detwt, which determinant in occup it corresponds to
+    """
+    ncore = mc.ncore if hasattr(mc, "ncore") else 0
+    # find multi slater determinant occupation
+    if hasattr(mc, "_strs"):  # if this is a HCI object, it will have _strs
+        deters = deters_from_hci(mc, tol)
+    else:
+        deters = pyscf.fci.addons.large_ci(mc.ci, mc.ncas, mc.nelecas, tol=-1)
+    return determinant_tools.reformat_binary_dets(deters, ncore=ncore, tol=tol)
+
+
+def deters_from_hci(mc, tol):
+    bigcis = np.abs(mc.ci) > tol
+    nstrs = int(mc._strs.shape[1] / 2)
+    deters = []
+    # In pyscf, the first n/2 strings represent the up determinant and the second
+    # represent the down determinant.
+    for c, s in zip(mc.ci[bigcis], mc._strs[bigcis, :]):
+        s1 = "".join(str(bin(p)).replace("0b", "") for p in s[0:nstrs])
+        s2 = "".join(str(bin(p)).replace("0b", "") for p in s[nstrs:])
+        deters.append((c, s1, s2))
+    return deters

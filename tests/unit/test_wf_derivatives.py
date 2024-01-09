@@ -69,6 +69,7 @@ def test_obc_wfs(LiH_sto3g_rhf, epsilon=1e-5, nconf=10):
                 wf.parameters[k] = cp.asarray(np.random.rand(*wf.parameters[k].shape))
 
         epos = pyq.initial_guess(mol, nconf)
+        print(type(wf))
         run_tests(wf, epos, epsilon)
 
 
@@ -180,7 +181,7 @@ def test_manual_pbcs_correct(H_pbc_sto3g_kuks, epsilon=1e-5, nconf=10):
     This test makes sure that the number of k-points must match the number of k-points
     in the mf object.
     """
-    from pyqmc.determinant_tools import create_pbc_determinant
+    from pyqmc.pyscftools import single_determinant_from_mf
 
     mol, mf = H_pbc_sto3g_kuks
     supercell = np.identity(3, dtype=int)
@@ -188,9 +189,14 @@ def test_manual_pbcs_correct(H_pbc_sto3g_kuks, epsilon=1e-5, nconf=10):
     mol = pyq.get_supercell(mol, supercell)
 
     determinants = [
-        (1.0, create_pbc_determinant(mol, mf, [])),
-        (-0.2, create_pbc_determinant(mol, mf, [(0, 0, 0, 0, 1)])),
+        single_determinant_from_mf(mf, 1.0)[0],
+        single_determinant_from_mf(mf, -0.2)[0],
     ]
+    for s, ka, a, ki, i in [(0, 0, 0, 0, 1)]:
+        determinants[1][1][s][ka].remove(a)
+        determinants[1][1][s][ki].append(i)
+
+    print(determinants[0])
     wf = Slater(mol, mf, determinants=determinants)
     configs = pyq.initial_guess(mol, 10)
     run_tests(wf, configs, epsilon)

@@ -196,6 +196,7 @@ def line_minimization(
         # doing correlated sampling.
         steps = np.linspace(-steprange / (npts - 2), steprange, npts)
         dps, update_report = pgrad_acc.delta_p(steps, data, verbose=True)
+        step_data.update(update_report)
         params = [x0 + dp for dp in dps]
         stepsdata = correlated_compute(
             wf,

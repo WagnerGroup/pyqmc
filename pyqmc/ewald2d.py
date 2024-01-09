@@ -23,18 +23,12 @@ class Ewald:
         self.alpha = 5.0 / smallest_height
 
     def set_lattice_displacements(self, nlatvec):
-        space = [gpu.cp.arange(-nlatvec, nlatvec + 1)] * 3
+        space = [gpu.cp.arange(-nlatvec, nlatvec + 1)] * 2
         XYZ = gpu.cp.meshgrid(*space, indexing='ij')
-        xyz = gpu.cp.stack(XYZ, axis=-1).reshape((-1, 3))
-        self.lattice_displacements = gpu.cp.asarray(gpu.cp.dot(xyz, self.latvec)) # (27, 3)
-
-    # def set_lattice_displacements_test(self, nlatvec):
-    #     space = [gpu.cp.arange(-nlatvec, nlatvec + 1)] * 2
-    #     XYZ = gpu.cp.meshgrid(*space, indexing='ij')
-    #     xyz = gpu.cp.stack(XYZ, axis=-1).reshape((-1, 2))
-    #     z_zeros = np.zeros((xyz.shape[0], 1))
-    #     xyz = gpu.cp.concatenate([xyz, z_zeros], axis=1)
-    #     self.lattice_displacements = gpu.cp.asarray(np.dot(xyz, self.latvec))
+        xyz = gpu.cp.stack(XYZ, axis=-1).reshape((-1, 2))
+        z_zeros = np.zeros((xyz.shape[0], 1))
+        xyz = gpu.cp.concatenate([xyz, z_zeros], axis=1)
+        self.lattice_displacements = gpu.cp.asarray(np.dot(xyz, self.latvec))
 
     def generate_positive_gpoints(self, gmax):
         gXpos = gpu.cp.mgrid[1 : gmax + 1, -gmax: gmax + 1, 0:1].reshape(3, -1)
@@ -49,12 +43,9 @@ class Ewald:
         gnorm = gsquared**0.5
         gweight = gpu.cp.pi * gpu.erfc(gnorm/(2*self.alpha)) * 2
         gweight /= self.cell_area * gnorm
-        # self.gpoints = candidate_gpoints
-        # self.gweight = gweight
         mask_bigweight = gweight > tol
         self.gpoints = candidate_gpoints[mask_bigweight]
         self.gweight = gweight[mask_bigweight]
-        print()
 
     def eval_real_cij(self, dist, lattice_displacements):
         rvec = dist + lattice_displacements
@@ -66,16 +57,16 @@ class Ewald:
         if len(self.atom_charges) == 1:
             ion_ion_real_cross = 0
         else:
-            # input to dist_matrix has the shape (nconf, nparticles, ndim)
+            # input to dist_matrix has the shape (nconf, natoms, ndim)
             ion_ion_distances, ion_ion_idxs = self.dist.dist_matrix(self.atom_coords[None])
-            ion_ion_cij = self.eval_real_cij(ion_ion_distances[:, :, None, :], self.lattice_displacements[None, None, :, :]) # (nconf=1, npairs=choose(4, 2))
-            ion_ion_charge_ij = gpu.cp.prod(self.atom_charges[ion_ion_idxs], axis=1) # (npairs=6,)
-            ion_ion_real_cross = gpu.cp.einsum('j,ij->i', ion_ion_charge_ij, ion_ion_cij) # (nconf=1,)
+            ion_ion_cij = self.eval_real_cij(ion_ion_distances[:, :, None, :], self.lattice_displacements[None, None, :, :]) # (nconf, npairs=choose(natoms, 2))
+            ion_ion_charge_ij = gpu.cp.prod(self.atom_charges[ion_ion_idxs], axis=1) # (npairs,)
+            ion_ion_real_cross = gpu.cp.einsum('j,ij->i', ion_ion_charge_ij, ion_ion_cij) # (nconf,)
         return ion_ion_real_cross
 
     def ewald_elec_ion_real_cross(self, configs):
-        elec_ion_dist = configs.dist.dist_i(self.atom_coords, configs.configs)  # (nelec=4, nconf=1, natoms=4, ndim=3)
-        elec_ion_cij = self.eval_real_cij(elec_ion_dist[:, :, :, None, :], self.lattice_displacements[None, None, None, :, :])  # (nelec=4, nconf=1, natoms=4)
+        elec_ion_dist = configs.dist.dist_i(self.atom_coords, configs.configs)  # (nelec, nconf, natoms, ndim)
+        elec_ion_cij = self.eval_real_cij(elec_ion_dist[:, :, :, None, :], self.lattice_displacements[None, None, None, :, :])  # (nelec, nconf, natoms)
         elec_ion_real = gpu.cp.einsum('k,ijk->j', -self.atom_charges, elec_ion_cij)  # (nconf,)
         return elec_ion_real
 
@@ -122,7 +113,6 @@ class Ewald:
 
     def set_constants(self):
         self.const_self = self.alpha / gpu.cp.sqrt(gpu.cp.pi)
-        # self.const_charge = 2 * gpu.cp.sqrt(gpu.cp.pi) / (self.cell_area * self.alpha)
 
     def ewald_ion_ion_real_self(self):
         ion_ion_real_self = -self.const_self * gpu.cp.sum(self.atom_charges**2)

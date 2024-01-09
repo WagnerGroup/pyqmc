@@ -173,11 +173,9 @@ class Ewald:
         # xc_correction = lambda ne: cexc / rs(ne)
 
     def ee_const(self, ne):
-        ee_const_test = ne * (ne - 1) / 2 * self.ijconst + ne * self.squareconst
         return ne * (ne - 1) / 2 * self.ijconst + ne * self.squareconst
 
     def ei_const(self, ne):
-        ei_const_test = -ne * self.i_sum * self.ijconst
         return -ne * self.i_sum * self.ijconst
 
     def e_single(self, ne):
@@ -287,15 +285,13 @@ class Ewald:
     def reciprocal_space_electron(self, configs):
         # Reciprocal space electron-electron part
         e_GdotR = gpu.cp.einsum("hik,jk->hij", gpu.cp.asarray(configs), self.gpoints) # (nconf, nelec, nk)
-
-        gweight = self.gweight
         sum_e_sin = gpu.cp.sin(e_GdotR).sum(axis=1) # (nconf, nk)
         sum_e_cos = gpu.cp.cos(e_GdotR).sum(axis=1)
-        ee_recip = gpu.cp.dot(sum_e_sin**2 + sum_e_cos**2, gweight)
+        ee_recip = gpu.cp.dot(sum_e_sin**2 + sum_e_cos**2, self.gweight)
 
         ## Reciprocal space electron-ion part
         coscos_sinsin = -self.ion_exp.real * sum_e_cos - self.ion_exp.imag * sum_e_sin # (nconf, nk)
-        ei_recip = 2 * gpu.cp.dot(coscos_sinsin, gweight)
+        ei_recip = 2 * gpu.cp.dot(coscos_sinsin, self.gweight)
         return ee_recip, ei_recip
 
     def reciprocal_space_electron_separated(self, configs):

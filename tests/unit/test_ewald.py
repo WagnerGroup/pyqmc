@@ -66,6 +66,7 @@ def test_ewald_NaCl_2d():
     cell.build(a=np.array([[1, 1, 0], [-1, 1, 0], [0, 0, Lz]]), spin=1)
     cell.spin = 1 # has to build twice to enable protected attributes in `cell`
 
+    print('testing flat 2d ewald')
     S = np.eye(3)
     configs = np.asarray([[[1, 0, 0]]])
     etot = get_ewald_energy(cell, S, configs)
@@ -93,6 +94,7 @@ def test_ewald_NaCl_slab():
     cell.build(a=np.array([[1, 1, 0], [-1, 1, 0], [0, 0, Lz]]), spin=1)
     cell.spin = 1 # has to build twice to enable protected attributes in `cell`
 
+    print('testing 3-layer slab ewald')
     S = np.eye(3)
     configs = np.asarray([[[1, 0, 0], [1, 1, 1], [1, 1, -1]]])
     etot = get_ewald_energy(cell, S, configs)
@@ -187,9 +189,6 @@ def test_ewald_shifted():
 if __name__ == "__main__":
     import cProfile
 
-    # cProfile.run("test_ewald_NaCl()", "ewaldtest.prof")
-    # cProfile.run("test_ewald_NaCl_2d()", "ewaldtest.prof")
-
-    # test_ewald_NaCl()
-    # test_ewald_NaCl_2d()
-    test_ewald_NaCl_slab()
+    cProfile.run("test_ewald_NaCl()", "ewaldtest_3d.prof")
+    cProfile.run("test_ewald_NaCl_2d()", "ewaldtest_2d.prof")
+    cProfile.run("test_ewald_NaCl_slab()", "ewaldtest_slab.prof")

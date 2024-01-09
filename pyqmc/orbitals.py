@@ -110,7 +110,8 @@ class PBCOrbitalEvaluatorKpoints:
             self._cell.precision = eval_gto_precision
             self.rcut = self._estimate_rcut(self._cell)
         else:
-            self.rcut = np.ones(self._cell.nbas)
+            self._cell.rcut = 1
+            self.rcut = self._estimate_rcut(self._cell)
 
         Ls = self._cell.get_lattice_Ls(rcut=self.rcut.max(), dimension=3)
         self.Ls = Ls[np.argsort(pyscf.lib.norm(Ls, axis=1))]

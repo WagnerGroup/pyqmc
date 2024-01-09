@@ -17,7 +17,6 @@ class Ewald:
         self.set_constants()
         self.set_lattice_displacements(nlatvec)
         self.set_gpoints_gweight(gmax)
-        # self.gpoints = self.generate_positive_gpoints(gmax)
 
     def set_alpha(self):
         smallest_height = gpu.cp.amin(1 / gpu.cp.linalg.norm(self.recvec[:2, :2], axis=1))
@@ -29,7 +28,7 @@ class Ewald:
         xyz = gpu.cp.stack(XYZ, axis=-1).reshape((-1, 3))
         self.lattice_displacements = gpu.cp.asarray(gpu.cp.dot(xyz, self.latvec)) # (27, 3)
 
-    # def set_lattice_displacements(self, nlatvec):
+    # def set_lattice_displacements_test(self, nlatvec):
     #     space = [gpu.cp.arange(-nlatvec, nlatvec + 1)] * 2
     #     XYZ = gpu.cp.meshgrid(*space, indexing='ij')
     #     xyz = gpu.cp.stack(XYZ, axis=-1).reshape((-1, 2))
@@ -100,34 +99,26 @@ class Ewald:
         gweight = gpu.cp.pi / (self.cell_area * gnorm) * (w1 + w2)
         return gweight
 
-    # def ewald_ion_ion_recip_self(self):
-    #     '''
-    #     This is not for real use, but for testing the special case when i == j
-    #     '''
-    #     ii_sum2 = np.sum(self.atom_charges**2)
-    #     ion_ion_recip_z_zero = ii_sum2 * np.sum(self.gweight)
-    #     return ion_ion_recip_z_zero
-
     def ewald_ion_ion_recip(self):
         ii_dist = self.dist.dist_i(self.atom_coords, self.atom_coords) # (natoms, natoms, 3)
         g_dot_r = gpu.cp.einsum('kd,ijd->kij', self.gpoints, ii_dist) # (nk, natoms, natoms)
         gweight = self.eval_weight(ii_dist) # (nk, natoms, natoms)
         ion_ion_recip = gpu.cp.einsum('i,j,kij,kij->', self.atom_charges, self.atom_charges, gpu.cp.exp(1j * g_dot_r), gweight).real
-        return ion_ion_recip # tested
+        return ion_ion_recip
 
     def ewald_elec_ion_recip(self, configs):
         ei_dist = self.dist.dist_i(self.atom_coords, configs.configs).transpose((1, 0, 2, 3)) # (nconf, natoms, nelec, 3)
         g_dot_r = gpu.cp.einsum('kd,cijd->ckij', self.gpoints, ei_dist) # (nconf, nk, natoms, nelec)
         gweight = self.eval_weight(ei_dist) # (nconf, nk, natoms, nelec)
         elec_ion_recip = -2 * gpu.cp.einsum('i,ckij,ckij->c', self.atom_charges, gpu.cp.cos(g_dot_r), gweight)
-        return elec_ion_recip # tested
+        return elec_ion_recip
 
     def ewald_elec_elec_recip(self, configs):
         ee_dist = self.dist.dist_i(configs.configs, configs.configs).transpose((1, 0, 2, 3)) # (nconf, nelec, nelec, 3)
         g_dot_r = gpu.cp.einsum('kd,cijd->ckij', self.gpoints, ee_dist) # (nconf, nk, nelec, nelec)
         gweight = self.eval_weight(ee_dist) # (nconf, nk, nelec, nelec)
         elec_elec_recip = gpu.cp.einsum('ckij,ckij->c', gpu.cp.exp(1j * g_dot_r), gweight).real
-        return elec_elec_recip # tested
+        return elec_elec_recip
 
     def set_constants(self):
         self.const_self = self.alpha / gpu.cp.sqrt(gpu.cp.pi)
@@ -140,18 +131,6 @@ class Ewald:
     def ewald_elec_elec_real_self(self, nelec):
         elec_elec_real_self = -self.const_self * nelec
         return elec_elec_real_self
-
-    # def ewald_ion_ion_charge_old(self):
-    #     ion_ion_charge = -self.const_charge * gpu.cp.sum(self.atom_charges)**2
-    #     return ion_ion_charge
-    #
-    # def ewald_elec_ion_charge_old(self, nelec):
-    #     elec_ion_charge = self.const_charge * gpu.cp.sum(self.atom_charges)*nelec*2
-    #     return elec_ion_charge
-    #
-    # def ewald_elec_elec_charge_old(self, nelec):
-    #     elec_elec_charge = -self.const_charge * nelec**2
-    #     return elec_elec_charge
 
     def eval_weight_charge(self, dist):
         z = dist[..., 2] # (natoms, natoms)
@@ -180,13 +159,6 @@ class Ewald:
 
     def energy(self, configs):
         nelec = configs.configs.shape[1]
-        # self.ewald_ion_ion_charge()
-        # self.ewald_ion_ion_charge_old()
-        # self.ewald_elec_ion_charge(configs)
-        # self.ewald_elec_ion_charge_old(nelec)
-        # self.ewald_elec_elec_charge(configs)
-        # self.ewald_elec_elec_charge_old(nelec)
-
         ii_const = self.ewald_ion_ion_charge() + self.ewald_ion_ion_real_self()
         ii_real_cross = self.ewald_ion_ion_real_cross()
         ii_recip = self.ewald_ion_ion_recip()
@@ -201,5 +173,4 @@ class Ewald:
         ei_real_cross = self.ewald_elec_ion_real_cross(configs)
         ei_recip = self.ewald_elec_ion_recip(configs)
         ei = ei_real_cross + ei_recip + ei_const
-        sum_e = ee + ei + ii
         return ee, ei, ii

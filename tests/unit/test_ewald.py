@@ -1,8 +1,6 @@
 import numpy as np
 import pyqmc.ewald
 import pyqmc.ewald2d
-import pyqmc.ewald2d_old
-import pyqmc.ewald3d
 from pyqmc.coord import PeriodicConfigs
 from pyqmc.supercell import get_supercell
 from pyscf.pbc import gto, scf
@@ -13,7 +11,7 @@ def get_ewald_energy(cell, S, configs):
     if supercell.dimension == 2:
         ewald = pyqmc.ewald2d.Ewald(supercell)
     else:
-        ewald = pyqmc.ewald3d.Ewald(supercell)
+        ewald = pyqmc.ewald.Ewald(supercell)
     configs = PeriodicConfigs(configs, supercell.lattice_vectors())
     ee, ei, ii = ewald.energy(configs)
     etot = ee + ei + ii
@@ -75,7 +73,13 @@ def test_ewald_NaCl_2d():
     assert np.abs(etot + nacl_answer) < 1e-4
 
 def test_ewald_NaCl_slab():
-    nacl_answer = 1.7491
+    '''
+    The system is 3 layers of alternating charges
+    The reference answer is calculated from
+        E = Energy of a charge in the center layer + Energy of a charge in the top layer + Energy of a charge in the bottom layer
+          = 1.749129285988639 + 2*1.6815268353899375 = 5.1122
+    '''
+    nacl_answer = 5.1122
     Lz = 30 # large cell height to simulate 2D
     cell = gto.Cell(
         atom="""H 0 0 0; H 1 0 1; H 1 0 -1""",
@@ -187,5 +191,5 @@ if __name__ == "__main__":
     # cProfile.run("test_ewald_NaCl_2d()", "ewaldtest.prof")
 
     # test_ewald_NaCl()
-    test_ewald_NaCl_2d()
-    # test_ewald_NaCl_slab()
+    # test_ewald_NaCl_2d()
+    test_ewald_NaCl_slab()

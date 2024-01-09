@@ -6,10 +6,14 @@ class StochasticReconfiguration:
     given the averages given by avg() and __call__. 
     """
 
-    def __init__(self, enacc, transform, nodal_cutoff=1e-3):
+    def __init__(self, enacc, transform, nodal_cutoff=1e-3, eps=1e-3):
+        """
+        eps here is the regularization for SR.
+        """
         self.enacc = enacc
         self.transform = transform
         self.nodal_cutoff = nodal_cutoff
+        self.eps = eps
 
     def _node_regr(self, configs, grad2):
         """
@@ -81,4 +85,30 @@ class StochasticReconfiguration:
         d = {"dpH": (nparms,), "dppsi": (nparms,), "dpidpj": (nparms, nparms)}
         d.update(self.enacc.shapes())
         return d
+
+
+
+    def delta_p(self, steps, data, verbose=False):
+        """ 
+        steps: a list/numpy array of timesteps
+        data: averaged data from avg() or __call__. Note that if you use VMC to compute this with 
+        an accumulator with a name, you'll need to remove that name from the keys.
+        That is, the keys should be equal to the ones returned by keys().
+
+        Compute the change in parameters given the data from a stochastic reconfiguration step.
+        Return the change in parameters, and data that we may want to use for diagnostics.
+        """
+
+
+        pgrad = 2 * np.real(data['dpH'] - data['total'] * data['dppsi'])
+        Sij = np.real(data['dpidpj'] - np.einsum("i,j->ij", data['dppsi'], data['dppsi']))
+
+        invSij = np.linalg.inv(Sij + self.eps * np.eye(Sij.shape[0]))
+        v = np.einsum("ij,j->i", invSij, pgrad)
+        dp = [step*v for step in steps]
+        if verbose:
+            print("SR move norm: ", np.linalg.norm(v))
+            print("Dot product between gradient and SR step: ", np.dot(pgrad, v)/(np.linalg.norm(v)*np.linalg.norm(pgrad)))
+        return dp 
+
 

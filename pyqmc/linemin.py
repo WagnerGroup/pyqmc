@@ -6,20 +6,11 @@ import h5py
 import os
 import pyqmc.mc
 import copy
+import pyqmc.reblock
 
 
 def sr_update(pgrad, Sij, step, eps=0.1):
     invSij = np.linalg.inv(Sij + eps * np.eye(Sij.shape[0]))
-    v = np.einsum("ij,j->i", invSij, pgrad)
-    return -v * step  # / np.linalg.norm(v)
-
-
-def sd_update(pgrad, Sij, step, eps=0.1):
-    return -pgrad * step  # / np.linalg.norm(pgrad)
-
-
-def sr12_update(pgrad, Sij, step, eps=0.1):
-    invSij = scipy.linalg.sqrtm(np.linalg.inv(Sij + eps * np.eye(Sij.shape[0])))
     v = np.einsum("ij,j->i", invSij, pgrad)
     return -v * step  # / np.linalg.norm(v)
 
@@ -168,9 +159,14 @@ def line_minimization(
     # Attributes for linemin
     attr = dict(max_iterations=max_iterations, npts=npts, steprange=steprange)
 
-    def gradient_energy_function(x, coords):
-        set_wf_params(wf, x, pgrad_acc)
-        df, coords = pyqmc.mc.vmc(
+    x0 = pgrad_acc.transform.serialize_parameters(wf.parameters)
+
+    df = []
+    # Gradient descent cycles
+    for it in range(max_iterations):
+
+        set_wf_params(wf, x0, pgrad_acc)
+        df_vmc, coords = pyqmc.mc.vmc(
             wf,
             coords,
             accumulators={"pgrad": pgrad_acc},
@@ -178,40 +174,21 @@ def line_minimization(
             npartitions=npartitions,
             **vmcoptions,
         )
-        en = np.real(np.mean(df["pgradtotal"], axis=0))
-        en_err = np.std(df["pgradtotal"], axis=0) / np.sqrt(df["pgradtotal"].shape[0])
-        sigma = np.std(df["pgradtotal"], axis=0) * np.sqrt(np.mean(df["nconfig"]))
-        dpH = np.mean(df["pgraddpH"], axis=0)
-        dp = np.mean(df["pgraddppsi"], axis=0)
-        dpdp = np.mean(df["pgraddpidpj"], axis=0)
-        grad = 2 * np.real(dpH - en * dp)
-        Sij = np.real(dpdp - np.einsum("i,j->ij", dp, dp))
 
-        if np.any(np.isnan(grad)):
-            for nm, quant in {"dpH": dpH, "dp": dp, "en": en}.items():
-                print(nm, quant)
-            raise ValueError("NaN detected in derivatives")
+        data = {}
+        for k in ['pgradtotal','pgraddpH','pgraddppsi','pgraddpidpj']:
+            data[k.replace('pgrad','')] = np.mean(df_vmc[k], axis=0)
+        data['total_err'] = np.std(df_vmc['pgradtotal'], axis=0) / np.sqrt(df_vmc['pgradtotal'].shape[0])
 
-        return coords, grad, Sij, en, en_err, sigma
-
-    x0 = pgrad_acc.transform.serialize_parameters(wf.parameters)
-
-    df = []
-    # Gradient descent cycles
-    for it in range(max_iterations):
-        # Calculate gradient accurately
-        coords, pgrad, Sij, en, en_err, sigma = gradient_energy_function(x0, coords)
         step_data = {}
-        step_data["energy"] = en
-        step_data["energy_error"] = en_err
+        step_data["energy"] = data['total'].real
+        step_data["energy_error"] = data['total_err'].real
         step_data["x"] = x0
-        step_data["pgradient"] = pgrad
         step_data["iteration"] = it + iteration_offset
         step_data["nconfig"] = coords.configs.shape[0]
 
         if verbose:
-            print("descent en", en, en_err, " estimated sigma ", sigma)
-            print("descent |grad|", np.linalg.norm(pgrad), flush=True)
+            print("descent en", data['total'], data['total_err'])
 
         xfit = []
         yfit = []
@@ -221,7 +198,7 @@ def line_minimization(
         # We don't use the above computed value because we are
         # doing correlated sampling.
         steps = np.linspace(-steprange / (npts - 2), steprange, npts)
-        params = [x0 + update(pgrad, Sij, step, **update_kws) for step in steps]
+        params = [x0 + dp for dp in pgrad_acc.delta_p(steps, data, verbose=True)]
         stepsdata = correlated_compute(
             wf,
             coords,
@@ -237,7 +214,8 @@ def line_minimization(
         yfit.extend(en)
         xfit.extend(steps)
         est_min = stable_fit(xfit, yfit)
-        x0 += update(pgrad, Sij, est_min, **update_kws)
+        x0 = pgrad_acc.delta_p([est_min], data, verbose=False)[0] + x0
+
         step_data["tau"] = xfit
         step_data["yfit"] = yfit
         step_data["est_min"] = est_min

@@ -2,6 +2,7 @@ import numpy as np
 import pyqmc.gpu as gpu
 import pyqmc.determinant_tools as determinant_tools
 import pyqmc.orbitals
+import pyqmc.pyscftools
 import warnings
 
 
@@ -137,7 +138,7 @@ class Slater:
 
     """
 
-    def __init__(self, mol, mf, mc=None, tol=None, twist=None, determinants=None):
+    def __init__(self, mol, mf, mc=None, tol=None, twist=0, determinants=None):
         """
         determinants should be a list of tuples, for example
         [ (1.0, [0,1],[0,1]),
@@ -163,7 +164,7 @@ class Slater:
             self._det_occup,
             self._det_map,
             self.orbitals,
-        ) = pyqmc.orbitals.choose_evaluator_from_pyscf(
+        ) = pyqmc.pyscftools.orbital_evaluator_from_pyscf(
             mol, mf, mc, twist=twist, determinants=determinants, tol=self.tol
         )
 

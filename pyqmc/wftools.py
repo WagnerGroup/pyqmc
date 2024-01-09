@@ -114,7 +114,7 @@ def generate_jastrow3(mol, na=4, nb=3, rcut=None):
     return wf, to_opt
 
 
-def generate_sj(mol, mf, optimize_orbitals=False, twist=None, **jastrow_kws):
+def generate_sj(mol, mf, optimize_orbitals=False, twist=0, **jastrow_kws):
     wf1, to_opt1 = generate_slater(mol, mf, optimize_orbitals, twist)
     wf2, to_opt2 = generate_jastrow(mol, **jastrow_kws)
     wf = multiplywf.MultiplyWF(wf1, wf2)

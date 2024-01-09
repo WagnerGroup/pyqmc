@@ -11,6 +11,10 @@ def test_complex_linemin(H2_ccecp_rhf, optfile="linemin.hdf5"):
     """
     mol, mf = H2_ccecp_rhf
     mf = copy.copy(mf)
+    mol.output = None
+    mol.stdout = None
+    mf.output=None
+    mf.stdout=None
     noise = (np.random.random(mf.mo_coeff.shape) - 0.5) * 0.2
     mf.mo_coeff = mf.mo_coeff * 1j + noise
 

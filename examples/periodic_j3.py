@@ -4,7 +4,7 @@ import numpy as np
 from pyscf.pbc import gto, scf
 import pyqmc.api as pyq
 from pyqmc.supercell import get_supercell
-from pyqmc.j3 import J3
+from pyqmc.geminal_jastrow import GeminalJastrow
 import copy
 
 
@@ -43,7 +43,7 @@ def run_qmc(cell, kmf):
     slater, to_opts[0] = pyq.generate_slater(supercell, kmf)
     cusp, to_opts[1] = pyq.generate_jastrow(supercell, na=0, nb=0)
 
-    geminal = J3(supercell)
+    geminal = GeminalJastrow(supercell)
     to_opts[2] = {"gcoeff":np.ones(geminal.parameters["gcoeff"].shape).astype(bool)}
     to_opt = {}
     for i, t_o in enumerate(to_opts):
@@ -75,7 +75,7 @@ def run_qmc(cell, kmf):
     pyq.rundmc(
         wf,
         configs,
-        nsteps=1000,
+        nblocks=1000,
         accumulators={"energy": pgrad.enacc},
         hdf_file="pbc_he_dmc.hdf",
         verbose=True,

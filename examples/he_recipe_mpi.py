@@ -47,5 +47,5 @@ if __name__ == "__main__":
             slater_kws=slater_kws,
             client=client,
             npartitions=npartitions,
-            **{"nsteps": 4000, "tstep": 0.02},
+            **{"nblocks": 4000, "tstep": 0.02},
         )

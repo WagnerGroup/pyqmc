@@ -109,11 +109,12 @@ class PBCOrbitalEvaluatorKpoints:
         if eval_gto_precision is not None:
             self._cell.precision = eval_gto_precision
             self.rcut = self._estimate_rcut(self._cell)
+            Ls = self._cell.get_lattice_Ls(rcut=self.rcut.max(), dimension=3)
         else:
             self._cell.rcut = 1
-            self.rcut = self._estimate_rcut(self._cell)
+            Ls = self._cell.get_lattice_Ls(dimension=3)
 
-        Ls = self._cell.get_lattice_Ls(rcut=self.rcut.max(), dimension=3)
+        
         self.Ls = Ls[np.argsort(pyscf.lib.norm(Ls, axis=1))]
 
     def nmo(self):
@@ -194,7 +195,7 @@ class PBCOrbitalEvaluatorKpoints:
         """
         return self.param_split[spin], ao
 
-    def _estimate_rcut(cell):
+    def _estimate_rcut(self, cell):
         """
         Returns the cutoff raidus, above which each shell decays to a value less than the
         required precsion

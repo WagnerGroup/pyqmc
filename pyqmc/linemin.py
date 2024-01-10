@@ -190,14 +190,12 @@ def line_minimization(
         if verbose:
             print("descent en", data['total'], data['total_err'])
 
-        # Calculate samples to fit.
-        # include near zero in the fit, and go backwards as well
-        # We don't use the above computed value because we are
-        # doing correlated sampling.
+        # Correlated sampling line minimization.
         steps = np.linspace(-steprange / (npts - 2), steprange, npts)
         dps, update_report = pgrad_acc.delta_p(steps, data, verbose=True)
         step_data.update(update_report)
         params = [x0 + dp for dp in dps]
+
         stepsdata = correlated_compute(
             wf,
             coords,

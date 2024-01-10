@@ -1,4 +1,27 @@
 import numpy as np
+import h5py
+
+def nodal_regularization(grad2, nodal_cutoff=1e-3):
+    """
+    Return true if a given configuration is within nodal_cutoff
+    of the node
+    Also return the regularization polynomial if true,
+    f = a * r ** 2 + b * r ** 4 + c * r ** 6
+
+    This uses the method from 
+    Shivesh Pathak and Lucas K. Wagner. “A Light Weight Regularization for Wave Function Parameter Gradients in Quantum Monte Carlo.” AIP Advances 10, no. 8 (August 6, 2020): 085213. https://doi.org/10.1063/5.0004008.
+    """
+    r = 1.0 / grad2
+    mask = r < nodal_cutoff**2
+
+    c = 7.0 / (nodal_cutoff**6)
+    b = -15.0 / (nodal_cutoff**4)
+    a = 9.0 / (nodal_cutoff**2)
+
+    f = a * r + b * r**2 + c * r**3
+    f[np.logical_not(mask)] = 1.0
+
+    return mask, f
 
 class StochasticReconfiguration:
     """ 
@@ -15,24 +38,7 @@ class StochasticReconfiguration:
         self.nodal_cutoff = nodal_cutoff
         self.eps = eps
 
-    def _node_regr(self, configs, grad2):
-        """
-        Return true if a given configuration is within nodal_cutoff
-        of the node
-        Also return the regularization polynomial if true,
-        f = a * r ** 2 + b * r ** 4 + c * r ** 6
-        """
-        r = 1.0 / grad2
-        mask = r < self.nodal_cutoff**2
 
-        c = 7.0 / (self.nodal_cutoff**6)
-        b = -15.0 / (self.nodal_cutoff**4)
-        a = 9.0 / (self.nodal_cutoff**2)
-
-        f = a * r + b * r**2 + c * r**3
-        f[np.logical_not(mask)] = 1.0
-
-        return mask, f
 
     def __call__(self, configs, wf):
         pgrad = wf.pgradient()
@@ -40,7 +46,7 @@ class StochasticReconfiguration:
         energy = d["total"]
         dp = self.transform.serialize_gradients(pgrad)
 
-        node_cut, f = self._node_regr(configs, d["grad2"])
+        node_cut, f = nodal_regularization(d["grad2"], self.nodal_cutoff)
         dp_regularized = dp * f[:, np.newaxis]
 
         d["dpH"] = np.einsum("i,ij->ij", energy, dp_regularized)
@@ -64,7 +70,7 @@ class StochasticReconfiguration:
         energy = den["total"]
         dp = self.transform.serialize_gradients(pgrad)
 
-        node_cut, f = self._node_regr(configs, den["grad2"])
+        node_cut, f = nodal_regularization(den["grad2"])
 
         dp_regularized = dp * f[:, np.newaxis]
 
@@ -87,8 +93,17 @@ class StochasticReconfiguration:
         return d
 
 
+    def update_state(self, hdf_file : h5py.File):
+        """
+        Update the state of the accumulator from a restart file.
+        StochasticReconfiguration does not keep a state.
 
-    def delta_p(self, steps, data, verbose=False):
+        hdf_file: h5py.File object
+        """
+        pass
+    
+
+    def delta_p(self, steps, data : dict, verbose=False):
         """ 
         steps: a list/numpy array of timesteps
         data: averaged data from avg() or __call__. Note that if you use VMC to compute this with 

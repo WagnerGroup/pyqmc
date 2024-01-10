@@ -28,17 +28,17 @@ class RawDistance:
 
           ij : list of size n(n-1)/2 tuples that document i,j
         """
-        nconf, n, dimension = configs.shape
+        nconf, n = configs.shape[:2]
         npairs = int(n * (n - 1) / 2)
         if npairs == 0:
-            return np.zeros((nconf, 0, dimension)), []
+            return np.zeros((nconf, 0, 3)), []
         vs = []
         ij = []
         for i in range(n):
             vs.append(self.dist_i(configs[:, i + 1:, :], configs[:, i, :]))
             ij.extend([(i, j) for j in range(i + 1, n)])
         vs = np.concatenate(vs, axis=1)
-        ij = np.asarray(ij)
+
         return vs, ij
 
     def pairwise(self, config1, config2):
@@ -85,9 +85,14 @@ class MinimalImageDistance(RawDistance):
         if diagonal:
             self.dist_i = self.diagonal_dist_i
         else:
-            orthogonal = np.dot(latvec[0], latvec[1]) < ortho_tol
+            first_two_orthogonal = np.dot(latvec[0], latvec[1]) < ortho_tol
             if self.dimension == 3:
-                orthogonal = orthogonal and np.dot(latvec[1], latvec[2]) < ortho_tol and np.dot(latvec[2], latvec[0]) < ortho_tol
+                orthogonal = first_two_orthogonal and np.dot(latvec[1], latvec[2]) < ortho_tol and np.dot(latvec[2], latvec[0]) < ortho_tol
+            elif self.dimension == 2:
+                orthogonal = first_two_orthogonal
+            else:
+                raise NotImplementedError('Only 2 and 3 dimensions are supported')
+
             if orthogonal:
                 self.dist_i = self.orthogonal_dist_i
                 # print("Orthogonal lattice vectors")

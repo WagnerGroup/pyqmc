@@ -37,9 +37,9 @@ def test():
     )
 
     dfdmc = pd.DataFrame(dfdmc)
-    dfdmc.sort_values("step", inplace=True)
+    dfdmc.sort_values("block", inplace=True)
 
-    dfprod = dfdmc[dfdmc.step >= warmup]
+    dfprod = dfdmc[dfdmc.block >= warmup]
 
     rb_summary = reblock.reblock_summary(
         dfprod[["energytotal", "energyei"]], 20, weights=dfprod["weight"]

@@ -607,8 +607,7 @@ class ThreeBodyJastrow:
         bvalues = np.stack([b.value(d_all, r_all) for b in self.b_basis], axis=-1)
         inds = tuple(zip(*ij))
         b_2d_values = np.zeros((nelec, nelec, nconf, nb))
-        for s, shape in enumerate([(nup, nup), (nup, ndown), (ndown, ndown)]):
-            b_2d_values[inds] = bvalues.swapaxes(0, 1)
+        b_2d_values[inds] = bvalues.swapaxes(0, 1)
 
         a = self.a_values
         up, down = slice(0, nup), slice(nup, None)

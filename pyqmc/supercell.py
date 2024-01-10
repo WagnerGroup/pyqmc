@@ -58,7 +58,6 @@ def get_supercell(cell, S):
     supercell.output = None
     supercell.stdout = None
     supercell.dimension = cell.dimension
-    supercell.low_dim_ft_type = cell.low_dim_ft_type
     return supercell
 
 

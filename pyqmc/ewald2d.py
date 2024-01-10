@@ -1,3 +1,8 @@
+'''
+Evaluate the Ewald summation using the 2D formula
+Yeh and Berkowitz. J. Chem. Phys. 111, 3155–3162 (1999)
+https://doi.org/10.1063/1.479595
+'''
 import numpy as np
 import pyqmc
 import pyqmc.energy
@@ -5,7 +10,7 @@ import pyqmc.gpu as gpu
 
 class Ewald:
 
-    def __init__(self, cell, gmax=200, nlatvec=1):
+    def __init__(self, cell, gmax=200, nlatvec=1, alpha_scaling=5):
         self.latvec = cell.lattice_vectors()
         self.atom_coords = cell.atom_coords()
         self.nelec = np.array(cell.nelec)
@@ -13,14 +18,18 @@ class Ewald:
         self.dist = pyqmc.distance.MinimalImageDistance(self.latvec)
         self.cell_area = gpu.cp.linalg.det(self.latvec[:2, :2])
         self.recvec = gpu.cp.linalg.inv(self.latvec).T
+        self.alpha_scaling = alpha_scaling
         self.set_alpha()
         self.set_constants()
         self.set_lattice_displacements(nlatvec)
         self.set_gpoints_gweight(gmax)
 
     def set_alpha(self):
+        '''
+        Define the Ewald saparation variable.
+        '''
         smallest_height = gpu.cp.amin(1 / gpu.cp.linalg.norm(self.recvec[:2, :2], axis=1))
-        self.alpha = 5.0 / smallest_height
+        self.alpha = self.alpha_scaling / smallest_height
 
     def set_lattice_displacements(self, nlatvec):
         space = [gpu.cp.arange(-nlatvec, nlatvec + 1)] * 2
@@ -38,6 +47,12 @@ class Ewald:
         return gpoints
 
     def set_gpoints_gweight(self, gmax, tol=1e-10):
+        '''
+        Creates a grid of points in the reciprocal space and select only ones with small large contributions according to `tol`
+        :param gmax:
+        :param tol:
+        :return:
+        '''
         candidate_gpoints = self.generate_positive_gpoints(gmax)
         gsquared = gpu.cp.einsum('jk,jk->j', candidate_gpoints, candidate_gpoints)
         gnorm = gsquared**0.5

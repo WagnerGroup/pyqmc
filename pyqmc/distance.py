@@ -32,6 +32,7 @@ class RawDistance:
         npairs = int(n * (n - 1) / 2)
         if npairs == 0:
             return np.zeros((nconf, 0, 3)), []
+
         vs = []
         ij = []
         for i in range(n):
@@ -102,9 +103,6 @@ class MinimalImageDistance(RawDistance):
         self._latvec = latvec
         self._invvec = np.linalg.inv(latvec)
         # list of all 26 neighboring cells
-        # self.point_list = (
-        #     np.array([m.ravel() for m in np.meshgrid(*[[0, 1, 2]] * 3)]).T - 1
-        # )
         mesh_grid = np.meshgrid(*[np.array(range(self.dimension)) for _ in range(self.dimension)])
         self.point_list = np.stack([m.ravel() for m in mesh_grid], axis=0).T - 1
         self.shifts = np.dot(self.point_list, self._latvec)

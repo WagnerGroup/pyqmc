@@ -6,13 +6,6 @@ import h5py
 import os
 import pyqmc.mc
 import copy
-import pyqmc.reblock
-
-
-def sr_update(pgrad, Sij, step, eps=0.1):
-    invSij = np.linalg.inv(Sij + eps * np.eye(Sij.shape[0]))
-    v = np.einsum("ij,j->i", invSij, pgrad)
-    return -v * step  # / np.linalg.norm(v)
 
 
 def opt_hdf(hdf_file, data, attr, configs, parameters):
@@ -91,7 +84,6 @@ def line_minimization(
     vmcoptions=None,
     lmoptions=None,
     correlatedoptions=None,
-    update=sr_update,
     update_kws=None,
     verbose=False,
     npts=5,
@@ -142,6 +134,7 @@ def line_minimization(
             if "iteration" in hdf.keys():
                 iteration_offset = np.max(hdf["iteration"][...]) + 1
             coords.load_hdf(hdf)
+
     else:  # not restarting -- VMC warm up period
         if verbose:
             print("starting warmup")
@@ -176,8 +169,8 @@ def line_minimization(
         )
 
         data = {}
-        for k in ['pgradtotal','pgraddpH','pgraddppsi','pgraddpidpj']:
-            data[k.replace('pgrad','')] = np.mean(df_vmc[k], axis=0)
+        for k in pgrad_acc.keys():
+            data[k] = np.mean(df_vmc['pgrad'+k], axis=0)
         data['total_err'] = np.std(df_vmc['pgradtotal'], axis=0) / np.sqrt(df_vmc['pgradtotal'].shape[0])
 
         step_data = {}
@@ -192,7 +185,7 @@ def line_minimization(
 
         # Correlated sampling line minimization.
         steps = np.linspace(-steprange / (npts - 2), steprange, npts)
-        dps, update_report = pgrad_acc.delta_p(steps, data, verbose=True)
+        dps, update_report = pgrad_acc.delta_p(steps, data, verbose=verbose)
         step_data.update(update_report)
         params = [x0 + dp for dp in dps]
 

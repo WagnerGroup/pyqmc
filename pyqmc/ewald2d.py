@@ -3,7 +3,6 @@ Evaluate the Ewald summation using the 2D formula
 Yeh and Berkowitz. J. Chem. Phys. 111, 3155–3162 (1999)
 https://doi.org/10.1063/1.479595
 '''
-import numpy as np
 import pyqmc
 import pyqmc.energy
 import pyqmc.gpu as gpu
@@ -13,7 +12,7 @@ class Ewald:
     def __init__(self, cell, gmax=200, nlatvec=1, alpha_scaling=5):
         self.latvec = cell.lattice_vectors()
         self.atom_coords = cell.atom_coords()
-        self.nelec = np.array(cell.nelec)
+        self.nelec = gpu.cp.array(cell.nelec)
         self.atom_charges = gpu.cp.asarray(cell.atom_charges())
         self.dist = pyqmc.distance.MinimalImageDistance(self.latvec)
         self.cell_area = gpu.cp.linalg.det(self.latvec[:2, :2])
@@ -26,18 +25,23 @@ class Ewald:
 
     def set_alpha(self):
         '''
-        Define the Ewald saparation variable.
+        Define the Ewald separation variable.
         '''
         smallest_height = gpu.cp.amin(1 / gpu.cp.linalg.norm(self.recvec[:2, :2], axis=1))
         self.alpha = self.alpha_scaling / smallest_height
 
     def set_lattice_displacements(self, nlatvec):
+        '''
+        math
+        :param nlatvec:
+        :return:
+        '''
         space = [gpu.cp.arange(-nlatvec, nlatvec + 1)] * 2
         XYZ = gpu.cp.meshgrid(*space, indexing='ij')
         xyz = gpu.cp.stack(XYZ, axis=-1).reshape((-1, 2))
-        z_zeros = np.zeros((xyz.shape[0], 1))
+        z_zeros = gpu.cp.zeros((xyz.shape[0], 1))
         xyz = gpu.cp.concatenate([xyz, z_zeros], axis=1)
-        self.lattice_displacements = gpu.cp.asarray(np.dot(xyz, self.latvec))
+        self.lattice_displacements = gpu.cp.asarray(gpu.cp.dot(xyz, self.latvec))
 
     def generate_positive_gpoints(self, gmax):
         gXpos = gpu.cp.mgrid[1 : gmax + 1, -gmax: gmax + 1, 0:1].reshape(3, -1)
@@ -75,7 +79,7 @@ class Ewald:
             # input to dist_matrix has the shape (nconf, natoms, ndim)
             ion_ion_distances, ion_ion_idxs = self.dist.dist_matrix(self.atom_coords[None])
             ion_ion_cij = self.eval_real_cij(ion_ion_distances[:, :, None, :], self.lattice_displacements[None, None, :, :]) # (nconf, npairs=choose(natoms, 2))
-            ion_ion_charge_ij = gpu.cp.prod(self.atom_charges[ion_ion_idxs], axis=1) # (npairs,)
+            ion_ion_charge_ij = gpu.cp.prod(self.atom_charges[gpu.cp.asarray(ion_ion_idxs)], axis=1) # (npairs,)
             ion_ion_real_cross = gpu.cp.einsum('j,ij->i', ion_ion_charge_ij, ion_ion_cij) # (nconf,)
         return ion_ion_real_cross
 

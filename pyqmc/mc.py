@@ -7,6 +7,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
 import h5py
+import logging
 
 
 def initial_guess(mol, nconfig, r=1.0):
@@ -157,13 +158,13 @@ def vmc_parallel(
 def vmc(
     wf,
     configs,
+    tstep=0.5,
     nblocks=10,
     nsteps_per_block=10,
     nsteps=None,
-    tstep=0.5,
+    blockoffset=0,
     accumulators=None,
     verbose=False,
-    stepoffset=0,
     hdf_file=None,
     continue_from=None,
     client=None,
@@ -172,17 +173,18 @@ def vmc(
     """Run a Monte Carlo sample of a given wave function.
 
     :parameter wf: trial wave function for VMC
-    :type wf: a PyQMC wave-function-like class
-    :parameter configs: Initial electron coordinates
+    :type wf: a PyQMC wave-function-like object
+    :parameter configs: (nconfig, nelec, 3) - initial electron coordinates to start calculation.
     :type configs: PyQMC configs object
-    :parameter int nblocks: Number of VMC blocks to run
-    :parameter int nsteps_per_block: Number of steps to run per block
-    :parameter int nsteps: (Deprecated) Number of steps to run, maps to nblocks = 1, nsteps_per_block = nsteps
     :parameter float tstep: Time step for move proposals. Only affects efficiency.
+    :parameter int nblocks: Number of VMC blocks to run. If a calculation is continued (either from continue_from or from using the same hdf_file as a previous call), nblocks includes the blocks from previous calls; i.e., nblocks is the total number of blocks run over all the calls to vmc.
+    :parameter int nsteps_per_block: Number of steps to run per block
+    :parameter int nsteps: (Deprecated) Number of steps to run, maps to nblocks = nsteps, nsteps_per_block = 1
+    :parameter int blockoffset: If continuing a run, what to start the block numbering at. The calculation will stop when the block number reaches nblocks.
     :parameter accumulators: A dictionary of functor objects that take in (configs,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If None, then the coordinates will only be propagated with acceptance information.
     :parameter boolean verbose: Print out step information
-    :parameter int stepoffset: If continuing a run, what to start the step numbering at.
     :parameter str hdf_file: Hdf_file to store vmc output.
+    :parameter str continue_from: Hdf_file to continue vmc calculation from.
     :parameter client: an object with submit() functions that return futures
     :parameter int npartitions: the number of workers to submit at a time
     :returns: (df,configs)
@@ -215,16 +217,18 @@ def vmc(
     if continue_from is not None and os.path.isfile(continue_from):
         with h5py.File(continue_from, "r") as hdf:
             if "configs" in hdf.keys():
-                stepoffset = hdf["block"][-1] + 1
+                blockoffset = hdf["block"][-1] + 1
                 configs.load_hdf(hdf)
                 if verbose:
                     print(
-                        f"Restarting calculation {continue_from} from step {stepoffset}"
+                        f"Restarting calculation {continue_from} from block {blockoffset}"
                     )
 
     df = []
 
-    for block in range(nblocks):
+    if blockoffset >= nblocks:
+        logging.warning(f"blockoffset {blockoffset} >= nblocks {nblocks}; no steps will be run.")
+    for block in range(blockoffset, nblocks):
         if verbose:
             print(f"-", end="", flush=True)
         if client is None:
@@ -236,7 +240,7 @@ def vmc(
                 wf, configs, tstep, nsteps_per_block, accumulators, client, npartitions
             )
         # Append blocks
-        block_avg["block"] = stepoffset + block
+        block_avg["block"] = block
         block_avg["nconfig"] = nsteps_per_block * configs.configs.shape[0]
         vmc_file(hdf_file, block_avg, dict(tstep=tstep), configs)
         df.append(block_avg)
@@ -244,6 +248,7 @@ def vmc(
         print("vmc done")
 
     df_return = {}
-    for k in df[0].keys():
-        df_return[k] = np.asarray([d[k] for d in df])
+    if len(df) > 0:
+        for k in df[0].keys():
+            df_return[k] = np.asarray([d[k] for d in df])
     return df_return, configs

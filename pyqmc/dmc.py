@@ -360,43 +360,64 @@ def rundmc(
     configs,
     weights=None,
     tstep=0.01,
-    nsteps=1000,
-    branchtime=5,
-    stepoffset=0,
-    branchcut_start=10,
-    verbose=False,
+    nblocks=200,
+    nsteps_per_block=5,
+    blockoffset=0,
     accumulators=None,
-    ekey=("energy", "total"),
-    feedback=1.0,
+    verbose=False,
     hdf_file=None,
     continue_from=None,
     client=None,
     npartitions=None,
+    ekey=("energy", "total"),
     vmc_warmup=10,
-    **kwargs,
+    branchcut_start=10,
+    feedback=1.0,
+    branchtime=None,
+    stepoffset=None,
+    nsteps=None,
 ):
     """
     Run DMC
 
-    :parameter wf: A Wave function-like class. recompute(), gradient(), and updateinternals() are used, as well as anything (such as laplacian() ) used by accumulators
-    :parameter configs: (nconfig, nelec, 3) - initial coordinates to start calculation.
+    :parameter wf: trial wave function for DMC. recompute(), gradient(), and updateinternals() are used, as well as anything (such as laplacian() ) used by accumulators
+    :type wf: a PyQMC wave-function-like object
+    :parameter configs: (nconfig, nelec, 3) - initial electron coordinates to start calculation.
+    :type configs: PyQMC configs object
     :parameter weights: (nconfig,) - initial weights to start calculation, defaults to uniform.
-    :parameter nsteps: number of DMC steps to take
-    :parameter tstep: Time step for move proposals. Introduces time step error.
-    :parameter branchtime: number of steps to take between branching
+    :parameter float tstep: Time step for move proposals. Introduces time step error.
+    :parameter int nblocks: number of DMC blocks to run; branching is performed at the end of each block. If a calculation is continued (either from continue_from or from using the same hdf_file as a previous call), nblocks includes the blocks from previous calls; i.e., nblocks is the total number of blocks run over all the calls to rundmc.
+    :parameter int nsteps_per_block: number of steps to take between branching; branching is performed at the end of each block
+    :parameter int blockoffset: If continuing a run, what to start the block numbering at. The calculation will stop when the block number reaches nblocks.
     :parameter accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
+    :parameter boolean verbose: Print out step information
+    :parameter str hdf_file: Hdf_file to store vmc output.
+    :parameter str continue_from: Hdf_file to continue vmc calculation from.
+    :parameter client: an object with submit() functions that return futures
+    :parameter int npartitions: the number of workers to submit at a time
     :parameter ekey: tuple of strings; energy is needed for DMC weights. Access total energy by accumulators[ekey[0]](configs, wf)[ekey[1]
-    :parameter verbose: Print out step information
-    :parameter stepoffset: If continuing a run, what to start the step numbering at.
-    :parameter vmc_warmup: If starting a run, how many VMC warmup blocks to run
+    :parameter int vmc_warmup: If starting a run, how many VMC warmup blocks to run
+    :parameter int branchcut_start: Used in computing weights. Recommended for "experts only".
+    :parameter float feedback: Feedback strength for controlling normalization. Recommended for "experts only".
     :returns: (df,coords,weights)
-      df: A list of dictionaries nstep long that contains all results from the accumulators.
+      df: A list of dictionaries nblocks long that contains all results from the accumulators.
 
       coords: The final coordinates from this calculation.
 
       weights: The final weights from this calculation
-
+    :rtype: list of dictionaries, pyqmc.coord.Configs, ndarray
     """
+    # Deprecated backwards compatibility
+    if branchtime is not None:
+        logging.warning("rundmc kwarg `branchtime` is deprecated. Use `nsteps_per_block` instead. Overriding `nsteps_per_block` if given.")
+        nsteps_per_block = branchtime
+    if nsteps is not None:
+        logging.warning("rundmc kwarg `nsteps` is deprecated. Use `nblocks` and `nsteps_per_block` instead. Overriding nblocks if given.")
+        nblocks = nsteps // nsteps_per_block
+    if stepoffset is not None:
+        logging.warning("rundmc kwarg `stepoffset` is deprecated. Use `blockoffset` and `nsteps_per_block` instead. Overriding blockoffset if given.")
+        blockoffset = stepoffset // nsteps_per_block
+
     # Don't continue onto a file that's already there.
     if continue_from is not None and hdf_file is not None and os.path.isfile(hdf_file):
         raise RuntimeError(
@@ -411,7 +432,12 @@ def rundmc(
     # to continue from, if given.
     if continue_from is not None:
         with h5py.File(continue_from, "r") as hdf:
-            stepoffset = hdf["step"][-1] + 1
+            if "block" not in hdf.keys() and "step" in hdf.keys() :
+                logging.warning("Warning: found deprecated key `step` in the restart file. In future versions, `block` key will be expected. All data from this run will be indexed by the key `block`.")
+                blockoffset = hdf["step"][-1] // nsteps_per_block + 1
+            else:
+                blockoffset = hdf["block"][-1] + 1
+                
             configs.load_hdf(hdf)
             weights = np.array(hdf["weights"])
             if "e_trial" not in hdf.keys():
@@ -422,7 +448,7 @@ def rundmc(
             e_est = hdf["e_est"][-1]
             esigma = hdf["esigma"][-1]
             if verbose:
-                print(f"Restarting calculation {continue_from} from step {stepoffset}")
+                print(f"Restarting calculation {continue_from} from block {blockoffset}")
     else:
         df, configs = mc.vmc(
             wf,
@@ -446,9 +472,10 @@ def rundmc(
     if weights is None:
         weights = np.ones(nconfig)
 
-    npropagate = int(np.ceil(nsteps / branchtime))
     df = []
-    for step in range(npropagate):
+    if blockoffset >= nblocks:
+        logging.warning(f"blockoffset {blockoffset} >= nblocks {nblocks}; no steps will be run.")
+    for block in range(blockoffset, nblocks):
         if client is None:
             df_, configs, weights = dmc_propagate(
                 wf,
@@ -458,10 +485,9 @@ def rundmc(
                 branchcut_start * esigma,
                 e_trial=e_trial,
                 e_est=e_est,
-                nsteps=branchtime,
+                nsteps=nsteps_per_block,
                 accumulators=accumulators,
                 ekey=ekey,
-                **kwargs,
             )
         else:
             df_, configs, weights = dmc_propagate_parallel(
@@ -474,19 +500,18 @@ def rundmc(
                 branchcut_start * esigma,
                 e_trial=e_trial,
                 e_est=e_est,
-                nsteps=branchtime,
+                nsteps=nsteps_per_block,
                 accumulators=accumulators,
                 ekey=ekey,
-                **kwargs,
             )
 
         df_["e_trial"] = e_trial
         df_["e_est"] = e_est
-        df_["step"] = step + stepoffset
+        df_["block"] = block
         df_["esigma"] = esigma
         df_["tstep"] = tstep
         df_["weight_std"] = np.std(weights)
-        df_["nsteps"] = branchtime
+        df_["nsteps_per_block"] = nsteps_per_block
 
         configs, weights, branch_info = branch(configs, weights)
         df_.update(branch_info)
@@ -509,7 +534,10 @@ def rundmc(
             )
             print(branch_info)
 
-    df_ret = {k: np.asarray([d[k] for d in df]) for k in df[0].keys()}
+    if len(df) > 0:
+        df_ret = {k: np.asarray([d[k] for d in df]) for k in df[0].keys()}
+    else:
+        df_ret = {}
     return df_ret, configs, weights
 
 

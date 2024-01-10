@@ -60,7 +60,7 @@ if __name__ == "__main__":
     pyq.rundmc(
         wf,
         configs,
-        nsteps=1000,
+        nblocks=1000,
         accumulators={"energy": pgrad.enacc},
         hdf_file="pbc_he_dmc.hdf",
         verbose=True,

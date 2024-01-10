@@ -46,7 +46,7 @@ if __name__ == "__main__":
         wf,
         configs,
         hdf_file="h2o_dmc.hdf",
-        nsteps=1000,
+        nblocks=1000,
         accumulators={"energy": pgrad_acc.enacc},
         ekey=("energy", "total"),
         tstep=0.02,

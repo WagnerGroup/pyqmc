@@ -34,5 +34,5 @@ if __name__ == "__main__":
         accumulators={"rdm1": True},
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
-        **{"nsteps": 4000, "tstep": 0.02},
+        **{"nblocks": 4000, "tstep": 0.02},
     )

@@ -25,12 +25,11 @@ def test():
     enacc = pyq.EnergyAccumulator(mol)
 
     warmup = 200
-    branchtime = 5
     dfdmc, configs_, weights_ = pyq.rundmc(
         wf,
         configs,
-        nsteps=4000 + warmup * branchtime,
-        branchtime=branchtime,
+        nblocks=800 + warmup,
+        nsteps_per_block=5,
         accumulators={"energy": enacc},
         ekey=("energy", "total"),
         tstep=0.01,
@@ -61,8 +60,9 @@ def test_dmc_restarts(H_pbc_sto3g_krks, nconf=10):
     configs = pyq.initial_guess(mol, nconf)
     wf, _ = pyq.generate_wf(mol, mf, jastrow_kws=dict(na=0, nb=0))
     enacc = pyq.EnergyAccumulator(mol)
-    pyq.rundmc(wf, configs, nsteps=20, hdf_file=fname, accumulators={"energy": enacc})
-    pyq.rundmc(wf, configs, nsteps=20, hdf_file=fname, accumulators={"energy": enacc})
+    pyq.rundmc(wf, configs, nblocks=2, hdf_file=fname, accumulators={"energy": enacc})
+    pyq.rundmc(wf, configs, nblocks=4, hdf_file=fname, accumulators={"energy": enacc})
+    pyq.rundmc(wf, configs, nblocks=4, hdf_file=fname, accumulators={"energy": enacc})
     os.remove(fname)
 
 

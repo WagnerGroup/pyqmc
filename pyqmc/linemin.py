@@ -6,6 +6,7 @@ import h5py
 import os
 import pyqmc.mc
 import copy
+import logging
 
 
 def opt_hdf(hdf_file, data, attr, configs, parameters):
@@ -98,14 +99,17 @@ def line_minimization(
     :parameter coords: initial configurations
     :parameter pgrad_acc: A PGradAccumulator-like object
     :parameter float steprange: How far to search in the line minimization
-    :parameter int warmup: number of steps to use for vmc warmup
-    :parameter int max_iterations: (maximum) number of steps in the gradient descent
+    :parameter int max_iterations: (maximum) number of steps in the gradient descent. If the calculation is continued from the same hdf file, the iterations from previous runs are included in the total, i.e. when calling line_minimization multiple times with the same hdf_file, max_iterations is the total number of iterations that will be run. 
+    :parameter int warmup_options: kwargs to use for vmc warmup
     :parameter dict vmcoptions: a dictionary of options for the vmc method
     :parameter dict lmoptions: a dictionary of options for the lm method
     :parameter update: A function that generates a parameter change
     :parameter update_kws: Any keywords
-    :parameter int npts: number of points to fit to in each line minimization
     :parameter boolean verbose: print output if True
+    :parameter int npts: number of points to fit to in each line minimization
+    :parameter str hdf_file: Hdf_file to store vmc output.
+    :parameter client: an object with submit() functions that return futures
+    :parameter int npartitions: the number of workers to submit at a time
     :return: optimized wave function, optimization data
     """
 
@@ -148,6 +152,8 @@ def line_minimization(
         )
         if verbose:
             print("finished warmup", flush=True)
+    if iteration_offset >= max_iterations:
+        logging.warning(f"iteration_offset {iteration_offset} >= max_iterations {max_iterations}; no steps will be run.")
 
     # Attributes for linemin
     attr = dict(max_iterations=max_iterations, npts=npts, steprange=steprange)
@@ -156,7 +162,7 @@ def line_minimization(
 
     df = []
     # Gradient descent cycles
-    for it in range(max_iterations):
+    for it in range(iteration_offset, max_iterations):
 
         set_wf_params(wf, x0, pgrad_acc)
         df_vmc, coords = pyqmc.mc.vmc(
@@ -172,12 +178,12 @@ def line_minimization(
         for k in pgrad_acc.keys():
             data[k] = np.mean(df_vmc['pgrad'+k], axis=0)
         data['total_err'] = np.std(df_vmc['pgradtotal'], axis=0) / np.sqrt(df_vmc['pgradtotal'].shape[0])
-
+        
         step_data = {}
         step_data["energy"] = data['total'].real
         step_data["energy_error"] = data['total_err'].real
         step_data["x"] = x0
-        step_data["iteration"] = it + iteration_offset
+        step_data["iteration"] = it
         step_data["nconfig"] = coords.configs.shape[0]
 
         if verbose:

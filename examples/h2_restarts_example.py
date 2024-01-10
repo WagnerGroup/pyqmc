@@ -26,7 +26,7 @@ def run_restarts(ntimes=5):
             f"h2_opt{i}.hdf",
             load_parameters=f"h2_opt{i-1}.hdf" if i > 0 else None,
             slater_kws=dict(optimize_orbitals=True, optimize_zeros=False),
-            max_iterations=2,
+            max_iterations=2 * (i+1),
             **common_args,
         )
     for i in range(ntimes):
@@ -37,7 +37,7 @@ def run_restarts(ntimes=5):
             load_parameters=f"h2_opt{ntimes-1}.hdf",
             restart_from=f"h2_vmc{i-1}.hdf" if i > 0 else None,
             **common_args,
-            nblocks=2,
+            nblocks=2 * (i+1),
         )
     for i in range(ntimes):
         print(i)
@@ -47,7 +47,7 @@ def run_restarts(ntimes=5):
             load_parameters=f"h2_opt{ntimes-1}.hdf",
             restart_from=f"h2_dmc{i-1}.hdf" if i > 0 else None,
             **common_args,
-            nsteps=10,
+            nblocks=10 * (i+1),
         )
 
 

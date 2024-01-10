@@ -6,6 +6,7 @@ import h5py
 import os
 import pyqmc.mc
 import copy
+import logging
 
 
 def sr_update(pgrad, Sij, step, eps=0.1):

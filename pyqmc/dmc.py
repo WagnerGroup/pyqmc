@@ -474,7 +474,7 @@ def rundmc(
 
     df = []
     if blockoffset >= nblocks:
-        logger.warning(f"blockoffset {blockoffset} >= nblocks {nblocks}; no steps will be run.")
+        logging.warning(f"blockoffset {blockoffset} >= nblocks {nblocks}; no steps will be run.")
     for block in range(blockoffset, nblocks):
         if client is None:
             df_, configs, weights = dmc_propagate(

@@ -166,7 +166,7 @@ class Slater:
             self._det_map,
             self.orbitals,
         ) = pyqmc.pyscftools.orbital_evaluator_from_pyscf(
-            mol, mf, mc, twist=twist, determinants=determinants, tol=self.tol
+            mol, mf, mc, twist=twist, determinants=determinants, tol=self.tol, eval_gto_precision=self.eval_gto_precision
         )
 
         self.parameters = JoinParameters([self.myparameters, self.orbitals.parameters])

@@ -8,15 +8,12 @@ class RawDistance:
         """ """
         pass
 
-    def dist_i(self, configs, vec):
-        """returns a list of electron-electron distances from an electron at position 'vec'
-        configs will most likely be [nconfig,electron,dimension], and vec will be [nconfig,dimension]
-        """
-        if len(vec.shape) == 3:
-            v = vec.transpose((1, 0, 2))[:, :, np.newaxis]
-        else:
-            v = vec[:, np.newaxis, :]
-        return v - configs
+    def dist_i(self, a, b):
+        # a ([m,] n, 3)
+        # b (m, 3)
+        # returns shape (m, n, 3)
+        assert len(b.shape) <= 2, f"dist_i argument b has {len(b.shape)} dimensions -- can have max 2"
+        return b[:, np.newaxis, :] - a
 
     def dist_matrix(self, configs):
         """
@@ -45,25 +42,22 @@ class RawDistance:
     def pairwise(self, config1, config2):
         """
         All pairwise distances from config1 to config2
-
+        Parameters:
+            config1 (m1, n1, 3): m1 may be 1, e.g. for all atoms to all electrons
+            config2 (m2, n2, 3): m2 must equal m1 if neither equals 1
         Returns:
 
-          dist: array of size nconf x n1*n2 x 3
-
-          ij : list of size n1*n2 tuples that document i,j
+          dist: array (nconf, n1, n2, 3)
         """
-        n1 = config1.shape[1]
-        n2 = config2.shape[1]
+        m1, n1 = config1.shape[:2]
+        m2, n2 = config2.shape[:2]
+        assert m1 == m2 or m1 == 1 or m2 == 1, f"can't broadcast first axis {m1} and {m2}"
         if n1 == 0 or n2 == 0:
             return np.zeros((config1.shape[0], 0, 3)), []
-        vs = []
-        ij = []
+        vs = np.zeros((max(m1, m2), n1, n2, 3))
         for i in range(n2):
-            vs.append(self.dist_i(config1, config2[:, i, :]))
-            ij.extend([(j, i) for j in range(n1)])
-        vs = np.concatenate(vs, axis=1)
-
-        return vs, ij
+            vs[:, :, i] = self.dist_i(config1, config2[:, i, :])
+        return vs
 
 
 def _is_diagonal(M, tol):
@@ -87,16 +81,16 @@ class MinimalImageDistance(RawDistance):
         diagonal = _is_diagonal(latvec, ortho_tol)
         self.dimension = latvec.shape[-1]
         if diagonal:
-            self.dist_i = self.diagonal_dist_i
+            self._minimal_dist = self.diagonal_dist
         else:
             L_ovlp = np.dot(latvec, latvec.T)
             orthogonal = _is_diagonal(L_ovlp, ortho_tol)
             if orthogonal:
-                self.dist_i = self.orthogonal_dist_i
-                # print("Orthogonal lattice vectors")
+                self._minimal_dist = self.orthogonal_dist
+                # print("Orthogonal lattics vectors")
             else:
-                self.dist_i = self.general_dist_i
-                # print("Non-orthogonal lattice vectors")
+                self._minimal_dist = self.general_dist
+                # print("Non-orthogonal lattics vectors")
         self._latvec = latvec
         self._invvec = np.linalg.inv(latvec)
         # list of all 26 neighboring cells
@@ -105,15 +99,17 @@ class MinimalImageDistance(RawDistance):
         self.shifts = np.dot(self.point_list, self._latvec)
         # TODO build a minimal list instead of using all 27
 
-    def general_dist_i(self, configs, vec):
+    def dist_i(self, a, b):
+        # a ([m,] n, 3)
+        # b (m, 3)
+        # returns shape (m, n, 3)
+        assert len(b.shape) <= 2, f"dist_i argument b has {len(b.shape)} dimensions -- can have max 2"
+        return self._minimal_dist(b[:, np.newaxis, :] - a)
+
+    def general_dist(self, d1):
         """returns a list of electron-electron distances from an electron at position 'vec'
         configs will most likely be [nconfig,electron,dimension], and vec will be [nconfig,dimension]
         """
-        if len(vec.shape) == 3:
-            v = vec.transpose((1, 0, 2))[:, :, np.newaxis]
-        else:
-            v = vec[:, np.newaxis, :]
-        d1 = v - configs
         shifts = self.shifts.reshape((-1, *[1] * (len(d1.shape) - 1), 3))
         d1all = d1[np.newaxis] + shifts
         dists = np.sum(d1all**2, axis=-1)
@@ -121,28 +117,18 @@ class MinimalImageDistance(RawDistance):
         inds = np.meshgrid(*[np.arange(n) for n in mininds.shape], indexing="ij")
         return d1all[(mininds, *inds)]
 
-    def orthogonal_dist_i(self, configs, vec):
-        """Like dist_i, but assuming lattice vectors are orthogonal
+    def orthogonal_dist(self, d1):
+        """Like general_dist, but assuming lattice vectors are orthogonal
         It's about 10x faster than the general one checking all 27 lattice points
         """
-        if len(vec.shape) == 3:
-            v = vec.transpose((1, 0, 2))[:, :, np.newaxis]
-        else:
-            v = vec[:, np.newaxis, :]
-        d1 = v - configs
         frac_disps = np.einsum("...ij,jk->...ik", d1, self._invvec)
         frac_disps = (frac_disps + 0.5) % 1 - 0.5
         return np.einsum("...ij,jk->...ik", frac_disps, self._latvec)
 
-    def diagonal_dist_i(self, configs, vec):
-        """Like dist_i, but assuming lattice vectors are orthogonal
+    def diagonal_dist(self, d1):
+        """Like general_dist, but assuming lattice vectors are diagonal -- orthogonal and aligned with xyz
         It's about 10x faster than the general one checking all 27 lattice points
         """
-        if len(vec.shape) == 3:
-            v = vec.transpose((1, 0, 2))[:, :, np.newaxis]
-        else:
-            v = vec[:, np.newaxis, :]
-        d1 = v - configs
         for i in range(3):
             L = self._latvec[i, i]
             d1[..., i] = (d1[..., i] + L / 2) % L - L / 2

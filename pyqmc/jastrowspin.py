@@ -60,9 +60,9 @@ class JastrowSpin:
         # electron-electron distances
         nup = self._mol.nelec[0]
         d_upup, ij = configs.dist.dist_matrix(configs.configs[:, :nup])
-        d_updown, ij = configs.dist.pairwise(
+        d_updown = configs.dist.pairwise(
             configs.configs[:, :nup], configs.configs[:, nup:]
-        )
+        ).reshape(nconf, -1, 3)
         d_downdown, ij = configs.dist.dist_matrix(configs.configs[:, nup:])
 
         # Update bvalues according to spin case

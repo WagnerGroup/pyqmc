@@ -11,13 +11,17 @@ def test_complex_linemin(H2_ccecp_rhf, optfile="linemin.hdf5"):
     """
     mol, mf = H2_ccecp_rhf
     mf = copy.copy(mf)
+    mol.output = None
+    mol.stdout = None
+    mf.output=None
+    mf.stdout=None
     noise = (np.random.random(mf.mo_coeff.shape) - 0.5) * 0.2
     mf.mo_coeff = mf.mo_coeff * 1j + noise
 
     slater_kws = {"optimize_orbitals": True}
     wf, to_opt = pyq.generate_wf(mol, mf, slater_kws=slater_kws)
 
-    configs = pyq.initial_guess(mol, 100)
+    configs = pyq.initial_guess(mol, 1000)
     acc = pyq.gradient_generator(mol, wf, to_opt)
     pyq.line_minimization(
         wf, configs, acc, verbose=True, hdf_file=optfile, max_iterations=5

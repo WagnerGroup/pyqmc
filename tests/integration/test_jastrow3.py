@@ -19,6 +19,8 @@ import pytest
 def test_linemin_three_body(H2_ccecp_uhf):
     """Optimize a Slater-3bodyJastrow wave function and check that it's better than Hartree-Fock"""
     mol, mf = H2_ccecp_uhf
+    mol.stdout = None
+    mol.output = None
     wf, to_opt = generate_wf(
         mol,
         mf,

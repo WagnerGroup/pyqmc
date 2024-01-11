@@ -138,7 +138,7 @@ class Slater:
 
     """
 
-    def __init__(self, mol, mf, mc=None, tol=None, twist=0, determinants=None):
+    def __init__(self, mol, mf, mc=None, tol=None, twist=0, determinants=None, eval_gto_precision=None):
         """
         determinants should be a list of tuples, for example
         [ (1.0, [0,1],[0,1]),
@@ -158,6 +158,7 @@ class Slater:
         else:
             self._nelec = mol.nelec
 
+        self.eval_gto_precision = eval_gto_precision
         self.myparameters = {}
         (
             self.myparameters["det_coeff"],
@@ -165,7 +166,7 @@ class Slater:
             self._det_map,
             self.orbitals,
         ) = pyqmc.pyscftools.orbital_evaluator_from_pyscf(
-            mol, mf, mc, twist=twist, determinants=determinants, tol=self.tol
+            mol, mf, mc, twist=twist, determinants=determinants, tol=self.tol, eval_gto_precision=self.eval_gto_precision
         )
 
         self.parameters = JoinParameters([self.myparameters, self.orbitals.parameters])

@@ -81,7 +81,7 @@ class PBCOrbitalEvaluatorKpoints:
         :parameter cell: PyQMC supercell object (from get_supercell)
         :parameter mo_coeff: (2, nk, nao, nelec) array. MO coefficients for all kpts of primitive cell. If None, this object can't evaluate mos(), but can still evaluate aos().
         :parameter kpts: list of kpts to evaluate AOs
-        :eval_gto_precision: desired value of orbital at rcut, used for determining rcut for periodic. If None, rcut = 1
+        :eval_gto_precision: desired value of orbital at rcut, used for determining rcut for periodic system. Default value = 0.01
         """
         self._cell = cell.original_cell
         self.S = cell.S

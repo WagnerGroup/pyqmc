@@ -94,7 +94,7 @@ def orbital_evaluator_from_pyscf(
     twist: the twist of the calculation (units?)
     determinants: A list of determinants suitable to pass into create_packed_objects
     tol: smallest determinant weight to include in the wave function.
-    eval_gto_precision: desired value of orbital at rcut, used for determining rcut for periodic. If None, rcut = 1
+    eval_gto_precision: desired value of orbital at rcut, used for determining rcut for periodic system. Default value = 0.01
     
     You cannot pass both mc/tol and determinants.
 

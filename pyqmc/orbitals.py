@@ -107,11 +107,7 @@ class PBCOrbitalEvaluatorKpoints:
         self.ao_dtype = float if isgamma else complex
         self.mo_dtype = complex if iscomplex else float
 
-        if eval_gto_precision is not None:
-            self._cell.precision = eval_gto_precision
-        else:
-            self._cell.precision = 0.1
-
+        self._cell.precision = eval_gto_precision if eval_gto_precision is not None else 0.01
         self._cell.rcut = pyscf.pbc.gto.cell.estimate_rcut(self._cell, precision=self._cell.precision)
         self.rcut = self._estimate_rcut(self._cell)
         Ls = self._cell.get_lattice_Ls(rcut=self.rcut.max(), dimension=3)

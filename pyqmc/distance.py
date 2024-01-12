@@ -53,7 +53,7 @@ class RawDistance:
         m2, n2 = config2.shape[:2]
         assert m1 == m2 or m1 == 1 or m2 == 1, f"can't broadcast first axis {m1} and {m2}"
         if n1 == 0 or n2 == 0:
-            return np.zeros((config1.shape[0], 0, 3)), []
+            return np.zeros((config1.shape[0], 0, 3))
         vs = np.zeros((max(m1, m2), n1, n2, 3))
         for i in range(n2):
             vs[:, :, i] = self.dist_i(config1, config2[:, i, :])

@@ -185,10 +185,3 @@ def test_ewald_shifted():
     d = [compute_ewald_shifted(x, np.array([0.1, 0.2, 0.1])) for x in xvals]
     d = np.asarray(d)
     assert np.linalg.norm(d[1] - d[0]) < 1e-14
-
-if __name__ == "__main__":
-    import cProfile
-
-    cProfile.run("test_ewald_NaCl()", "ewaldtest_3d.prof")
-    cProfile.run("test_ewald_NaCl_2d()", "ewaldtest_2d.prof")
-    cProfile.run("test_ewald_NaCl_slab()", "ewaldtest_slab.prof")

@@ -19,8 +19,8 @@ class OpenConfigs:
     def electron(self, e):
         return OpenElectron(self.configs[:, e], self.dist)
 
-    def select(self, select):
-        return OpenConfigs(self.configs[select], dist=self.dist)
+    def mask(self, mask):
+        return OpenConfigs(self.configs[mask], dist=self.dist)
 
     def make_irreducible(self, e, vec, mask=True):
         """
@@ -134,9 +134,9 @@ class PeriodicConfigs:
             self.configs[:, e], self.lvecs, self.dist, wrap=self.wrap[:, e]
         )
 
-    def select(self, select):
+    def mask(self, mask):
         return PeriodicConfigs(
-            self.configs[select], self.lvecs, wrap=self.wrap[select], dist=self.dist
+            self.configs[mask], self.lvecs, wrap=self.wrap[mask], dist=self.dist
         )
 
     def make_irreducible(self, e, vec, mask=None):

@@ -12,15 +12,15 @@ class OpenElectron:
 
 
 class OpenConfigs:
-    def __init__(self, configs):
+    def __init__(self, configs, dist=None):
         self.configs = configs
-        self.dist = distance.RawDistance()
+        self.dist = dist or distance.RawDistance()
 
     def electron(self, e):
         return OpenElectron(self.configs[:, e], self.dist)
 
     def mask(self, mask):
-        return OpenConfigs(self.configs[mask])
+        return OpenConfigs(self.configs[mask], dist=self.dist)
 
     def make_irreducible(self, e, vec, mask=True):
         """
@@ -120,14 +120,14 @@ class PeriodicElectron:
 
 
 class PeriodicConfigs:
-    def __init__(self, configs, lattice_vectors, wrap=None):
+    def __init__(self, configs, lattice_vectors, wrap=None, dist=None):
         configs, wrap_ = pbc.enforce_pbc(lattice_vectors, configs)
         self.configs = configs
         self.wrap = wrap_
         if wrap is not None:
             self.wrap += wrap
         self.lvecs = lattice_vectors
-        self.dist = distance.MinimalImageDistance(lattice_vectors)
+        self.dist = dist or distance.MinimalImageDistance(lattice_vectors)
 
     def electron(self, e):
         return PeriodicElectron(
@@ -135,7 +135,9 @@ class PeriodicConfigs:
         )
 
     def mask(self, mask):
-        return PeriodicConfigs(self.configs[mask], self.lvecs, wrap=self.wrap[mask])
+        return PeriodicConfigs(
+            self.configs[mask], self.lvecs, wrap=self.wrap[mask], dist=self.dist
+        )
 
     def make_irreducible(self, e, vec, mask=None):
         """
@@ -193,7 +195,7 @@ class PeriodicConfigs:
         """
         clist = np.array_split(self.configs, npartitions)
         wlist = np.array_split(self.wrap, npartitions)
-        return [PeriodicConfigs(c, self.lvecs, w) for c, w in zip(clist, wlist)]
+        return [PeriodicConfigs(c, self.lvecs, w, dist=self._dist) for c, w in zip(clist, wlist)]
 
     def join(self, configslist, axis=0):
         """

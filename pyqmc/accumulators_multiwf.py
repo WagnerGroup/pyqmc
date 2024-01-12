@@ -39,16 +39,14 @@ class EnergyAccumulatorMultipleWF:
 
         return weighted_dat
 
-
-
     def keys(self):
-        return self.enacc.keys().union(["dpH", "dppsi", "dpidpj"])
+        return self.enacc.keys()
 
     def shapes(self):
-        nparms = np.sum([np.sum(opt) for opt in self.transform.to_opt.values()])
-        d = {"dpH": (nparms,), "dppsi": (nparms,), "dpidpj": (nparms, nparms)}
-        d.update(self.enacc.shapes())
-        return d
+        """
+        Note that the shapes here do not include the number of wave functions.
+        """
+        return self.enacc.shapes()
 
 
 

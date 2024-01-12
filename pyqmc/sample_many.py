@@ -55,50 +55,6 @@ def compute_weights(wfs):
     weights = np.einsum("ic,jc->ijc", psi.conj(), psi / rho)
     return weights
 
-
-
-def collect_overlap_data(wfs, configs, energy):
-    r"""
-    First implementation: just evaluate energy; future generalize to other accs
-
-    Sample distribution: sum of wf probabilities.
-
-    .. math:: \rho(\mathbf{R}) = \sum_i |\Psi_i(\mathbf{R})|^2
-
-    Wfs don't have to be normalized, but sampling will be more efficient if normalizations are similar.
-
-    Expectation values
-
-    .. math:: \frac{\langle{\Psi_i | \hat O | \Psi_j\rangle}}{N_iN_j} = \frac{1}{N_iN_j} \int d\mathbf{R} d\mathbf{R}' \Psi_i^*(\mathbf{R}) O(\mathbf{R}, \mathbf{R}') \Psi_j(\mathbf{R}') = \frac{1}{N_iN_j} \int d\mathbf{R} \frac{\Psi_i^*(\mathbf{R}) \Psi_j(\mathbf{R})}{\rho(\mathbf{R})} d\mathbf{R}' \frac{O(\mathbf{R}, \mathbf{R}') \Psi_j(\mathbf{R}')}{\Psi_j(\mathbf{R})} \rho(\mathbf{R})
-
-    .. math:: \frac{\langle{\Psi_i | \hat O | \Psi_j\rangle}}{N_iN_j} = \frac{1}{N_iN_j} \int d\mathbf{R} w_{ij}(\mathbf{R}) O_j^L(\mathbf{R}) \rho(\mathbf{R}) = \frac{1}{N_iN_j} \langle w_{ij}(\mathbf{R}) O_j^L(\mathbf{R})\rangle_{\mathjbf{R} ~ \rho}
-    """
-    phase, log_vals = [
-        np.nan_to_num(np.array(x)) for x in zip(*[wf.value() for wf in wfs])
-    ]
-    ref = np.max(log_vals, axis=0)  # for numerical stability
-    rho = np.mean(np.nan_to_num(np.exp(2 * (log_vals - ref))), axis=0)
-    psi = phase * np.nan_to_num(np.exp(log_vals - ref))
-    weight = np.einsum("ic,jc->ijc", psi.conj(), psi / rho)
-
-    energies = invert_list_of_dicts([energy(configs, wf) for wf in wfs])
-
-    weighted_dat = {}
-    unweighted_dat = {}
-
-    nconfig = psi.shape[-1]
-    # psi are [config,wf]
-    # we average over configs here and produce [wf,wf]
-    # c refers to the configuration
-    unweighted_dat["overlap"] = np.mean(weight, axis=-1)
-
-    # Weighted average
-    for k, en in energies.items():
-        weighted_dat[k] = np.einsum("jc,ijc->ij", en, weight) / nconfig
-
-    return weighted_dat, unweighted_dat
-
-
 def invert_list_of_dicts(A, asarray=True):
     """
     if we have a list [ {'A':1,'B':2}, {'A':3, 'B':5}], invert the structure to

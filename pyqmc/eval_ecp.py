@@ -91,7 +91,7 @@ def ecp_ea(mol, configs, wf, e, atom, threshold, naip=None):
     epos_rot[mask] = (configs.configs[mask, e, :] - r_ea_vec)[:, np.newaxis] + r_ea_i
 
     ratio_ = []
-    for a in range(naip):
+    for a in range(P_l.shape[1]):
         epos = configs.make_irreducible(e, epos_rot[:, a], mask)
         ratio_.append(wf.testvalue(e, epos, mask)[0])
     ratio = np.stack(ratio_, axis=1)

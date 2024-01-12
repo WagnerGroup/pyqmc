@@ -3,7 +3,6 @@ from pyqmc.coord import PeriodicConfigs
 import pyqmc.energy
 import pyqmc.gpu as gpu
 from pyscf.pbc.gto.cell import Cell
-from typing import Tuple
 
 class Ewald:
     '''
@@ -97,7 +96,7 @@ class Ewald:
         weight = gpu.cp.sum(gpu.erfc(self.alpha * r) / r, axis=-1) # sum over the lattice vectors
         return weight
 
-    def ewald_real_ion_ion_cross(self) -> float:
+    def ewald_real_ion_ion_cross(self):
         r'''
         Compute ion-ion contributions to the cross terms of real space sum.
 
@@ -230,7 +229,7 @@ class Ewald:
         ion_ion_real_self = -self.alpha / gpu.cp.sqrt(gpu.cp.pi) * gpu.cp.sum(self.atom_charges**2)
         return ion_ion_real_self
 
-    def ewald_real_elec_elec_self(self, nelec) -> float:
+    def ewald_real_elec_elec_self(self, nelec):
         r'''
         Compute ion-ion contributions to the self terms of real-space sum
 
@@ -257,7 +256,7 @@ class Ewald:
         w = -gpu.cp.pi / self.cell_area * (w1 + w2)
         return w
 
-    def ewald_recip_ion_ion_charge(self) -> float:
+    def ewald_recip_ion_ion_charge(self):
         r'''
         Compute ion-ion contributions to sum of the charge terms.
 
@@ -271,7 +270,7 @@ class Ewald:
         ion_ion_charge = gpu.cp.einsum('i,j,ij->', self.atom_charges, self.atom_charges, weight)
         return ion_ion_charge
 
-    def ewald_recip_elec_ion_charge(self, configs: PeriodicConfigs) -> float:
+    def ewald_recip_elec_ion_charge(self, configs: PeriodicConfigs):
         r'''
         Compute electron-ion contributions to sum of the charge terms.
 
@@ -286,7 +285,7 @@ class Ewald:
         elec_ion_charge = -2 * gpu.cp.einsum('i,cij->c', self.atom_charges, weight)
         return elec_ion_charge
 
-    def ewald_recip_elec_elec_charge(self, configs: PeriodicConfigs) -> float:
+    def ewald_recip_elec_elec_charge(self, configs: PeriodicConfigs):
         r'''
         Compute electron-electron contributions to sum of the charge terms.
 
@@ -301,7 +300,7 @@ class Ewald:
         elec_elec_charge = gpu.cp.einsum('cij->c', weight)
         return elec_elec_charge
 
-    def energy(self, configs: PeriodicConfigs) -> Tuple[float, float, float]:
+    def energy(self, configs: PeriodicConfigs):
         r'''
         Compute Coulomb energy for a set of configs.
 

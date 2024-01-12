@@ -54,7 +54,7 @@ class Ewald:
         '''
         Generate a list of points in the reciprocal space to add together for reciprocal-space sum.
 
-        :parameter int gmax: max number of reciprocal lattice vectors to check away from 0
+        :parameter gmax: max number of reciprocal lattice vectors to check away from 0
         :returns: reciprocal-space points (nk, 3)
         '''
         gXpos = gpu.cp.mgrid[1 : gmax + 1, -gmax: gmax + 1, 0:1].reshape(3, -1)

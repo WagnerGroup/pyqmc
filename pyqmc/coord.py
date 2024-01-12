@@ -19,6 +19,9 @@ class OpenConfigs:
     def electron(self, e):
         return OpenElectron(self.configs[:, e], self.dist)
 
+    def electrons(self, es):
+        return OpenConfigs(self.configs[:, es], self.dist)
+
     def mask(self, mask):
         return OpenConfigs(self.configs[mask], dist=self.dist)
 
@@ -132,6 +135,11 @@ class PeriodicConfigs:
     def electron(self, e):
         return PeriodicElectron(
             self.configs[:, e], self.lvecs, self.dist, wrap=self.wrap[:, e]
+        )
+
+    def electrons(self, es):
+        return PeriodicConfigs(
+            self.configs[:, es], self.lvecs, self.dist, wrap=self.wrap[:, es]
         )
 
     def mask(self, mask):

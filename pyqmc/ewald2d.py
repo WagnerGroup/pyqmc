@@ -3,11 +3,12 @@ from pyqmc.coord import PeriodicConfigs
 import pyqmc.energy
 import pyqmc.gpu as gpu
 from pyscf.pbc.gto.cell import Cell
+from typing import Tuple
 
 class Ewald:
     '''
     Evaluate the Ewald summation using the 2D formula
-    Yeh and Berkowitz. J. Chem. Phys. 111, 3155–3162 (1999)
+    [Yeh and Berkowitz. J. Chem. Phys. 111, 3155–3162 (1999)]
     https://doi.org/10.1063/1.479595
     '''
 
@@ -37,7 +38,7 @@ class Ewald:
         smallest_height = gpu.cp.amin(1 / gpu.cp.linalg.norm(self.recvec[:2, :2], axis=1))
         self.alpha = self.alpha_scaling / smallest_height
 
-    def set_lattice_displacements(self, nlatvec):
+    def set_lattice_displacements(self, nlatvec: int):
         '''
         Define a list of lattice-vector displacements to add together for real-space sum.
 
@@ -87,7 +88,7 @@ class Ewald:
 
         `m` and `n` denote either electrons or ions.
 
-        :parameter dist: distance matrix of two particles. Shape: (num_particles_m, num_particles_n, 1, 3)
+        :parameter dist: distance matrix. Shape: (num_particles_m, num_particles_n, 1, 3)
         :parameter lattice_displacements: a list of lattice-vector displacements. Shape: (1, 1, num_lattice_vectors, 3)
         :return: weight for real-space sum.
         '''
@@ -96,11 +97,11 @@ class Ewald:
         weight = gpu.cp.sum(gpu.erfc(self.alpha * r) / r, axis=-1) # sum over the lattice vectors
         return weight
 
-    def ewald_real_ion_ion_cross(self):
+    def ewald_real_ion_ion_cross(self) -> float:
         r'''
         Compute ion-ion contributions to the cross terms of real space sum.
 
-        .. math:: E_{\textrm{real-cross}}^{\textrm{ion-ion}} = \sum_{I=1}^{N_{\textrm{ion}}} \sum_{J > I}^{N_{\textrm{ion}}} q_I q_J W_{\textrm{real}}(\mathbf{r}_{IJ}).
+        .. math:: E_{\textrm{real,cross}}^{\textrm{ion-ion}} = \sum_{I=1}^{N_{\textrm{ion}}} \sum_{J > I}^{N_{\textrm{ion}}} q_I q_J W_{\textrm{real}}(\mathbf{r}_{IJ}).
 
         :returns: ion-ion real-space cross-term component of Ewald sum
         '''
@@ -118,7 +119,7 @@ class Ewald:
         r'''
         Compute electron-ion contributions to the cross terms of real space sum.
 
-        .. math:: E_{\textrm{real-cross}}^{\textrm{e-ion}} = \sum_{i=1}^{N_{\textrm{e}}} \sum_{I=1}^{N_{\textrm{ion}}} (-1) q_I W_{\textrm{real}}(\mathbf{r}_{iI}).
+        .. math:: E_{\textrm{real,cross}}^{\textrm{e-ion}} = \sum_{i=1}^{N_{\textrm{e}}} \sum_{I=1}^{N_{\textrm{ion}}} (-1) q_I W_{\textrm{real}}(\mathbf{r}_{iI}).
 
         :parameter configs: Shape: (nconf, nelec, 3)
         :returns: electron-ion real-space cross-term component of Ewald sum
@@ -132,7 +133,7 @@ class Ewald:
         r'''
         Compute electron-electron contributions to the cross terms of real space sum.
 
-        .. math:: E_{\textrm{real-cross}}^{\textrm{e-e}} = \sum_{i=1}^{N_{\textrm{e}}} \sum_{j > i}^{N_{\textrm{e}}} W_{\textrm{real}}(\mathbf{r}_{ij}).
+        .. math:: E_{\textrm{real,cross}}^{\textrm{e-e}} = \sum_{i=1}^{N_{\textrm{e}}} \sum_{j > i}^{N_{\textrm{e}}} W_{\textrm{real}}(\mathbf{r}_{ij}).
 
         :parameter configs: Shape: (nconf, nelec, 3)
         :returns: electron-electron real-space cross-term component of Ewald sum
@@ -146,7 +147,7 @@ class Ewald:
             elec_elec_real = gpu.cp.sum(elec_elec_cij, axis=-1)
         return elec_elec_real
 
-    def ewald_recip_weight(self, dist):
+    def ewald_recip_weight(self, dist: gpu.cp.ndarray):
         r'''
         Compute the weight for the reciprocal-space sum
 
@@ -156,8 +157,10 @@ class Ewald:
                     + \mathrm{e}^{-k z_{mn}} \textrm{erfc} \left(-\alpha z_{mn} + \frac{k}{2 \alpha} \right)
                 \right].
 
-        :parameter dist:
-        :returns:
+        :parameter dist: distance matrix.
+            Shape: (num_particles_m, num_particles_n, 3) or (nconf, num_particles_m, num_particles_n, 3)
+        :returns: weight for reciprocal-space sum
+        :
         '''
         z = dist[..., 2][None, ...]
         gsquared = gpu.cp.einsum('jk,jk->j', self.gpoints, self.gpoints)
@@ -220,29 +223,33 @@ class Ewald:
         r'''
         Compute ion-ion contributions to the self terms of real-space sum
 
-        .. math:: E_{\textrm{real-self}}^{\textrm{ion-ion}} = - \frac{\alpha}{\sqrt{\pi}} \sum_{I=1}^{N_{\textrm{ion}}} q_I^2. \\
+        .. math:: E_{\textrm{real,self}}^{\textrm{ion-ion}} = - \frac{\alpha}{\sqrt{\pi}} \sum_{I=1}^{N_{\textrm{ion}}} q_I^2. \\
 
         :return: ion-ion real-space self energy
         '''
         ion_ion_real_self = -self.alpha / gpu.cp.sqrt(gpu.cp.pi) * gpu.cp.sum(self.atom_charges**2)
         return ion_ion_real_self
 
-    def ewald_real_elec_elec_self(self, nelec):
+    def ewald_real_elec_elec_self(self, nelec) -> float:
         r'''
         Compute ion-ion contributions to the self terms of real-space sum
 
-        .. math:: E_{\textrm{real-self}}^{\textrm{e-e}} = - \frac{\alpha}{\sqrt{\pi}} N_{\textrm{e}}. \\
+        .. math:: E_{\textrm{real,self}}^{\textrm{e-e}} = - \frac{\alpha}{\sqrt{\pi}} N_{\textrm{e}}. \\
 
         :return: ion-ion real-space self energy
         '''
         elec_elec_real_self = -self.alpha / gpu.cp.sqrt(gpu.cp.pi) * nelec
         return elec_elec_real_self
 
-    def ewald_recip_weight_charge(self, dist):
+    def ewald_recip_weight_charge(self, dist: gpu.cp.ndarray) -> gpu.cp.ndarray:
         r'''
         Compute the weight for the charge terms (k = 0 terms) in reciprocal space sum
 
         .. math:: W_{\textrm{recip,k=0}}(z_{mn}) = - \frac{\pi}{A} \left[z_{mn} \textrm{erf}(\alpha z_{mn}) + \frac{1}{\alpha \sqrt{\pi}} \exp(-\alpha^2 z_{mn}^2) \right].
+
+        :parameter dist: distance matrix.
+            Shape: (num_particles_m, num_particles_n, 3) or (nconf, num_particles_m, num_particles_n, 3)
+        :return: Shape: (num_particles_m, num_particles_n) or (nconf, num_particles_m, num_particles_n)
         '''
         z = dist[..., 2] # (natoms, natoms)
         w1 = z * gpu.erf(self.alpha * z)
@@ -250,19 +257,21 @@ class Ewald:
         w = -gpu.cp.pi / self.cell_area * (w1 + w2)
         return w
 
-    def ewald_recip_ion_ion_charge(self):
+    def ewald_recip_ion_ion_charge(self) -> float:
         r'''
         Compute ion-ion contributions to sum of the charge terms.
 
         .. math:: E_{\textrm{recip},k = 0}^{\textrm{ion-ion}}
             = \sum_{I=1}^{N_{\textrm{ion}}} \sum_{J=1}^{N_{\textrm{ion}}} q_I q_J W(z_{IJ}).
+
+        :return: ion-ion charge term
         '''
         ii_dist = self.dist.dist_i(self.atom_coords, self.atom_coords) # (natoms, natoms, 3)
         weight = self.ewald_recip_weight_charge(ii_dist)
         ion_ion_charge = gpu.cp.einsum('i,j,ij->', self.atom_charges, self.atom_charges, weight)
         return ion_ion_charge
 
-    def ewald_recip_elec_ion_charge(self, configs: PeriodicConfigs):
+    def ewald_recip_elec_ion_charge(self, configs: PeriodicConfigs) -> float:
         r'''
         Compute electron-ion contributions to sum of the charge terms.
 
@@ -270,13 +279,14 @@ class Ewald:
             = \sum_{i=1}^{N_{\textrm{e}}} \sum_{I=1}^{N_{\textrm{ion}}} (-2 q_I) W(z_{iI}).
 
         :parameter configs: Shape: (nconf, nelec, 3)
+        :return: electron-ion charge term
         '''
         ei_dist = self.dist.dist_i(self.atom_coords, configs.configs).transpose((1, 0, 2, 3)) # (nconf, natoms, nelec, 3)
         weight = self.ewald_recip_weight_charge(ei_dist)
         elec_ion_charge = -2 * gpu.cp.einsum('i,cij->c', self.atom_charges, weight)
         return elec_ion_charge
 
-    def ewald_recip_elec_elec_charge(self, configs: PeriodicConfigs):
+    def ewald_recip_elec_elec_charge(self, configs: PeriodicConfigs) -> float:
         r'''
         Compute electron-electron contributions to sum of the charge terms.
 
@@ -284,13 +294,14 @@ class Ewald:
             = \sum_{i=1}^{N_{\textrm{e}}} \sum_{j=1}^{N_{\textrm{e}}} W_{\textrm{recip}}(z_{ij}).
 
         :parameter configs: Shape: (nconf, nelec, 3)
+        :return: electron-electron charge term
         '''
         ee_dist = self.dist.dist_i(configs.configs, configs.configs).transpose((1, 0, 2, 3)) # (nconf, nelec, nelec, 3)
         weight = self.ewald_recip_weight_charge(ee_dist)
         elec_elec_charge = gpu.cp.einsum('cij->c', weight)
         return elec_elec_charge
 
-    def energy(self, configs: PeriodicConfigs):
+    def energy(self, configs: PeriodicConfigs) -> Tuple[float, float, float]:
         r'''
         Compute Coulomb energy for a set of configs.
 
@@ -307,7 +318,6 @@ class Ewald:
             * ee: electron-electron part
             * ei: electron-ion part
             * ii: ion-ion part
-        :rtype: float, float, float
         '''
         nelec = configs.configs.shape[1]
         ii_const = self.ewald_recip_ion_ion_charge() + self.ewald_real_ion_ion_self()

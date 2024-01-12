@@ -44,15 +44,6 @@ class OpenConfigs:
         """
         self.configs[accept, e, :] = new.configs[accept, :]
 
-    def move_all(self, new, accept):
-        """
-        Change coordinates of all electrons
-        Args:
-          new: OpenConfigs with configs.shape new coordinates
-          accept: (nconfig,) boolean for which configs to update
-        """
-        self.configs[accept] = new.configs[accept]
-
     def resample(self, newinds):
         """
         Resample configs by new indices (e.g. for DMC branching)
@@ -173,16 +164,6 @@ class PeriodicConfigs:
         """
         self.configs[accept, e, :] = new.configs[accept, :]
         self.wrap[accept, e, :] = new.wrap[accept, :]
-
-    def move_all(self, new, accept):
-        """
-        Change coordinates of all electrons
-        Args:
-          new: PeriodicConfigs with configs.shape new coordinates
-          accept: (nconfig,) boolean for which configs to update
-        """
-        self.configs[accept] = new.configs[accept]
-        self.wrap[accept] = new.wrap[accept]
 
     def resample(self, newinds):
         """

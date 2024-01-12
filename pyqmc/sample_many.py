@@ -157,9 +157,6 @@ def sample_overlap_block(wfs, configs, tstep, nsteps, energy):
 
             # Acceptance
             t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
-            #wf_ratios = np.abs(vals) ** 2
-            #log_values = np.real(np.array([wf.value()[1] for wf in wfs]))
-            #weights = np.exp(2 * (log_values - log_values[0]))
             weights = compute_weights(wfs).diagonal() #Little tricky here; this is to prevent overflows
             weights = weights/weights.sum(axis=0)
 

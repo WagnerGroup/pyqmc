@@ -139,7 +139,7 @@ class PeriodicConfigs:
 
     def electrons(self, es):
         return PeriodicConfigs(
-            self.configs[:, es], self.lvecs, self.dist, wrap=self.wrap[:, es]
+            self.configs[:, es], self.lvecs, dist=self.dist, wrap=self.wrap[:, es]
         )
 
     def mask(self, mask):

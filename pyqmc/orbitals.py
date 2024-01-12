@@ -107,9 +107,8 @@ class PBCOrbitalEvaluatorKpoints:
         self.ao_dtype = float if isgamma else complex
         self.mo_dtype = complex if iscomplex else float
 
-        self._cell.precision = eval_gto_precision if eval_gto_precision is not None else 0.01
-        self._cell.rcut = pyscf.pbc.gto.cell.estimate_rcut(self._cell, precision=self._cell.precision)
-        self.rcut = self._estimate_rcut(self._cell)
+        eval_gto_precision = 1e-2 if eval_gto_precision is None else eval_gto_precision
+        self.rcut = _estimate_rcut(self._cell, eval_gto_precision)
         Ls = self._cell.get_lattice_Ls(rcut=self.rcut.max(), dimension=3)
         self.Ls = Ls[np.argsort(pyscf.lib.norm(Ls, axis=1))]
 
@@ -191,23 +190,25 @@ class PBCOrbitalEvaluatorKpoints:
         """
         return self.param_split[spin], ao
 
-    def _estimate_rcut(self, cell):
-        """
-        Returns the cutoff raidus, above which each shell decays to a value less than the
-        required precsion
-        """
-        vol = cell.vol
-        weight_penalty = vol # ~ V[r] * (vol/ngrids) * ngrids
-        precision = cell.precision / max(weight_penalty, 1)
-        rcut = []
-        for ib in range(cell.nbas):
-            l = cell.bas_angular(ib)
-            es = cell.bas_exp(ib)
-            cs = abs(cell._libcint_ctr_coeff(ib)).max(axis=1)
-            norm_ang = ((2*l+1)/(4*np.pi))**.5
-            fac = 2*np.pi/vol * cs*norm_ang/es / precision
-            r = cell.rcut
+
+def _estimate_rcut(cell, eval_gto_precision):
+    """
+    Returns the cutoff raidus, above which each shell decays to a value less than the
+    required precsion
+    """
+    vol = cell.vol
+    weight_penalty = vol # ~ V[r] * (vol/ngrids) * ngrids
+    init_rcut = pyscf.pbc.gto.cell.estimate_rcut(cell, precision=eval_gto_precision)
+    precision = eval_gto_precision / max(weight_penalty, 1)
+    rcut = []
+    for ib in range(cell.nbas):
+        l = cell.bas_angular(ib)
+        es = cell.bas_exp(ib)
+        cs = abs(cell._libcint_ctr_coeff(ib)).max(axis=1)
+        norm_ang = ((2*l+1)/(4*np.pi))**.5
+        fac = 2*np.pi/vol * cs*norm_ang/es / precision
+        r = init_rcut
+        for _ in range(2):
             r = (np.log(fac * r**(l+1) + 1.) / es)**.5
-            r = (np.log(fac * r**(l+1) + 1.) / es)**.5
-            rcut.append(r.max())
-        return np.array(rcut)
+        rcut.append(r.max())
+    return np.array(rcut)

@@ -1,10 +1,7 @@
 import numpy as np
 import pyqmc.gpu as gpu
-import pyqmc.pbc as pbc
 import pyscf.pbc.gto.eval_gto
 import pyscf.pbc.gto.cell
-import pyscf.pbc.scf.addons
-import pyscf.lib
 import pyqmc.pbc
 
 """
@@ -110,7 +107,7 @@ class PBCOrbitalEvaluatorKpoints:
         eval_gto_precision = 1e-2 if eval_gto_precision is None else eval_gto_precision
         self.rcut = _estimate_rcut(self._cell, eval_gto_precision)
         Ls = self._cell.get_lattice_Ls(rcut=self.rcut.max(), dimension=3)
-        self.Ls = Ls[np.argsort(pyscf.lib.norm(Ls, axis=1))]
+        self.Ls = Ls[np.argsort(np.linalg.norm(Ls, axis=1))]
 
     def nmo(self):
         return [
@@ -128,7 +125,7 @@ class PBCOrbitalEvaluatorKpoints:
         """
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
-        primcoords, primwrap = pbc.enforce_pbc(self.Lprim, mycoords)
+        primcoords, primwrap = pyqmc.pbc.enforce_pbc(self.Lprim, mycoords)
         ao = gpu.cp.asarray(
             pyscf.pbc.gto.eval_gto.eval_gto(
                 self._cell,

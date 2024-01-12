@@ -163,7 +163,7 @@ class JastrowSpin:
 
         return b_partial_e, bvals
 
-    def _b_partial_many(self, e, epos, mask, spin):
+    def _b_update_many(self, e, epos, mask, spin):
         r"""
         Compute the update to b for each electron moving to epos.
 
@@ -412,7 +412,7 @@ class JastrowSpin:
                 self._a_update(e[ind], epos, mask) - self._a_partial[e[ind]][:, mask]
             )
             deltab = (
-                self._b_partial_many(e[ind], epos, mask, spin)
+                self._b_update_many(e[ind], epos, mask, spin)
                 - self._b_partial[e[ind]][:, mask]
             )
             a_val = gpu.cp.einsum(

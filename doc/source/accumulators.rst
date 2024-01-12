@@ -20,6 +20,11 @@ Ewald summation
 .. automodule:: pyqmc.ewald
    :members:
 
+Ewald2D summation
+=============================
+.. automodule:: pyqmc.ewald2d
+   :members:
+
 1-RDM
 =============================
 .. automodule:: pyqmc.obdm

@@ -32,7 +32,7 @@ class GeminalJastrow:
     The independent parameters are :math:`g_{mn} = \tilde g_{mn} + \tilde g_{nm}, \; m \le n`.
     """
 
-    def __init__(self, mol, orbitals=None):
+    def __init__(self, mol, orbitals=None, eval_gto_precision=None):
         if orbitals is None:
             if hasattr(mol, "lattice_vectors"):
                 if not hasattr(mol, "original_cell"):
@@ -41,7 +41,7 @@ class GeminalJastrow:
                     mol = make_pbc_supercell_for_gamma_aos(mol)
                 kpts = [[0, 0, 0]]
                 self.orbitals = pyqmc.orbitals.PBCOrbitalEvaluatorKpoints(
-                    mol, kpts=kpts
+                    mol, kpts=kpts, eval_gto_precision=eval_gto_precision
                 )
             else:
                 self.orbitals = pyqmc.orbitals.MoleculeOrbitalEvaluator(mol, [0, 0])

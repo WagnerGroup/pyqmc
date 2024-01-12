@@ -44,6 +44,8 @@ class OBDMAccumulator:
         extra coordinate.
 
       spin: 0 or 1 for up or down. Defaults to all electrons.
+
+      eval_gto_precision (float): desired value of orbital at rcut, used for determining rcut for periodic system. Default value = 0.01
     """
 
     def __init__(
@@ -57,6 +59,7 @@ class OBDMAccumulator:
         spin=None,
         electrons=None,
         kpts=None,
+        eval_gto_precision=None,
     ):
         if spin is not None:
             if spin == 0:
@@ -80,7 +83,7 @@ class OBDMAccumulator:
             if not hasattr(mol, "original_cell"):
                 mol = supercell.get_supercell(mol, np.eye(3))
             self.orbitals = pyqmc.orbitals.PBCOrbitalEvaluatorKpoints(
-                mol, [orb_coeff, orb_coeff], kpts
+                mol, [orb_coeff, orb_coeff], kpts, eval_gto_precision=eval_gto_precision
             )
 
         self.dtype = self.orbitals.mo_dtype

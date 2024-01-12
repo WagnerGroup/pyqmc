@@ -57,6 +57,7 @@ def get_supercell(cell, S):
     supercell.scale = scale
     supercell.output = None
     supercell.stdout = None
+    supercell.dimension = cell.dimension
     return supercell
 
 

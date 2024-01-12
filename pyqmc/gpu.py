@@ -5,13 +5,13 @@ class NoGPUFoundError(Exception):
 try:
     import cupy as cp
     from cupy import get_array_module, asnumpy, fuse
-    from cupyx.scipy.special import erfc
+    from cupyx.scipy.special import erfc, erf
 
     if not cp.cuda.is_available():
         raise NoGPUFoundError
 except (ModuleNotFoundError, NoGPUFoundError) as e:
     import numpy as cp
-    from scipy.special import erfc
+    from scipy.special import erfc, erf
 
     def get_array_module(a):
         return cp

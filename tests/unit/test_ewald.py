@@ -1,5 +1,6 @@
 import numpy as np
 import pyqmc.ewald
+import pyqmc.ewald2d
 from pyqmc.coord import PeriodicConfigs
 from pyqmc.supercell import get_supercell
 from pyscf.pbc import gto, scf
@@ -7,7 +8,10 @@ from pyscf.pbc import gto, scf
 
 def get_ewald_energy(cell, S, configs):
     supercell = get_supercell(cell, S)
-    ewald = pyqmc.ewald.Ewald(supercell)
+    if supercell.dimension == 2:
+        ewald = pyqmc.ewald2d.Ewald(supercell)
+    else:
+        ewald = pyqmc.ewald.Ewald(supercell)
     configs = PeriodicConfigs(configs, supercell.lattice_vectors())
     ee, ei, ii = ewald.energy(configs)
     etot = ee + ei + ii
@@ -47,6 +51,55 @@ def test_ewald_NaCl():
     print("correct answer: ", 4 * nacl_answer)
     assert np.abs(etot / 4 + nacl_answer) < 1e-4
 
+def test_ewald_NaCl_2d():
+    nacl_answer = 1.6155
+    Lz = 30 # large cell height to simulate 2D
+    cell = gto.Cell(
+        atom="""H     {0} {0} {0}""".format(0.0),
+        basis="sto-3g",
+        unit="bohr",
+        spin=1,
+        dimension=2, # specify 2 dimensions to use the 2d ewald formula
+        low_dim_ft_type='inf_vacuum'
+    )
+    cell.spin = 1
+    cell.build(a=np.array([[1, 1, 0], [-1, 1, 0], [0, 0, Lz]]), spin=1)
+    cell.spin = 1 # has to build twice to enable protected attributes in `cell`
+
+    print('testing flat 2d ewald')
+    S = np.eye(3)
+    configs = np.asarray([[[1, 0, 0]]])
+    etot = get_ewald_energy(cell, S, configs)
+    print("correct answer: ", nacl_answer)
+    assert np.abs(etot + nacl_answer) < 1e-4
+
+def test_ewald_NaCl_slab():
+    '''
+    The system is 3 layers of alternating charges
+    The reference answer is calculated from
+        E = Energy of a charge in the center layer + Energy of a charge in the top layer + Energy of a charge in the bottom layer
+          = 1.749129285988639 + 2*1.6815268353899375 = 5.1122
+    '''
+    nacl_answer = 5.1122
+    Lz = 30 # large cell height to simulate 2D
+    cell = gto.Cell(
+        atom="""H 0 0 0; H 1 0 1; H 1 0 -1""",
+        basis="sto-3g",
+        unit="bohr",
+        spin=1,
+        dimension=2,
+        low_dim_ft_type='inf_vacuum'
+    )
+    cell.spin = 1
+    cell.build(a=np.array([[1, 1, 0], [-1, 1, 0], [0, 0, Lz]]), spin=1)
+    cell.spin = 1 # has to build twice to enable protected attributes in `cell`
+
+    print('testing 3-layer slab ewald')
+    S = np.eye(3)
+    configs = np.asarray([[[1, 0, 0], [1, 1, 1], [1, 1, -1]]])
+    etot = get_ewald_energy(cell, S, configs)
+    print("correct answer: ", nacl_answer)
+    assert np.abs(etot + nacl_answer) < 1e-4
 
 def test_ewald_CaF2():
     r"""
@@ -127,15 +180,15 @@ def compute_ewald_shifted(x, delta, L=4.0):
     energy = evaluator.energy(configs)
     return np.concatenate([np.ravel(a) for a in energy])
 
-
 def test_ewald_shifted():
     xvals = [0.1, 0.2]
     d = [compute_ewald_shifted(x, np.array([0.1, 0.2, 0.1])) for x in xvals]
     d = np.asarray(d)
     assert np.linalg.norm(d[1] - d[0]) < 1e-14
 
-
 if __name__ == "__main__":
     import cProfile
 
-    cProfile.run("test_ewald_NaCl()", "ewaldtest.prof")
+    cProfile.run("test_ewald_NaCl()", "ewaldtest_3d.prof")
+    cProfile.run("test_ewald_NaCl_2d()", "ewaldtest_2d.prof")
+    cProfile.run("test_ewald_NaCl_slab()", "ewaldtest_slab.prof")

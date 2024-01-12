@@ -1,3 +1,4 @@
+import numpy as np
 import pyqmc
 from pyqmc.coord import PeriodicConfigs
 import pyqmc.energy
@@ -20,7 +21,7 @@ class Ewald:
         :parameter float alpha_scaling: scaling factor for partitioning the real-space and reciprocal-space parts.
         '''
         self.latvec = cell.lattice_vectors()
-        self.atom_coords = cell.atom_coords()
+        self.atom_coords = cell.atom_coords()[np.newaxis]
         self.nelec = gpu.cp.array(cell.nelec)
         self.atom_charges = gpu.cp.asarray(cell.atom_charges())
         self.dist = pyqmc.distance.MinimalImageDistance(self.latvec)
@@ -108,7 +109,7 @@ class Ewald:
             ion_ion_real_cross = 0
         else:
             # input to dist_matrix has the shape (nconf, natoms, ndim)
-            ion_ion_dist, ion_ion_idxs = self.dist.dist_matrix(self.atom_coords[None])
+            ion_ion_dist, ion_ion_idxs = self.dist.dist_matrix(self.atom_coords)
             ion_ion_cij = self.ewald_real_weight(ion_ion_dist[:, :, None, :], self.lattice_displacements[None, None, :, :]) # (nconf, npairs=choose(natoms, 2))
             ion_ion_charge_ij = gpu.cp.prod(self.atom_charges[gpu.cp.asarray(ion_ion_idxs)], axis=1) # (npairs,)
             ion_ion_real_cross = gpu.cp.einsum('j,ij->i', ion_ion_charge_ij, ion_ion_cij) # (nconf,)
@@ -123,9 +124,9 @@ class Ewald:
         :parameter configs: Shape: (nconf, nelec, 3)
         :returns: electron-ion real-space cross-term component of Ewald sum
         '''
-        elec_ion_dist = configs.dist.dist_i(self.atom_coords, configs.configs) # (nelec, nconf, natoms, ndim)
-        elec_ion_cij = self.ewald_real_weight(elec_ion_dist[:, :, :, None, :], self.lattice_displacements[None, None, None, :, :])  # (nelec, nconf, natoms)
-        elec_ion_real = gpu.cp.einsum('k,ijk->j', -self.atom_charges, elec_ion_cij)  # (nconf,)
+        elec_ion_dist = configs.dist.pairwise(self.atom_coords, configs.configs) # (nelec, nconf, natoms, ndim)
+        elec_ion_cij = self.ewald_real_weight(elec_ion_dist[:, :, :, None, :], self.lattice_displacements[None, None, None, :, :])  # (nconf, nelec, natoms)
+        elec_ion_real = gpu.cp.einsum('k,ijk->i', -self.atom_charges, elec_ion_cij)  # (nconf,)
         return elec_ion_real
 
     def ewald_real_elec_elec_cross(self, configs: PeriodicConfigs) -> float:
@@ -178,7 +179,7 @@ class Ewald:
 
         :return: ion-ion reciprocal-space k>0 component of Ewald sum
         '''
-        ii_dist = self.dist.dist_i(self.atom_coords, self.atom_coords) # (natoms, natoms, 3)
+        ii_dist = self.dist.pairwise(self.atom_coords, self.atom_coords)[0] # (natoms, natoms, 3)
         g_dot_r = gpu.cp.einsum('kd,ijd->kij', self.gpoints, ii_dist) # (nk, natoms, natoms)
         gweight = self.ewald_recip_weight(ii_dist) # (nk, natoms, natoms)
         ion_ion_recip = gpu.cp.einsum('i,j,kij,kij->', self.atom_charges, self.atom_charges, gpu.cp.exp(1j * g_dot_r), gweight).real
@@ -194,7 +195,7 @@ class Ewald:
         :parameter configs: Shape: (nconf, nelec, 3)
         :return: electron-ion reciprocal-space k>0 component of Ewald sum
         '''
-        ei_dist = self.dist.dist_i(self.atom_coords, configs.configs).transpose((1, 0, 2, 3)) # (nconf, natoms, nelec, 3)
+        ei_dist = self.dist.pairwise(self.atom_coords, configs.configs) # (nconf, natoms, nelec, 3)
         g_dot_r = gpu.cp.einsum('kd,cijd->ckij', self.gpoints, ei_dist) # (nconf, nk, natoms, nelec)
         gweight = self.ewald_recip_weight(ei_dist) # (nconf, nk, natoms, nelec)
         elec_ion_recip = -2 * gpu.cp.einsum('i,ckij,ckij->c', self.atom_charges, gpu.cp.cos(g_dot_r), gweight)
@@ -210,7 +211,7 @@ class Ewald:
         :parameter configs: Shape: (nconf, nelec, 3)
         :return: electron-electron reciprocal-space k>0 component of Ewald sum
         '''
-        ee_dist = self.dist.dist_i(configs.configs, configs.configs).transpose((1, 0, 2, 3)) # (nconf, nelec, nelec, 3)
+        ee_dist = self.dist.pairwise(configs.configs, configs.configs) # (nconf, nelec, nelec, 3)
         g_dot_r = gpu.cp.einsum('kd,cijd->ckij', self.gpoints, ee_dist) # (nconf, nk, nelec, nelec)
         gweight = self.ewald_recip_weight(ee_dist) # (nconf, nk, nelec, nelec)
         elec_elec_recip = gpu.cp.einsum('ckij,ckij->c', gpu.cp.exp(1j * g_dot_r), gweight).real
@@ -264,7 +265,7 @@ class Ewald:
 
         :return: ion-ion charge term
         '''
-        ii_dist = self.dist.dist_i(self.atom_coords, self.atom_coords) # (natoms, natoms, 3)
+        ii_dist = self.dist.pairwise(self.atom_coords, self.atom_coords)[0] # (natoms, natoms, 3)
         weight = self.ewald_recip_weight_charge(ii_dist)
         ion_ion_charge = gpu.cp.einsum('i,j,ij->', self.atom_charges, self.atom_charges, weight)
         return ion_ion_charge
@@ -279,7 +280,7 @@ class Ewald:
         :parameter configs: Shape: (nconf, nelec, 3)
         :return: electron-ion charge term
         '''
-        ei_dist = self.dist.dist_i(self.atom_coords, configs.configs).transpose((1, 0, 2, 3)) # (nconf, natoms, nelec, 3)
+        ei_dist = self.dist.pairwise(self.atom_coords, configs.configs) # (nconf, natoms, nelec, 3)
         weight = self.ewald_recip_weight_charge(ei_dist)
         elec_ion_charge = -2 * gpu.cp.einsum('i,cij->c', self.atom_charges, weight)
         return elec_ion_charge
@@ -294,7 +295,7 @@ class Ewald:
         :parameter configs: Shape: (nconf, nelec, 3)
         :return: electron-electron charge term
         '''
-        ee_dist = self.dist.dist_i(configs.configs, configs.configs).transpose((1, 0, 2, 3)) # (nconf, nelec, nelec, 3)
+        ee_dist = self.dist.pairwise(configs.configs, configs.configs) # (nconf, nelec, nelec, 3)
         weight = self.ewald_recip_weight_charge(ee_dist)
         elec_elec_charge = gpu.cp.einsum('cij->c', weight)
         return elec_elec_charge

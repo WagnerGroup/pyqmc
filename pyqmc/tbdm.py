@@ -42,6 +42,8 @@ class TBDMAccumulator:
          for up-up, up-down, down-up or down-down.
 
       ijkl (array): contains M tbdm matrix elements to calculate with dim (M,4).
+
+      eval_gto_precision (float): desired value of orbital at rcut, used for determining rcut for periodic system. Default value = 0.01
     """
 
     def __init__(
@@ -55,6 +57,7 @@ class TBDMAccumulator:
         naux=None,
         ijkl=None,
         kpts=None,
+        eval_gto_precision=None,
     ):
         self._mol = mol
         self._tstep = tstep
@@ -75,7 +78,7 @@ class TBDMAccumulator:
             if not hasattr(mol, "original_cell"):
                 mol = supercell.get_supercell(mol, np.eye(3))
             self.orbitals = pyqmc.orbitals.PBCOrbitalEvaluatorKpoints(
-                mol, orb_coeff, kpts
+                mol, orb_coeff, kpts, eval_gto_precision=eval_gto_precision
             )
             norb_up = np.sum([o.shape[1] for o in orb_coeff[0]])
             norb_down = np.sum([o.shape[1] for o in orb_coeff[1]])

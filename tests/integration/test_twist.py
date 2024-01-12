@@ -19,7 +19,7 @@ def runtest(mol, mf, kind=0):
     supercell = pyq.get_supercell(mol, np.identity(3))
     twists = pyq.create_supercell_twists(supercell, mf, 12)
     kpt = twists["twists"][kind]
-    wft = Slater(mol, mf, twist=kind)
+    wft = Slater(mol, mf, twist=kind, eval_gto_precision=1e-8)
 
     #####################################
     ## compare values across boundary

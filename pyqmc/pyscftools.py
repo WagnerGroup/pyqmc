@@ -85,7 +85,7 @@ def recover_pyscf(chkfile, ci_checkfile=None, cancel_outputs=True):
 
 
 def orbital_evaluator_from_pyscf(
-    mol, mf, mc=None, twist=0, determinants=None, tol=None
+    mol, mf, mc=None, twist=0, determinants=None, tol=None, eval_gto_precision=None
 ):
     """
     mol: A Mole object
@@ -94,7 +94,8 @@ def orbital_evaluator_from_pyscf(
     twist: the twist of the calculation (units?)
     determinants: A list of determinants suitable to pass into create_packed_objects
     tol: smallest determinant weight to include in the wave function.
-
+    eval_gto_precision: desired value of orbital at rcut, used for determining rcut for periodic system. Default value = 0.01
+    
     You cannot pass both mc/tol and determinants.
 
     :returns:
@@ -129,7 +130,7 @@ def orbital_evaluator_from_pyscf(
         max_orb = np.amax(max_orb, axis=0)
         mo_coeff = [[_mo_coeff[s][k][:, 0 : max_orb[s][k]] for k in kinds] for s in [0, 1]]
 
-        evaluator = orbitals.PBCOrbitalEvaluatorKpoints(mol, mo_coeff, kpts)
+        evaluator = orbitals.PBCOrbitalEvaluatorKpoints(mol, mo_coeff, kpts, eval_gto_precision)
         determinants = determinant_tools.flatten_determinants(determinants, max_orb, kinds)
     else:
         max_orb = [[f_max_orb(s) for s in det] for wt, det in determinants]

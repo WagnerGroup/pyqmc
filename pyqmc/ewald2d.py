@@ -5,6 +5,7 @@ import pyqmc.energy
 import pyqmc.gpu as gpu
 from pyscf.pbc.gto.cell import Cell
 from typing import Tuple
+import pyqmc.ewald as ewald
 
 class Ewald:
     '''
@@ -79,23 +80,6 @@ class Ewald:
         mask_bigweight = gweight > tol
         self.gpoints = candidate_gpoints[mask_bigweight]
 
-    def ewald_real_weight(self, dist: gpu.cp.ndarray, lattice_displacements: gpu.cp.ndarray) -> gpu.cp.ndarray:
-        r'''
-        Compute the weight for real-space sum
-
-        .. math:: W_{\textrm{real}}(\mathbf{r}_{mn}) = \sum_{\mathbf{n}} {}^{\prime} \frac{\textrm{erfc}(\alpha |\mathbf{r}_{mn} + \mathbf{n} L|)}{|\mathbf{r}_{mn} + \mathbf{n} L|}.
-
-        `m` and `n` denote either electrons or ions.
-
-        :parameter dist: distance matrix. Shape: (num_particles_m, num_particles_n, 1, 3)
-        :parameter lattice_displacements: a list of lattice-vector displacements. Shape: (1, 1, num_lattice_vectors, 3)
-        :return: weight for real-space sum. Shape: (num_particles_m, num_particles_n)
-        '''
-        rvec = dist + lattice_displacements
-        r = gpu.cp.linalg.norm(rvec, axis=-1)
-        weight = gpu.cp.sum(gpu.erfc(self.alpha * r) / r, axis=-1) # sum over the lattice vectors
-        return weight
-
     def ewald_real_ion_ion_cross(self) -> float:
         r'''
         Compute ion-ion contributions to the cross terms of real space sum.
@@ -109,7 +93,7 @@ class Ewald:
         else:
             # input to dist_matrix has the shape (nconf, natoms, ndim)
             ion_ion_dist, ion_ion_idxs = self.dist.dist_matrix(self.atom_coords)
-            ion_ion_cij = self.ewald_real_weight(ion_ion_dist[:, :, None, :], self.lattice_displacements[None, None, :, :]) # (nconf, npairs=choose(natoms, 2))
+            ion_ion_cij = ewald.real_cij(ion_ion_dist, self.lattice_displacements, self.alpha) # (nconf, npairs=choose(natoms, 2))
             ion_ion_charge_ij = gpu.cp.prod(self.atom_charges[gpu.cp.asarray(ion_ion_idxs)], axis=1) # (npairs,)
             ion_ion_real_cross = gpu.cp.einsum('j,ij->i', ion_ion_charge_ij, ion_ion_cij) # (nconf,)
         return ion_ion_real_cross
@@ -124,7 +108,7 @@ class Ewald:
         :returns: electron-ion real-space cross-term component of Ewald sum
         '''
         elec_ion_dist = configs.dist.pairwise(self.atom_coords, configs.configs) # (nelec, nconf, natoms, ndim)
-        elec_ion_cij = self.ewald_real_weight(elec_ion_dist[:, :, :, None, :], self.lattice_displacements[None, None, None, :, :])  # (nconf, nelec, natoms)
+        elec_ion_cij = ewald.real_cij(elec_ion_dist, self.lattice_displacements, self.alpha)  # (nconf, nelec, natoms)
         elec_ion_real = gpu.cp.einsum('k,ijk->i', -self.atom_charges, elec_ion_cij)  # (nconf,)
         return elec_ion_real
 
@@ -142,7 +126,7 @@ class Ewald:
             elec_elec_real = 0
         else:
             elec_elec_dist, elec_elec_idxs = configs.dist.dist_matrix(configs.configs) # (nconf, npairs, ndim)
-            elec_elec_cij = self.ewald_real_weight(elec_elec_dist[:, :, None, :], self.lattice_displacements[None, None, :, :])
+            elec_elec_cij = ewald.real_cij(elec_elec_dist, self.lattice_displacements, self.alpha)
             elec_elec_real = gpu.cp.sum(elec_elec_cij, axis=-1)
         return elec_elec_real
 

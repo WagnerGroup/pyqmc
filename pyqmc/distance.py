@@ -66,6 +66,9 @@ class RawDistance:
         return vs, ij
 
 
+def _is_diagonal(M, tol):
+    diagonal = np.all(np.abs(M - np.diag(np.diagonal(M))) < tol)
+
 class MinimalImageDistance(RawDistance):
     """Compute distance vectors under a minimal image condition
     using periodic boundary conditions."""
@@ -81,19 +84,13 @@ class MinimalImageDistance(RawDistance):
         Can also do something smarter by dividing the unit cell up into pieces that need to be determined or not.
         """
         ortho_tol = 1e-10
-        diagonal = np.all(np.abs(latvec - np.diag(np.diagonal(latvec))) < ortho_tol)
+        diagonal = _is_diagonal(latvec, ortho_tol)
         self.dimension = latvec.shape[-1]
         if diagonal:
             self.dist_i = self.diagonal_dist_i
         else:
-            first_two_orthogonal = np.dot(latvec[0], latvec[1]) < ortho_tol
-            if self.dimension == 3:
-                orthogonal = first_two_orthogonal and np.dot(latvec[1], latvec[2]) < ortho_tol and np.dot(latvec[2], latvec[0]) < ortho_tol
-            elif self.dimension == 2:
-                orthogonal = first_two_orthogonal
-            else:
-                raise NotImplementedError('Only 2 and 3 dimensions are supported')
-
+            L_ovlp = np.dot(latvec, latvec.T)
+            orthogonal = _is_diagonal(L_ovlp, ortho_tol)
             if orthogonal:
                 self.dist_i = self.orthogonal_dist_i
                 # print("Orthogonal lattice vectors")

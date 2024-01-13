@@ -30,6 +30,7 @@ class Ewald:
         self.set_alpha(alpha_scaling)
         self.set_lattice_displacements(nlatvec)
         self.set_gpoints(gmax)
+        self.set_ewald_ion_ion()
 
     def set_alpha(self, alpha_scaling: float):
         '''
@@ -81,7 +82,7 @@ class Ewald:
         self.gnorm = gnorm[mask_bigweight]
         self.sum_gweight = gpu.cp.sum(self.gweight)
 
-    def ewald_ion_ion(self) -> float:
+    def set_ewald_ion_ion(self):
         r'''
         real space sum:
 
@@ -100,7 +101,8 @@ class Ewald:
         '''
         sum_charges2 = np.sum(self.atom_charges**2)
         if len(self.atom_charges) == 1:
-            return self.ewald_self(sum_charges2)
+            self.ewald_ion_ion = self.ewald_self(sum_charges2)
+            return
         # real cross term
         # input to dist_matrix has the shape (nconf, natoms, ndim)
         ion_ion_dist, ion_ion_idxs = self.dist.dist_matrix(self.atom_coords)
@@ -118,7 +120,7 @@ class Ewald:
         weight = self.ewald_recip_weight_charge(ion_ion_dist)
         ion_ion_charge = 2 * gpu.cp.einsum('j,ij->', ion_ion_charge_ij, weight)
 
-        return ion_ion_real_cross + ion_ion_recip + ion_ion_charge + self.ewald_self(sum_charges2)
+        self.ewald_ion_ion = ion_ion_real_cross + ion_ion_recip + ion_ion_charge + self.ewald_self(sum_charges2)
 
     def ewald_elec_ion(self, configs: PeriodicConfigs) -> float:
         r'''
@@ -264,7 +266,7 @@ class Ewald:
             * ei: electron-ion part
             * ii: ion-ion part
         '''
-        ii = self.ewald_ion_ion()
+        ii = self.ewald_ion_ion
         ee = self.ewald_elec_elec(configs)
         ei = self.ewald_elec_ion(configs)
         return ee, ei, ii

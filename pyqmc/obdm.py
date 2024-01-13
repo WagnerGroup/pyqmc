@@ -142,7 +142,7 @@ class OBDMAccumulator:
             [orb[assign, ...] for orb, assign in zip(borb_aux, auxassignments)]
         )
 
-        borb_configs = self.evaluate_orbitals(configs.electrons(self._electrons))
+        borb_configs = self.evaluate_orbitals(configs.select_electrons(self._electrons))
         borb_configs = borb_configs.reshape(nconf, self.nelec, -1)
 
         bauxsquared = cp.abs(borb_aux) ** 2

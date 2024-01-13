@@ -79,6 +79,8 @@ class Ewald:
         gweight /= self.cell_area * gnorm
         mask_bigweight = gweight > tol
         self.gpoints = candidate_gpoints[mask_bigweight]
+        self.gweight = gweight[mask_bigweight]
+        self.gnorm = gnorm[mask_bigweight]
 
     def ewald_real_ion_ion_cross(self) -> float:
         r'''
@@ -145,9 +147,7 @@ class Ewald:
         :return: weight for reciprocal-space sum when k > 0. Shape: (nk, num_particles_m, num_particles_n) or (nconf, nk, num_particles_m, num_particles_n)
         '''
         z = dist[..., 2][None, ...]
-        gsquared = gpu.cp.einsum('jk,jk->j', self.gpoints, self.gpoints)
-        gnorm = gsquared**0.5
-        gnorm = gnorm[:, None, None]
+        gnorm = self.gnorm[:, None, None]
         w1 = gpu.cp.exp(gnorm * z) * gpu.erfc(self.alpha * z + gnorm / (2 * self.alpha))
         w2 = gpu.cp.exp(-gnorm * z) * gpu.erfc(-self.alpha * z + gnorm / (2 * self.alpha))
         gweight = gpu.cp.pi / (self.cell_area * gnorm) * (w1 + w2)

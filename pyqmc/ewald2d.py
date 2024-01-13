@@ -146,8 +146,8 @@ class Ewald:
             Shape: (num_particles_m, num_particles_n, 3) or (nconf, num_particles_m, num_particles_n, 3)
         :return: weight for reciprocal-space sum when k > 0. Shape: (nk, num_particles_m, num_particles_n) or (nconf, nk, num_particles_m, num_particles_n)
         '''
-        z = dist[..., 2][None, ...]
-        gnorm = self.gnorm[:, None, None]
+        z = dist[..., 2][..., np.newaxis]
+        gnorm = self.gnorm
         w1 = gpu.cp.exp(gnorm * z) * gpu.erfc(self.alpha * z + gnorm / (2 * self.alpha))
         w2 = gpu.cp.exp(-gnorm * z) * gpu.erfc(-self.alpha * z + gnorm / (2 * self.alpha))
         gweight = gpu.cp.pi / (self.cell_area * gnorm) * (w1 + w2)
@@ -164,8 +164,8 @@ class Ewald:
         '''
         ii_dist = self.dist.pairwise(self.atom_coords, self.atom_coords)[0] # (natoms, natoms, 3)
         g_dot_r = gpu.cp.einsum('kd,ijd->kij', self.gpoints, ii_dist) # (nk, natoms, natoms)
-        gweight = self.ewald_recip_weight(ii_dist) # (nk, natoms, natoms)
-        ion_ion_recip = gpu.cp.einsum('i,j,kij,kij->', self.atom_charges, self.atom_charges, gpu.cp.exp(1j * g_dot_r), gweight).real
+        gweight = self.ewald_recip_weight(ii_dist) # (natoms, natoms, nk)
+        ion_ion_recip = gpu.cp.einsum('i,j,kij,ijk->', self.atom_charges, self.atom_charges, gpu.cp.exp(1j * g_dot_r), gweight).real
         return ion_ion_recip
 
     def ewald_recip_elec_ion(self, configs: PeriodicConfigs) -> float:
@@ -180,8 +180,8 @@ class Ewald:
         '''
         ei_dist = self.dist.pairwise(self.atom_coords, configs.configs) # (nconf, natoms, nelec, 3)
         g_dot_r = gpu.cp.einsum('kd,cijd->ckij', self.gpoints, ei_dist) # (nconf, nk, natoms, nelec)
-        gweight = self.ewald_recip_weight(ei_dist) # (nconf, nk, natoms, nelec)
-        elec_ion_recip = -2 * gpu.cp.einsum('i,ckij,ckij->c', self.atom_charges, gpu.cp.cos(g_dot_r), gweight)
+        gweight = self.ewald_recip_weight(ei_dist) # (nconf, natoms, nelec, nk)
+        elec_ion_recip = -2 * gpu.cp.einsum('i,ckij,cijk->c', self.atom_charges, gpu.cp.cos(g_dot_r), gweight)
         return elec_ion_recip
 
     def ewald_recip_elec_elec(self, configs: PeriodicConfigs) -> float:
@@ -196,8 +196,8 @@ class Ewald:
         '''
         ee_dist = self.dist.pairwise(configs.configs, configs.configs) # (nconf, nelec, nelec, 3)
         g_dot_r = gpu.cp.einsum('kd,cijd->ckij', self.gpoints, ee_dist) # (nconf, nk, nelec, nelec)
-        gweight = self.ewald_recip_weight(ee_dist) # (nconf, nk, nelec, nelec)
-        elec_elec_recip = gpu.cp.einsum('ckij,ckij->c', gpu.cp.exp(1j * g_dot_r), gweight).real
+        gweight = self.ewald_recip_weight(ee_dist) # (nconf, nelec, nelec, nk)
+        elec_elec_recip = gpu.cp.einsum('ckij,cijk->c', gpu.cp.exp(1j * g_dot_r), gweight).real
         return elec_elec_recip
 
     def ewald_real_ion_ion_self(self) -> float:

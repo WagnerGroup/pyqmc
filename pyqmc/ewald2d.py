@@ -73,8 +73,7 @@ class Ewald:
         :parameter tol: tolerance for the cutoff weight
         '''
         candidate_gpoints = self.generate_positive_gpoints(gmax)
-        gsquared = gpu.cp.einsum('jk,jk->j', candidate_gpoints, candidate_gpoints)
-        gnorm = gsquared**0.5
+        gnorm = gpu.cp.linalg.norm(candidate_gpoints, axis=-1)
         gweight = gpu.cp.pi * gpu.erfc(gnorm/(2*self.alpha)) * 2
         gweight /= self.cell_area * gnorm
         mask_bigweight = gweight > tol

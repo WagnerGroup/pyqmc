@@ -14,7 +14,7 @@ class OpenElectron:
 class OpenConfigs:
     def __init__(self, configs, dist=None):
         self.configs = configs
-        self.dist = dist or distance.RawDistance()
+        self.dist = dist if dist is not None else distance.RawDistance()
 
     def electron(self, e):
         return OpenElectron(self.configs[:, e], self.dist)
@@ -121,7 +121,7 @@ class PeriodicConfigs:
         if wrap is not None:
             self.wrap += wrap
         self.lvecs = lattice_vectors
-        self.dist = dist or distance.MinimalImageDistance(lattice_vectors)
+        self.dist = dist if dist is not None else distance.MinimalImageDistance(lattice_vectors)
 
     def electron(self, e):
         return PeriodicElectron(

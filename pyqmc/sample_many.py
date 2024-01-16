@@ -113,12 +113,15 @@ def sample_overlap_block(wfs, configs, tstep, nsteps, energy):
 
             # Acceptance
             t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
-            weights = compute_weights(wfs).diagonal() #Little tricky here; this is to prevent overflows
-            weights = weights/weights.sum(axis=0)
+            wf_ratios = np.abs(vals) ** 2
+            log_values = np.real(np.array([wf.value()[1] for wf in wfs]))
+            weights = np.exp(2 * (log_values - log_values[0]))
 
-            ratio = t_prob * np.sum(np.abs(vals) ** 2 * weights.T, axis=0)
+            ratio = (
+                t_prob * np.sum(wf_ratios * weights, axis=0) / weights.sum(axis=0)
+            )
             accept = ratio > np.random.rand(nconf)
-            unweighted_block["acceptance"] += accept.mean() / nelec
+            # block_avg["acceptance"][n] += accept.mean() / nelec
 
             # Update wave function
             configs.move(e, newcoorde, accept)

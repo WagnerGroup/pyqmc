@@ -56,11 +56,11 @@ def test_sampler(H2_casci):
     _, configs = pyq.vmc(wf1, configs)
     energy = pyq.EnergyAccumulator(mol)
     sr_accumulator = StochasticReconfigurationMultipleWF(energy, [transform1, transform2])
-    data_weighted, data_unweighted, configs = sample_overlap(
-        [wf1, wf2], configs, sr_accumulator, nsteps=10, nblocks=20
-    )
+    data_weighted, data_unweighted, configs = sample_overlap([wf1, wf2], configs, sr_accumulator, nsteps=10, nblocks=20)
+    #data_weighted, data_unweighted, configs = sample_overlap_worker([wf1,wf2], configs, energy, [transform1, transform2], nsteps=10, nblocks=10)
 
     print(np.mean(data_unweighted['overlap'], axis=0))
+    raise Exception("stop here")
     avg, error = sr_accumulator.block_average(data_weighted, data_unweighted['overlap'])
     print(avg, error)
 

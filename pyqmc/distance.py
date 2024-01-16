@@ -61,7 +61,7 @@ class RawDistance:
 
 
 def _is_diagonal(M, tol):
-    diagonal = np.all(np.abs(M - np.diag(np.diagonal(M))) < tol)
+    return np.all(np.abs(M - np.diag(np.diagonal(M))) < tol)
 
 class MinimalImageDistance(RawDistance):
     """Compute distance vectors under a minimal image condition

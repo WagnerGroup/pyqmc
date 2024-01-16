@@ -146,7 +146,7 @@ class ThreeBodyJastrow:
 
         e: electron index
 
-        epos: Openconfigs Object with with proposed electron e configuration
+        epos: (nconfig, 3) array with with proposed electron e configuration
 
         a_values: a_basis evaluated on electron ion distances for configs
 
@@ -169,10 +169,16 @@ class ThreeBodyJastrow:
         edown = int(e >= self._mol.nelec[0])
         not_e = np.arange(self._nelec) != e
 
-        de = configs.dist.dist_i(configs.configs[:, not_e], epos)
-        re = np.linalg.norm(de, axis=-1)
+        if len(epos.shape) == 2:
+            de = configs.dist.dist_i(configs.configs[:, not_e], epos)
+            di_e = configs.dist.dist_i(self._mol.atom_coords(), epos)
+        else:
+            de = configs.dist.pairwise(configs.configs[:, not_e], epos)
+            di_e = configs.dist.pairwise(self._mol.atom_coords(), epos)
+            de = np.moveaxis(de, 2, 0)
+            di_e = np.moveaxis(di_e, 2, 0)
 
-        di_e = configs.dist.dist_i(self._mol.atom_coords(), epos)
+        re = np.linalg.norm(de, axis=-1)
         ri_e = np.linalg.norm(di_e, axis=-1)
 
         ae = np.zeros((*epos.shape[-2::-1], self._mol.natm, na))
@@ -607,8 +613,7 @@ class ThreeBodyJastrow:
         bvalues = np.stack([b.value(d_all, r_all) for b in self.b_basis], axis=-1)
         inds = tuple(zip(*ij))
         b_2d_values = np.zeros((nelec, nelec, nconf, nb))
-        for s, shape in enumerate([(nup, nup), (nup, ndown), (ndown, ndown)]):
-            b_2d_values[inds] = bvalues.swapaxes(0, 1)
+        b_2d_values[inds] = bvalues.swapaxes(0, 1)
 
         a = self.a_values
         up, down = slice(0, nup), slice(nup, None)

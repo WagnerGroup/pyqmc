@@ -18,7 +18,7 @@ def run_tests(wf, epos, epsilon):
         print(k, item)
         assert item < epsilon
 
-    testwf.test_mask(wf, 0, epos)
+    testwf.test_mask(wf, 0, epos.electron(0))
     # testwf.test_testvalue_many(wf,epos)
 
     for fname, func in zip(

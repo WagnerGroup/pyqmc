@@ -262,10 +262,10 @@ class Ewald:
         nconf, nelec, ndim = configs.configs.shape
 
         # Real space electron-ion part
-        # ei_distances shape (elec, conf, atom, dim)
-        ei_distances = configs.dist.dist_i(self.atom_coords, configs.configs)
+        # ei_distances shape (conf, atom, elec, dim)
+        ei_distances = configs.dist.pairwise(self.atom_coords[np.newaxis], configs.configs)
         ei_cij = self._real_cij(ei_distances)
-        ei_real_separated = gpu.cp.einsum("k,ijk->ji", -self.atom_charges, ei_cij)
+        ei_real_separated = gpu.cp.einsum("a,cae->ce", -self.atom_charges, ei_cij)
 
         # Real space electron-electron part
         ee_real_separated = gpu.cp.zeros((nconf, nelec))

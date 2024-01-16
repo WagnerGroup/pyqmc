@@ -29,6 +29,7 @@ class JastrowSpin:
         self.parameters = {}
         self._nelec = np.sum(mol.nelec)
         self._mol = mol
+        self.atom_coords = mol.atom_coords()[np.newaxis]
         self.parameters["bcoeff"] = gpu.cp.zeros((len(b_basis), 3))
         self.parameters["acoeff"] = gpu.cp.zeros((self._mol.natm, len(a_basis), 2))
         self.dtype = float
@@ -60,9 +61,9 @@ class JastrowSpin:
         # electron-electron distances
         nup = self._mol.nelec[0]
         d_upup, ij = configs.dist.dist_matrix(configs.configs[:, :nup])
-        d_updown, ij = configs.dist.pairwise(
+        d_updown = configs.dist.pairwise(
             configs.configs[:, :nup], configs.configs[:, nup:]
-        )
+        ).reshape(nconf, -1, 3)
         d_downdown, ij = configs.dist.dist_matrix(configs.configs[:, nup:])
 
         # Update bvalues according to spin case
@@ -76,7 +77,7 @@ class JastrowSpin:
         di = gpu.cp.zeros((nelec, nconf, self._mol.natm, 3))
         for e in range(nelec):
             di[e] = gpu.cp.asarray(
-                configs.dist.dist_i(self._mol.atom_coords(), configs.configs[:, e, :])
+                configs.dist.dist_i(self.atom_coords, configs.configs[:, e, :])
             )
         ri = gpu.cp.linalg.norm(di, axis=-1)
 
@@ -117,14 +118,19 @@ class JastrowSpin:
           Calculate a (e-ion) partial sum for electron e
         _a_partial_e is the array :math:`A^p_{iIk} = a_k(r^i_{Ie}` with e fixed
         i is the configuration index
-          Args:
-              e: fixed electron index
-              epos: configs object for electron e
-              mask: mask over configs axis, only return values for configs where mask==True. a_partial_e might have a smaller configs axis than epos, _configscurrent, and _a_partial because of the mask.
+
+        :parameter int e: fixed electron index
+        :parameter epos: positions (nconfig,[ naip,] 3) for electron e
+        :type epos: Electron object 
+        :parameter ndarray mask: boolean array-like to select the configs to evaluate. 
+        :return a_partial_e: partial electron-ion sum for electron e. Only returns values for configs where mask==True. 
+        :rtype a_partial_e: ndarray (sum(mask),[ naip,] 3)
         """
-        d = gpu.cp.asarray(
-            epos.dist.dist_i(self._mol.atom_coords(), epos.configs[mask])
-        )
+        if len(epos.configs.shape) == 2:
+            d = gpu.cp.asarray(epos.dist.dist_i(self.atom_coords, epos.configs[mask]))
+        else:
+            d = gpu.cp.asarray(epos.dist.pairwise(self.atom_coords, epos.configs[mask]))
+            d = gpu.cp.moveaxis(d, 2, 0)
         r = gpu.cp.linalg.norm(d, axis=-1)
         a_partial_e = gpu.cp.zeros((*r.shape, self._a_partial.shape[3]))
         for k, a in enumerate(self.a_basis):
@@ -136,19 +142,22 @@ class JastrowSpin:
           Calculate b (e-e) partial sums for electron e
         _b_partial_e is the array :math:`B^p_{ils} = \sum_s b_l(r^i_{es}`, with e fixed; :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums, not including electron e.
           :math:`i` is the configuration index.
-          Args:
-              e: fixed electron index
-              epos: configs object for electron e
-              mask: mask over configs axis, only return values for configs where mask==True. b_partial_e might have a smaller configs axis than epos, _configscurrent, and _b_partial because of the mask.
+        :parameter int e: fixed electron index
+        :parameter epos: positions (nconfig,[ naip,] 3) for electron e
+        :type epos: Electron object 
+        :parameter ndarray mask: boolean array-like to select the configs to evaluate. 
+        :return b_partial_e: partial electron-electron sum for electron e. Only returns values for configs where mask==True. 
+        :rtype b_partial_e: ndarray (sum(mask),[ naip,] 3)
         """
         nup = self._mol.nelec[0]
         sep = nup - int(e < nup)
         not_e = np.arange(self._nelec) != e
-        d = gpu.cp.asarray(
-            epos.dist.dist_i(
-                self._configscurrent.configs[mask][:, not_e], epos.configs[mask]
-            )
-        )
+        current = self._configscurrent.configs[mask][:, not_e]
+        if len(epos.configs.shape) == 2:
+            d = gpu.cp.asarray(epos.dist.dist_i(current , epos.configs[mask]))
+        else:
+            d = gpu.cp.asarray(epos.dist.pairwise(current, epos.configs[mask]))
+            d = gpu.cp.moveaxis(d, 2, 0)
         r = gpu.cp.linalg.norm(d, axis=-1)
         b_partial_e = gpu.cp.zeros((*r.shape[:-1], *self._b_partial.shape[2:]))
 
@@ -256,7 +265,7 @@ class JastrowSpin:
         dnew = gpu.cp.asarray(
             epos.dist.dist_i(self._configscurrent.configs, epos.configs)[:, not_e]
         )
-        dinew = gpu.cp.asarray(epos.dist.dist_i(self._mol.atom_coords(), epos.configs))
+        dinew = gpu.cp.asarray(epos.dist.dist_i(self.atom_coords, epos.configs))
         rnew = gpu.cp.linalg.norm(dnew, axis=-1)
         rinew = gpu.cp.linalg.norm(dinew, axis=-1)
 
@@ -286,7 +295,7 @@ class JastrowSpin:
         dnew = gpu.cp.asarray(
             epos.dist.dist_i(self._configscurrent.configs[:, not_e], epos.configs)
         )
-        dinew = gpu.cp.asarray(epos.dist.dist_i(self._mol.atom_coords(), epos.configs))
+        dinew = gpu.cp.asarray(epos.dist.dist_i(self.atom_coords, epos.configs))
         rnew = gpu.cp.linalg.norm(dnew, axis=-1)
         rinew = gpu.cp.linalg.norm(dinew, axis=-1)
 
@@ -336,7 +345,7 @@ class JastrowSpin:
         dnew = gpu.cp.asarray(
             epos.dist.dist_i(self._configscurrent.configs, epos.configs)[:, not_e]
         )
-        dinew = gpu.cp.asarray(epos.dist.dist_i(self._mol.atom_coords(), epos.configs))
+        dinew = gpu.cp.asarray(epos.dist.dist_i(self.atom_coords, epos.configs))
         rnew = gpu.cp.linalg.norm(dnew, axis=-1)
         rinew = gpu.cp.linalg.norm(dinew, axis=-1)
 
@@ -372,6 +381,13 @@ class JastrowSpin:
         The update for _avalues and _b_values from moving one electron only requires computing the new sum for that electron. The sums for the electron in the current configuration are stored in _a_partial and _b_partial.
         deltaa = :math:`a_{k}(r_{Ie})`, indexing (atom, a_basis)
         deltab = :math:`\sum_s b_{l}(r_{se})`, indexing (b_basis, spin s)
+
+        :parameter int e: electron index
+        :parameter epos: (nconfig, 3) positions or (nconfig, naip, 3) auxiliary positions for electron e
+        :type epos: OpenElectron or PeriodicElectron
+        :parameter ndarray mask: boolean array-like to select the walkers to evaluate
+        :return: ratio newPsi/oldPsi for moving electron e and arrays of saved internal values
+        :rtype: ndarray (nconf,) or (nconf, naip), tuple(ndarray, ndarray, ndarray)
         """
         if mask is None:
             mask = [True] * epos.configs.shape[0]

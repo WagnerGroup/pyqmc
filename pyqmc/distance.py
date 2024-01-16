@@ -36,7 +36,7 @@ class RawDistance:
         vs = []
         ij = []
         for i in range(n):
-            vs.append(self.dist_i(configs[:, i + 1 :, :], configs[:, i, :]))
+            vs.append(self.dist_i(configs[:, i + 1:, :], configs[:, i, :]))
             ij.extend([(i, j) for j in range(i + 1, n)])
         vs = np.concatenate(vs, axis=1)
 
@@ -66,6 +66,9 @@ class RawDistance:
         return vs, ij
 
 
+def _is_diagonal(M, tol):
+    diagonal = np.all(np.abs(M - np.diag(np.diagonal(M))) < tol)
+
 class MinimalImageDistance(RawDistance):
     """Compute distance vectors under a minimal image condition
     using periodic boundary conditions."""
@@ -81,27 +84,24 @@ class MinimalImageDistance(RawDistance):
         Can also do something smarter by dividing the unit cell up into pieces that need to be determined or not.
         """
         ortho_tol = 1e-10
-        diagonal = np.all(np.abs(latvec - np.diag(np.diagonal(latvec))) < ortho_tol)
+        diagonal = _is_diagonal(latvec, ortho_tol)
+        self.dimension = latvec.shape[-1]
         if diagonal:
             self.dist_i = self.diagonal_dist_i
         else:
-            orthogonal = (
-                np.abs(np.dot(latvec[0], latvec[1])) < ortho_tol
-                and np.abs(np.dot(latvec[1], latvec[2])) < ortho_tol
-                and np.abs(np.dot(latvec[2], latvec[0])) < ortho_tol
-            )
+            L_ovlp = np.dot(latvec, latvec.T)
+            orthogonal = _is_diagonal(L_ovlp, ortho_tol)
             if orthogonal:
                 self.dist_i = self.orthogonal_dist_i
-                # print("Orthogonal lattics vectors")
+                # print("Orthogonal lattice vectors")
             else:
                 self.dist_i = self.general_dist_i
-                # print("Non-orthogonal lattics vectors")
+                # print("Non-orthogonal lattice vectors")
         self._latvec = latvec
         self._invvec = np.linalg.inv(latvec)
         # list of all 26 neighboring cells
-        self.point_list = (
-            np.array([m.ravel() for m in np.meshgrid(*[[0, 1, 2]] * 3)]).T - 1
-        )
+        mesh_grid = np.meshgrid(*[np.array(range(self.dimension)) for _ in range(self.dimension)])
+        self.point_list = np.stack([m.ravel() for m in mesh_grid], axis=0).T - 1
         self.shifts = np.dot(self.point_list, self._latvec)
         # TODO build a minimal list instead of using all 27
 

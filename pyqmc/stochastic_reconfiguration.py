@@ -1,5 +1,6 @@
 import numpy as np
 import h5py
+from accumulators_multiwf import invert_list_of_dicts
 
 def nodal_regularization(grad2, nodal_cutoff=1e-3):
     """
@@ -9,7 +10,7 @@ def nodal_regularization(grad2, nodal_cutoff=1e-3):
     f = a * r ** 2 + b * r ** 4 + c * r ** 6
 
     This uses the method from 
-    Shivesh Pathak and Lucas K. Wagner. “A Light Weight Regularization for Wave Function Parameter Gradients in Quantum Monte Carlo.” AIP Advances 10, no. 8 (August 6, 2020): 085213. https://doi.org/10.1063/5.0004008.
+    Shivesh Pathak and Lucas K. Wagner. “A Light weightsRegularization for Wave Function Parameter Gradients in Quantum Monte Carlo.” AIP Advances 10, no. 8 (August 6, 2020): 085213. https://doi.org/10.1063/5.0004008.
     """
     r = 1.0 / grad2
     mask = r < nodal_cutoff**2
@@ -57,7 +58,7 @@ class StochasticReconfiguration:
 
     def avg(self, configs, wf, weights=None):
         """
-        Compute (weighted) average
+        Compute (weightsd) average
         """
 
         nconf = configs.configs.shape[0]
@@ -130,3 +131,107 @@ class StochasticReconfiguration:
         return dp, report
 
 
+
+
+class StochasticReconfigurationMultipleWF:
+    """ 
+    This class works as an accumulator, but has an extra method that computes the change in parameters
+    given the averages given by avg() 
+    """
+
+    def __init__(self, enacc, transforms, nodal_cutoff=1e-3, eps=1e-3):
+        """
+        eps here is the regularization for SR.
+        """
+        self.enacc = enacc
+        self.transforms = transforms
+        self.nodal_cutoff = nodal_cutoff
+        self.eps = eps
+
+
+    def avg(self, configs, wfs, weights=None):
+        """
+        Compute (weighted) average
+        """
+
+        energies = invert_list_of_dicts([self.enacc(configs, wf) for wf in wfs])
+        dppsi = [
+            transform.serialize_gradients(wf.pgradient())
+            for transform, wf in zip(self.transforms, wfs)
+        ]
+        d = {}
+        for k, en in energies.items():
+            d[k] = np.einsum("jc,ijc->ij", np.asarray(en), weights / weights.shape[-1])
+
+        nconfig = weights.shape[-1]
+        for wfi, dp in enumerate(dppsi):
+            d[("dp", wfi)] = np.zeros(
+                (dp.shape[1], weights.shape[0]), dtype=dp.dtype
+            )
+            d[("dpH", wfi)] = np.zeros(
+                (dp.shape[1], weights.shape[0]), dtype=dp.dtype
+            )
+            d[("dp2", wfi)] = np.zeros(
+                (dp.shape[1], dp.shape[1], weights.shape[0]), dtype=dp.dtype
+            )
+
+            d[("dp", wfi)][:, :] = (
+                np.einsum("cp,jc->pj", dp, weights[wfi, :, :], optimize=True) / nconfig
+            )
+
+            d[("dpipj", wfi)][:,:] = (
+                np.einsum("cp,cq,jc->pqj", dp, dp, weights[wfi, :, :], optimize=True) / nconfig
+            )
+
+            d[("dpH", wfi)][:, :] = (
+                np.einsum("jc,cp,jc->pj", energies["total"], dp, weights[wfi, :, :])
+                / nconfig
+            )
+
+        return d
+
+    def keys(self):
+        return self.enacc.keys().union(["dpH", "dppsi", "dpidpj"])
+
+    def shapes(self):
+        nparms = np.sum([np.sum(opt) for opt in self.transform.to_opt.values()])
+        d = {"dpH": (nparms,), "dppsi": (nparms,), "dpidpj": (nparms, nparms)}
+        d.update(self.enacc.shapes())
+        return d
+
+
+    def update_state(self, hdf_file : h5py.File):
+        """
+        Update the state of the accumulator from a restart file.
+        StochasticReconfiguration does not keep a state.
+
+        hdf_file: h5py.File object
+        """
+        pass
+    
+
+    def delta_p(self, steps, data : dict, verbose=False):
+        """ 
+        steps: a list/numpy array of timesteps
+        data: averaged data from avg() or __call__. Note that if you use VMC to compute this with 
+        an accumulator with a name, you'll need to remove that name from the keys.
+        That is, the keys should be equal to the ones returned by keys().
+
+        Compute the change in parameters given the data from a stochastic reconfiguration step.
+        Return the change in parameters, and data that we may want to use for diagnostics.
+        """
+
+
+        pgrad = 2 * np.real(data['dpH'] - data['total'] * data['dppsi'])
+        Sij = np.real(data['dpidpj'] - np.einsum("i,j->ij", data['dppsi'], data['dppsi']))
+
+        invSij = np.linalg.inv(Sij + self.eps * np.eye(Sij.shape[0]))
+        v = np.einsum("ij,j->i", invSij, pgrad)
+        dp = [step*v for step in steps]
+        report = {'pgrad': pgrad,
+                  'SRdot': np.dot(pgrad, v)/(np.linalg.norm(v)*np.linalg.norm(pgrad)),   } 
+        
+        if verbose:
+            print("Gradient norm: ", np.linalg.norm(pgrad))
+            print("Dot product between gradient and SR step: ", report['SRdot'])
+        return dp, report

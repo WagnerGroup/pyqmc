@@ -1,9 +1,7 @@
 import numpy as np
 import pyqmc.gpu as gpu
-import pyqmc.pbc as pbc
 import pyscf.pbc.gto.eval_gto
-import pyscf.pbc.scf.addons
-import pyscf.lib
+import pyscf.pbc.gto.cell
 import pyqmc.pbc
 
 """
@@ -75,11 +73,12 @@ class PBCOrbitalEvaluatorKpoints:
 
     """
 
-    def __init__(self, cell, mo_coeff=None, kpts=None):
+    def __init__(self, cell, mo_coeff=None, kpts=None, eval_gto_precision=None):
         """
         :parameter cell: PyQMC supercell object (from get_supercell)
         :parameter mo_coeff: (2, nk, nao, nelec) array. MO coefficients for all kpts of primitive cell. If None, this object can't evaluate mos(), but can still evaluate aos().
         :parameter kpts: list of kpts to evaluate AOs
+        :eval_gto_precision: desired value of orbital at rcut, used for determining rcut for periodic system. Default value = 0.01
         """
         self._cell = cell.original_cell
         self.S = cell.S
@@ -104,9 +103,11 @@ class PBCOrbitalEvaluatorKpoints:
 
         self.ao_dtype = float if isgamma else complex
         self.mo_dtype = complex if iscomplex else float
-        Ls = self._cell.get_lattice_Ls(dimension=3)
-        self.Ls = Ls[np.argsort(pyscf.lib.norm(Ls, axis=1))]
-        self.rcut = pyscf.pbc.gto.eval_gto._estimate_rcut(self._cell)
+
+        eval_gto_precision = 1e-2 if eval_gto_precision is None else eval_gto_precision
+        self.rcut = _estimate_rcut(self._cell, eval_gto_precision)
+        Ls = self._cell.get_lattice_Ls(rcut=self.rcut.max(), dimension=3)
+        self.Ls = Ls[np.argsort(np.linalg.norm(Ls, axis=1))]
 
     def nmo(self):
         return [
@@ -124,7 +125,7 @@ class PBCOrbitalEvaluatorKpoints:
         """
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
-        primcoords, primwrap = pbc.enforce_pbc(self.Lprim, mycoords)
+        primcoords, primwrap = pyqmc.pbc.enforce_pbc(self.Lprim, mycoords)
         ao = gpu.cp.asarray(
             pyscf.pbc.gto.eval_gto.eval_gto(
                 self._cell,
@@ -185,3 +186,26 @@ class PBCOrbitalEvaluatorKpoints:
 
         """
         return self.param_split[spin], ao
+
+
+def _estimate_rcut(cell, eval_gto_precision):
+    """
+    Returns the cutoff raidus, above which each shell decays to a value less than the
+    required precsion
+    """
+    vol = cell.vol
+    weight_penalty = vol # ~ V[r] * (vol/ngrids) * ngrids
+    init_rcut = pyscf.pbc.gto.cell.estimate_rcut(cell, precision=eval_gto_precision)
+    precision = eval_gto_precision / max(weight_penalty, 1)
+    rcut = []
+    for ib in range(cell.nbas):
+        l = cell.bas_angular(ib)
+        es = cell.bas_exp(ib)
+        cs = abs(cell._libcint_ctr_coeff(ib)).max(axis=1)
+        norm_ang = ((2*l+1)/(4*np.pi))**.5
+        fac = 2*np.pi/vol * cs*norm_ang/es / precision
+        r = init_rcut
+        for _ in range(2):
+            r = (np.log(fac * r**(l+1) + 1.) / es)**.5
+        rcut.append(r.max())
+    return np.array(rcut)

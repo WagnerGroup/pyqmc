@@ -82,13 +82,13 @@ def test_pbc_wfs(H_pbc_sto3g_krks, epsilon=1e-5, nconf=10):
     supercell = pyq.get_supercell(mol, S=(np.ones((3, 3)) - 2 * np.eye(3)))
     epos = pyq.initial_guess(supercell, nconf)
     for wf in [
-        MultiplyWF(Slater(supercell, mf), generate_jastrow(supercell)[0]),
+        MultiplyWF(Slater(supercell, mf, eval_gto_precision=1e-6), generate_jastrow(supercell)[0]),
         MultiplyWF(
-            Slater(supercell, mf),
+            Slater(supercell, mf, eval_gto_precision=1e-6),
             generate_jastrow(supercell)[0],
-            GeminalJastrow(supercell),
+            GeminalJastrow(supercell, eval_gto_precision=1e-6),
         ),
-        Slater(supercell, mf),
+        Slater(supercell, mf, eval_gto_precision=1e-6),
     ]:
         for k in wf.parameters:
             if "mo_coeff" not in k and k != "det_coeff":
@@ -108,8 +108,8 @@ def test_pbc_wfs_triplet(h_noncubic_sto3g_triplet, epsilon=1e-5, nconf=10):
     supercell = pyq.get_supercell(mol, S=np.identity(3, dtype=int))
     epos = pyq.initial_guess(supercell, nconf)
     for wf in [
-        MultiplyWF(Slater(supercell, mf), generate_jastrow(supercell)[0]),
-        Slater(supercell, mf),
+        MultiplyWF(Slater(supercell, mf, eval_gto_precision=1e-6), generate_jastrow(supercell)[0]),
+        Slater(supercell, mf, eval_gto_precision=1e-6),
     ]:
         for k in wf.parameters:
             if "mo_coeff" not in k and k != "det_coeff":
@@ -197,7 +197,7 @@ def test_manual_pbcs_correct(H_pbc_sto3g_kuks, epsilon=1e-5, nconf=10):
         determinants[1][1][s][ki].append(i)
 
     print(determinants[0])
-    wf = Slater(mol, mf, determinants=determinants)
+    wf = Slater(mol, mf, determinants=determinants, eval_gto_precision=1e-6)
     configs = pyq.initial_guess(mol, 10)
     run_tests(wf, configs, epsilon)
 

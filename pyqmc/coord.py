@@ -7,7 +7,6 @@ import copy
 class OpenElectron:
     # Can have shape (nconf, 3) or (nconf, naip, 3) for auxiliary integration points
     def __init__(self, epos, dist):
-        assert len(epos.shape) <= 2, "OpenElectron is for single electron only"
         self.configs = epos
         self.dist = dist
 
@@ -107,7 +106,6 @@ class PeriodicElectron:
     """
 
     def __init__(self, epos, lattice_vectors, dist, wrap=None):
-        assert len(epos.shape) <= 2, "PeriodicElectron is for single electron only"
         self.configs = epos
         self.lvec = lattice_vectors
         self.wrap = wrap if wrap is not None else np.zeros_like(epos)

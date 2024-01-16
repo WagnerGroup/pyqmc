@@ -117,14 +117,23 @@ class JastrowSpin:
           Calculate a (e-ion) partial sum for electron e
         _a_partial_e is the array :math:`A^p_{iIk} = a_k(r^i_{Ie}` with e fixed
         i is the configuration index
-          Args:
-              e: fixed electron index
-              epos: configs object for electron e
-              mask: mask over configs axis, only return values for configs where mask==True. a_partial_e might have a smaller configs axis than epos, _configscurrent, and _a_partial because of the mask.
+
+        :parameter int e: fixed electron index
+        :parameter epos: positions (nconfig,[ naip,] 3) for electron e
+        :type epos: Electron object 
+        :parameter ndarray mask: boolean array-like to select the configs to evaluate. 
+        :return a_partial_e: partial electron-ion sum for electron e. Only returns values for configs where mask==True. 
+        :rtype a_partial_e: ndarray (sum(mask),[ naip,] 3)
         """
-        d = gpu.cp.asarray(
-            epos.dist.dist_i(self._mol.atom_coords(), epos.configs[mask])
-        )
+        if len(epos.configs.shape) == 2:
+            d = gpu.cp.asarray(
+                epos.dist.dist_i(self._mol.atom_coords(), epos.configs[mask])
+            )
+        else:
+            d = gpu.cp.asarray(
+                epos.dist.pairwise(self._mol.atom_coords(), epos.configs[mask])
+            )
+            d = gpu.cp.moveaxis(d, 2, 0)
         r = gpu.cp.linalg.norm(d, axis=-1)
         a_partial_e = gpu.cp.zeros((*r.shape, self._a_partial.shape[3]))
         for k, a in enumerate(self.a_basis):
@@ -136,19 +145,22 @@ class JastrowSpin:
           Calculate b (e-e) partial sums for electron e
         _b_partial_e is the array :math:`B^p_{ils} = \sum_s b_l(r^i_{es}`, with e fixed; :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums, not including electron e.
           :math:`i` is the configuration index.
-          Args:
-              e: fixed electron index
-              epos: configs object for electron e
-              mask: mask over configs axis, only return values for configs where mask==True. b_partial_e might have a smaller configs axis than epos, _configscurrent, and _b_partial because of the mask.
+        :parameter int e: fixed electron index
+        :parameter epos: positions (nconfig,[ naip,] 3) for electron e
+        :type epos: Electron object 
+        :parameter ndarray mask: boolean array-like to select the configs to evaluate. 
+        :return b_partial_e: partial electron-electron sum for electron e. Only returns values for configs where mask==True. 
+        :rtype b_partial_e: ndarray (sum(mask),[ naip,] 3)
         """
         nup = self._mol.nelec[0]
         sep = nup - int(e < nup)
         not_e = np.arange(self._nelec) != e
-        d = gpu.cp.asarray(
-            epos.dist.dist_i(
-                self._configscurrent.configs[mask][:, not_e], epos.configs[mask]
-            )
-        )
+        current = self._configscurrent.configs[mask][:, not_e]
+        if len(epos.configs.shape) == 2:
+            d = gpu.cp.asarray(epos.dist.dist_i(current , epos.configs[mask]))
+        else:
+            d = gpu.cp.asarray(epos.dist.pairwise(current, epos.configs[mask]))
+            d = gpu.cp.moveaxis(d, 2, 0)
         r = gpu.cp.linalg.norm(d, axis=-1)
         b_partial_e = gpu.cp.zeros((*r.shape[:-1], *self._b_partial.shape[2:]))
 
@@ -372,6 +384,13 @@ class JastrowSpin:
         The update for _avalues and _b_values from moving one electron only requires computing the new sum for that electron. The sums for the electron in the current configuration are stored in _a_partial and _b_partial.
         deltaa = :math:`a_{k}(r_{Ie})`, indexing (atom, a_basis)
         deltab = :math:`\sum_s b_{l}(r_{se})`, indexing (b_basis, spin s)
+
+        :parameter int e: electron index
+        :parameter epos: (nconfig, 3) positions or (nconfig, naip, 3) auxiliary positions for electron e
+        :type epos: OpenElectron or PeriodicElectron
+        :parameter ndarray mask: boolean array-like to select the walkers to evaluate
+        :return: ratio newPsi/oldPsi for moving electron e and arrays of saved internal values
+        :rtype: ndarray (nconf,) or (nconf, naip), tuple(ndarray, ndarray, ndarray)
         """
         if mask is None:
             mask = [True] * epos.configs.shape[0]

@@ -169,10 +169,16 @@ class ThreeBodyJastrow:
         edown = int(e >= self._mol.nelec[0])
         not_e = np.arange(self._nelec) != e
 
-        de = configs.dist.dist_i(configs.configs[:, not_e], epos)
-        re = np.linalg.norm(de, axis=-1)
+        if len(epos.configs.shape) == 2:
+            de = configs.dist.dist_i(configs.configs[:, not_e], epos)
+            di_e = configs.dist.dist_i(self._mol.atom_coords(), epos)
+        else:
+            de = configs.dist.pairwise(configs.configs[:, not_e], epos)
+            di_e = configs.dist.pairwise(self._mol.atom_coords(), epos)
+            de = np.moveaxis(de, 2, 0)
+            di = np.moveaxis(di, 2, 0)
 
-        di_e = configs.dist.dist_i(self._mol.atom_coords(), epos)
+        re = np.linalg.norm(de, axis=-1)
         ri_e = np.linalg.norm(di_e, axis=-1)
 
         ae = np.zeros((*epos.shape[-2::-1], self._mol.natm, na))

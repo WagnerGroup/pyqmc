@@ -176,7 +176,7 @@ class ThreeBodyJastrow:
             de = configs.dist.pairwise(configs.configs[:, not_e], epos)
             di_e = configs.dist.pairwise(self._mol.atom_coords(), epos)
             de = np.moveaxis(de, 2, 0)
-            di = np.moveaxis(di, 2, 0)
+            di_e = np.moveaxis(di_e, 2, 0)
 
         re = np.linalg.norm(de, axis=-1)
         ri_e = np.linalg.norm(di_e, axis=-1)

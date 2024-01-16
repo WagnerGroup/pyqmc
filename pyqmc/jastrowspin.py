@@ -29,6 +29,7 @@ class JastrowSpin:
         self.parameters = {}
         self._nelec = np.sum(mol.nelec)
         self._mol = mol
+        self.atom_coords = mol.atom_coords()[np.newaxis]
         self.parameters["bcoeff"] = gpu.cp.zeros((len(b_basis), 3))
         self.parameters["acoeff"] = gpu.cp.zeros((self._mol.natm, len(a_basis), 2))
         self.dtype = float
@@ -76,7 +77,7 @@ class JastrowSpin:
         di = gpu.cp.zeros((nelec, nconf, self._mol.natm, 3))
         for e in range(nelec):
             di[e] = gpu.cp.asarray(
-                configs.dist.dist_i(self._mol.atom_coords(), configs.configs[:, e, :])
+                configs.dist.dist_i(self.atom_coords, configs.configs[:, e, :])
             )
         ri = gpu.cp.linalg.norm(di, axis=-1)
 
@@ -126,13 +127,9 @@ class JastrowSpin:
         :rtype a_partial_e: ndarray (sum(mask),[ naip,] 3)
         """
         if len(epos.configs.shape) == 2:
-            d = gpu.cp.asarray(
-                epos.dist.dist_i(self._mol.atom_coords(), epos.configs[mask])
-            )
+            d = gpu.cp.asarray(epos.dist.dist_i(self.atom_coords, epos.configs[mask]))
         else:
-            d = gpu.cp.asarray(
-                epos.dist.pairwise(self._mol.atom_coords(), epos.configs[mask])
-            )
+            d = gpu.cp.asarray(epos.dist.pairwise(self.atom_coords, epos.configs[mask]))
             d = gpu.cp.moveaxis(d, 2, 0)
         r = gpu.cp.linalg.norm(d, axis=-1)
         a_partial_e = gpu.cp.zeros((*r.shape, self._a_partial.shape[3]))
@@ -268,7 +265,7 @@ class JastrowSpin:
         dnew = gpu.cp.asarray(
             epos.dist.dist_i(self._configscurrent.configs, epos.configs)[:, not_e]
         )
-        dinew = gpu.cp.asarray(epos.dist.dist_i(self._mol.atom_coords(), epos.configs))
+        dinew = gpu.cp.asarray(epos.dist.dist_i(self.atom_coords, epos.configs))
         rnew = gpu.cp.linalg.norm(dnew, axis=-1)
         rinew = gpu.cp.linalg.norm(dinew, axis=-1)
 
@@ -298,7 +295,7 @@ class JastrowSpin:
         dnew = gpu.cp.asarray(
             epos.dist.dist_i(self._configscurrent.configs[:, not_e], epos.configs)
         )
-        dinew = gpu.cp.asarray(epos.dist.dist_i(self._mol.atom_coords(), epos.configs))
+        dinew = gpu.cp.asarray(epos.dist.dist_i(self.atom_coords, epos.configs))
         rnew = gpu.cp.linalg.norm(dnew, axis=-1)
         rinew = gpu.cp.linalg.norm(dinew, axis=-1)
 
@@ -348,7 +345,7 @@ class JastrowSpin:
         dnew = gpu.cp.asarray(
             epos.dist.dist_i(self._configscurrent.configs, epos.configs)[:, not_e]
         )
-        dinew = gpu.cp.asarray(epos.dist.dist_i(self._mol.atom_coords(), epos.configs))
+        dinew = gpu.cp.asarray(epos.dist.dist_i(self.atom_coords, epos.configs))
         rnew = gpu.cp.linalg.norm(dnew, axis=-1)
         rinew = gpu.cp.linalg.norm(dinew, axis=-1)
 

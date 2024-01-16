@@ -146,7 +146,7 @@ class ThreeBodyJastrow:
 
         e: electron index
 
-        epos: Openconfigs Object with with proposed electron e configuration
+        epos: (nconfig, 3) array with with proposed electron e configuration
 
         a_values: a_basis evaluated on electron ion distances for configs
 
@@ -169,7 +169,7 @@ class ThreeBodyJastrow:
         edown = int(e >= self._mol.nelec[0])
         not_e = np.arange(self._nelec) != e
 
-        if len(epos.configs.shape) == 2:
+        if len(epos.shape) == 2:
             de = configs.dist.dist_i(configs.configs[:, not_e], epos)
             di_e = configs.dist.dist_i(self._mol.atom_coords(), epos)
         else:

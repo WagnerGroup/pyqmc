@@ -100,13 +100,12 @@ class PeriodicElectron:
     Represents the coordinates of a test electron position, for many walkers and
     potentially several different points.
 
-    configs is a 2D or 3D vector with elements [config, point, dimension]
+    epos is an array (nconf, 3) or (nconf, naip, 3) for auxiliary integration points
     wrap is same shape as configs
     lvec and dist will most likely be references to the parent object
     """
 
     def __init__(self, epos, lattice_vectors, dist, wrap=None):
-        assert len(epos.shape) <= 2, "PeriodicElectron is for single electron only"
         self.configs = epos
         self.lvec = lattice_vectors
         self.wrap = wrap if wrap is not None else np.zeros_like(epos)

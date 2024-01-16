@@ -285,7 +285,7 @@ class Ewald:
 
     def reciprocal_space_electron(self, configs):
         # Reciprocal space electron-electron part
-        e_GdotR = gpu.cp.einsum("hik,jk->hij", gpu.cp.asarray(configs), self.gpoints)
+        e_GdotR = gpu.cp.einsum("hik,jk->hij", gpu.cp.asarray(configs), self.gpoints, optimize="greedy")
         sum_e_sin = gpu.cp.sin(e_GdotR).sum(axis=1)
         sum_e_cos = gpu.cp.cos(e_GdotR).sum(axis=1)
         ee_recip = gpu.cp.dot(sum_e_sin**2 + sum_e_cos**2, self.gweight)

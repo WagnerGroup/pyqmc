@@ -168,7 +168,7 @@ class PBCOrbitalEvaluatorKpoints:
         nelec = self.parameters[self.parm_names[spin]].shape[1]
         out = gpu.cp.zeros([nelec, *ao[0].shape[:-1]], dtype=self.mo_dtype)
         for i, ak, mok in zip(range(len(ao)), ao, p[:-1]):
-            gpu.cp.einsum("...a,an->n...", ak, mok, out=out[ps[i] : ps[i + 1]])
+            gpu.cp.einsum("...a,an->n...", ak, mok, out=out[ps[i] : ps[i + 1]], optimize="greedy")
         return out.transpose([*np.arange(1, len(out.shape)), 0])
 
     def pgradient(self, ao, spin):

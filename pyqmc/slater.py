@@ -394,8 +394,14 @@ class Slater:
         return ratios[1:-1], ratios[-1]
 
     def testvalue(self, e, epos, mask=None):
-        """return the ratio between the current wave function and the wave function if
-        electron e's position is replaced by epos"""
+        """
+        :parameter int e: fixed electron index
+        :parameter epos: positions (nconfig[, naip], 3) for electron e
+        :type epos: Electron object 
+        :parameter ndarray mask: boolean array-like to select the configs to evaluate. 
+        :return ratio: `newPsi/currentPsi`, ratio between the current wave function and the wave function if electron e's position is replaced by epos
+        :rtype ratio: ndarray (nconfig[, naip])
+        """
         s = int(e >= self._nelec[0])
         ao = self.orbitals.aos("GTOval_sph", epos, mask)
         mo = self.orbitals.mos(ao, s)

@@ -235,15 +235,6 @@ class Ewald:
         ion_ion = ion_ion_real + ion_ion_rec
         return ion_ion
 
-    def _real_cij(self, dists):
-        dists = gpu.cp.asarray(dists)
-        r = gpu.cp.zeros(dists.shape[:-1])
-        cij = gpu.cp.zeros(r.shape)
-        for ld in self.lattice_displacements:
-            r[:] = np.linalg.norm(dists + ld, axis=-1)
-            cij += gpu.erfc(self.alpha * r) / r
-        return cij
-
     def ewald_electron(self, configs):
         r"""
         Compute the Ewald sum for e-e and e-ion
@@ -278,14 +269,14 @@ class Ewald:
         # Real space electron-ion part
         # ei_distances shape (conf, atom, elec, dim)
         ei_distances = configs.dist.pairwise(self.atom_coords[np.newaxis], configs.configs)
-        ei_cij = self._real_cij(ei_distances)
+        ei_cij = real_cij(ei_distances, self.lattice_displacements, self.alpha)
         ei_real_separated = gpu.cp.einsum("a,cae->ce", -self.atom_charges, ei_cij)
 
         # Real space electron-electron part
         ee_real_separated = gpu.cp.zeros((nconf, nelec))
         if nelec > 1:
             ee_distances, ee_inds = configs.dist.dist_matrix(configs.configs)
-            ee_cij = self._real_cij(ee_distances)
+            ee_cij = real_cij(ee_distances, self.lattice_displacements, self.alpha)
 
             for (i, j), val in zip(ee_inds, ee_cij.T):
                 ee_real_separated[:, i] += val
@@ -391,3 +382,14 @@ def generate_positive_gpoints(gmax, recvec):
     gpts = gpu.cp.concatenate([gXpos, gX0Ypos, gX0Y0Zpos], axis=1)
     gpoints = gpu.cp.einsum("ji,jk->ik", gpts, gpu.cp.asarray(recvec) * 2 * np.pi)
     return gpoints
+
+
+def real_cij(dists, lattice_displacements, alpha):
+    dists = gpu.cp.asarray(dists)
+    r = gpu.cp.zeros(dists.shape[:-1])
+    cij = gpu.cp.zeros(r.shape)
+    for ld in lattice_displacements:
+        r[:] = np.linalg.norm(dists + ld, axis=-1)
+        cij += gpu.erfc(alpha * r) / r
+    return cij
+

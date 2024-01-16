@@ -133,7 +133,7 @@ def sample_overlap_block(wfs, configs, tstep, nsteps, energy):
     
         # Collect rolling average
         if energy is not None:
-            weighted_dat = energy.average(wfs, weights)
+            weighted_dat = energy.avg(configs, wfs, weights)
             rolling_average(weighted_block, weighted_dat, nsteps)
             rolling_average(unweighted_block, unweighted_dat, nsteps)
 

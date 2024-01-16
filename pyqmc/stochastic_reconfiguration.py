@@ -1,7 +1,7 @@
 import numpy as np
 import h5py
-from accumulators_multiwf import invert_list_of_dicts
-
+from pyqmc.accumulators_multiwf import invert_list_of_dicts
+import scipy.stats
 def nodal_regularization(grad2, nodal_cutoff=1e-3):
     """
     Return true if a given configuration is within nodal_cutoff
@@ -171,7 +171,7 @@ class StochasticReconfigurationMultipleWF:
             d[("dpH", wfi)] = np.zeros(
                 (dp.shape[1], weights.shape[0]), dtype=dp.dtype
             )
-            d[("dp2", wfi)] = np.zeros(
+            d[("dpipj", wfi)] = np.zeros(
                 (dp.shape[1], dp.shape[1], weights.shape[0]), dtype=dp.dtype
             )
 
@@ -208,7 +208,27 @@ class StochasticReconfigurationMultipleWF:
         hdf_file: h5py.File object
         """
         pass
-    
+
+
+    def block_average(self, data, weights):
+        """
+        This is meant to be called to create correctly weighted average after a number of blocks have
+        been performed. 
+        weights are block, wf, wf
+        data is a dictionary, with each entry being a numpy array of shape (block, ...) (i.e., block is added to the front of what's returned from avg())
+        """
+        weight_avg = np.mean(weights, axis=0)
+
+        N = np.abs(weight_avg.diagonal())
+        Nij = np.sqrt(np.outer(N, N))
+
+        avg = {}
+        error = {}
+        for k in ['total']:
+            it = data[k]
+            avg[k] = np.mean(it, axis=0) / Nij
+            error[k] = scipy.stats.sem(it, axis=0) / Nij
+        return avg, error
 
     def delta_p(self, steps, data : dict, verbose=False):
         """ 

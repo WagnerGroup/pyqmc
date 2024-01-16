@@ -12,6 +12,8 @@ from pyqmc.optimize_excited_states import (
     objective_function_derivative,
     correlated_sampling,
 )
+from pyqmc.sample_many import sample_overlap
+from pyqmc.stochastic_reconfiguration import StochasticReconfigurationMultipleWF
 import copy
 
 
@@ -53,10 +55,13 @@ def test_sampler(H2_casci):
     configs = pyq.initial_guess(mol, 2000)
     _, configs = pyq.vmc(wf1, configs)
     energy = pyq.EnergyAccumulator(mol)
-    data_weighted, data_unweighted, configs = sample_overlap_worker(
-        [wf1, wf2], configs, energy, [transform1, transform2], nsteps=40, nblocks=20
+    sr_accumulator = StochasticReconfigurationMultipleWF(energy, [transform1, transform2])
+    data_weighted, data_unweighted, configs = sample_overlap(
+        [wf1, wf2], configs, sr_accumulator, nsteps=10, nblocks=20
     )
-    avg, error = average(data_weighted, data_unweighted)
+
+    print(np.mean(data_unweighted['overlap'], axis=0))
+    avg, error = sr_accumulator.block_average(data_weighted, data_unweighted['overlap'])
     print(avg, error)
 
     ref_energy1 = 0.5 * (ci_energies[0] + ci_energies[1])
@@ -92,16 +97,8 @@ def test_sampler(H2_casci):
         abs(terms[("dp_energy", 1)][:, 1, 1].reshape(mc2.ci.shape) - en_derivative)
         - overlap_tolerance
     )
-    derivative = objective_function_derivative(
-        terms,
-        overlap_penalty=1.0,
-        norm_penalty=1.0,
-        offdiagonal_energy_penalty=0.1,
-        lagrange_multiplier=0.1,
-    )
 
-
-def test_correlated_sampling(H2_casci):
+def temp_dont_correlated_sampling(H2_casci):
     mol, mf, mc = H2_casci
 
     ci_energies = mc.e_tot

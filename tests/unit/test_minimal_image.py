@@ -22,11 +22,11 @@ def test():
     d1 = vec[:, np.newaxis, :] - configs
     d1norm = np.linalg.norm(d1, axis=-1)
     start = time.time()
-    gd = mid.general_dist_i(configs, vec)
-    print("general_dist_i,", "\ttime={0:.5f}".format(time.time() - start))
+    gd = mid.general_dist(d1)
+    print("general_dist,", "\ttime={0:.5f}".format(time.time() - start))
     start = time.time()
-    od = mid.orthogonal_dist_i(configs, vec)
-    print("orthogonal_dist_i,", "\ttime={0:.5f}".format(time.time() - start))
+    od = mid.orthogonal_dist(d1)
+    print("orthogonal_dist,", "\ttime={0:.5f}".format(time.time() - start))
     diff = gd - od
     print("matrix norm |gen-orth| = {0}".format(np.linalg.norm(diff)))
     print("matrix shape is (nconf,nelec,3) = {0}".format(gd.shape))
@@ -44,7 +44,7 @@ def test():
         )
     assert (
         np.linalg.norm(diff) < 1e-12
-    ), "general_dist_i and orthogonal_dist_i don't give the same answer for the lattice vectors {0}; at least one of them has an error".format(
+    ), "general_dist and orthogonal_dist don't give the same answer for the lattice vectors {0}; at least one of them has an error".format(
         latvecs
     )
 

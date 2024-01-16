@@ -5,21 +5,25 @@ import copy
 
 
 class OpenElectron:
+    # Can have shape (nconf, 3) or (nconf, naip, 3) for auxiliary integration points
     def __init__(self, epos, dist):
         self.configs = epos
         self.dist = dist
 
 
 class OpenConfigs:
-    def __init__(self, configs):
+    def __init__(self, configs, dist=None):
         self.configs = configs
-        self.dist = distance.RawDistance()
+        self.dist = dist if dist is not None else distance.RawDistance()
 
     def electron(self, e):
         return OpenElectron(self.configs[:, e], self.dist)
 
+    def select_electrons(self, es):
+        return OpenConfigs(self.configs[:, es], self.dist)
+
     def mask(self, mask):
-        return OpenConfigs(self.configs[mask])
+        return OpenConfigs(self.configs[mask], dist=self.dist)
 
     def make_irreducible(self, e, vec, mask=True):
         """
@@ -39,15 +43,6 @@ class OpenConfigs:
           accept: (nconfig,) boolean for which configs to update
         """
         self.configs[accept, e, :] = new.configs[accept, :]
-
-    def move_all(self, new, accept):
-        """
-        Change coordinates of all electrons
-        Args:
-          new: OpenConfigs with configs.shape new coordinates
-          accept: (nconfig,) boolean for which configs to update
-        """
-        self.configs[accept] = new.configs[accept]
 
     def resample(self, newinds):
         """
@@ -105,7 +100,7 @@ class PeriodicElectron:
     Represents the coordinates of a test electron position, for many walkers and
     potentially several different points.
 
-    configs is a 2D or 3D vector with elements [config, point, dimension]
+    epos is an array (nconf, 3) or (nconf, naip, 3) for auxiliary integration points
     wrap is same shape as configs
     lvec and dist will most likely be references to the parent object
     """
@@ -118,22 +113,29 @@ class PeriodicElectron:
 
 
 class PeriodicConfigs:
-    def __init__(self, configs, lattice_vectors, wrap=None):
+    def __init__(self, configs, lattice_vectors, wrap=None, dist=None):
         configs, wrap_ = pbc.enforce_pbc(lattice_vectors, configs)
         self.configs = configs
         self.wrap = wrap_
         if wrap is not None:
             self.wrap += wrap
         self.lvecs = lattice_vectors
-        self.dist = distance.MinimalImageDistance(lattice_vectors)
+        self.dist = dist if dist is not None else distance.MinimalImageDistance(lattice_vectors)
 
     def electron(self, e):
         return PeriodicElectron(
             self.configs[:, e], self.lvecs, self.dist, wrap=self.wrap[:, e]
         )
 
+    def select_electrons(self, es):
+        return PeriodicConfigs(
+            self.configs[:, es], self.lvecs, dist=self.dist, wrap=self.wrap[:, es]
+        )
+
     def mask(self, mask):
-        return PeriodicConfigs(self.configs[mask], self.lvecs, wrap=self.wrap[mask])
+        return PeriodicConfigs(
+            self.configs[mask], self.lvecs, wrap=self.wrap[mask], dist=self.dist
+        )
 
     def make_irreducible(self, e, vec, mask=None):
         """
@@ -162,16 +164,6 @@ class PeriodicConfigs:
         self.configs[accept, e, :] = new.configs[accept, :]
         self.wrap[accept, e, :] = new.wrap[accept, :]
 
-    def move_all(self, new, accept):
-        """
-        Change coordinates of all electrons
-        Args:
-          new: PeriodicConfigs with configs.shape new coordinates
-          accept: (nconfig,) boolean for which configs to update
-        """
-        self.configs[accept] = new.configs[accept]
-        self.wrap[accept] = new.wrap[accept]
-
     def resample(self, newinds):
         """
         Resample configs by new indices (e.g. for DMC branching)
@@ -191,7 +183,7 @@ class PeriodicConfigs:
         """
         clist = np.array_split(self.configs, npartitions)
         wlist = np.array_split(self.wrap, npartitions)
-        return [PeriodicConfigs(c, self.lvecs, w) for c, w in zip(clist, wlist)]
+        return [PeriodicConfigs(c, self.lvecs, w, dist=self._dist) for c, w in zip(clist, wlist)]
 
     def join(self, configslist, axis=0):
         """

@@ -142,7 +142,7 @@ class OBDMAccumulator:
             [orb[assign, ...] for orb, assign in zip(borb_aux, auxassignments)]
         )
 
-        borb_configs = self.evaluate_orbitals(configs.electron(self._electrons))
+        borb_configs = self.evaluate_orbitals(configs.select_electrons(self._electrons))
         borb_configs = borb_configs.reshape(nconf, self.nelec, -1)
 
         bauxsquared = cp.abs(borb_aux) ** 2
@@ -190,7 +190,13 @@ class OBDMAccumulator:
 
 
 def sample_onebody(configs, orbitals, spin, nsamples=1, tstep=0.5):
-    r"""For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i \phi_i(r)^2`."""
+    r"""
+    For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i \phi_i(r)^2`.
+    Returns:
+        allaccept (nsamples, n)
+        allconfigs nsamples list of (naux, 1, 3) configs
+        allorbs = nsamples list of (naux, 1, norb)
+    """
     n = configs.configs.shape[0]
     ao = orbitals.aos("GTOval_sph", configs)
     borb = orbitals.mos(ao, spin=spin)
@@ -201,12 +207,12 @@ def sample_onebody(configs, orbitals, spin, nsamples=1, tstep=0.5):
     allorbs = []
     for s in range(nsamples):
         shift = np.sqrt(tstep) * np.random.randn(*configs.configs.shape)
-        newconfigs = configs.make_irreducible(0, configs.configs + shift)
+        newconfigs = configs.make_irreducible(0, (configs.configs + shift)[:, 0])
         ao = orbitals.aos("GTOval_sph", newconfigs)
         borbnew = orbitals.mos(ao, spin=spin)
         fsumnew = (cp.abs(borbnew) ** 2).sum(axis=1)
         accept = asnumpy(fsumnew / fsum) > np.random.rand(n)
-        configs.move_all(newconfigs, accept)
+        configs.move(0, newconfigs, accept)
         borb[accept] = borbnew[accept]
         fsum[accept] = fsumnew[accept]
         allconfigs.append(configs.copy())

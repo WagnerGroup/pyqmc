@@ -5,8 +5,8 @@ import copy
 
 
 class OpenElectron:
+    # Can have shape (nconf, 3) or (nconf, naip, 3) for auxiliary integration points
     def __init__(self, epos, dist):
-        assert len(epos.shape) <= 2, "OpenElectron is for single electron only"
         self.configs = epos
         self.dist = dist
 

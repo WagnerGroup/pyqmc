@@ -75,6 +75,8 @@ def ecp_ea(mol, configs, wf, e, atom, threshold, naip=None):
 
     l_list, v_l = get_v_l(mol, at_name, r_ea)
     mask, prob = ecp_mask(v_l, threshold)
+    if not np.any(mask):
+        return {"total": ecp_val}
     masked_v_l = v_l[mask]
     masked_v_l[:, :-1] /= prob[mask, np.newaxis]
 

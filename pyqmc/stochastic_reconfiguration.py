@@ -165,25 +165,15 @@ class StochasticReconfigurationMultipleWF:
 
         nconfig = weights.shape[-1]
         for wfi, dp in enumerate(dppsi):
-            d[("dp", wfi)] = np.zeros(
-                (dp.shape[1], weights.shape[0]), dtype=dp.dtype
-            )
-            d[("dpH", wfi)] = np.zeros(
-                (dp.shape[1], weights.shape[0]), dtype=dp.dtype
-            )
-            d[("dpipj", wfi)] = np.zeros(
-                (dp.shape[1], dp.shape[1], weights.shape[0]), dtype=dp.dtype
-            )
-
-            d[("dp", wfi)][:, :] = (
+            d[("dp", wfi)] = (
                 np.einsum("cp,jc->pj", dp, weights[wfi, :, :], optimize=True) / nconfig
             )
 
-            d[("dpipj", wfi)][:,:] = (
+            d[("dpipj", wfi)]= (
                 np.einsum("cp,cq,jc->pqj", dp, dp, weights[wfi, :, :], optimize=True) / nconfig
             )
 
-            d[("dpH", wfi)][:, :] = (
+            d[("dpH", wfi)] = (
                 np.einsum("jc,cp,jc->pj", energies["total"], dp, weights[wfi, :, :])
                 / nconfig
             )
@@ -228,7 +218,42 @@ class StochasticReconfigurationMultipleWF:
             it = data[k]
             avg[k] = np.mean(it, axis=0) / Nij
             error[k] = scipy.stats.sem(it, axis=0) / Nij
+        
+        nwf = weights.shape[1]
+        for k in ['dp', 'dpH', 'dpipj']:
+            for w in range(nwf):
+                it = data[(k, w)]
+                avg[(k, w)] = np.mean(it, axis=0)/Nij[w] # ("i...,i -> i... ", it, 1.0/Nij[w])
+                error[(k, w)] = scipy.stats.sem(it, axis=0)/Nij[w]
         return avg, error
+    
+    def _collect_terms(self, avg, error, overlap):
+        ret = {}
+        avg['overlap'] = overlap
+        nwf = avg["total"].shape[0]
+        N = np.abs(avg["overlap"].diagonal())
+        Nij = np.sqrt(np.outer(N, N))
+
+        ret["norm"] = N
+        ret["overlap"] = avg["overlap"] / Nij
+        fac = np.ones((nwf, nwf)) + np.identity(nwf)
+        for wfi in range(nwf):
+            print(f"dpH {avg[('dpH', wfi)].shape}, total {avg['total'][wfi].shape}, dp: {avg[('dp',wfi)].shape} ")
+            ret[("dp_energy", wfi)] = fac[wfi] * np.real(
+                avg[("dpH", wfi)] - avg["total"][wfi] * avg[("dp", wfi)]
+            )
+            ret[("dp_norm", wfi)] = 2.0 * np.real(avg[("dp", wfi)][:, wfi])
+
+            norm_part = (
+                np.einsum("i,p->pi", avg["overlap"][wfi, :], ret[("dp_norm", wfi)]) / N[wfi]
+            )
+            ret[("dp_overlap", wfi)] = fac[wfi] * (avg[("dp", wfi)] - 0.5 * norm_part) / Nij[wfi]
+            #ret[("condition", wfi)] = np.real(
+            #    avg[("dp2", wfi)][:, wfi] - avg[("dp", wfi)][:, wfi] ** 2
+            #)
+        ret["energy"] = avg["total"]
+        return ret
+
 
     def delta_p(self, steps, data : dict, verbose=False):
         """ 

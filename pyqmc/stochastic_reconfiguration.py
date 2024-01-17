@@ -214,7 +214,7 @@ class StochasticReconfigurationMultipleWF:
 
         avg = {}
         error = {}
-        for k in ['total']:
+        for k in ['total','kinetic','potential']:
             it = data[k]
             avg[k] = np.mean(it, axis=0) / Nij
             error[k] = scipy.stats.sem(it, axis=0) / Nij
@@ -274,7 +274,7 @@ class StochasticReconfigurationMultipleWF:
         Return the change in parameters, and data that we may want to use for diagnostics.
         """
 
-
+        raise NotImplementedError("delta_p is not implemented yet for multiple wavefunctions")
         pgrad = 2 * np.real(data['dpH'] - data['total'] * data['dppsi'])
         Sij = np.real(data['dpidpj'] - np.einsum("i,j->ij", data['dppsi'], data['dppsi']))
 

@@ -170,7 +170,7 @@ class StochasticReconfigurationMultipleWF:
             )
 
             d[("dpipj", wfi)]= (
-                np.einsum("cp,cq,jc->pqj", dp, dp, weights[wfi, :, :], optimize=True) / nconfig
+                np.einsum("cp,cq,c->pq", dp, dp, weights[wfi, wfi, :], optimize=True) / nconfig
             )
 
             d[("dpH", wfi)] = (
@@ -220,11 +220,18 @@ class StochasticReconfigurationMultipleWF:
             error[k] = scipy.stats.sem(it, axis=0) / Nij
         
         nwf = weights.shape[1]
-        for k in ['dp', 'dpH', 'dpipj']:
+        for k in ['dp', 'dpH']:
             for w in range(nwf):
                 it = data[(k, w)]
-                avg[(k, w)] = np.mean(it, axis=0)/Nij[w] # ("i...,i -> i... ", it, 1.0/Nij[w])
+                avg[(k, w)] = np.mean(it, axis=0)/Nij[w] 
                 error[(k, w)] = scipy.stats.sem(it, axis=0)/Nij[w]
+
+        for k in ['dpipj']:
+            for w in range(nwf):
+                it = data[(k, w)]
+                avg[(k, w)] = np.mean(it, axis=0)/Nij[w,w] 
+                error[(k, w)] = scipy.stats.sem(it, axis=0)/Nij[w,w]
+
         return avg, error
     
     def _collect_terms(self, avg, error, overlap):
@@ -248,9 +255,10 @@ class StochasticReconfigurationMultipleWF:
                 np.einsum("i,p->pi", avg["overlap"][wfi, :], ret[("dp_norm", wfi)]) / N[wfi]
             )
             ret[("dp_overlap", wfi)] = fac[wfi] * (avg[("dp", wfi)] - 0.5 * norm_part) / Nij[wfi]
-            #ret[("condition", wfi)] = np.real(
-            #    avg[("dp2", wfi)][:, wfi] - avg[("dp", wfi)][:, wfi] ** 2
-            #)
+            ret[("dpipj", wfi)] = np.real(
+                avg[("dpipj", wfi)] 
+                - np.einsum("i,j->ij", avg[("dp", wfi)][:,wfi],avg[("dp", wfi)][:,wfi])
+            )
         ret["energy"] = avg["total"]
         return ret
 

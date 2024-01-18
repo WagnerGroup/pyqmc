@@ -43,7 +43,7 @@ class StochasticReconfiguration:
     given the averages given by avg() and __call__. 
     """
 
-    def __init__(self, enacc, transform, nodal_cutoff=1e-3, eps=1e-3):
+    def __init__(self, enacc, transform, nodal_cutoff=1e-3, eps=1e-1):
         """
         eps here is the regularization for SR.
         """

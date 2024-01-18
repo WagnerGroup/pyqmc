@@ -200,8 +200,6 @@ def line_minimization(
         step_data["iteration"] = it
         step_data["nconfig"] = coords.configs.shape[0]
 
-        if verbose:
-            print("descent en", data['total'], data['total_err'])
 
         # Correlated sampling line minimization.
         steps = np.linspace(-steprange / (npts - 2), steprange, npts)
@@ -228,6 +226,11 @@ def line_minimization(
         step_data["tau"] = steps
         step_data["yfit"] = en
         step_data["est_min"] = est_min
+
+        if verbose:
+            print("descent en", data['total'], data['total_err'])
+            print("energies from correlated sampling", en)
+
 
         opt_hdf(
             hdf_file, step_data, attr, coords, pgrad_acc.transform.deserialize(wf, x0)

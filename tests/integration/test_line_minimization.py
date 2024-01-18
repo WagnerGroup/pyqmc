@@ -29,9 +29,9 @@ def test_linemin(H2_ccecp_uhf):
     mol.output, mol.stdout = None, None
 
     wf, to_opt = generate_wf(mol, mf)
-    nconf = 100
+    nconf = 1000
     wf, dfgrad = line_minimization(
-        wf, initial_guess(mol, nconf), gradient_generator(mol, wf, to_opt)
+        wf, initial_guess(mol, nconf), gradient_generator(mol, wf, to_opt), verbose=True
     )
 
     dfgrad = pd.DataFrame(dfgrad)

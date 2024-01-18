@@ -214,7 +214,7 @@ class StochasticReconfigurationMultipleWF:
 
         avg = {}
         error = {}
-        for k in ['total','kinetic','potential']:
+        for k in ['total']:
             it = data[k]
             avg[k] = np.mean(it, axis=0) / Nij
             error[k] = scipy.stats.sem(it, axis=0) / Nij
@@ -231,12 +231,11 @@ class StochasticReconfigurationMultipleWF:
                 it = data[(k, w)]
                 avg[(k, w)] = np.mean(it, axis=0)/Nij[w,w] 
                 error[(k, w)] = scipy.stats.sem(it, axis=0)/Nij[w,w]
-
+        avg['overlap'] = weight_avg
         return avg, error
     
-    def _collect_terms(self, avg, error, overlap):
+    def _collect_terms(self, avg, error):
         ret = {}
-        avg['overlap'] = overlap
         nwf = avg["total"].shape[0]
         N = np.abs(avg["overlap"].diagonal())
         Nij = np.sqrt(np.outer(N, N))
@@ -245,7 +244,7 @@ class StochasticReconfigurationMultipleWF:
         ret["overlap"] = avg["overlap"] / Nij
         fac = np.ones((nwf, nwf)) + np.identity(nwf)
         for wfi in range(nwf):
-            print(f"dpH {avg[('dpH', wfi)].shape}, total {avg['total'][wfi].shape}, dp: {avg[('dp',wfi)].shape} ")
+            #print(f"dpH {avg[('dpH', wfi)].shape}, total {avg['total'][wfi].shape}, dp: {avg[('dp',wfi)].shape} ")
             ret[("dp_energy", wfi)] = fac[wfi] * np.real(
                 avg[("dpH", wfi)] - avg["total"][wfi] * avg[("dp", wfi)]
             )
@@ -263,28 +262,42 @@ class StochasticReconfigurationMultipleWF:
         return ret
 
 
-    def delta_p(self, steps, data : dict, verbose=False):
+    def delta_p(self, steps: np.ndarray, data : dict, overlap_penalty: np.ndarray, verbose=False):
         """ 
         steps: a list/numpy array of timesteps
         data: averaged data from avg() or __call__. Note that if you use VMC to compute this with 
         an accumulator with a name, you'll need to remove that name from the keys.
         That is, the keys should be equal to the ones returned by keys().
 
+
         Compute the change in parameters given the data from a stochastic reconfiguration step.
         Return the change in parameters, and data that we may want to use for diagnostics.
         """
+        #raise NotImplementedError("delta_p is not implemented yet for multiple wavefunctions")
+        data = self._collect_terms(data, None)
+        nwf = data['energy'].shape[0]
+        dp_all = []
+        for wf in range(nwf):
+            #pgrad = 2 * np.real(data[('dpH',wf)] - data['total'][wf] * data[('dppsi',wf)])
+            #Sij = np.real(data[('dpidpj',wf)] - np.einsum("i,j->ij", data['dppsi'], data['dppsi']))
+            Sij = np.real(data[('dpipj',wf)])
+            ovlp = 0.0
+            overlap_cost = 0.0
+            for i in range(wf):
+                ovlp += 2.0*data[('dp_overlap',wf)][:, i] * overlap_penalty[wf,i] * data['overlap'][wf,i]
+                overlap_cost += overlap_penalty[wf,i] * data['overlap'][wf,i]
+            pgrad = data[('dp_energy',wf)][:,wf] + ovlp
 
-        raise NotImplementedError("delta_p is not implemented yet for multiple wavefunctions")
-        pgrad = 2 * np.real(data['dpH'] - data['total'] * data['dppsi'])
-        Sij = np.real(data['dpidpj'] - np.einsum("i,j->ij", data['dppsi'], data['dppsi']))
-
-        invSij = np.linalg.inv(Sij + self.eps * np.eye(Sij.shape[0]))
-        v = np.einsum("ij,j->i", invSij, pgrad)
-        dp = [step*v for step in steps]
-        report = {'pgrad': pgrad,
-                  'SRdot': np.dot(pgrad, v)/(np.linalg.norm(v)*np.linalg.norm(pgrad)),   } 
-        
-        if verbose:
-            print("Gradient norm: ", np.linalg.norm(pgrad))
-            print("Dot product between gradient and SR step: ", report['SRdot'])
-        return dp, report
+            invSij = np.linalg.inv(Sij + self.eps * np.eye(Sij.shape[0]))
+            v = np.einsum("ij,j->i", invSij, pgrad)
+            dp = [step*v for step in steps]
+            dp_all.append(dp)
+            report = {'pgrad': pgrad,
+                    'SRdot': np.dot(pgrad, v)/(np.linalg.norm(v)*np.linalg.norm(pgrad)),   } 
+            if verbose:
+                print("wave function", wf)
+                print("Overlap cost", overlap_cost)
+                print("overlap gradient norm", np.linalg.norm(ovlp))
+                print("Gradient norm: ", np.linalg.norm(pgrad))
+                print("Dot product between gradient and SR step: ", report['SRdot'])
+        return dp_all, report

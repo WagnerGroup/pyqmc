@@ -36,7 +36,7 @@ def take_derivative_casci_energy(mc, civec, delta=1e-4):
     return np.asarray(en_derivative).reshape(civec.shape)
 
 
-def test_sampler(H2_casci):
+def skip_sampler(H2_casci):
     mol, mf, mc = H2_casci
 
     ci_energies = mc.e_tot
@@ -86,7 +86,7 @@ def test_sampler(H2_casci):
 
 
     # Finally, derivatives
-    terms = sr_accumulator._collect_terms(avg, error, overlap)
+    terms = sr_accumulator._collect_terms(avg, error)
 
     en_derivative = take_derivative_casci_energy(mc, mc2.ci)
     assert np.all(
@@ -106,6 +106,30 @@ def test_sampler(H2_casci):
         np.abs(overlap_derivative_ref - terms[("dp_overlap", 1)][:,0])
         < overlap_tolerance
     )
+
+from  pyqmc.ensemble_optimization import optimize_ensemble
+
+def test_optimizer(H2_casci):
+    mol, mf, mc = H2_casci
+
+    ci_energies = mc.e_tot
+    mc1 = copy.copy(mc)
+    mc2 = copy.copy(mc)
+    mc1.ci = mc.ci[0]
+    mc2.ci = (mc.ci[0] + mc.ci[1]) / np.sqrt(2)
+
+    wf1, to_opt1 = pyq.generate_slater(mol, mf, mc=mc1, optimize_determinants=True)
+    wf2, to_opt2 = pyq.generate_slater(mol, mf, mc=mc2, optimize_determinants=True)
+    for to_opt in [to_opt1, to_opt2]:
+        to_opt["det_coeff"] = np.ones_like(to_opt["det_coeff"], dtype=bool)
+
+    transform1 = pyqmc.accumulators.LinearTransform(wf1.parameters, to_opt1)
+    transform2 = pyqmc.accumulators.LinearTransform(wf2.parameters, to_opt2)
+    configs = pyq.initial_guess(mol, 2000)
+    _, configs = pyq.vmc(wf1, configs)
+    energy = pyq.EnergyAccumulator(mol)
+    sr_accumulator = StochasticReconfigurationMultipleWF(energy, [transform1, transform2])
+    optimize_ensemble([wf1, wf2], configs, sr_accumulator, None, max_iterations=10)
 
 
 

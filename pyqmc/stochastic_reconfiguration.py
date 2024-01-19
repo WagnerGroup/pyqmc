@@ -1,3 +1,17 @@
+# MIT License
+# 
+# Copyright (c) 2019-2024 The PyQMC Developers
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
 import numpy as np
 import h5py
 from pyqmc.accumulators_multiwf import invert_list_of_dicts
@@ -30,7 +44,7 @@ class StochasticReconfiguration:
     given the averages given by avg() and __call__. 
     """
 
-    def __init__(self, enacc, transform, nodal_cutoff=1e-3, eps=1e-3):
+    def __init__(self, enacc, transform, nodal_cutoff=1e-3, eps=1e-1):
         """
         eps here is the regularization for SR.
         """
@@ -121,7 +135,7 @@ class StochasticReconfiguration:
 
         invSij = np.linalg.inv(Sij + self.eps * np.eye(Sij.shape[0]))
         v = np.einsum("ij,j->i", invSij, pgrad)
-        dp = [step*v for step in steps]
+        dp = [ -step*v for step in steps]
         report = {'pgrad': pgrad,
                   'SRdot': np.dot(pgrad, v)/(np.linalg.norm(v)*np.linalg.norm(pgrad)),   } 
         

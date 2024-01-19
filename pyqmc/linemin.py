@@ -1,3 +1,17 @@
+# MIT License
+# 
+# Copyright (c) 2019-2024 The PyQMC Developers
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
 import numpy as np
 import pyqmc.gpu as gpu
 import pyqmc.sample_many as sm
@@ -186,8 +200,6 @@ def line_minimization(
         step_data["iteration"] = it
         step_data["nconfig"] = coords.configs.shape[0]
 
-        if verbose:
-            print("descent en", data['total'], data['total_err'])
 
         # Correlated sampling line minimization.
         steps = np.linspace(-steprange / (npts - 2), steprange, npts)
@@ -214,6 +226,11 @@ def line_minimization(
         step_data["tau"] = steps
         step_data["yfit"] = en
         step_data["est_min"] = est_min
+
+        if verbose:
+            print("descent en", data['total'], data['total_err'])
+            print("energies from correlated sampling", en)
+
 
         opt_hdf(
             hdf_file, step_data, attr, coords, pgrad_acc.transform.deserialize(wf, x0)

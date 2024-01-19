@@ -54,14 +54,14 @@ def optimize_ensemble(
         data_weighted, data_unweighted, configs = pyqmc.sample_many.sample_overlap(wfs, configs, None, nsteps=10, nblocks=20)
         norm = np.mean(data_unweighted['overlap'], axis=0)
         print("Normalization step", norm.diagonal())
-        renormalize(wfs, norm.diagonal(), pivot=1)
+        renormalize(wfs, norm.diagonal(), pivot=0)
 
         data_weighted, data_unweighted, configs = pyqmc.sample_many.sample_overlap(wfs, configs, updater, nsteps=10, nblocks=20)
         avg, error = updater.block_average(data_weighted, data_unweighted['overlap'])
         print("Iteration", i, "Energy", avg['total'], "Overlap", avg['overlap'])
         dp, report = updater.delta_p([tau], avg, overlap_penalty, verbose=True)
         x = [transform.serialize_parameters(wf.parameters) for wf, transform in zip(wfs, updater.transforms)]
-        x = [x_ - dp_[0] for x_, dp_ in zip(x, dp)]
+        x = [x_ + dp_[0] for x_, dp_ in zip(x, dp)]
         set_wf_params(wfs, x, updater)
 
 

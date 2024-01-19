@@ -139,13 +139,14 @@ class StochasticReconfigurationMultipleWF:
     given the averages given by avg() 
     """
 
-    def __init__(self, enacc, transforms, nodal_cutoff=1e-3, eps=1e-3):
+    def __init__(self, enacc, transforms,  eps=1e-1):
         """
         eps here is the regularization for SR.
+        Note that we don't need the nodal cutoff here, because we are sampling the sum of squares which 
+        doesn't have the nodal divergence.
         """
         self.enacc = enacc
         self.transforms = transforms
-        self.nodal_cutoff = nodal_cutoff
         self.eps = eps
 
 
@@ -244,7 +245,6 @@ class StochasticReconfigurationMultipleWF:
         ret["overlap"] = avg["overlap"] / Nij
         fac = np.ones((nwf, nwf)) + np.identity(nwf)
         for wfi in range(nwf):
-            #print(f"dpH {avg[('dpH', wfi)].shape}, total {avg['total'][wfi].shape}, dp: {avg[('dp',wfi)].shape} ")
             ret[("dp_energy", wfi)] = fac[wfi] * np.real(
                 avg[("dpH", wfi)] - avg["total"][wfi] * avg[("dp", wfi)]
             )
@@ -278,8 +278,6 @@ class StochasticReconfigurationMultipleWF:
         nwf = data['energy'].shape[0]
         dp_all = []
         for wf in range(nwf):
-            #pgrad = 2 * np.real(data[('dpH',wf)] - data['total'][wf] * data[('dppsi',wf)])
-            #Sij = np.real(data[('dpidpj',wf)] - np.einsum("i,j->ij", data['dppsi'], data['dppsi']))
             Sij = np.real(data[('dpipj',wf)])
             ovlp = 0.0
             overlap_cost = 0.0
@@ -290,7 +288,7 @@ class StochasticReconfigurationMultipleWF:
 
             invSij = np.linalg.inv(Sij + self.eps * np.eye(Sij.shape[0]))
             v = np.einsum("ij,j->i", invSij, pgrad)
-            dp = [step*v for step in steps]
+            dp = [ - step*v for step in steps]
             dp_all.append(dp)
             report = {'pgrad': pgrad,
                     'SRdot': np.dot(pgrad, v)/(np.linalg.norm(v)*np.linalg.norm(pgrad)),   } 

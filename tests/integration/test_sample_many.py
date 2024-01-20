@@ -19,6 +19,7 @@ from pyscf.fci.addons import overlap
 import pyqmc.api as pyq
 import pyqmc.accumulators
 from pyqmc.optimize_excited_states import average, collect_terms
+from pyqmc.accumulators_multiwf import EnergyAccumulatorMultipleWF
 from pyqmc.sample_many import sample_overlap
 import copy
 
@@ -37,7 +38,7 @@ def test_sampler(H2_casci):
 
     configs = pyq.initial_guess(mol, 2000)
     _, configs = pyq.vmc(wf1, configs)
-    energy = pyq.EnergyAccumulator(mol)
+    energy = EnergyAccumulatorMultipleWF(pyq.EnergyAccumulator(mol))
     data_weighted, data_unweighted, configs = sample_overlap(
         [wf1, wf2], configs, energy, nsteps=40, nblocks=20
     )
@@ -89,7 +90,7 @@ def test_correlated_sampling(H2_casci):
 
     configs = pyq.initial_guess(mol, 1000)
     _, configs = pyq.vmc(wfs[0], configs)
-    energy = pyq.EnergyAccumulator(mol)
+    energy = EnergyAccumulatorMultipleWF(pyq.EnergyAccumulator(mol))
     data_weighted, data_unweighted, configs = sample_overlap(
         wfs, configs, energy, nsteps=10, nblocks=10
     )

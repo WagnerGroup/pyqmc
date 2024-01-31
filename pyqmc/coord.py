@@ -197,7 +197,7 @@ class PeriodicConfigs:
         """
         clist = np.array_split(self.configs, npartitions)
         wlist = np.array_split(self.wrap, npartitions)
-        return [PeriodicConfigs(c, self.lvecs, w, dist=self._dist) for c, w in zip(clist, wlist)]
+        return [PeriodicConfigs(c, self.lvecs, w, dist=self.dist) for c, w in zip(clist, wlist)]
 
     def join(self, configslist, axis=0):
         """

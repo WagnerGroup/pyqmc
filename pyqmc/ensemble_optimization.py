@@ -67,6 +67,8 @@ def optimize_ensemble(
         tau = 1,
         max_iterations = 100,
         overlap_penalty = None,
+        npartitions = None,
+        client = None,
         vmc_kwargs = {},
 ):
     """Optimize a set of wave functions using ensemble VMC.
@@ -83,12 +85,12 @@ def optimize_ensemble(
         overlap_penalty = np.ones((nwf, nwf))*.5
 
     for i in range(max_iterations):
-        data_weighted, data_unweighted, configs = pyqmc.sample_many.sample_overlap(wfs, configs, None, nsteps=10, nblocks=20)
+        data_weighted, data_unweighted, configs = pyqmc.sample_many.sample_overlap(wfs, configs, None, nsteps=10, nblocks=20, client=client, npartitions=npartitions, **vmc_kwargs)
         norm = np.mean(data_unweighted['overlap'], axis=0)
         print("Normalization step", norm.diagonal())
         renormalize(wfs, norm.diagonal(), pivot=0)
 
-        data_weighted, data_unweighted, configs = pyqmc.sample_many.sample_overlap(wfs, configs, updater, nsteps=10, nblocks=20)
+        data_weighted, data_unweighted, configs = pyqmc.sample_many.sample_overlap(wfs, configs, updater, client=client, npartitions=npartitions, **vmc_kwargs)
         avg, error = updater.block_average(data_weighted, data_unweighted['overlap'])
         print("Iteration", i, "Energy", avg['total'], "Overlap", avg['overlap'])
         dp, report = updater.delta_p([tau], avg, overlap_penalty, verbose=True)

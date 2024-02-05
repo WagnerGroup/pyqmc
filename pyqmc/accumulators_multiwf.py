@@ -35,7 +35,6 @@ class EnergyAccumulatorMultipleWF:
         weighted_dat = {}
         nconfig = configs.configs.shape[0]
         for k, en in energies.items():
-            print(k, en.shape)
             weighted_dat[k] = np.einsum("jc,ijc->ij", en, weights) / nconfig
 
         return weighted_dat

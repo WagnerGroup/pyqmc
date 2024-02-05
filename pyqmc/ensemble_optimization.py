@@ -15,6 +15,23 @@
 
 import pyqmc.sample_many
 import numpy as np
+import h5py
+from pyqmc import hdftools
+
+def hdf_save(hdf_file, data, attr, wfs):
+    if hdf_file is not None:
+        with h5py.File(hdf_file, "a") as hdf:
+            if "energy" not in hdf.keys():
+                hdftools.setup_hdf(hdf, data, attr)
+                for wfi, wf in enumerate(wfs):
+                    for k, it in wf.parameters.items():
+                        hdf.create_dataset(f"wf/{wfi}/" + k, data=it)
+
+            hdftools.append_hdf(hdf, data)
+            for wfi, wf in enumerate(wfs):
+                for k, it in wf.parameters.items():
+                    hdf[f"wf/{wfi}/" + k][...] = it.copy()
+
 
 def set_wf_params(wfs, params, updater):
     for wf, p, transform in zip(wfs, params, updater.transforms):
@@ -25,7 +42,7 @@ def set_wf_params(wfs, params, updater):
 
 def renormalize(wfs, norms, pivot = 0, N=1):
     """
-    Normalizes the last wave function, given a current value of the normalization. Assumes that we want N to be 0.5
+    Renormalize the wave functions so that they have the same normalization as the pivot wave function.
 
     .. math::
 
@@ -78,6 +95,13 @@ def optimize_ensemble(
         x = [transform.serialize_parameters(wf.parameters) for wf, transform in zip(wfs, updater.transforms)]
         x = [x_ + dp_[0] for x_, dp_ in zip(x, dp)]
         set_wf_params(wfs, x, updater)
+
+        save_data = {
+            'energy':avg['total'],
+            'overlap':avg['overlap'],
+            'iteration':i,   
+        }
+        hdf_save(hdf_file, save_data, {}, wfs)
 
 
     return wfs

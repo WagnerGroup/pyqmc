@@ -24,7 +24,7 @@ def nodal_regularization(grad2, nodal_cutoff=1e-3):
     f = a * r ** 2 + b * r ** 4 + c * r ** 6
 
     This uses the method from 
-    Shivesh Pathak and Lucas K. Wagner. “A Light weightsRegularization for Wave Function Parameter Gradients in Quantum Monte Carlo.” AIP Advances 10, no. 8 (August 6, 2020): 085213. https://doi.org/10.1063/5.0004008.
+    Shivesh Pathak and Lucas K. Wagner. “A Light Weight Regularization for Wave Function Parameter Gradients in Quantum Monte Carlo.” AIP Advances 10, no. 8 (August 6, 2020): 085213. https://doi.org/10.1063/5.0004008.
     """
     r = 1.0 / grad2
     mask = r < nodal_cutoff**2
@@ -305,7 +305,8 @@ class StochasticReconfigurationMultipleWF:
             dp = [ - step*v for step in steps]
             dp_all.append(dp)
             report = {'pgrad': pgrad,
-                    'SRdot': np.dot(pgrad, v)/(np.linalg.norm(v)*np.linalg.norm(pgrad)),   } 
+                    'SRdot': np.dot(pgrad, v)/(np.linalg.norm(v)*np.linalg.norm(pgrad)), 
+                        } 
             if verbose:
                 print("wave function", wf)
                 print("Overlap cost", overlap_cost)

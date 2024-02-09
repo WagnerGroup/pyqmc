@@ -60,10 +60,11 @@ def compute_tmoves(mol, configs, wf, e, threshold, tau, naip=None):
         npts = d["ratio"].shape[1]
         weight = np.zeros((nconfig, npts))
         ratio = np.ones((nconfig, npts), dtype=d["ratio"].dtype)
-        weight[d["mask"]] = np.einsum(
-            "ik, ijk -> ij", np.exp(-tau * d["v_l"]) - 1, d["P_l"]
-        )
-        ratio[d["mask"]] = d["ratio"]
+        if np.any(d["mask"]):
+            weight[d["mask"]] = np.einsum(
+                "ik, ijk -> ij", np.exp(-tau * d["v_l"]) - 1, d["P_l"]
+            )
+            ratio[d["mask"]] = d["ratio"]
         summed_data.append({"weight": weight, "ratio": ratio, "epos": d["epos"]})
 
     ratio = np.concatenate([d["ratio"] for d in summed_data], axis=1)
@@ -90,7 +91,16 @@ def ecp_ea(mol, configs, wf, e, atom, threshold, naip=None):
     l_list, v_l = get_v_l(mol, at_name, r_ea)
     mask, prob = ecp_mask(v_l, threshold)
     if not np.any(mask):
-        return {"total": ecp_val}
+        naip = 6 if len(l_list) <= 2 else 12
+        epos_rot = np.repeat(configs.configs[:, e, :][:, np.newaxis, :], naip, axis=1)
+        epos = configs.make_irreducible(e, epos_rot, mask)
+        return {
+            "total": ecp_val,
+            # "v_l": np.zeros((nconf, len(l_list))),
+            # "P_l": np.zeros((nconf, naip, len(l_list))),
+            "ratio": np.zeros((nconf, naip)),
+            "epos": epos,
+            "mask": mask}
     masked_v_l = v_l[mask]
     masked_v_l[:, :-1] /= prob[mask, np.newaxis]
 

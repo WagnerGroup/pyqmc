@@ -65,7 +65,7 @@ def compute_tmoves(mol, configs, wf, e, threshold, tau, naip=None):
                 "ik, ijk -> ij", np.exp(-tau * d["v_l"]) - 1, d["P_l"]
             )
             ratio[d["mask"]] = d["ratio"]
-        else:
+        else: # if d["mask"] is all False, return empty arrays for weight, ratio and d["epos"].configs
             weight = np.zeros((nconfig, 0))
             ratio = np.ones((nconfig, 0))
         summed_data.append({"weight": weight, "ratio": ratio, "epos": d["epos"]})

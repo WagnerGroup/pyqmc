@@ -57,17 +57,13 @@ def compute_tmoves(mol, configs, wf, e, threshold, tau, naip=None):
     summed_data = []
     nconfig = configs.configs.shape[0]
     for d in data:
-        if np.any(d["mask"]):
-            npts = d["ratio"].shape[1]
-            weight = np.zeros((nconfig, npts))
-            ratio = np.ones((nconfig, npts), dtype=d["ratio"].dtype)
-            weight[d["mask"]] = np.einsum(
-                "ik, ijk -> ij", np.exp(-tau * d["v_l"]) - 1, d["P_l"]
-            )
-            ratio[d["mask"]] = d["ratio"]
-        else: # if d["mask"] is all False, return empty arrays for weight, ratio and d["epos"].configs
-            weight = np.zeros((nconfig, 0))
-            ratio = np.ones((nconfig, 0))
+        npts = d["ratio"].shape[1]
+        weight = np.zeros((nconfig, npts))
+        ratio = np.ones((nconfig, npts), dtype=d["ratio"].dtype)
+        weight[d["mask"]] = np.einsum(
+            "ik, ijk -> ij", np.exp(-tau * d["v_l"]) - 1, d["P_l"]
+        )
+        ratio[d["mask"]] = d["ratio"]
         summed_data.append({"weight": weight, "ratio": ratio, "epos": d["epos"]})
 
     ratio = np.concatenate([d["ratio"] for d in summed_data], axis=1)
@@ -93,13 +89,6 @@ def ecp_ea(mol, configs, wf, e, atom, threshold, naip=None):
 
     l_list, v_l = get_v_l(mol, at_name, r_ea)
     mask, prob = ecp_mask(v_l, threshold)
-    if not np.any(mask):
-        epos = configs.make_irreducible(e, np.zeros((nconf, 0, 3)))
-        return {
-            "total": ecp_val,
-            "epos": epos,
-            "mask": mask
-        }
     masked_v_l = v_l[mask]
     masked_v_l[:, :-1] /= prob[mask, np.newaxis]
 
@@ -115,7 +104,12 @@ def ecp_ea(mol, configs, wf, e, atom, threshold, naip=None):
     )
     epos_rot[mask] = (configs.configs[mask, e, :] - r_ea_vec)[:, np.newaxis] + r_ea_i
     epos = configs.make_irreducible(e, epos_rot, mask)
-    ratio = wf.testvalue(e, epos, mask)[0]
+
+    # Avoid calling wf.testvalue() when epos.configs is empty
+    if np.any(mask):
+        ratio = wf.testvalue(e, epos, mask)[0]
+    else:
+        ratio = np.zeros(P_l.shape[:2])
 
     # Compute local and non-local parts
     ecp_val[mask] = np.einsum("ij,ik,ijk->i", ratio, masked_v_l, P_l)

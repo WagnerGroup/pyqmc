@@ -121,18 +121,30 @@ def orbital_evaluator_from_pyscf(
 
     periodic = hasattr(mol, "a")
     f_max_orb = lambda a: int(np.max(a, initial=0)) + 1 if len(a) > 0 else 0
-    _mo_coeff = mc.mo_coeff if hasattr(mc, "mo_coeff") else mf.mo_coeff
-    checkshape = _mo_coeff[0][0].shape if periodic else _mo_coeff[0].shape
-    if len(checkshape) == 1:
-        _mo_coeff = [_mo_coeff, _mo_coeff]
 
+    try:
+        mf = mf.to_uhf()
+    except TypeError:
+        mf = mf.to_uhf(mf)
+        
+    if periodic:
+        mf = pyscf.pbc.scf.addons.convert_to_khf(mf)
     if determinants is None:
         determinants = determinants_from_pyscf(mol, mf, mc=mc, tol=tol)
+
+    if hasattr(mc, "mo_coeff"):
+            # assume no kpts for mc calculation
+        _mo_coeff = mc.mo_coeff
+        if len(_mo_coeff.shape) == 2: # restricted spin: create up and down copies
+            _mo_coeff = [_mo_coeff, _mo_coeff]
+        if periodic:
+            _mo_coeff = [m[np.newaxis] for m in _mo_coeff] # add kpt dimension
+    else:
+        _mo_coeff = mf.mo_coeff
+            
     if periodic:
         if not hasattr(mol, "original_cell"):
             mol = supercell.get_supercell(mol, np.eye(3))
-        if not hasattr(mf, "kpts"):
-            mf = pyscf.pbc.scf.addons.convert_to_khf(mf)
         kinds = twists.create_supercell_twists(mol, mf)['primitive_ks'][twist]
         if len(kinds) != mol.scale:
             raise ValueError(
@@ -174,7 +186,10 @@ def single_determinant_from_mf(mf, weight=1.):
     """
     Creates a determinant list for a single determinant from SCF object
     """
-    mf = mf.to_uhf()
+    try:
+        mf = mf.to_uhf() 
+    except TypeError:
+        mf = mf.to_uhf(mf) 
     if hasattr(mf, "kpts"):
         occupation = [[list(np.nonzero(k > 0.5)[0]) for k in s] for s in mf.mo_occ]
     else:

@@ -23,6 +23,7 @@ from pyqmc.wftools import generate_jastrow
 import pyqmc.api as pyq
 from pyqmc.three_body_jastrow import ThreeBodyJastrow
 from pyqmc.wftools import default_jastrow_basis
+import pytest
 
 
 def test_pbc_wfs_triplet(h_noncubic_sto3g_triplet, epsilon=1e-5, nconf=10):

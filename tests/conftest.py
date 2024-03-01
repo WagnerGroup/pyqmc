@@ -105,6 +105,22 @@ def H2_ccecp_casci_s2(H2_ccecp_uhf):
 
 
 @pytest.fixture(scope="module")
+def H2_ccecp_casscf_s0(H2_ccecp_rhf):
+    mol, mf = H2_ccecp_rhf
+    mc = pyscf.mcscf.CASSCF(mf, ncas=4, nelecas=(1, 1))
+    mc.kernel()
+    return mol, mf, mc
+
+
+@pytest.fixture(scope="module")
+def H2_ccecp_casscf_s2(H2_ccecp_uhf):
+    mol, mf = H2_ccecp_uhf
+    mc = pyscf.mcscf.CASSCF(mf, ncas=4, nelecas=(2, 0))
+    mc.kernel()
+    return mol, mf, mc
+
+
+@pytest.fixture(scope="module")
 def H2_ccecp_uhf():
     r = 1.54 / 0.529177
     mol = gto.M(
@@ -250,3 +266,27 @@ def h_noncubic_sto3g_triplet():
     mf = mf.run()
     print(mf.mo_occ)
     return mol, mf
+
+
+@pytest.fixture(scope='module')
+def h_pbc_casscf():
+    L = 8
+    mol = pyscf.pbc.gto.M(
+        atom="""H     {0}      {0}      {0}                
+                  H     {1}      {1}      {1}""".format(
+            0.0, L / 4
+        ),
+        basis="ccpvdz",
+        a= np.eye(3) * L,
+        spin=0,
+        unit="bohr",
+        precision=1e-6,
+    )
+    mf = pyscf.pbc.scf.RKS(mol)
+    mf.xc = "pbe"
+    #mf = pyscf.pbc.dft.multigrid.multigrid(mf)
+    mf = mf.run()
+    print(mf.mo_occ)
+    mc = pyscf.mcscf.CASSCF(mf, ncas=4, nelecas=(1, 1))
+    mc.kernel()
+    return mol, mf, mc

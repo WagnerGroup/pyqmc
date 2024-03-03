@@ -54,21 +54,11 @@ def extend_hdf(f, data):
         f[k][-n:] = it
 
 
-def collect_overlap_data(wfs, configs, energy):
-    r"""
-    First implementation: just evaluate energy; future generalize to other accs
-
-    Sample distribution: sum of wf probabilities.
-
-    .. math:: \rho(\mathbf{R}) = \sum_i |\Psi_i(\mathbf{R})|^2
-
-    Wfs don't have to be normalized, but sampling will be more efficient if normalizations are similar.
-
-    Expectation values
-
-    .. math:: \frac{\langle{\Psi_i | \hat O | \Psi_j\rangle}}{N_iN_j} = \frac{1}{N_iN_j} \int d\mathbf{R} d\mathbf{R}' \Psi_i^*(\mathbf{R}) O(\mathbf{R}, \mathbf{R}') \Psi_j(\mathbf{R}') = \frac{1}{N_iN_j} \int d\mathbf{R} \frac{\Psi_i^*(\mathbf{R}) \Psi_j(\mathbf{R})}{\rho(\mathbf{R})} d\mathbf{R}' \frac{O(\mathbf{R}, \mathbf{R}') \Psi_j(\mathbf{R}')}{\Psi_j(\mathbf{R})} \rho(\mathbf{R})
-
-    .. math:: \frac{\langle{\Psi_i | \hat O | \Psi_j\rangle}}{N_iN_j} = \frac{1}{N_iN_j} \int d\mathbf{R} w_{ij}(\mathbf{R}) O_j^L(\mathbf{R}) \rho(\mathbf{R}) = \frac{1}{N_iN_j} \langle w_{ij}(\mathbf{R}) O_j^L(\mathbf{R})\rangle_{\mathjbf{R} ~ \rho}
+def compute_weights(wfs):
+    """
+    computes psi_i psi_j / rho for all i,j and for each configuration.
+    Returns: 
+      weights[wfi, wfj, config] 
     """
     phase, log_vals = [
         np.nan_to_num(np.array(x)) for x in zip(*[wf.value() for wf in wfs])
@@ -76,25 +66,8 @@ def collect_overlap_data(wfs, configs, energy):
     ref = np.max(log_vals, axis=0)  # for numerical stability
     rho = np.mean(np.nan_to_num(np.exp(2 * (log_vals - ref))), axis=0)
     psi = phase * np.nan_to_num(np.exp(log_vals - ref))
-
-    energies = invert_list_of_dicts([energy(configs, wf) for wf in wfs])
-
-    weighted_dat = {}
-    unweighted_dat = {}
-
-    nconfig = psi.shape[-1]
-    weight = np.einsum("ic,jc->ijc", psi.conj(), psi / rho)
-    # psi are [config,wf]
-    # we average over configs here and produce [wf,wf]
-    # c refers to the configuration
-    unweighted_dat["overlap"] = np.mean(weight, axis=-1)
-
-    # Weighted average
-    for k, en in energies.items():
-        weighted_dat[k] = np.einsum("jc,ijc->ij", en, weight) / nconfig
-
-    return weighted_dat, unweighted_dat
-
+    weights = np.einsum("ic,jc->ijc", psi.conj(), psi / rho)
+    return weights
 
 def invert_list_of_dicts(A, asarray=True):
     """
@@ -157,11 +130,12 @@ def sample_overlap_block(wfs, configs, tstep, nsteps, energy):
             wf_ratios = np.abs(vals) ** 2
             log_values = np.real(np.array([wf.value()[1] for wf in wfs]))
             weights = np.exp(2 * (log_values - log_values[0]))
-            weights /= weights.sum(axis=0)
 
-            ratio = t_prob * np.sum(np.abs(vals) ** 2 * weights, axis=0)
+            ratio = (
+                t_prob * np.sum(wf_ratios * weights, axis=0) / weights.sum(axis=0)
+            )
             accept = ratio > np.random.rand(nconf)
-            unweighted_block["acceptance"] += accept.mean() / nelec
+            # block_avg["acceptance"][n] += accept.mean() / nelec
 
             # Update wave function
             configs.move(e, newcoorde, accept)
@@ -170,11 +144,14 @@ def sample_overlap_block(wfs, configs, tstep, nsteps, energy):
                     e, newcoorde, configs, mask=accept, saved_values=saved
                 )
 
+        weights = compute_weights(wfs)
+        unweighted_dat={}
+        unweighted_dat['overlap'] = np.mean(weights, axis=-1)
+        rolling_average(unweighted_block, unweighted_dat, nsteps)
         # Collect rolling average
         if energy is not None:
-            weighted_dat, unweighted_dat = collect_overlap_data(wfs, configs, energy)
+            weighted_dat = energy.avg(configs, wfs, weights)
             rolling_average(weighted_block, weighted_dat, nsteps)
-            rolling_average(unweighted_block, unweighted_dat, nsteps)
 
     return weighted_block, unweighted_block, configs
 

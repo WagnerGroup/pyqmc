@@ -56,6 +56,30 @@ def test_testvalue_many(wf, configs, tol=1e-6):
     assert np.max(np.abs(terr)) < tol
 
 
+def test_testvalue_aux(wf, configs, aux, tol=1e-6):
+    """
+    :parameter wf: a wave function object to be tested
+    :parameter configs: aux positions
+    :type configs: (nconf, naux, 3) array
+    :returns: max abs errors
+    :rtype: dictionary
+
+    """
+    nconf, naux, ndim = aux.configs.shape
+    val1 = wf.recompute(configs)
+    wfcopy = copy.copy(wf)
+
+    delta = 1e-2
+    tval = np.zeros((nconf, naux))
+    e = 0
+    for a in range(naux):
+        tval[:, a], _ = wf.testvalue(e, aux.select_electrons(a))
+
+    tmany, _ = wfcopy.testvalue(e, aux)
+    terr = tmany - tval
+    assert np.max(np.abs(terr)) < tol
+
+
 def test_updateinternals(wf, configs):
     """
     :parameter wf: a wave function object to be tested

@@ -188,7 +188,7 @@ class ThreeBodyJastrow:
             di_e = configs.dist.dist_i(self._mol.atom_coords(), epos)
         else:
             de = configs.dist.pairwise(configs.configs[:, not_e], epos)
-            di_e = configs.dist.pairwise(self._mol.atom_coords(), epos)
+            di_e = configs.dist.pairwise(self._mol.atom_coords()[np.newaxis], epos)
             de = np.moveaxis(de, 2, 0)
             di_e = np.moveaxis(di_e, 2, 0)
 

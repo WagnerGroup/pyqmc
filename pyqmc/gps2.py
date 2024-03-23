@@ -7,8 +7,6 @@ import pyqmc.distance as distance
 class GPSJastrow:
     def __init__(self, mol, X_support):
         self.n_support = X_support.shape[0]
-        self._mol = mol
-        self.iscomplex = False
         self.dtype = float
         self.parameters = {}
 

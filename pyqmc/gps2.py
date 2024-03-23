@@ -57,7 +57,7 @@ class GPSJastrow:
         # shape is nconf,[naux,]nsup,2,3
         Xsup = self.parameters["Xsupport"][np.newaxis]
         nconf, naux = epos.configs.shape[:2]
-        d_ne = np.zeros((nconf,self.n_support, naux2, 3))
+        d_ne = np.zeros((nconf, self.n_support, naux, 2, 3))
         d_ne[:, :, :, 0] = epos.dist.pairwise(Xsup[:, :, 0], epos.configs)
         d_ne[:, :, :, 1] = epos.dist.pairwise(Xsup[:, :, 1], epos.configs)
         return np.moveaxis(-d_ne, 2, 1)

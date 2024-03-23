@@ -36,7 +36,7 @@ def setup_hdf(f, data, attr):
 
 def append_hdf(f, data):
     for k, it in data.items():
-        if k not in data.keys():
+        if k not in f.keys():
             f.create_dataset(
                 k, (0, *it.shape), maxshape=(None, *it.shape), dtype=it.dtype
             )

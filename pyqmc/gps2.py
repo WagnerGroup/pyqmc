@@ -31,10 +31,8 @@ class GPSJastrow:
         return self.value()
 
     def value_from_e_cs(self, e_cs):
-        cs = np.einsum("csi,csj->cs", e_cs[:, :, :, 0], e_cs[:, :, :, 1])
-        cs -= np.einsum("csi,csi->cs", e_cs[:, :, :, 0], e_cs[:, :, :, 1])
-        val = np.einsum("s,cs->c", self.parameters["alpha"], cs)
-        return val
+        A = e_cs[..., 1] - np.sum(e_cs[..., 1], axis=2, keepdims=True)
+        return np.einsum("s,csi,csi->c", self.parameters["alpha"], e_cs[..., 0], -A)
 
     def value(self):
         """returns phase and log(value) tuple"""
@@ -81,15 +79,12 @@ class GPSJastrow:
         else:
             d = self._compute_d_ne(e, epos.mask(mask))
         new_e_ne, _ = self._compute_e_ne(d)
-        tup = (slice(None),) + is_epos_3 * (None,) + (slice(None), e, slice(None))
-        dif1 = new_e_ne - self.e_cs[mask][tup]
-        summ = np.sum(self.e_cs[mask], axis=2)
-        dif2 = summ - self.e_cs[mask, :, e, :]
+        tup = (slice(None),) + is_epos_3 * (None,)# + (slice(None), e, slice(None))
+        e_cs = self.e_cs[mask][tup]
+        dif1 = new_e_ne - e_cs[..., e, :]
+        dif2 = np.sum(e_cs, axis=-2) - e_cs[..., e, :]
 
-        tup1 = (slice(None),) + is_epos_3 * (None,) + (slice(None), 1)
-        tup0 = (slice(None),) + is_epos_3 * (None,) + (slice(None), 0)
-
-        final = dif1[..., 0] * dif2[tup1] + dif1[..., 1] * dif2[tup0]
+        final = dif1[..., 0] * dif2[..., 1] + dif1[..., 1] * dif2[..., 0]
         val = np.einsum("s,c...s->c...", self.parameters["alpha"], final)
         return np.exp(val), np.array([1])
 
@@ -102,7 +97,7 @@ class GPSJastrow:
         final = dif1[..., 0] * dif2[:, :, 1] + dif1[..., 1] * dif2[:, :, 0]
         val = np.einsum("s,c...s->c...", self.parameters["alpha"], final)
 
-        d = np.moveaxis(d, [0, 1, 2, 3], [1, 2, 3, 0])
+        d = np.moveaxis(d, 3, 0)
         final = (
             new_e_ne[:, :, 0] * d[:, :, :, 0] * 2 * self.parameters["f"] * dif2[:, :, 1]
             + new_e_ne[:, :, 1]
@@ -117,7 +112,7 @@ class GPSJastrow:
     def gradient(self, e, epos):
         d = self._compute_d_ne(e, epos)
         new_e_ne, _ = self._compute_e_ne(d)
-        d = np.moveaxis(d, [0, 1, 2, 3], [1, 2, 3, 0])
+        d = np.moveaxis(d, 3, 0)
         summ = np.sum(self.e_cs, axis=2) - self.e_cs[:, :, e, :]
         # can simplify last 2 lines by switching axis order of summ, so this fits into 1 einsum. but that will make stuff less readable, so will do
         # later
@@ -135,7 +130,7 @@ class GPSJastrow:
     def gradient_laplacian(self, e, epos):
         d = self._compute_d_ne(e, epos)
         new_e_ne, r2 = self._compute_e_ne(d)
-        d = np.moveaxis(d, [0, 1, 2, 3], [1, 2, 3, 0])
+        d = np.moveaxis(d, 3, 0)
         summ = np.sum(self.e_cs, axis=2) - self.e_cs[:, :, e, :]
         final = (
             new_e_ne[:, :, 0] * d[:, :, :, 0] * 2 * self.parameters["f"] * summ[:, :, 1]
@@ -147,7 +142,6 @@ class GPSJastrow:
         )
 
         grad = np.einsum("s,dcs->dc", self.parameters["alpha"], final)
-        d = np.moveaxis(d, [0, 1, 2, 3], [3, 0, 1, 2])
 
         term1 = 4 * self.parameters["f"] ** 2 * r2 - 6 * self.parameters["f"]
         final = (

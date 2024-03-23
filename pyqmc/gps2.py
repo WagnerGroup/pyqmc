@@ -205,118 +205,32 @@ class GPSJastrow:
     # configs shape nconfig,nelec,3
     def pgradient(self):
         configs = self._configscurrent.configs
-        A = self.e_cs - np.sum(self.e_cs, axis=2, keepdims=True)
+        A = (self.e_cs - np.sum(self.e_cs, axis=2, keepdims=True))[:, :, :, ::-1]
         alphader = -np.einsum("csi,csi->cs", A[:, :, :, 0], A[:, :, :, 1])
 
-        #alphader = np.einsum(
-        #    "csi,csj->cs", self.e_cs[:, :, :, 0], self.e_cs[:, :, :, 1]
-        #) - np.einsum("csi,csi->cs", self.e_cs[:, :, :, 0], self.e_cs[:, :, :, 1])
-
-        d = np.zeros((self.nconfig, self.n_support, self.nelec, 2, 3))
-
-        for e in range(self.nelec):
-            d[:, :, e, :, :] = (
-                self.parameters["Xsupport"][np.newaxis, :, :, :]
-                - configs[:, np.newaxis, e, np.newaxis, :]
-            )
+        d = (
+            self.parameters["Xsupport"][np.newaxis, :, np.newaxis, :, :]
+            - configs[:, np.newaxis, :, np.newaxis, :]
+        )
 
         r = np.sum(d**2, axis=-1)
 
         fder = np.einsum(
-                "s,csit,csit,csit->c",
-                self.parameters["alpha"],
-                self.e_cs[:, :, :, :],
-                A[:, :, :, ::-1],
-                r[:, :, :, :],
-                optimize="greedy",
+            "s,csit,csit,csit->c",
+            self.parameters["alpha"],
+            self.e_cs,
+            A,
+            r,
+            optimize="greedy",
         )
 
-        Xder = 2 * self.parameters["f"] * np.einsum(
-                "s,csitd,csit,csit->cstd",
-                self.parameters["alpha"],
-                d[:, :, :, :, :],
-                self.e_cs[:, :, :, :],
-                A[:, :, :, ::-1],
-                optimize="greedy",
+        Xder = np.einsum(
+            "s,csitd,csit,csit->cstd",
+            2 * self.parameters["f"] * self.parameters["alpha"],
+            d,
+            self.e_cs,
+            A,
+            optimize="greedy",
         )
-
-        #fder = -(
-        #    np.einsum(
-        #        "s,csi,csj,csi->c",
-        #        self.parameters["alpha"],
-        #        self.e_cs[:, :, :, 0],
-        #        self.e_cs[:, :, :, 1],
-        #        r[:, :, :, 0],
-        #    )
-        #    + np.einsum(
-        #        "s,csi,csj,csj->c",
-        #        self.parameters["alpha"],
-        #        self.e_cs[:, :, :, 0],
-        #        self.e_cs[:, :, :, 1],
-        #        r[:, :, :, 1],
-        #    )
-        #    - np.einsum(
-        #        "s,csi,csi,csi->c",
-        #        self.parameters["alpha"],
-        #        self.e_cs[:, :, :, 0],
-        #        self.e_cs[:, :, :, 1],
-        #        r[:, :, :, 0],
-        #    )
-        #    - np.einsum(
-        #        "s,csi,csi,csi->c",
-        #        self.parameters["alpha"],
-        #        self.e_cs[:, :, :, 0],
-        #        self.e_cs[:, :, :, 1],
-        #        r[:, :, :, 1],
-        #    )
-        #)
-
-        #x1 = (
-        #    -2
-        #    * self.parameters["f"]
-        #    * (
-        #        (
-        #            np.einsum(
-        #                "s,csid,csi,csj->csd",
-        #                self.parameters["alpha"],
-        #                d[:, :, :, 0, :],
-        #                self.e_cs[:, :, :, 0],
-        #                self.e_cs[:, :, :, 1],
-        #            )
-        #            - np.einsum(
-        #                "s,csid,csi,csi->csd",
-        #                self.parameters["alpha"],
-        #                d[:, :, :, 0, :],
-        #                self.e_cs[:, :, :, 0],
-        #                self.e_cs[:, :, :, 1],
-        #            )
-        #        )
-        #    )
-        #)
-        #x2 = (
-        #    -2
-        #    * self.parameters["f"]
-        #    * (
-        #        (
-        #            np.einsum(
-        #                "s,csjd,csi,csj->csd",
-        #                self.parameters["alpha"],
-        #                d[:, :, :, 1, :],
-        #                self.e_cs[:, :, :, 0],
-        #                self.e_cs[:, :, :, 1],
-        #            )
-        #            - np.einsum(
-        #                "s,csid,csi,csi->csd",
-        #                self.parameters["alpha"],
-        #                d[:, :, :, 1, :],
-        #                self.e_cs[:, :, :, 0],
-        #                self.e_cs[:, :, :, 1],
-        #            )
-        #        )
-        #    )
-        #)
-        #Xder = np.zeros((self.nconfig, self.n_support, 2, 3))
-        #Xder[:, :, 0, :] = x1
-        #Xder[:, :, 1, :] = x2
 
         return {"alpha": alphader, "Xsupport": Xder, "f": fder}

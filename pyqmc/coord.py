@@ -1,14 +1,14 @@
 # MIT License
-# 
+#
 # Copyright (c) 2019-2024 The PyQMC Developers
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
@@ -134,7 +134,9 @@ class PeriodicConfigs:
         if wrap is not None:
             self.wrap += wrap
         self.lvecs = lattice_vectors
-        self.dist = dist if dist is not None else distance.MinimalImageDistance(lattice_vectors)
+        self.dist = (
+            dist if dist is not None else distance.MinimalImageDistance(lattice_vectors)
+        )
 
     def electron(self, e):
         return PeriodicElectron(
@@ -197,7 +199,10 @@ class PeriodicConfigs:
         """
         clist = np.array_split(self.configs, npartitions)
         wlist = np.array_split(self.wrap, npartitions)
-        return [PeriodicConfigs(c, self.lvecs, w, dist=self.dist) for c, w in zip(clist, wlist)]
+        return [
+            PeriodicConfigs(c, self.lvecs, w, dist=self.dist)
+            for c, w in zip(clist, wlist)
+        ]
 
     def join(self, configslist, axis=0):
         """

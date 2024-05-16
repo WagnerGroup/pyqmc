@@ -1,14 +1,14 @@
 # MIT License
-# 
+#
 # Copyright (c) 2019-2024 The PyQMC Developers
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
@@ -81,7 +81,8 @@ class LinearTransform:
 
     * to_opt[k] can't be boolean scalar; it has to be an array with the same dimension as parameters[k].
     * to_opt doesn't have to have all the keys of parameters, but all keys of to_opt must be keys of parameters.
-    * If you change wf.parameters, then all serializations will be out of date. For example, if you serialize, then change wf.paramaters, then deserialize, the deserialization will be incorrect.
+    * If you change wf.parameters, then all serializations will be out of date.
+    For example, if you serialize, then change wf.paramaters, then deserialize, the deserialization will be incorrect.
     """
 
     def __init__(self, parameters, to_opt=None):
@@ -148,7 +149,9 @@ class LinearTransform:
             n += n_p
         return d
 
+
 PGradTransform = StochasticReconfiguration
+
 
 class SqAccumulator:
     r"""

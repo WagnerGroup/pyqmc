@@ -1,14 +1,14 @@
 # MIT License
-# 
+#
 # Copyright (c) 2019-2024 The PyQMC Developers
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
@@ -135,9 +135,9 @@ class JastrowSpin:
 
         :parameter int e: fixed electron index
         :parameter epos: positions (nconfig,[ naip,] 3) for electron e
-        :type epos: Electron object 
-        :parameter ndarray mask: boolean array-like to select the configs to evaluate. 
-        :return a_partial_e: partial electron-ion sum for electron e. Only returns values for configs where mask==True. 
+        :type epos: Electron object
+        :parameter ndarray mask: boolean array-like to select the configs to evaluate.
+        :return a_partial_e: partial electron-ion sum for electron e. Only returns values for configs where mask==True.
         :rtype a_partial_e: ndarray (sum(mask),[ naip,] 3)
         """
         if len(epos.configs.shape) == 2:
@@ -158,9 +158,9 @@ class JastrowSpin:
           :math:`i` is the configuration index.
         :parameter int e: fixed electron index
         :parameter epos: positions (nconfig,[ naip,] 3) for electron e
-        :type epos: Electron object 
-        :parameter ndarray mask: boolean array-like to select the configs to evaluate. 
-        :return b_partial_e: partial electron-electron sum for electron e. Only returns values for configs where mask==True. 
+        :type epos: Electron object
+        :parameter ndarray mask: boolean array-like to select the configs to evaluate.
+        :return b_partial_e: partial electron-electron sum for electron e. Only returns values for configs where mask==True.
         :rtype b_partial_e: ndarray (sum(mask),[ naip,] 3)
         """
         nup = self._mol.nelec[0]
@@ -168,7 +168,7 @@ class JastrowSpin:
         not_e = np.arange(self._nelec) != e
         current = self._configscurrent.configs[mask][:, not_e]
         if len(epos.configs.shape) == 2:
-            d = gpu.cp.asarray(epos.dist.dist_i(current , epos.configs[mask]))
+            d = gpu.cp.asarray(epos.dist.dist_i(current, epos.configs[mask]))
         else:
             d = gpu.cp.asarray(epos.dist.pairwise(current, epos.configs[mask]))
             d = gpu.cp.moveaxis(d, 2, 0)

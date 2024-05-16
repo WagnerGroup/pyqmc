@@ -1,14 +1,14 @@
 # MIT License
-# 
+#
 # Copyright (c) 2019-2024 The PyQMC Developers
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
@@ -92,11 +92,11 @@ def generate_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
     :parameter boolean ion_cusp: add an extra term to satisfy electron-ion cusp.
     :returns: jastrow, to_opt
     """
-    if ion_cusp == False:
+    if ion_cusp is False:
         ion_cusp = []
         if not mol.has_ecp():
             print("Warning: using neither ECP nor ion_cusp")
-    elif ion_cusp == True:
+    elif ion_cusp is True:
         ion_cusp = list(mol._basis.keys())
         if mol.has_ecp():
             print("Warning: using both ECP and ion_cusp")

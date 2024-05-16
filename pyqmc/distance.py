@@ -1,14 +1,14 @@
 # MIT License
-# 
+#
 # Copyright (c) 2019-2024 The PyQMC Developers
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
@@ -26,7 +26,9 @@ class RawDistance:
         # a ([m,] n, 3)
         # b (m, 3)
         # returns shape (m, n, 3)
-        assert len(b.shape) <= 2, f"dist_i argument b has {len(b.shape)} dimensions -- can have max 2"
+        assert (
+            len(b.shape) <= 2
+        ), f"dist_i argument b has {len(b.shape)} dimensions -- can have max 2"
         return b[:, np.newaxis, :] - a
 
     def dist_matrix(self, configs):
@@ -47,7 +49,7 @@ class RawDistance:
         vs = []
         ij = []
         for i in range(n):
-            vs.append(self.dist_i(configs[:, i + 1:, :], configs[:, i, :]))
+            vs.append(self.dist_i(configs[:, i + 1 :, :], configs[:, i, :]))
             ij.extend([(i, j) for j in range(i + 1, n)])
         vs = np.concatenate(vs, axis=1)
 
@@ -65,7 +67,9 @@ class RawDistance:
         """
         m1, n1 = config1.shape[:2]
         m2, n2 = config2.shape[:2]
-        assert m1 == m2 or m1 == 1 or m2 == 1, f"can't broadcast first axis {m1} and {m2}"
+        assert (
+            m1 == m2 or m1 == 1 or m2 == 1
+        ), f"can't broadcast first axis {m1} and {m2}"
         if n1 == 0 or n2 == 0:
             return np.zeros((config1.shape[0], 0, 3))
         vs = config2[:, np.newaxis, :] - config1[:, :, np.newaxis]
@@ -107,7 +111,9 @@ class MinimalImageDistance(RawDistance):
         self._latvec = latvec
         self._invvec = np.linalg.inv(latvec)
         # list of all 26 neighboring cells
-        mesh_grid = np.meshgrid(*[np.array(range(self.dimension)) for _ in range(self.dimension)])
+        mesh_grid = np.meshgrid(
+            *[np.array(range(self.dimension)) for _ in range(self.dimension)]
+        )
         self.point_list = np.stack([m.ravel() for m in mesh_grid], axis=0).T - 1
         self.shifts = np.dot(self.point_list, self._latvec)
         # TODO build a minimal list instead of using all 27
@@ -116,7 +122,9 @@ class MinimalImageDistance(RawDistance):
         # a ([m,] n, 3)
         # b (m, 3)
         # returns shape (m, n, 3)
-        assert len(b.shape) <= 2, f"dist_i argument b has {len(b.shape)} dimensions -- can have max 2"
+        assert (
+            len(b.shape) <= 2
+        ), f"dist_i argument b has {len(b.shape)} dimensions -- can have max 2"
         return self._minimal_dist(b[:, np.newaxis, :] - a)
 
     def pairwise(self, a, b):

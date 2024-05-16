@@ -46,7 +46,10 @@ def get_supercell(cell, S):
     """
     Inputs:
         cell: pyscf Cell object
-        S: (3, 3) supercell matrix for QMC from cell defined by cell.a. In other words, the QMC calculation cell is qmc_cell = np.dot(S, cell.lattice_vectors()). For a 2x2x2 supercell, S is [[2, 0, 0], [0, 2, 0], [0, 0, 2]].
+        S: (3, 3) supercell matrix for QMC from cell defined by cell.a.
+        In other words, the QMC calculation cell is
+        qmc_cell = np.dot(S, cell.lattice_vectors()).
+        For a 2x2x2 supercell, S is [[2, 0, 0], [0, 2, 0], [0, 0, 2]].
     """
     import pyscf.pbc
 

@@ -1,14 +1,14 @@
 # MIT License
-# 
+#
 # Copyright (c) 2019-2024 The PyQMC Developers
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
@@ -268,7 +268,9 @@ class Ewald:
 
         # Real space electron-ion part
         # ei_distances shape (conf, atom, elec, dim)
-        ei_distances = configs.dist.pairwise(self.atom_coords[np.newaxis], configs.configs)
+        ei_distances = configs.dist.pairwise(
+            self.atom_coords[np.newaxis], configs.configs
+        )
         ei_cij = real_cij(ei_distances, self.lattice_displacements, self.alpha)
         ei_real_separated = gpu.cp.einsum("a,cae->ce", -self.atom_charges, ei_cij)
 
@@ -290,11 +292,13 @@ class Ewald:
 
     def reciprocal_space_electron(self, configs):
         # Reciprocal space electron-electron part
-        e_GdotR = gpu.cp.einsum("hik,jk->hij", gpu.cp.asarray(configs), self.gpoints, optimize="greedy")
+        e_GdotR = gpu.cp.einsum(
+            "hik,jk->hij", gpu.cp.asarray(configs), self.gpoints, optimize="greedy"
+        )
         sum_e_sin = gpu.cp.sin(e_GdotR).sum(axis=1)
         sum_e_cos = gpu.cp.cos(e_GdotR).sum(axis=1)
         ee_recip = gpu.cp.dot(sum_e_sin**2 + sum_e_cos**2, self.gweight)
-        ## Reciprocal space electron-ion part
+        # Reciprocal space electron-ion part
         coscos_sinsin = -self.ion_exp.real * sum_e_cos - self.ion_exp.imag * sum_e_sin
         ei_recip = 2 * gpu.cp.dot(coscos_sinsin, self.gweight)
         return ee_recip, ei_recip
@@ -307,7 +311,7 @@ class Ewald:
         sinsin = e_sin.sum(axis=1, keepdims=True) * e_sin
         coscos = e_cos.sum(axis=1, keepdims=True) * e_cos
         ee_recip = np.dot(coscos + sinsin - 0.5, self.gweight)
-        ## Reciprocal space electron-ion part
+        # Reciprocal space electron-ion part
         coscos_sinsin = -self.ion_exp.real * e_cos + self.ion_exp.imag * e_sin
         ei_recip = np.dot(coscos_sinsin, self.gweight)
         return ee_recip, ei_recip
@@ -318,7 +322,7 @@ class Ewald:
         self.ee_separated = ee_real + 1 * ee_recip
         self.ewalde_separated = self.ei_separated + self.ee_separated
         nelec = ee_recip.shape[1]
-        ### Add back the 0.5 that was subtracted earlier
+        # Add back the 0.5 that was subtracted earlier
         ee = self.ee_separated.sum(axis=1) + nelec / 2 * self.gweight.sum()
         ei = self.ei_separated.sum(axis=1)
         return ee, ei
@@ -374,11 +378,11 @@ def select_big(gpoints, cellvolume, alpha):
 
 
 def generate_positive_gpoints(gmax, recvec):
-    gXpos = gpu.cp.mgrid[1 : gmax + 1, -gmax : gmax + 1, -gmax : gmax + 1].reshape(
+    gXpos = gpu.cp.mgrid[1:gmax + 1, -gmax:gmax + 1, -gmax:gmax + 1].reshape(
         3, -1
     )
-    gX0Ypos = gpu.cp.mgrid[0:1, 1 : gmax + 1, -gmax : gmax + 1].reshape(3, -1)
-    gX0Y0Zpos = gpu.cp.mgrid[0:1, 0:1, 1 : gmax + 1].reshape(3, -1)
+    gX0Ypos = gpu.cp.mgrid[0:1, 1:gmax + 1, -gmax:gmax + 1].reshape(3, -1)
+    gX0Y0Zpos = gpu.cp.mgrid[0:1, 0:1, 1:gmax + 1].reshape(3, -1)
     gpts = gpu.cp.concatenate([gXpos, gX0Ypos, gX0Y0Zpos], axis=1)
     gpoints = gpu.cp.einsum("ji,jk->ik", gpts, gpu.cp.asarray(recvec) * 2 * np.pi)
     return gpoints
@@ -392,4 +396,3 @@ def real_cij(dists, lattice_displacements, alpha):
         r[:] = np.linalg.norm(dists + ld, axis=-1)
         cij += gpu.erfc(alpha * r) / r
     return cij
-

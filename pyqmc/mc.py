@@ -1,24 +1,20 @@
 # MIT License
-# 
+#
 # Copyright (c) 2019-2024 The PyQMC Developers
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
 # This must be done BEFORE importing numpy or anything else.
 # Therefore it must be in your main script.
 import os
-
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
-os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
 import h5py
 import logging
@@ -49,21 +45,21 @@ def initial_guess(mol, nconfig, r=1.0):
         neach = np.array(
             np.floor(mol.nelec[s] * wts), dtype=int
         )  # integer number of elec on each atom
-        nleft = (
-            mol.nelec[s] * wts - neach
-        )  # fraction of electron unassigned on each atom
+        #nleft = (
+        #    mol.nelec[s] * wts - neach
+        #)  # fraction of electron unassigned on each atom
         nassigned = np.sum(neach)  # number of electrons assigned
         totleft = int(mol.nelec[s] - nassigned)  # number of electrons not yet assigned
         ind0 = s * mol.nelec[0]
-        epos[:, ind0 : ind0 + nassigned, :] = np.repeat(
+        epos[:, ind0:ind0 + nassigned, :] = np.repeat(
             mol.atom_coords(), neach, axis=0
         )  # assign core electrons
         if totleft > 0:
-            bins = np.cumsum(nleft) / totleft
+            #bins = np.cumsum(nleft) / totleft
             inds = np.argpartition(
                 np.random.random((nconfig, len(wts))), totleft, axis=1
             )[:, :totleft]
-            epos[:, ind0 + nassigned : ind0 + mol.nelec[s], :] = mol.atom_coords()[
+            epos[:, ind0 + nassigned:ind0 + mol.nelec[s], :] = mol.atom_coords()[
                 inds
             ]  # assign remaining electrons
 
@@ -241,10 +237,12 @@ def vmc(
     df = []
 
     if blockoffset >= nblocks:
-        logging.warning(f"blockoffset {blockoffset} >= nblocks {nblocks}; no steps will be run.")
+        logging.warning(
+            f"blockoffset {blockoffset} >= nblocks {nblocks}; no steps will be run."
+        )
     for block in range(blockoffset, nblocks):
         if verbose:
-            print(f"-", end="", flush=True)
+            print("-", end="", flush=True)
         if client is None:
             block_avg, configs = vmc_worker(
                 wf, configs, tstep, nsteps_per_block, accumulators

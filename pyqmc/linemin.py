@@ -1,21 +1,20 @@
 # MIT License
-# 
+#
 # Copyright (c) 2019-2024 The PyQMC Developers
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
 import numpy as np
 import pyqmc.gpu as gpu
 import pyqmc.sample_many as sm
-import scipy
 import h5py
 import os
 import pyqmc.mc
@@ -113,7 +112,7 @@ def line_minimization(
     :parameter coords: initial configurations
     :parameter pgrad_acc: A PGradAccumulator-like object
     :parameter float steprange: How far to search in the line minimization
-    :parameter int max_iterations: (maximum) number of steps in the gradient descent. If the calculation is continued from the same hdf file, the iterations from previous runs are included in the total, i.e. when calling line_minimization multiple times with the same hdf_file, max_iterations is the total number of iterations that will be run. 
+    :parameter int max_iterations: (maximum) number of steps in the gradient descent. If the calculation is continued from the same hdf file, the iterations from previous runs are included in the total, i.e. when calling line_minimization multiple times with the same hdf_file, max_iterations is the total number of iterations that will be run.
     :parameter int warmup_options: kwargs to use for vmc warmup
     :parameter dict vmcoptions: a dictionary of options for the vmc method
     :parameter dict lmoptions: a dictionary of options for the lm method
@@ -167,7 +166,9 @@ def line_minimization(
         if verbose:
             print("finished warmup", flush=True)
     if iteration_offset >= max_iterations:
-        logging.warning(f"iteration_offset {iteration_offset} >= max_iterations {max_iterations}; no steps will be run.")
+        logging.warning(
+            f"iteration_offset {iteration_offset} >= max_iterations {max_iterations}; no steps will be run."
+        )
 
     # Attributes for linemin
     attr = dict(max_iterations=max_iterations, npts=npts, steprange=steprange)
@@ -190,16 +191,17 @@ def line_minimization(
 
         data = {}
         for k in pgrad_acc.keys():
-            data[k] = np.mean(df_vmc['pgrad'+k], axis=0)
-        data['total_err'] = np.std(df_vmc['pgradtotal'], axis=0) / np.sqrt(df_vmc['pgradtotal'].shape[0])
-        
+            data[k] = np.mean(df_vmc["pgrad" + k], axis=0)
+        data["total_err"] = np.std(df_vmc["pgradtotal"], axis=0) / np.sqrt(
+            df_vmc["pgradtotal"].shape[0]
+        )
+
         step_data = {}
-        step_data["energy"] = data['total'].real
-        step_data["energy_error"] = data['total_err'].real
+        step_data["energy"] = data["total"].real
+        step_data["energy_error"] = data["total_err"].real
         step_data["x"] = x0
         step_data["iteration"] = it
         step_data["nconfig"] = coords.configs.shape[0]
-
 
         # Correlated sampling line minimization.
         steps = np.linspace(-steprange / (npts - 2), steprange, npts)
@@ -228,9 +230,8 @@ def line_minimization(
         step_data["est_min"] = est_min
 
         if verbose:
-            print("descent en", data['total'], data['total_err'])
+            print("descent en", data["total"], data["total_err"])
             print("energies from correlated sampling", en)
-
 
         opt_hdf(
             hdf_file, step_data, attr, coords, pgrad_acc.transform.deserialize(wf, x0)
@@ -257,7 +258,6 @@ def correlated_compute(
 
     """
 
-    data = []
     wfs = [copy.deepcopy(wf) for i in [0, -1]]
     for p, wf_ in zip(params, wfs):
         set_wf_params(wf_, p, pgrad_acc)

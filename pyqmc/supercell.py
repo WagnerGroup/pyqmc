@@ -1,19 +1,18 @@
 # MIT License
-# 
+#
 # Copyright (c) 2019-2024 The PyQMC Developers
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
 import numpy as np
-import pyqmc
 
 
 def get_supercell_kpts(supercell):
@@ -47,7 +46,10 @@ def get_supercell(cell, S):
     """
     Inputs:
         cell: pyscf Cell object
-        S: (3, 3) supercell matrix for QMC from cell defined by cell.a. In other words, the QMC calculation cell is qmc_cell = np.dot(S, cell.lattice_vectors()). For a 2x2x2 supercell, S is [[2, 0, 0], [0, 2, 0], [0, 0, 2]].
+        S: (3, 3) supercell matrix for QMC from cell defined by cell.a.
+        In other words, the QMC calculation cell is
+        qmc_cell = np.dot(S, cell.lattice_vectors()).
+        For a 2x2x2 supercell, S is [[2, 0, 0], [0, 2, 0], [0, 0, 2]].
     """
     import pyscf.pbc
 

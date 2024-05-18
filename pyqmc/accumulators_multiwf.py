@@ -1,6 +1,17 @@
+# MIT License
+#
+# Copyright (c) 2019-2024 The PyQMC Developers
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
 import numpy as np
-import h5py
-
 
 
 def invert_list_of_dicts(A, asarray=True):
@@ -14,21 +25,20 @@ def invert_list_of_dicts(A, asarray=True):
     else:
         return {k: [a[k] for a in A] for k in A[0].keys()}
 
+
 class EnergyAccumulatorMultipleWF:
-    """ 
-    """
+    """ """
 
     def __init__(self, enacc):
-        """
-        """
+        """ """
         self.enacc = enacc
 
-    def avg(self, configs, wfs:list, weights:np.ndarray):
+    def avg(self, configs, wfs: list, weights: np.ndarray):
         """
         weights: [nwf, nwf, configs]
         wfs: [nwf]
         configs: PeriodicConfigs or OpenConfigs object
-        Returns: 
+        Returns: {key: [nwf, nwf]}
 
         """
         energies = invert_list_of_dicts([self.enacc(configs, wf) for wf in wfs])
@@ -47,7 +57,3 @@ class EnergyAccumulatorMultipleWF:
         Note that the shapes here do not include the number of wave functions.
         """
         return self.enacc.shapes()
-
-
-
-

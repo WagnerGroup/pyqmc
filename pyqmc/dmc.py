@@ -1,21 +1,20 @@
 # MIT License
-# 
+#
 # Copyright (c) 2019-2024 The PyQMC Developers
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
 import os
 import numpy as np
 import pyqmc.mc as mc
-import sys
 import h5py
 import logging
 
@@ -423,13 +422,19 @@ def rundmc(
     """
     # Deprecated backwards compatibility
     if branchtime is not None:
-        logging.warning("rundmc kwarg `branchtime` is deprecated. Use `nsteps_per_block` instead. Overriding `nsteps_per_block` if given.")
+        logging.warning(
+            "rundmc kwarg `branchtime` is deprecated. Use `nsteps_per_block` instead. Overriding `nsteps_per_block` if given."
+        )
         nsteps_per_block = branchtime
     if nsteps is not None:
-        logging.warning("rundmc kwarg `nsteps` is deprecated. Use `nblocks` and `nsteps_per_block` instead. Overriding nblocks if given.")
+        logging.warning(
+            "rundmc kwarg `nsteps` is deprecated. Use `nblocks` and `nsteps_per_block` instead. Overriding nblocks if given."
+        )
         nblocks = nsteps // nsteps_per_block
     if stepoffset is not None:
-        logging.warning("rundmc kwarg `stepoffset` is deprecated. Use `blockoffset` and `nsteps_per_block` instead. Overriding blockoffset if given.")
+        logging.warning(
+            "rundmc kwarg `stepoffset` is deprecated. Use `blockoffset` and `nsteps_per_block` instead. Overriding blockoffset if given."
+        )
         blockoffset = stepoffset // nsteps_per_block
 
     # Don't continue onto a file that's already there.
@@ -446,12 +451,14 @@ def rundmc(
     # to continue from, if given.
     if continue_from is not None:
         with h5py.File(continue_from, "r") as hdf:
-            if "block" not in hdf.keys() and "step" in hdf.keys() :
-                logging.warning("Warning: found deprecated key `step` in the restart file. In future versions, `block` key will be expected. All data from this run will be indexed by the key `block`.")
+            if "block" not in hdf.keys() and "step" in hdf.keys():
+                logging.warning(
+                    "Warning: found deprecated key `step` in the restart file. In future versions, `block` key will be expected. All data from this run will be indexed by the key `block`."
+                )
                 blockoffset = hdf["step"][-1] // nsteps_per_block + 1
             else:
                 blockoffset = hdf["block"][-1] + 1
-                
+
             configs.load_hdf(hdf)
             weights = np.array(hdf["weights"])
             if "e_trial" not in hdf.keys():
@@ -462,7 +469,9 @@ def rundmc(
             e_est = hdf["e_est"][-1]
             esigma = hdf["esigma"][-1]
             if verbose:
-                print(f"Restarting calculation {continue_from} from block {blockoffset}")
+                print(
+                    f"Restarting calculation {continue_from} from block {blockoffset}"
+                )
     else:
         df, configs = mc.vmc(
             wf,
@@ -488,7 +497,9 @@ def rundmc(
 
     df = []
     if blockoffset >= nblocks:
-        logging.warning(f"blockoffset {blockoffset} >= nblocks {nblocks}; no steps will be run.")
+        logging.warning(
+            f"blockoffset {blockoffset} >= nblocks {nblocks}; no steps will be run."
+        )
     for block in range(blockoffset, nblocks):
         if client is None:
             df_, configs, weights = dmc_propagate(

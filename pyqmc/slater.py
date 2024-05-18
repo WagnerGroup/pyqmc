@@ -1,14 +1,14 @@
 # MIT License
-# 
+#
 # Copyright (c) 2019-2024 The PyQMC Developers
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
@@ -152,7 +152,16 @@ class Slater:
 
     """
 
-    def __init__(self, mol, mf, mc=None, tol=None, twist=0, determinants=None, eval_gto_precision=None):
+    def __init__(
+        self,
+        mol,
+        mf,
+        mc=None,
+        tol=None,
+        twist=0,
+        determinants=None,
+        eval_gto_precision=None,
+    ):
         """
         determinants should be a list of tuples, for example
         [ (1.0, [0,1],[0,1]),
@@ -180,7 +189,13 @@ class Slater:
             self._det_map,
             self.orbitals,
         ) = pyqmc.pyscftools.orbital_evaluator_from_pyscf(
-            mol, mf, mc, twist=twist, determinants=determinants, tol=self.tol, eval_gto_precision=self.eval_gto_precision
+            mol,
+            mf,
+            mc,
+            twist=twist,
+            determinants=determinants,
+            tol=self.tol,
+            eval_gto_precision=self.eval_gto_precision,
         )
 
         self.parameters = JoinParameters([self.myparameters, self.orbitals.parameters])
@@ -411,8 +426,8 @@ class Slater:
         """
         :parameter int e: fixed electron index
         :parameter epos: positions (nconfig[, naip], 3) for electron e
-        :type epos: Electron object 
-        :parameter ndarray mask: boolean array-like to select the configs to evaluate. 
+        :type epos: Electron object
+        :parameter ndarray mask: boolean array-like to select the configs to evaluate.
         :return ratio: `newPsi/currentPsi`, ratio between the current wave function and the wave function if electron e's position is replaced by epos
         :rtype ratio: ndarray (nconfig[, naip])
         """
@@ -441,7 +456,7 @@ class Slater:
         return gpu.asnumpy(ratios)
 
     def pgradient(self):
-        """Compute the parameter gradient of Psi.
+        r"""Compute the parameter gradient of Psi.
         Returns :math:`\partial_p \Psi/\Psi` as a dictionary of numpy arrays,
         which correspond to the parameter dictionary.
 

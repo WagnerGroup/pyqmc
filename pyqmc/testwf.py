@@ -203,7 +203,7 @@ def test_wf_pgradient(wf, configs, delta=1e-5):
 
     if len(error) == 0:
         return (0, 0)
-    return error[max(error)]  # Return maximum coefficient error
+    return max(error.values())  # Return maximum coefficient error
 
 
 def test_wf_laplacian(wf, configs, delta=1e-5):

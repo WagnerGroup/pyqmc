@@ -259,8 +259,8 @@ def correlated_compute(
     """
 
     wfs = [copy.deepcopy(wf) for i in [0, -1]]
-    for p, wf_ in zip(params, wfs):
-        set_wf_params(wf_, p, pgrad_acc)
+    for i in [0, -1]:
+        set_wf_params(wfs[i], params[i], pgrad_acc)
     # sample combined distribution
     _, _, configs = sm.sample_overlap(
         wfs, configs, None, client=client, npartitions=npartitions, **kws

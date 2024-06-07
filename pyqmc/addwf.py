@@ -1,14 +1,14 @@
 # MIT License
-# 
+#
 # Copyright (c) 2019-2024 The PyQMC Developers
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
@@ -35,7 +35,7 @@ class AddWF:
         self.dtype = complex if iscomplex else float
 
     def recompute(self, configs):
-        """
+        r"""
         Recompute the quantity :math:`ln(|\psi(R)|)` and the phase/sign of the wave function.
         """
         wf_vals = np.array([wf.recompute(configs) for wf in self.wf_components])
@@ -57,7 +57,7 @@ class AddWF:
             wf.updateinternals(e, epos, configs, mask=mask, saved_values=saved)
 
     def value(self):
-        """
+        r"""
         Compute the quantity :math:`ln(|\psi(R)|)` and the phase/sign of the wave function.
 
         Returns:
@@ -73,7 +73,7 @@ class AddWF:
         return wf_sign, wf_val
 
     def ratio_current_config(self, mask=None):
-        """
+        r"""
         Compute the ratio :math:`c_i \psi_i(R)/\psi(R)` at current configuration R,
         where :math:`\psi_i` is the ith component.
 
@@ -101,7 +101,7 @@ class AddWF:
         return ratio
 
     def ratio(self, e, epos, mask=None):
-        """
+        r"""
         Compute the ratio :math:`c_i \psi_i(R')/\psi(R')` at configuration R',
         where electron e has been displaced to epos.
 
@@ -132,14 +132,14 @@ class AddWF:
         return ratio
 
     def gradient(self, e, epos):
-        """
+        r"""
         Compute the gradient of the log wave function, which is the quantity :math:`\nabla_e \psi/\psi|_{R'}`.
         """
         grads_components = np.array([wf.gradient(e, epos) for wf in self.wf_components])
         return np.einsum("ijk,ik->jk", grads_components, self.ratio(e, epos))
 
     def testvalue(self, e, epos, mask=None):
-        """
+        r"""
         Compute the ratio :math:`\psi(R')/\psi(R)`, where R' is the configuration when electron e's position is replaced by epos.
         """
         testvalue_components, saved_values = list(
@@ -155,7 +155,7 @@ class AddWF:
         )
 
     def testvalue_many(self, e, epos, mask=None):
-        """
+        r"""
         Compute the ratio :math:`\psi(R')/\psi(R)`, where R' is the configuration when electron e's position is replaced by epos for each electron.
         """
         testvalue_components = np.array(
@@ -167,7 +167,7 @@ class AddWF:
         )
 
     def gradient_value(self, e, epos):
-        """
+        r"""
         Compute the gradient of the log wave function, and the ratio psi(R')/psi(R).
         """
         grad_vals = [wf.gradient_value(e, epos) for wf in self.wf_components]
@@ -178,7 +178,7 @@ class AddWF:
         return grad, val, saved_values
 
     def gradient_laplacian(self, e, epos):
-        """
+        r"""
         Compute the gradient of the log wave function, and the quantity :math:`\nabla^2 \psi/\psi|_{R'}`
         """
         grad_laps = [wf.gradient_laplacian(e, epos) for wf in self.wf_components]

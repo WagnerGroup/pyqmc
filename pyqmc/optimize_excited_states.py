@@ -1,14 +1,14 @@
 # MIT License
-# 
+#
 # Copyright (c) 2019-2024 The PyQMC Developers
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
@@ -16,6 +16,8 @@ import numpy as np
 import pyqmc.mc as mc
 import scipy.stats
 import pyqmc.linemin as linemin
+import pyqmc.hdftools as hdftools
+import h5py
 
 """
 TODO:
@@ -341,11 +343,6 @@ def objective_function_derivative(
         * np.sum(np.triu(terms["energy"] * terms[("dp_energy", i)], 1), axis=(1, 2))
         for i in range(nwf)
     ]
-
-
-import pyqmc.hdftools as hdftools
-import h5py
-
 
 def hdf_save(hdf_file, data, attr, wfs):
     if hdf_file is not None:

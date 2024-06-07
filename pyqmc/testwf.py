@@ -1,21 +1,20 @@
 # MIT License
-# 
+#
 # Copyright (c) 2019-2024 The PyQMC Developers
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
 import copy
 import time
 import numpy as np
-import pyqmc.mc as mc
 
 
 def test_mask(wf, e, epos, mask=None, tolerance=1e-6):
@@ -40,7 +39,6 @@ def test_testvalue_many(wf, configs, tol=1e-6):
 
     """
     nconf, ne, ndim = configs.configs.shape
-    val1 = wf.recompute(configs)
     wfcopy = copy.copy(wf)
 
     delta = 1e-2
@@ -66,10 +64,11 @@ def test_testvalue_aux(wf, configs, aux, tol=1e-6):
 
     """
     nconf, naux, ndim = aux.configs.shape
-    val1 = wf.recompute(configs)
     wfcopy = copy.copy(wf)
+    wf.recompute(configs)
+    wfcopy.recompute(configs)
+    print(dir(wfcopy))
 
-    delta = 1e-2
     tval = np.zeros((nconf, naux))
     e = 0
     for a in range(naux):
@@ -89,7 +88,6 @@ def test_updateinternals(wf, configs):
     :rtype: dictionary
 
     """
-    import pyqmc.mc as mc
 
     nconf, ne, ndim = configs.configs.shape
     delta = 1e-2
@@ -205,7 +203,7 @@ def test_wf_pgradient(wf, configs, delta=1e-5):
 
     if len(error) == 0:
         return (0, 0)
-    return error[max(error)]  # Return maximum coefficient error
+    return max(error.values())  # Return maximum coefficient error
 
 
 def test_wf_laplacian(wf, configs, delta=1e-5):
@@ -256,7 +254,6 @@ def test_wf_laplacian(wf, configs, delta=1e-5):
 def test_wf_gradient_laplacian(wf, configs):
     nconf, nelec = configs.configs.shape[0:2]
     wf.recompute(configs)
-    maxerror = 0
     lap = np.zeros(configs.configs.shape[:2], dtype=wf.dtype)
     grad = np.zeros(configs.configs.shape, dtype=wf.dtype).transpose((1, 2, 0))
     andlap = np.zeros(configs.configs.shape[:2], dtype=wf.dtype)
@@ -296,7 +293,6 @@ def compare_nested_saved_vals(saved1, saved2):
 def test_wf_gradient_value(wf, configs):
     nconf, nelec = configs.configs.shape[0:2]
     wf.recompute(configs)
-    maxerror = 0
     val = np.zeros(configs.configs.shape[:2], dtype=wf.dtype)
     grad = np.zeros(configs.configs.shape, dtype=wf.dtype).transpose((1, 2, 0))
     andval = np.zeros(configs.configs.shape[:2], dtype=wf.dtype)

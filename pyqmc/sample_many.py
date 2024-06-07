@@ -1,14 +1,14 @@
 # MIT License
-# 
+#
 # Copyright (c) 2019-2024 The PyQMC Developers
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
@@ -57,8 +57,8 @@ def extend_hdf(f, data):
 def compute_weights(wfs):
     """
     computes psi_i psi_j / rho for all i,j and for each configuration.
-    Returns: 
-      weights[wfi, wfj, config] 
+    Returns:
+      weights[wfi, wfj, config]
     """
     phase, log_vals = [
         np.nan_to_num(np.array(x)) for x in zip(*[wf.value() for wf in wfs])
@@ -68,6 +68,7 @@ def compute_weights(wfs):
     psi = phase * np.nan_to_num(np.exp(log_vals - ref))
     weights = np.einsum("ic,jc->ijc", psi.conj(), psi / rho)
     return weights
+
 
 def invert_list_of_dicts(A, asarray=True):
     """
@@ -131,9 +132,7 @@ def sample_overlap_block(wfs, configs, tstep, nsteps, energy):
             log_values = np.real(np.array([wf.value()[1] for wf in wfs]))
             weights = np.exp(2 * (log_values - log_values[0]))
 
-            ratio = (
-                t_prob * np.sum(wf_ratios * weights, axis=0) / weights.sum(axis=0)
-            )
+            ratio = t_prob * np.sum(wf_ratios * weights, axis=0) / weights.sum(axis=0)
             accept = ratio > np.random.rand(nconf)
             # block_avg["acceptance"][n] += accept.mean() / nelec
 
@@ -145,8 +144,8 @@ def sample_overlap_block(wfs, configs, tstep, nsteps, energy):
                 )
 
         weights = compute_weights(wfs)
-        unweighted_dat={}
-        unweighted_dat['overlap'] = np.mean(weights, axis=-1)
+        unweighted_dat = {}
+        unweighted_dat["overlap"] = np.mean(weights, axis=-1)
         rolling_average(unweighted_block, unweighted_dat, nsteps)
         # Collect rolling average
         if energy is not None:

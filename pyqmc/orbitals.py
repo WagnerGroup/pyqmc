@@ -1,14 +1,14 @@
 # MIT License
-# 
+#
 # Copyright (c) 2019-2024 The PyQMC Developers
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
@@ -182,7 +182,9 @@ class PBCOrbitalEvaluatorKpoints:
         nelec = self.parameters[self.parm_names[spin]].shape[1]
         out = gpu.cp.zeros([nelec, *ao[0].shape[:-1]], dtype=self.mo_dtype)
         for i, ak, mok in zip(range(len(ao)), ao, p[:-1]):
-            gpu.cp.einsum("...a,an->n...", ak, mok, out=out[ps[i] : ps[i + 1]], optimize="greedy")
+            gpu.cp.einsum(
+                "...a,an->n...", ak, mok, out=out[ps[i] : ps[i + 1]], optimize="greedy"
+            )
         return out.transpose([*np.arange(1, len(out.shape)), 0])
 
     def pgradient(self, ao, spin):
@@ -219,6 +221,7 @@ class PBCOrbitalEvaluatorKpoints:
 # Author: Qiming Sun <osirpt.sun@gmail.com>
 #
 
+
 # We modified _estimate_rcut slightly to take a new precision argument instead of using cell.precision
 def _estimate_rcut(cell, eval_gto_precision):
     """
@@ -226,7 +229,7 @@ def _estimate_rcut(cell, eval_gto_precision):
     required precsion
     """
     vol = cell.vol
-    weight_penalty = vol # ~ V[r] * (vol/ngrids) * ngrids
+    weight_penalty = vol  # ~ V[r] * (vol/ngrids) * ngrids
     init_rcut = pyscf.pbc.gto.cell.estimate_rcut(cell, precision=eval_gto_precision)
     precision = eval_gto_precision / max(weight_penalty, 1)
     rcut = []
@@ -234,10 +237,10 @@ def _estimate_rcut(cell, eval_gto_precision):
         l = cell.bas_angular(ib)
         es = cell.bas_exp(ib)
         cs = abs(cell._libcint_ctr_coeff(ib)).max(axis=1)
-        norm_ang = ((2*l+1)/(4*np.pi))**.5
-        fac = 2*np.pi/vol * cs*norm_ang/es / precision
+        norm_ang = ((2 * l + 1) / (4 * np.pi)) ** 0.5
+        fac = 2 * np.pi / vol * cs * norm_ang / es / precision
         r = init_rcut
         for _ in range(2):
-            r = (np.log(fac * r**(l+1) + 1.) / es)**.5
+            r = (np.log(fac * r ** (l + 1) + 1.0) / es) ** 0.5
         rcut.append(r.max())
     return np.array(rcut)

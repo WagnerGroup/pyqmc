@@ -1,14 +1,14 @@
 # MIT License
-# 
+#
 # Copyright (c) 2019-2024 The PyQMC Developers
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
@@ -23,7 +23,6 @@ import pyqmc.determinant_tools as determinant_tools
 import pyqmc.orbitals as orbitals
 import pyqmc.supercell as supercell
 import pyqmc.twists as twists
-import pyqmc.orbitals
 
 
 def recover_pyscf(chkfile, ci_checkfile=None, cancel_outputs=True):
@@ -109,7 +108,7 @@ def orbital_evaluator_from_pyscf(
     determinants: A list of determinants suitable to pass into create_packed_objects
     tol: smallest determinant weight to include in the wave function.
     eval_gto_precision: desired value of orbital at rcut, used for determining rcut for periodic system. Default value = 0.01
-    
+
     You cannot pass both mc/tol and determinants.
 
     :returns:
@@ -126,26 +125,26 @@ def orbital_evaluator_from_pyscf(
         mf = mf.to_uhf()
     except TypeError:
         mf = mf.to_uhf(mf)
-        
+
     if periodic:
         mf = pyscf.pbc.scf.addons.convert_to_khf(mf)
     if determinants is None:
         determinants = determinants_from_pyscf(mol, mf, mc=mc, tol=tol)
 
     if hasattr(mc, "mo_coeff"):
-            # assume no kpts for mc calculation
+        # assume no kpts for mc calculation
         _mo_coeff = mc.mo_coeff
-        if len(_mo_coeff.shape) == 2: # restricted spin: create up and down copies
+        if len(_mo_coeff.shape) == 2:  # restricted spin: create up and down copies
             _mo_coeff = [_mo_coeff, _mo_coeff]
         if periodic:
-            _mo_coeff = [m[np.newaxis] for m in _mo_coeff] # add kpt dimension
+            _mo_coeff = [m[np.newaxis] for m in _mo_coeff]  # add kpt dimension
     else:
         _mo_coeff = mf.mo_coeff
-            
+
     if periodic:
         if not hasattr(mol, "original_cell"):
             mol = supercell.get_supercell(mol, np.eye(3))
-        kinds = twists.create_supercell_twists(mol, mf)['primitive_ks'][twist]
+        kinds = twists.create_supercell_twists(mol, mf)["primitive_ks"][twist]
         if len(kinds) != mol.scale:
             raise ValueError(
                 f"Found {len(kinds)} k-points but should have found {mol.scale}."
@@ -154,10 +153,16 @@ def orbital_evaluator_from_pyscf(
 
         max_orb = [[[f_max_orb(k) for k in s] for s in det] for wt, det in determinants]
         max_orb = np.amax(max_orb, axis=0)
-        mo_coeff = [[_mo_coeff[s][k][:, 0 : max_orb[s][k]] for k in kinds] for s in [0, 1]]
+        mo_coeff = [
+            [_mo_coeff[s][k][:, 0 : max_orb[s][k]] for k in kinds] for s in [0, 1]
+        ]
 
-        evaluator = orbitals.PBCOrbitalEvaluatorKpoints(mol, mo_coeff, kpts, eval_gto_precision)
-        determinants = determinant_tools.flatten_determinants(determinants, max_orb, kinds)
+        evaluator = orbitals.PBCOrbitalEvaluatorKpoints(
+            mol, mo_coeff, kpts, eval_gto_precision
+        )
+        determinants = determinant_tools.flatten_determinants(
+            determinants, max_orb, kinds
+        )
     else:
         max_orb = [[f_max_orb(s) for s in det] for wt, det in determinants]
         max_orb = np.amax(max_orb, axis=0)
@@ -182,14 +187,14 @@ def determinants_from_pyscf(mol, mf, mc=None, tol=-1):
     return determinants
 
 
-def single_determinant_from_mf(mf, weight=1.):
+def single_determinant_from_mf(mf, weight=1.0):
     """
     Creates a determinant list for a single determinant from SCF object
     """
     try:
-        mf = mf.to_uhf() 
+        mf = mf.to_uhf()
     except TypeError:
-        mf = mf.to_uhf(mf) 
+        mf = mf.to_uhf(mf)
     if hasattr(mf, "kpts"):
         occupation = [[list(np.nonzero(k > 0.5)[0]) for k in s] for s in mf.mo_occ]
     else:

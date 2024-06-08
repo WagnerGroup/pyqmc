@@ -137,7 +137,7 @@ class GPSJastrow:
     def pgradient(self):
         configs = self._configscurrent
         A = (self.e_cs - np.sum(self.e_cs, axis=2, keepdims=True))[:, :, :, ::-1]
-        alphader = -np.einsum("csi,csi->cs", A[:, :, :, 0], A[:, :, :, 1])
+        alphader = np.einsum('csi,csi->cs', self.e_cs[:,:,:,0], -A[:,:,:,0])
 
         Xsup = self.parameters["Xsupport"][np.newaxis]
         d_cs = np.zeros((self.nconfig, self.n_support, self.nelec, 2, 3))
@@ -156,7 +156,7 @@ class GPSJastrow:
 
         Xder = np.einsum(
             "s,csitd,csit,csit->cstd",
-            2 * self.parameters["f"] * self.parameters["alpha"],
+            -2 * self.parameters["f"] * self.parameters["alpha"],
             d_cs,
             self.e_cs,
             A,

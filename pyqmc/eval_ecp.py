@@ -15,6 +15,7 @@
 import numpy as np
 import copy
 import scipy.spatial.transform
+import functools
 
 
 def ecp(mol, configs, wf, threshold, naip=None):
@@ -263,6 +264,7 @@ def get_rot(nconf, naip):
     return weights, rot_vec
 
 
+@functools.cache
 def generate_quadrature_grids():
     """
     Generate quadrature grids from Mitas, Shirley, and Ceperley J. Chem. Phys. 95, 3467 (1991)

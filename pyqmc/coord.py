@@ -24,6 +24,8 @@ class OpenElectron:
         self.configs = epos
         self.dist = dist
 
+    def mask(self, mask):
+        return OpenElectron(self.configs[mask], dist=self.dist)
 
 class OpenConfigs:
     def __init__(self, configs, dist=None):
@@ -124,6 +126,11 @@ class PeriodicElectron:
         self.lvec = lattice_vectors
         self.wrap = wrap if wrap is not None else np.zeros_like(epos)
         self.dist = dist
+
+    def mask(self, mask):
+        return PeriodicElectron(
+            self.configs[mask], self.lvec, wrap=self.wrap[mask], dist=self.dist
+        )
 
 
 class PeriodicConfigs:

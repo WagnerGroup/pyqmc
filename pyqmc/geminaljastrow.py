@@ -62,7 +62,7 @@ class GeminalJastrow:
         else:
             self.orbitals = orbitals
         randpos = np.random.random((1, 3))
-        dim = mol.eval_gto("GTOval_cart", randpos).shape[-1]
+        dim = mol.eval_gto("GTOval_sph", randpos).shape[-1]
         self.parameters = {"gcoeff": gpu.cp.zeros(int(dim * (dim + 1) / 2))}
         self.dtype = float
         self.optimize = "greedy"
@@ -74,7 +74,7 @@ class GeminalJastrow:
         nconf, self.nelec = configs.configs.shape[:2]
         # shape of arrays:
         # ao_val: (nconf, nelec, nbasis)
-        aos = self.orbitals.aos("GTOval_cart", configs)
+        aos = self.orbitals.aos("GTOval_sph", configs)
         self.ao_val = aos.reshape(nconf, self.nelec, aos.shape[-1])
         self.gcoeff = gpu.cp.zeros((aos.shape[-1], aos.shape[-1]))
         triu_inds = gpu.cp.triu_indices(aos.shape[-1])
@@ -90,7 +90,7 @@ class GeminalJastrow:
         if mask is None:
             mask = [True] * epos.configs.shape[0]
         if saved_values is None:
-            aoval = self.orbitals.aos("GTOval_cart", epos, mask=mask)[0]
+            aoval = self.orbitals.aos("GTOval_sph", epos, mask=mask)[0]
         else:
             aoval = saved_values[mask]
         self.ao_val[mask, e, :] = aoval
@@ -149,7 +149,7 @@ class GeminalJastrow:
         return curr_val
 
     def gradient_value(self, e, epos):
-        ao = self.orbitals.aos("GTOval_cart_deriv1", epos)[0]
+        ao = self.orbitals.aos("GTOval_sph_deriv1", epos)[0]
         deriv = self._compute_value(ao, self.ao_val, e)
         curr_val = self._compute_value(self.ao_val[:, e], self.ao_val, e)
         val_ratio = gpu.cp.exp(deriv[0] - curr_val)
@@ -161,7 +161,7 @@ class GeminalJastrow:
                              + \sum_{e<j} g_{mn} \nabla\chi_n(\mathbf{r}'_e) \chi_m(\mathbf{r}_j)
         """
 
-        ao = self.orbitals.aos("GTOval_cart_deriv1", epos)[0]
+        ao = self.orbitals.aos("GTOval_sph_deriv1", epos)[0]
         grad = self._compute_value(ao[1:], self.ao_val, e)
         return gpu.asnumpy(grad)
 
@@ -176,10 +176,10 @@ class GeminalJastrow:
                              + \sum_{e<j} g_{mn} \nabla^2\chi_n(\mathbf{r}'_e) \chi_m(\mathbf{r}_j)
         .. math:: \nabla_e^2 e^{J_G(\mathbf{R})} / e^{J_G(\mathbf{R})} = \nabla_e^2 J_G + |\nabla_e J_G|^2
         """
-        ao = self.orbitals.aos("GTOval_cart_deriv2", epos)[0]
-        ao = gpu.cp.concatenate(
-            [ao[1:4, ...], ao[[4, 7, 9], ...].sum(axis=0, keepdims=True)], axis=0
-        )
+        ao = self.orbitals.aos("GTOval_sph_deriv2", epos)[0][1:]
+        #ao = gpu.cp.concatenate(
+        #    [ao[1:4, ...], ao[[4, 7, 9], ...].sum(axis=0, keepdims=True)], axis=0
+        #)
         deriv = self._compute_value(ao, self.ao_val, e)
         grad = deriv[:3]
         lap3 = gpu.cp.einsum("dc,dc->c", grad, grad)
@@ -212,7 +212,7 @@ class GeminalJastrow:
             mask = [True] * self.ao_val.shape[0]
         masked_ao_val = self.ao_val[mask]
         curr_val = self._compute_value(masked_ao_val[:, e], masked_ao_val, e)
-        aos = self.orbitals.aos("GTOval_cart", epos, mask=mask)[0]
+        aos = self.orbitals.aos("GTOval_sph", epos, mask=mask)[0]
         new_ao_val = aos.reshape(
             len(curr_val), *epos.configs.shape[1:-1], aos.shape[-1]
         )

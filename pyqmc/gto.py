@@ -16,7 +16,8 @@
 import numpy as np
 import scipy.special
 from numba import njit, jit
-import spherical_harmonics as hsh
+import pyqmc.spherical_harmonics as hsh
+import pyqmc.distance
 
 
 @njit(cache=False, fastmath=True)
@@ -80,7 +81,7 @@ def mol_eval_gto(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
             #ao[sel:sel+nbas] += spherical[l**2:(l+1)**2] * rad
             split += 1
         sel += b_ind
-    return ao
+    return np.transpose(ao)
 
 @njit
 def mol_eval_gto_grad(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
@@ -117,7 +118,7 @@ def mol_eval_gto_grad(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits)
                 b_ind += 1
             split += 1
         sel += b_ind
-    return np.transpose(ao, (1, 0, 2))
+    return np.transpose(ao, (1, 2, 0))
 
 
 @njit
@@ -156,7 +157,7 @@ def mol_eval_gto_lap(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
                 b_ind += 1
             split += 1
         sel += b_ind
-    return np.transpose(ao, (1, 0, 2))
+    return np.transpose(ao, (1, 2, 0))
 
 
 @njit("float64[:](float64[:], float64[:, :])", fastmath=True)
@@ -345,6 +346,15 @@ class AtomicOrbitalEvaluator:
         self.l_splits = np.cumsum([0] + [len(basis_ls[atom]) for atom in self.atom_names])
         #self.nbas = np.sum(self.nbas_atom)
 
+        self.dtype = float
+
+        self.dist = pyqmc.distance.RawDistance()
+        self.gto_func = dict(
+            GTOval_sph=mol_eval_gto,
+            GTOval_sph_deriv1=mol_eval_gto_grad,
+            GTOval_sph_deriv2=mol_eval_gto_lap,
+        )
+
         self.atom_cutoff, self.l_cutoff = mol_cutoffs(
             self.basis_ls, 
             self.basis_arrays, 
@@ -353,13 +363,13 @@ class AtomicOrbitalEvaluator:
             expcutoff=expcutoff,
         )
 
-    def eval_gto(self, configs):
+    def eval_gto(self, eval_str, configs):
         """
         configs is (n, 3)
         """
         # (natom, nconf, 3)
-        rvec = configs.dist.pairwise(self.atom_coords[np.newaxis], configs.configs[np.newaxis])[0]
-        ao = mol_eval_gto(
+        rvec = self.dist.pairwise(self.atom_coords[np.newaxis], configs[np.newaxis])[0]
+        return self.gto_func[eval_str](
             rvec,
             self.basis_ls, 
             self.basis_arrays,
@@ -367,37 +377,4 @@ class AtomicOrbitalEvaluator:
             self.splits,
             self.l_splits,
         )
-        return ao.T
 
-    def eval_gto_grad(self, configs):
-        """
-        configs is (n, 3)
-        """
-        # (natom, nconf, 3)
-        rvec = configs.dist.pairwise(self.atom_coords[np.newaxis], configs.configs[np.newaxis])[0]
-        ao = mol_eval_gto_grad(
-            rvec,
-            self.basis_ls, 
-            self.basis_arrays,
-            self.max_l,
-            self.splits,
-            self.l_splits,
-        )
-        return np.transpose(ao, (0, 2, 1))
-            
-    def eval_gto_lap(self, configs):
-        """
-        configs is (n, 3)
-        """
-        # (natom, nconf, 3)
-        rvec = configs.dist.pairwise(self.atom_coords[np.newaxis], configs.configs[np.newaxis])[0]
-        ao = mol_eval_gto_lap(
-            rvec,
-            self.basis_ls, 
-            self.basis_arrays,
-            self.max_l,
-            self.splits,
-            self.l_splits,
-        )
-        return np.transpose(ao, (0, 2, 1))
-            

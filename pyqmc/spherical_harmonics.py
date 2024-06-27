@@ -428,6 +428,15 @@ which macro(s) should be called
 """
 
 @njit(fastmath=True, cache=True)
+def SPH0(x, y, z, x2, y2, z2, sph_i,):
+    COMPUTE_SPH_L0( sph_i,)
+
+@njit(fastmath=True, cache=True)
+def SPH1(x, y, z, x2, y2, z2, sph_i,):
+    COMPUTE_SPH_L0( sph_i,)
+    COMPUTE_SPH_L1( x, y, z, sph_i,)
+
+@njit(fastmath=True, cache=True)
 def SPH2(x, y, z, x2, y2, z2, sph_i,):
     COMPUTE_SPH_L0( sph_i,)
     COMPUTE_SPH_L1( x, y, z, sph_i,)
@@ -466,6 +475,17 @@ def SPH6(x, y, z, x2, y2, z2, sph_i,):
     COMPUTE_SPH_L4( x, y, z, x2, y2, z2, sph_i,)
     COMPUTE_SPH_L5( x, y, z, x2, y2, z2, sph_i,)
     COMPUTE_SPH_L6( x, y, z, x2, y2, z2, sph_i,)
+
+@njit(fastmath=True, cache=True)
+def SPH0_GRAD(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz):
+    SPH0( x, y, z, x2, y2, z2, sph_i,)
+    COMPUTE_SPH_DERIVATIVE_L0( sph_i, dsdx, dsdy, dsdz)
+
+@njit(fastmath=True, cache=True)
+def SPH1_GRAD(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz):
+    SPH1( x, y, z, x2, y2, z2, sph_i,)
+    COMPUTE_SPH_DERIVATIVE_L0( sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L1( sph_i, dsdx, dsdy, dsdz)
 
 @njit(fastmath=True, cache=True)
 def SPH2_GRAD(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz):
@@ -516,8 +536,15 @@ def SPH6_GRAD(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz):
 @njit(fastmath=True, cache=True)
 def HARDCODED_SPH_MACRO( HARDCODED_LMAX, x, y, z, x2, y2, z2, sph_i,):
     assert HARDCODED_LMAX <= SPHERICART_LMAX_HARDCODED, "Computing hardcoded sph beyond what is currently implemented."
-    assert HARDCODED_LMAX >= 2, "Computing sph less than l=3??"
 
+    if HARDCODED_LMAX == 0: SPH0(x, y, z, x2, y2, z2, sph_i)
+    elif HARDCODED_LMAX == 1: SPH1(x, y, z, x2, y2, z2, sph_i)
+    elif HARDCODED_LMAX == 2: SPH2(x, y, z, x2, y2, z2, sph_i)
+    elif HARDCODED_LMAX == 3: SPH3(x, y, z, x2, y2, z2, sph_i)
+    elif HARDCODED_LMAX == 4: SPH4(x, y, z, x2, y2, z2, sph_i)
+    elif HARDCODED_LMAX == 5: SPH5(x, y, z, x2, y2, z2, sph_i)
+    else: SPH6(x, y, z, x2, y2, z2, sph_i)
+    return
     COMPUTE_SPH_L0( sph_i,)
     #if (HARDCODED_LMAX > 0):
     COMPUTE_SPH_L1( x, y, z, sph_i,)
@@ -543,7 +570,9 @@ def HARDCODED_SPH_MACRO( HARDCODED_LMAX, x, y, z, x2, y2, z2, sph_i,):
 def HARDCODED_SPH_DERIVATIVE_MACRO(
     HARDCODED_LMAX, x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
 ):
-    if HARDCODED_LMAX == 2: SPH2_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)
+    if HARDCODED_LMAX == 0: SPH0_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)
+    elif HARDCODED_LMAX == 1: SPH1_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)
+    elif HARDCODED_LMAX == 2: SPH2_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)
     elif HARDCODED_LMAX == 3: SPH3_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)
     elif HARDCODED_LMAX == 4: SPH4_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)
     elif HARDCODED_LMAX == 5: SPH5_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)

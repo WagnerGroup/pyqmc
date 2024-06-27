@@ -16,9 +16,11 @@
 import numpy as np
 import scipy.special
 from numba import njit
-from pyqmc.orbitals import _estimate_rcut
-import spherical_harmonics as hsh
-import gto
+import pyqmc.spherical_harmonics as hsh
+import pyqmc.gto as gto
+import pyscf.pbc.gto.cell
+import pyqmc.orbitals as pyqorb
+import pyqmc.distance
 
 
 """
@@ -26,44 +28,62 @@ Wrappers for hsh.SPHn: evaluate spherical harmonics through l=2
 v: (3,) vector to evaluate
 out: ((n+1)**2,) output array
 """
-@njit(cache=False, fastmath=True)
+@njit(cache=True, fastmath=True)
+def sph0(v, out):
+    hsh.SPH0(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, out)
+
+@njit(cache=True, fastmath=True)
+def sph1(v, out):
+    hsh.SPH1(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, out)
+
+@njit(cache=True, fastmath=True)
 def sph2(v, out):
     hsh.SPH2(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, out)
 
-@njit(cache=False, fastmath=True)
+@njit(cache=True, fastmath=True)
 def sph3(v, out):
     hsh.SPH3(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, out)
 
-@njit(cache=False, fastmath=True)
+@njit(cache=True, fastmath=True)
 def sph4(v, out):
     hsh.SPH4(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, out)
 
-@njit(cache=False, fastmath=True)
+@njit(cache=True, fastmath=True)
 def sph5(v, out):
     hsh.SPH5(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, out)
 
-@njit(cache=False, fastmath=True)
+@njit(cache=True, fastmath=True)
+def sph0_grad(v, out):
+    a, b, c, d = out
+    hsh.SPH0_GRAD(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, a, b, c, d)
+
+@njit(cache=True, fastmath=True)
+def sph1_grad(v, out):
+    a, b, c, d = out
+    hsh.SPH1_GRAD(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, a, b, c, d)
+
+@njit(cache=True, fastmath=True)
 def sph2_grad(v, out):
     a, b, c, d = out
     hsh.SPH2_GRAD(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, a, b, c, d)
 
-@njit(cache=False, fastmath=True)
+@njit(cache=True, fastmath=True)
 def sph3_grad(v, out):
     a, b, c, d = out
     hsh.SPH3_GRAD(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, a, b, c, d)
 
-@njit(cache=False, fastmath=True)
+@njit(cache=True, fastmath=True)
 def sph4_grad(v, out):
     a, b, c, d = out
     hsh.SPH4_GRAD(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, a, b, c, d)
 
-@njit(cache=False, fastmath=True)
+@njit(cache=True, fastmath=True)
 def sph5_grad(v, out):
     a, b, c, d = out
     hsh.SPH5_GRAD(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, a, b, c, d)
 
 
-@njit(fastmath=True)
+@njit(fastmath=True, cache=False)
 def _pbc_eval_gto(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits, Ls, num_Ls, r2_l_cutoff, r2_cutoff, phases):
     """
     all_rvec: (natom, nelec, 3) atom-electron distances
@@ -79,7 +99,7 @@ def _pbc_eval_gto(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits, Ls,
     """
     natom, nelec = all_rvec.shape[:2]
     nbas_tot = np.sum(2 * basis_ls + 1)
-    ao = np.zeros((1, all_rvec.shape[1], nbas_tot), dtype=phases.dtype)
+    ao = np.zeros((phases.shape[1], all_rvec.shape[1], nbas_tot), dtype=phases.dtype)
 
     atom_start = np.zeros(natom+1, dtype=np.int32)
     basis_ = []
@@ -113,7 +133,7 @@ def _pbc_eval_gto(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits, Ls,
     return ao
 
 
-@njit(fastmath=True)
+@njit(fastmath=True, cache=False)
 def _single_atom(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutoff, cut, astart, max_l, phases):
     """
     Calculate basis functions for one atom
@@ -129,7 +149,9 @@ def _single_atom(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutoff, cu
     astart: (int) starting index for ao
     max_l: (int) max angular momentum l for this atom
     """
-    if max_l == 2: sph_func = sph2#hsh.SPH2
+    if max_l == 0: sph_func = sph0#hsh.SPH2
+    elif max_l == 1: sph_func = sph1#hsh.SPH2
+    elif max_l == 2: sph_func = sph2#hsh.SPH2
     elif max_l == 3: sph_func = sph3#hsh.SPH3
     elif max_l == 4: sph_func = sph4#hsh.SPH4
     else: sph_func = sph5#hsh.SPH5
@@ -162,7 +184,7 @@ def _single_atom(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutoff, cu
                 bstart += 2*l+1
 
 
-@njit(fastmath=True)
+@njit(fastmath=True, cache=False)
 def _pbc_eval_gto_grad(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits, Ls, num_Ls, r2_l_cutoff, r2_cutoff, phases):
     """
     all_rvec: (natom, nelec, 3) atom-electron distances
@@ -178,7 +200,7 @@ def _pbc_eval_gto_grad(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits
     """
     natom, nelec = all_rvec.shape[:2]
     nbas_tot = np.sum(2 * basis_ls + 1)
-    ao = np.zeros((1, all_rvec.shape[1], nbas_tot, 4), dtype=phases.dtype)
+    ao = np.zeros((phases.shape[1], all_rvec.shape[1], nbas_tot, 4), dtype=phases.dtype)
 
     atom_start = np.zeros(natom+1, dtype=np.int32)
     basis_ = []
@@ -212,7 +234,7 @@ def _pbc_eval_gto_grad(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits
     return np.transpose(ao, (0, 3, 1, 2))
 
 
-@njit(fastmath=True)
+@njit(fastmath=True, cache=False)
 def _single_atom_grad(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutoff, cut, astart, max_l, phases):
     """
     Calculate basis functions for one atom
@@ -228,7 +250,9 @@ def _single_atom_grad(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutof
     astart: (int) starting index for ao
     max_l: (int) max angular momentum l for this atom
     """
-    if max_l == 2: sph_func = sph2_grad#hsh.SPH2
+    if max_l == 0: sph_func = sph0_grad#hsh.SPH2
+    elif max_l == 1: sph_func = sph1_grad#hsh.SPH2
+    elif max_l == 2: sph_func = sph2_grad#hsh.SPH2
     elif max_l == 3: sph_func = sph3_grad#hsh.SPH3
     elif max_l == 4: sph_func = sph4_grad#hsh.SPH4
     else: sph_func = sph5_grad#hsh.SPH5
@@ -265,7 +289,7 @@ def _single_atom_grad(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutof
                     b_ind += 1
 
 
-@njit(fastmath=True)
+@njit(fastmath=True, cache=False)
 def _pbc_eval_gto_lap(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits, Ls, num_Ls, r2_l_cutoff, r2_cutoff, phases):
     """
     all_rvec: (natom, nelec, 3) atom-electron distances
@@ -281,7 +305,7 @@ def _pbc_eval_gto_lap(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits,
     """
     natom, nelec = all_rvec.shape[:2]
     nbas_tot = np.sum(2 * basis_ls + 1)
-    ao = np.zeros((1, all_rvec.shape[1], nbas_tot, 5), dtype=phases.dtype)
+    ao = np.zeros((phases.shape[1], all_rvec.shape[1], nbas_tot, 5), dtype=phases.dtype)
 
     atom_start = np.zeros(natom+1, dtype=np.int32)
     basis_ = []
@@ -315,7 +339,7 @@ def _pbc_eval_gto_lap(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits,
     return np.transpose(ao, (0, 3, 1, 2))
 
 
-@njit(fastmath=True)
+@njit(fastmath=True, cache=False)
 def _single_atom_lap(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutoff, cut, astart, max_l, phases):
     """
     Calculate basis functions for one atom
@@ -331,7 +355,9 @@ def _single_atom_lap(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutoff
     astart: (int) starting index for ao
     max_l: (int) max angular momentum l for this atom
     """
-    if max_l == 2: sph_func = sph2_grad#hsh.SPH2
+    if max_l == 0: sph_func = sph0_grad#hsh.SPH2
+    elif max_l == 1: sph_func = sph1_grad#hsh.SPH2
+    elif max_l == 2: sph_func = sph2_grad#hsh.SPH2
     elif max_l == 3: sph_func = sph3_grad#hsh.SPH3
     elif max_l == 4: sph_func = sph4_grad#hsh.SPH4
     else: sph_func = sph5_grad#hsh.SPH5
@@ -363,15 +389,15 @@ def _single_atom_lap(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutoff
                 for b in range(2*l+1):
                     for k, phase in enumerate(phases_j):
                         ao[k, e, astart+b_ind, 0] += spherical[0, l*l+b] * rad[0] * phase
-                        tmp_lap = spherical[0, l*l+b] * rad[4] * phase
+                        tmp_lap = spherical[0, l*l+b] * rad[4] 
                         for i in range(1, 4):
                             ao[k, e, astart+b_ind, i] += (spherical[i, l*l+b] * rad[0] + spherical[0, l*l+b] * rad[i]) * phase
-                            tmp_lap += 2 * spherical[i, l*l+b] * rad[i] * phase
+                            tmp_lap += 2 * spherical[i, l*l+b] * rad[i]
                         ao[k, e, astart+b_ind, 4] += tmp_lap * phase
                     b_ind += 1
 
 
-@njit
+@njit(cache=True)
 def max_distance_in_cell(lvecs):
     """
     calculate the maximum possible distance in the cell to estimate how many Ls are needed
@@ -386,7 +412,7 @@ def max_distance_in_cell(lvecs):
     return vecs[i] / 2
 
 
-@njit
+@njit(cache=True)
 def calc_num_Ls(rvec, Ls, basis_arrays, basis_ls, splits, l_splits, expcutoff):
     """
     Not used
@@ -412,7 +438,7 @@ def calc_num_Ls(rvec, Ls, basis_arrays, basis_ls, splits, l_splits, expcutoff):
     return res 
 
 
-@njit
+@njit(cache=True)
 def max_Ls(Ls, lvecs, basis_ls, basis_arrays, splits, l_splits, expcutoff=20):
     """
     Ls: (nL, 3) list of (sorted) lattice points to check
@@ -462,7 +488,7 @@ class PeriodicAtomicOrbitalEvaluator(gto.AtomicOrbitalEvaluator):
         self.rcut = _estimate_rcut(cell, eval_gto_precision)#.max()
         Ls = cell.get_lattice_Ls(rcut=self.rcut.max(), dimension=3)
         self.Ls = Ls[np.argsort(np.linalg.norm(Ls, axis=1))]
-        expcutoff = -3.0*np.log(eval_gto_precision)
+        expcutoff = -3.5*np.log(eval_gto_precision) # this number is a guess
         print("expcutoff", expcutoff, np.exp(-expcutoff))
         self.num_Ls, self.atom_cutoff, self.l_cutoff = max_Ls(
             self.Ls, 
@@ -485,11 +511,19 @@ class PeriodicAtomicOrbitalEvaluator(gto.AtomicOrbitalEvaluator):
         self._gto_func = _pbc_eval_gto
         self._gto_func_grad = _pbc_eval_gto_grad
         self._gto_func_lap = _pbc_eval_gto_lap
+        self.get_wrapphase = pyqorb.get_wrapphase_complex if self.dtype == complex else pyqorb.get_wrapphase_real
+
+        self.dist = pyqmc.distance.MinimalImageDistance(cell.lattice_vectors())
+        self._gto_func = dict(
+            GTOval_sph=_pbc_eval_gto,
+            GTOval_sph_deriv1=_pbc_eval_gto_grad,
+            GTOval_sph_deriv2=_pbc_eval_gto_lap,
+        )
 
 
-    def eval_gto(self, configs):
-        rvec = configs.dist.pairwise(self.atom_coords[np.newaxis], configs.configs[np.newaxis])[0]
-        ao = self._gto_func(
+    def eval_gto(self, eval_str, configs):
+        rvec = self.dist.pairwise(self.atom_coords[np.newaxis], configs[np.newaxis])[0]
+        return self._gto_func[eval_str](
             rvec,
             self.basis_ls, 
             self.basis_arrays,
@@ -502,41 +536,45 @@ class PeriodicAtomicOrbitalEvaluator(gto.AtomicOrbitalEvaluator):
             self.atom_cutoff,
             self.phases,
         )
-        return ao
         
 
-    def eval_gto_grad(self, configs):
-        rvec = configs.dist.pairwise(self.atom_coords[np.newaxis], configs.configs[np.newaxis])[0]
-        ao = self._gto_func_grad(
-            rvec,
-            self.basis_ls, 
-            self.basis_arrays,
-            self.max_l,
-            self.splits,
-            self.l_splits,
-            self.Ls[:self.Lmax],
-            self.num_Ls,
-            self.l_cutoff,
-            self.atom_cutoff,
-            self.phases,
-        )
-        return ao
-        
-    def eval_gto_lap(self, configs):
-        rvec = configs.dist.pairwise(self.atom_coords[np.newaxis], configs.configs[np.newaxis])[0]
-        ao = self._gto_func_lap(
-            rvec,
-            self.basis_ls, 
-            self.basis_arrays,
-            self.max_l,
-            self.splits,
-            self.l_splits,
-            self.Ls[:self.Lmax],
-            self.num_Ls,
-            self.l_cutoff,
-            self.atom_cutoff,
-            self.phases,
-        )
-        return ao
-        
+# Copyright 2014-2020 The PySCF Developers. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Author: Qiming Sun <osirpt.sun@gmail.com>
+#
 
+
+# We modified _estimate_rcut slightly to take a new precision argument instead of using cell.precision
+def _estimate_rcut(cell, eval_gto_precision):
+    """
+    Returns the cutoff raidus, above which each shell decays to a value less than the
+    required precsion
+    """
+    vol = cell.vol
+    weight_penalty = vol  # ~ V[r] * (vol/ngrids) * ngrids
+    init_rcut = pyscf.pbc.gto.cell.estimate_rcut(cell, precision=eval_gto_precision)
+    precision = eval_gto_precision / max(weight_penalty, 1)
+    rcut = []
+    for ib in range(cell.nbas):
+        l = cell.bas_angular(ib)
+        es = cell.bas_exp(ib)
+        cs = abs(cell._libcint_ctr_coeff(ib)).max(axis=1)
+        norm_ang = ((2 * l + 1) / (4 * np.pi)) ** 0.5
+        fac = 2 * np.pi / vol * cs * norm_ang / es / precision
+        r = init_rcut
+        for _ in range(2):
+            r = (np.log(fac * r ** (l + 1) + 1.0) / es) ** 0.5
+        rcut.append(r.max())
+    return np.array(rcut)

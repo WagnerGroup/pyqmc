@@ -17,6 +17,7 @@ import pyqmc.slater as slater
 import pyqmc.multiplywf as multiplywf
 import pyqmc.addwf as addwf
 import pyqmc.jastrowspin as jastrowspin
+import pyqmc.gps2 as gps2
 import pyqmc.func3d as func3d
 import pyqmc.gpu as gpu
 import numpy as np
@@ -125,6 +126,24 @@ def generate_jastrow3(mol, na=4, nb=3, rcut=None):
     abasis, bbasis = default_jastrow_basis(mol, False, na, nb, rcut)
     wf = three_body_jastrow.ThreeBodyJastrow(mol, abasis, bbasis)
     to_opt = {"ccoeff": np.ones(wf.parameters["ccoeff"].shape).astype(bool)}
+    return wf, to_opt
+
+
+def generate_gps_jastrow(mol, Xsupport=None, optimize_Xsupport=True):
+    if Xsupport is None:
+        r = 2
+        Xsupport = np.array(
+            [[[0, 0, 0], [0, 0, r]], 
+             [[0, 0, r], [0, 0, 0]],
+             [[0,0,0],[0,0,0]],
+             [[0,0,r],[0,0,r]]]
+        )
+    wf = gps2.GPSJastrow(mol, Xsupport)
+    to_opt = {}
+    to_opt["alpha"] = np.ones(wf.parameters["alpha"].shape).astype(bool)
+    to_opt["f"] =  np.ones(wf.parameters["f"].shape).astype(bool)
+    if optimize_Xsupport:
+        to_opt["Xsupport"] = np.ones(wf.parameters["Xsupport"].shape).astype(bool)
     return wf, to_opt
 
 

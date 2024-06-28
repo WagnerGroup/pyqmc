@@ -78,6 +78,8 @@ class GeminalJastrow:
         self.ao_val = aos.reshape(nconf, self.nelec, aos.shape[-1])
         self.gcoeff = gpu.cp.zeros((aos.shape[-1], aos.shape[-1]))
         triu_inds = gpu.cp.triu_indices(aos.shape[-1])
+        if len(triu_inds[0]) != len(self.parameters["gcoeff"]):
+            raise ValueError("Wrong number of parameters. Maybe the parameters are from an incompatible version.")
         self.gcoeff[triu_inds] = self.parameters["gcoeff"]
         self.gcoeff = self.gcoeff + self.gcoeff.T
 

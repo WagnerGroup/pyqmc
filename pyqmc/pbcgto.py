@@ -513,7 +513,7 @@ class PeriodicAtomicOrbitalEvaluator(gto.AtomicOrbitalEvaluator):
         self._gto_func_lap = _pbc_eval_gto_lap
         self.get_wrapphase = pyqorb.get_wrapphase_complex if self.dtype == complex else pyqorb.get_wrapphase_real
 
-        self.dist = pyqmc.distance.MinimalImageDistance(cell.lattice_vectors())
+        self.dist = pyqmc.distance.RawDistance() # don't use minimal image
         self._gto_func = dict(
             GTOval_sph=_pbc_eval_gto,
             GTOval_sph_deriv1=_pbc_eval_gto_grad,

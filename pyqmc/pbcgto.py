@@ -505,7 +505,7 @@ class PeriodicAtomicOrbitalEvaluator(gto.AtomicOrbitalEvaluator):
         self.Lmax = self.num_Ls.max()
 
         isgamma = np.abs(self.kpts).sum() < 1e-9
-        phases = np.exp(1j * np.sum(kpts * Ls[:, np.newaxis], axis=-1))
+        phases = np.exp(1j * self.Ls @ kpts.T)
         self.phases = np.real_if_close(phases)
         self.dtype =  self.phases.dtype
         self._gto_func = _pbc_eval_gto

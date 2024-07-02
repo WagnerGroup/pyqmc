@@ -65,8 +65,11 @@ def runtest(mol, mf, kind=0):
 
     df = pd.DataFrame(df)
     dfke = pyq.avg_reblock(df["energyke"][warmup:], 10)
+    dfg2 = pyq.avg_reblock(df["energygrad2"][warmup:]/2, 10)
     vmcke, err = dfke.mean(), dfke.sem()
+    vmcg2, errg2 = dfg2.mean(), dfg2.sem()
     print("VMC kinetic energy: {0} +- {1}".format(vmcke, err), df["energyke"])
+    print("VMC grad squared: {0} +- {1}".format(vmcg2, errg2), df["energygrad2"])
 
     assert (
         np.abs(vmcke - pyscfke) < 5 * err

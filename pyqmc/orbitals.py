@@ -70,11 +70,10 @@ class MoleculeOrbitalEvaluator:
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
         aos = gpu.cp.asarray([self.evaluator.eval_gto(eval_str, mycoords)])
-        
         if len(aos.shape) == 4:  # if derivatives are included
-            return aos.reshape((1, aos.shape[1], mycoords.shape[0], aos.shape[-1]))
+            return aos.reshape((1, aos.shape[1], *mycoords.shape[:-1], aos.shape[-1]))
         else:
-            return aos.reshape((1, mycoords.shape[0], aos.shape[-1]))
+            return aos.reshape((1, *mycoords.shape[:-1], aos.shape[-1]))
 
     def mos(self, ao, spin):
         return ao[0].dot(self.parameters[self.parm_names[spin]])
@@ -146,7 +145,6 @@ class PBCOrbitalEvaluatorKpoints:
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
         primcoords, primwrap = pyqmc.pbc.enforce_pbc(self.Lprim, mycoords)
         ao = gpu.cp.asarray(self.evaluator.eval_gto(eval_str, primcoords))
-        
         if self.isgamma == False:
             wrap = configs.wrap if mask is None else configs.wrap[mask]
             wrap = np.dot(wrap, self.S)
@@ -159,10 +157,10 @@ class PBCOrbitalEvaluatorKpoints:
             ao = gpu.cp.einsum("k...,k...a->k...a", wrap_phase, ao)
         if len(ao.shape) == 4:  # if derivatives are included
             return ao.reshape(
-                (ao.shape[0], ao.shape[1], mycoords.shape[0], ao.shape[-1])
+                (ao.shape[0], ao.shape[1], *mycoords.shape[:-1], ao.shape[-1])
             )
         else:
-            return ao.reshape((ao.shape[0], mycoords.shape[0], ao.shape[-1]))
+            return ao.reshape((ao.shape[0], *mycoords.shape[:-1], ao.shape[-1]))
 
     def mos(self, ao, spin):
         """ao should be [k,[d],...,ao].

@@ -504,13 +504,9 @@ class PeriodicAtomicOrbitalEvaluator(gto.AtomicOrbitalEvaluator):
         #print("l_cutoff", self.l_cutoff)
         self.Lmax = self.num_Ls.max()
 
-        isgamma = np.abs(self.kpts).sum() < 1e-9
         phases = np.exp(1j * self.Ls @ kpts.T)
         self.phases = np.real_if_close(phases)
         self.dtype =  self.phases.dtype
-        self._gto_func = _pbc_eval_gto
-        self._gto_func_grad = _pbc_eval_gto_grad
-        self._gto_func_lap = _pbc_eval_gto_lap
         self.get_wrapphase = pyqorb.get_wrapphase_complex if self.dtype == complex else pyqorb.get_wrapphase_real
 
         self.dist = pyqmc.distance.RawDistance() # don't use minimal image

@@ -48,15 +48,15 @@ def runtest(mol, mf, kind=0):
     #####################################
     ## evaluate KE integral with VMC
     #####################################
-    wf = Slater(mol, mf)
+    wf = Slater(mol, mf, eval_gto_precision=1e-6)
     coords = pyq.initial_guess(mol, 1200, 0.7)
-    warmup = 10
+    warmup = 1
     start = time.time()
     df, coords = pyq.vmc(
         wf,
         coords,
-        nsteps=100 + warmup,
-        tstep=1,
+        nblocks=10 + warmup,
+        tstep=4,
         accumulators={"energy": pyq.EnergyAccumulator(mol)},
         verbose=False,
         hdf_file=str(uuid.uuid4()),

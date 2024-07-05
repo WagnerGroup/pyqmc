@@ -142,6 +142,7 @@ def line_minimization(
     assert npts >= 3, f"linemin npts={npts}; need npts >= 3 for correlated sampling"
 
     iteration_offset = 0
+    sub_iteration_offset = 0
     if hdf_file is not None and os.path.isfile(hdf_file):  # restarting -- read in data
         with h5py.File(hdf_file, "r") as hdf:
             if "wf" in hdf.keys():
@@ -150,6 +151,8 @@ def line_minimization(
                     wf.parameters[k] = gpu.cp.asarray(grp[k])
             if "iteration" in hdf.keys():
                 iteration_offset = np.max(hdf["iteration"][...]) + 1
+            if "sub_iteration" in hdf.keys():
+                sub_iteration_offset = hdf["sub_iteration"][-1] + 1
             coords.load_hdf(hdf)
 
     else:  # not restarting -- VMC warm up period
@@ -172,74 +175,76 @@ def line_minimization(
 
     # Attributes for linemin
     attr = dict(max_iterations=max_iterations, npts=npts, steprange=steprange)
-
-    x0 = pgrad_acc.transform.serialize_parameters(wf.parameters)
-
+    sub_iterations = len(pgrad_acc)
     df = []
     # Gradient descent cycles
     for it in range(iteration_offset, max_iterations):
+        for sub_it in range(sub_iteration_offset, sub_iterations):
+            pgrad = pgrad_acc[sub_it]
+            x0 = pgrad.transform.serialize_parameters(wf.parameters)
 
-        set_wf_params(wf, x0, pgrad_acc)
-        df_vmc, coords = pyqmc.mc.vmc(
-            wf,
-            coords,
-            accumulators={"pgrad": pgrad_acc},
-            client=client,
-            npartitions=npartitions,
-            **vmcoptions,
-        )
+            #set_wf_params(wf, x0, pgrad_acc)
+            df_vmc, coords = pyqmc.mc.vmc(
+                wf,
+                coords,
+                accumulators={"pgrad": pgrad},
+                client=client,
+                npartitions=npartitions,
+                **vmcoptions,
+            )
 
-        data = {}
-        for k in pgrad_acc.keys():
-            data[k] = np.mean(df_vmc["pgrad" + k], axis=0)
-        data["total_err"] = np.std(df_vmc["pgradtotal"], axis=0) / np.sqrt(
-            df_vmc["pgradtotal"].shape[0]
-        )
+            data = {}
+            for k in pgrad.keys():
+                data[k] = np.mean(df_vmc["pgrad" + k], axis=0)
+            data["total_err"] = np.std(df_vmc["pgradtotal"], axis=0) / np.sqrt(
+                df_vmc["pgradtotal"].shape[0]
+            )
 
-        step_data = {}
-        step_data["energy"] = data["total"].real
-        step_data["energy_error"] = data["total_err"].real
-        step_data["x"] = x0
-        step_data["iteration"] = it
-        step_data["nconfig"] = coords.configs.shape[0]
+            step_data = {}
+            step_data["energy"] = data["total"].real
+            step_data["energy_error"] = data["total_err"].real
+            step_data["x"] = x0
+            step_data["iteration"] = it
+            step_data['sub_iteration'] = sub_it
+            step_data["nconfig"] = coords.configs.shape[0]
 
-        # Correlated sampling line minimization.
-        steps = np.linspace(-steprange / (npts - 2), steprange, npts)
-        dps, update_report = pgrad_acc.delta_p(steps, data, verbose=verbose)
-        step_data.update(update_report)
-        params = [x0 + dp for dp in dps]
+            # Correlated sampling line minimization.
+            steps = np.linspace(-steprange / (npts - 2), steprange, npts)
+            dps, update_report = pgrad.delta_p(steps, data, verbose=verbose)
+            step_data.update(update_report)
+            params = [x0 + dp for dp in dps]
 
-        stepsdata = correlated_compute(
-            wf,
-            coords,
-            params,
-            pgrad_acc,
-            client=client,
-            npartitions=npartitions,
-        )
+            stepsdata = correlated_compute(
+                wf,
+                coords,
+                params,
+                pgrad,
+                client=client,
+                npartitions=npartitions,
+            )
 
-        w = stepsdata["weight"]
-        w = w / np.mean(w, axis=1, keepdims=True)
-        en = np.real(np.mean(stepsdata["total"] * w, axis=1))
+            w = stepsdata["weight"]
+            w = w / np.mean(w, axis=1, keepdims=True)
+            en = np.real(np.mean(stepsdata["total"] * w, axis=1))
 
-        est_min = stable_fit(steps, en)
-        x0 = pgrad_acc.delta_p([est_min], data, verbose=False)[0][0] + x0
+            est_min = stable_fit(steps, en)
+            x0 = pgrad.delta_p([est_min], data, verbose=False)[0][0] + x0
 
-        step_data["tau"] = steps
-        step_data["yfit"] = en
-        step_data["est_min"] = est_min
+            step_data["tau"] = steps
+            step_data["yfit"] = en
+            step_data["est_min"] = est_min
 
-        if verbose:
-            print("descent en", data["total"], data["total_err"])
-            print("energies from correlated sampling", en)
+            if verbose:
+                print("descent en", data["total"], data["total_err"])
+                print("energies from correlated sampling", en)
 
-        opt_hdf(
-            hdf_file, step_data, attr, coords, pgrad_acc.transform.deserialize(wf, x0)
-        )
-        df.append(step_data)
+            opt_hdf(
+                hdf_file, step_data, attr, coords, pgrad.transform.deserialize(wf, x0)
+            )
+            df.append(step_data)
 
-    set_wf_params(wf, x0, pgrad_acc)
-
+            set_wf_params(wf, x0, pgrad)
+        sub_iteration_offset = 0
     return wf, df
 
 

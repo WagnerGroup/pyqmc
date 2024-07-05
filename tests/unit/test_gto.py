@@ -98,12 +98,13 @@ def test_mol():
     orbgrad = lambda x: orbitals.eval_gto("GTOval_sph_deriv1", (x))
     orblap = lambda x: orbitals.eval_gto("GTOval_sph_deriv2", (x))
 
-    err = mol_against_pyscf(mol, orbitals)
     graderr = _gradient(orbval, orbgrad, mol)
     laperr = _laplacian(orbgrad, orblap, mol)
     print("mol orbitals")
     print("gradient", graderr)
     print("laplacian", laperr)
+    orbval, pyscfval, _ = mol_against_pyscf(mol, orbitals)
+    err = np.amax(np.abs(orbval-pyscfval))
     tol = 3e-5
     assert err < tol, err
     assert graderr < tol, graderr
@@ -119,41 +120,43 @@ def test_pbc():
     orbgrad = lambda x: orbitals.eval_gto("GTOval_sph_deriv1", x).swapaxes(0, 1)
     orblap = lambda x: orbitals.eval_gto("GTOval_sph_deriv2", x).swapaxes(0, 1)
 
-    err = pbc_against_pyscf(mol, orbitals)
-
     graderr = _gradient(orbval, orbgrad, mol)
     laperr = _laplacian(orbgrad, orblap, mol)
     print("pbc orbitals")
     print("gradient", graderr)
     print("laplacian", laperr)
+    orbval, pyscfval, _ = pbc_against_pyscf(mol, orbitals)
+    err = np.amax(np.abs(orbval-pyscfval))
+
     tol = 3e-5
     assert err < tol, err
     assert graderr < tol, graderr
     assert laperr < tol, laperr
 
 
-def mol_against_pyscf(mol, orbitals, N=500, eval_str="GTOval_sph_deriv2"):
-    #coords, _ = enforce_pbc(cell.lattice_vectors(), np.random.randn(500, 3) * 3)
+def mol_against_pyscf(mol, orbitals, N=100, eval_str="GTOval_sph_deriv2"):
     coords = np.zeros((N, 3))
-    coords[:, 0] = np.linspace(-2, 2, N)
-    coords[:, 1] = np.linspace(-1, 1, N)
-    coords[:, 2] = np.linspace(-.5, .5, N)
+    coords[:, 0] = np.linspace(-0, 7, N)
+    coords[:, 1] = np.linspace(-0, 7, N)
+    coords[:, 2] = np.linspace(-.0, 7, N)
     
     pyscfval = mol.eval_gto(eval_str, coords)
     if len(pyscfval) == 10:
         pyscfval[4] = pyscfval[[4, 7, 9]].sum(axis=0)
         pyscfval = pyscfval[:5]
     orbval = orbitals.eval_gto(eval_str, coords)
-    diff = orbval - pyscfval
+    return orbval, pyscfval, coords
+    #diff = orbval - pyscfval
 
-    return np.amax(np.abs(diff))
+    #return np.amax(np.abs(diff))
     
-def pbc_against_pyscf(cell, orbitals, N=500, eval_str="GTOval_sph_deriv2"):
+def pbc_against_pyscf(cell, orbitals, N=100, eval_str="GTOval_sph_deriv2"):
     #coords, _ = enforce_pbc(cell.lattice_vectors(), np.random.randn(500, 3) * 3)
+    #coords = np.mgrid[4.9:5.1:3j, 4.9:5.1:3j, 4.9:5.1:3j].reshape(3, -1).T / 10
     coords = np.zeros((N, 3))
     coords[:, 0] = np.linspace(0, 1, N)
-    coords[:, 1] = np.linspace(0, 0.5, N)
-    coords[:, 2] = np.linspace(0, 0.25, N)
+    coords[:, 1] = np.linspace(0, 1, N)
+    coords[:, 2] = np.linspace(0, 1, N)
     coords = coords @ cell.lattice_vectors()
     pyscfval = cell.eval_gto("PBC"+eval_str, coords, kpts=orbitals.kpts)
     if len(pyscfval[0]) == 10:
@@ -161,18 +164,62 @@ def pbc_against_pyscf(cell, orbitals, N=500, eval_str="GTOval_sph_deriv2"):
             p[4] = p[[4, 7, 9]].sum(axis=0)
         pyscfval = [p[:5] for p in pyscfval]
     orbval = orbitals.eval_gto(eval_str, coords)
-    diff = orbval - pyscfval
-
-
-    return np.amax(np.abs(diff))
+    return orbval, pyscfval, coords
     
+
+if __name__ == "__main__":
     # Plot
-    #import matplotlib.pyplot as plt
-    #ao = 5
-    #for k in range(1, 2):
-    #    plt.plot(coords[:, 0], orbval[k, :, ao], label=f"orb{k}")
-    #    plt.plot(coords[:, 0], pyscfval[k][ :, ao], label=f"pyscf{k}")
+    import matplotlib.pyplot as plt
+    #mol = pyscf.pbc.gto.M(atom="Li 0. 0. 0.; Li 3.3 3.3 3.3", basis="ccecp-ccpvdz", unit="B", a=np.eye(3)*2*3.3)
+    mol = pyscf.pbc.gto.M(atom="N 0. 0. 0.; N 3.3 3.3 3.3", basis="ccecp-ccpvdz", unit="B", a=np.eye(3)*2*3.3)
+    #mol = pyscf.gto.M(atom="Na 0. 0. 0.; Na 3.3 3.3 3.3", basis="ccecp-ccpvdz", unit="B")
+    mol.precision = 1e-12
+    mol.build()
+    for at, basis in mol._basis.items():
+        print(at)
+        for bas in basis:
+            print(bas[0])
+            for b in bas[1:]:
+                    print(b)
+
+    labels = mol.ao_labels()
+    kpts = np.pi * np.mgrid[:2,:2,:2].reshape(3, -1).T @ np.linalg.inv(mol.lattice_vectors())
+    orbitals = pbcgto.PeriodicAtomicOrbitalEvaluator(mol, eval_gto_precision=1e-11, kpts=kpts)
+    #orbitals = gto.AtomicOrbitalEvaluator(mol)#, eval_gto_precision=1e-8)
+
+    orbval, pyscfval, coords = pbc_against_pyscf(mol, orbitals)
+    #orbval = orbval[np.newaxis]
+    #pyscfval = pyscfval[np.newaxis]
+
+    diff = np.real(orbval - pyscfval)
+    
+    print(diff.shape)
+
+    print("max diff", np.amax(np.abs(diff)))
+    print("norm", np.linalg.norm((diff)))
+    print("sum diff", np.sum((diff), axis=(0, 2, 3)))
+    print("sum abs diff", np.sum(np.abs(diff), axis=(0, 2, 3)))
+    
+    ao = 12
+    d = 0
+    #for k in range(0, 1):
+        #plt.plot(pyscfval[k][d, :, ao], label=f"pyscf{k}")
+        #plt.plot(orbval[k, d, :, ao], ls=":", label=f"orb{k}")
+    k = 0
+    ratio = np.zeros_like(orbval[k, d])
+    ind = np.where(pyscfval[k][d] > 1e-10)
+    print("inds")
+    for _i in ind:
+        print(_i.shape)
+
+    ratio[ind] = orbval[k, d][ind] / pyscfval[k][d][ind]
+    v = max(np.amax(np.abs(w[k][d])) for w in [diff])
+    fig, axs = plt.subplots(2, 1)
+    axs[0].imshow(ratio.T, vmin=-2, vmax=2, cmap="PRGn")
+    axs[1].imshow(diff[k, d].T, vmin=-v, vmax=v, cmap="PRGn")
+    axs[0].set_title("ratio")
+    axs[1].set_title("diff")
     #plt.title(f"ao={labels[ao]}")
     #plt.legend()
-    #plt.savefig("compare_pyscf_orbs.pdf", bbox_inches="tight")
-    #plt.show()
+    plt.savefig("imshow_pyscf_orbs.pdf", bbox_inches="tight")
+    plt.show()

@@ -290,18 +290,6 @@ def normalize_basis_coeffs(basis):
         basis_coeffs.append(cs * s1)
     return basis_coeffs
             
-# from https://pyscf.org/_modules/pyscf/gto/mole.html#gto_norm
-def _nomalize_contracted_ao(l, es, cs):
-    #ee = numpy.empty((nprim,nprim))
-    #for i in range(nprim):
-    #    for j in range(i+1):
-    #        ee[i,j] = ee[j,i] = gaussian_int(angl*2+2, es[i]+es[j])
-    #s1 = 1/numpy.sqrt(numpy.einsum('pi,pq,qi->i', cs, ee, cs))
-    ee = es.reshape(-1,1) + es.reshape(1,-1)
-    ee = gaussian_int(l*2+2, ee)
-    s1 = 1. / np.sqrt(np.einsum('pi,pq,qi->i', cs, ee, cs))
-    return np.einsum('pi,i->pi', cs, s1)
-
 
 @njit
 def mol_cutoffs(basis_ls, basis_arrays, splits, l_splits, expcutoff=20):

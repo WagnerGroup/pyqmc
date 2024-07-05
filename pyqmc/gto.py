@@ -259,7 +259,7 @@ def single_radial_gto_lap(r2, rvec, coeffs):
     return out
 
  
-def compute_basis_norms(basis):
+def normalize_basis_coeffs(basis):
     """
     https://pyscf.org/pyscf_api_docs/pyscf.gto.html#pyscf.gto.mole.gto_norm
     Compute normalization constants for each Gaussian coefficient
@@ -277,14 +277,31 @@ def compute_basis_norms(basis):
     N^2 = gamma(m) / (4 * (2*a)**m)
     """
      
-    basis_norms = []
+    basis_coeffs = []
     for l, coeffs in basis:
         m = l + 1.5
         b = 2 * coeffs[:, 0]
-        norm = np.sqrt(2 * b ** m / scipy.special.gamma(m))
-        basis_norms.append(norm)
-    return basis_norms
+        b_g_int = 2 * b ** m / scipy.special.gamma(m)
+        s1 = np.sqrt(b_g_int)
+        cs = coeffs[:, 1] * s1
+
+        ee = coeffs[:, 0] + coeffs[:, 0, np.newaxis]
+        g_int = scipy.special.gamma(m) / (2 * ee ** m )
+        s1 = 1. / np.sqrt(np.einsum('p,pq,q->', cs, g_int, cs))
+        basis_coeffs.append(cs * s1)
+    return basis_coeffs
             
+# from https://pyscf.org/_modules/pyscf/gto/mole.html#gto_norm
+def _nomalize_contracted_ao(l, es, cs):
+    #ee = numpy.empty((nprim,nprim))
+    #for i in range(nprim):
+    #    for j in range(i+1):
+    #        ee[i,j] = ee[j,i] = gaussian_int(angl*2+2, es[i]+es[j])
+    #s1 = 1/numpy.sqrt(numpy.einsum('pi,pq,qi->i', cs, ee, cs))
+    ee = es.reshape(-1,1) + es.reshape(1,-1)
+    ee = gaussian_int(l*2+2, ee)
+    s1 = 1. / np.sqrt(np.einsum('pi,pq,qi->i', cs, ee, cs))
+    return np.einsum('pi,i->pi', cs, s1)
 
 
 @njit
@@ -323,15 +340,15 @@ class AtomicOrbitalEvaluator:
         basis_ls = {}
         basis_arrays = {}
         _splits = {}
-        self.basis_norms = {}
+        self.basis_coeffs = {}
         for k, v in mol._basis.items():
             array_basis = list2arr(v)# for k, v in mol._basis.items()}
             ls, bases = list(zip(*array_basis))
             basis_ls[k] = np.asarray(ls)
-            basis_norms = compute_basis_norms(array_basis)
-            self.basis_norms[k]=basis_norms
-            for bas, norm in zip(bases, basis_norms):
-                bas[:, 1] *= norm
+            basis_coeffs = normalize_basis_coeffs(array_basis)
+            self.basis_coeffs[k]=basis_coeffs
+            for bas, norm in zip(bases, basis_coeffs):
+                bas[:, 1] = norm
             _splits[k] = np.array([len(b) for b in bases])
             basis_arrays[k] = np.concatenate(bases, axis=0)
         max_l = {k: np.amax(zip(*v).__next__()) for k, v in mol._basis.items()}
@@ -339,6 +356,7 @@ class AtomicOrbitalEvaluator:
         
         self.basis_ls = np.concatenate([basis_ls[atom] for atom in self.atom_names])
         self.basis_arrays = np.concatenate([basis_arrays[atom] for atom in self.atom_names])
+        print(basis_arrays)
         splits = np.concatenate([[0]] + [_splits[atom] for atom in self.atom_names])
         self.splits = np.cumsum(splits)
         self.max_l = np.asarray([max_l[atom] for atom in self.atom_names])

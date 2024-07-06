@@ -344,7 +344,6 @@ class AtomicOrbitalEvaluator:
         
         self.basis_ls = np.concatenate([basis_ls[atom] for atom in self.atom_names])
         self.basis_arrays = np.concatenate([basis_arrays[atom] for atom in self.atom_names])
-        print(basis_arrays)
         splits = np.concatenate([[0]] + [_splits[atom] for atom in self.atom_names])
         self.splits = np.cumsum(splits)
         self.max_l = np.asarray([max_l[atom] for atom in self.atom_names])

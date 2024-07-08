@@ -45,7 +45,7 @@ def generate_slater(
     to_opt["det_coeff"] = np.zeros_like(wf.parameters["det_coeff"], dtype=bool)
     if optimize_determinants:
         to_opt["det_coeff"] = np.ones_like(wf.parameters["det_coeff"], dtype=bool)
-        to_opt["det_coeff"][np.argmax(wf.parameters["det_coeff"])] = False
+        to_opt["det_coeff"][np.argmax(np.abs(wf.parameters["det_coeff"]))] = False
     if optimize_orbitals:
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             to_opt[k] = np.ones(wf.parameters[k].shape, dtype=bool)

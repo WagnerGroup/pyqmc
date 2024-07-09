@@ -489,7 +489,7 @@ class PeriodicAtomicOrbitalEvaluator(gto.AtomicOrbitalEvaluator):
         Ls = cell.get_lattice_Ls(rcut=self.rcut.max(), dimension=3)
         self.Ls = Ls[np.argsort(np.linalg.norm(Ls, axis=1))]
         expcutoff = -3.5*np.log(eval_gto_precision) # this number is a guess
-        print("expcutoff", expcutoff, np.exp(-expcutoff))
+        #print("expcutoff", expcutoff, np.exp(-expcutoff))
         self.num_Ls, self.atom_cutoff, self.l_cutoff = max_Ls(
             self.Ls, 
             cell.lattice_vectors(), 

@@ -70,6 +70,7 @@ def optimize_ensemble(
     overlap_penalty=None,
     npartitions=None,
     client=None,
+    verbose = False,
     vmc_kwargs={},
 ):
     """Optimize a set of wave functions using ensemble VMC.
@@ -85,39 +86,52 @@ def optimize_ensemble(
     if overlap_penalty is None:
         overlap_penalty = np.ones((nwf, nwf)) * 0.5
 
+    try:
+        sub_iterations = len(updater)
+    except TypeError:
+        if verbose:
+            print("Was passed a single PGradAccumulator; using 1 sub_iteration. This is deprecated behavior.")
+        sub_iterations = 1
+        updater = [updater]
+
     for i in range(max_iterations):
-        data_weighted, data_unweighted, configs = pyqmc.sample_many.sample_overlap(
-            wfs,
-            configs,
-            None,
-            nsteps=10,
-            nblocks=20,
-            client=client,
-            npartitions=npartitions,
-            **vmc_kwargs,
-        )
-        norm = np.mean(data_unweighted["overlap"], axis=0)
-        print("Normalization step", norm.diagonal())
-        renormalize(wfs, norm.diagonal(), pivot=0)
+        for sub_iteration in range(sub_iterations):
+            data_weighted, data_unweighted, configs = pyqmc.sample_many.sample_overlap(
+                wfs,
+                configs,
+                None,
+                nsteps=10,
+                nblocks=20,
+                client=client,
+                npartitions=npartitions,
+                **vmc_kwargs,
+            )
+            update = updater[sub_iteration]
+            norm = np.mean(data_unweighted["overlap"], axis=0)
+            if verbose:
+                print("Normalization step", norm.diagonal())
+            renormalize(wfs, norm.diagonal(), pivot=0)
 
-        data_weighted, data_unweighted, configs = pyqmc.sample_many.sample_overlap(
-            wfs, configs, updater, client=client, npartitions=npartitions, **vmc_kwargs
-        )
-        avg, error = updater.block_average(data_weighted, data_unweighted["overlap"])
-        print("Iteration", i, "Energy", avg["total"], "Overlap", avg["overlap"])
-        dp, report = updater.delta_p([tau], avg, overlap_penalty, verbose=True)
-        x = [
-            transform.serialize_parameters(wf.parameters)
-            for wf, transform in zip(wfs, updater.transforms)
-        ]
-        x = [x_ + dp_[0] for x_, dp_ in zip(x, dp)]
-        set_wf_params(wfs, x, updater)
+            data_weighted, data_unweighted, configs = pyqmc.sample_many.sample_overlap(
+                wfs, configs, update, client=client, npartitions=npartitions, **vmc_kwargs
+            )
+            avg, error = update.block_average(data_weighted, data_unweighted["overlap"])
+            if verbose:
+                print("Iteration", i, "Energy", avg["total"], "Overlap", avg["overlap"])
+            dp, report = update.delta_p([tau], avg, overlap_penalty, verbose=True)
+            x = [
+                transform.serialize_parameters(wf.parameters)
+                for wf, transform in zip(wfs, update.transforms)
+            ]
+            x = [x_ + dp_[0] for x_, dp_ in zip(x, dp)]
+            set_wf_params(wfs, x, update)
 
-        save_data = {
-            "energy": avg["total"],
-            "overlap": avg["overlap"],
-            "iteration": i,
-        }
-        hdf_save(hdf_file, save_data, {}, wfs)
+            save_data = {
+                "energy": avg["total"],
+                "overlap": avg["overlap"],
+                "iteration": i,
+                "sub_iteration": sub_iteration,
+            }
+            hdf_save(hdf_file, save_data, {}, wfs)
 
     return wfs

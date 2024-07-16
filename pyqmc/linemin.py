@@ -175,7 +175,14 @@ def line_minimization(
 
     # Attributes for linemin
     attr = dict(max_iterations=max_iterations, npts=npts, steprange=steprange)
-    sub_iterations = len(pgrad_acc)
+    try:
+        sub_iterations = len(pgrad_acc)
+    except TypeError:
+        if verbose:
+            print("Was passed a single PGradAccumulator; using 1 sub_iteration. This is deprecated behavior.")
+        sub_iterations = 1
+        pgrad_acc = [pgrad_acc]
+
     df = []
     # Gradient descent cycles
     for it in range(iteration_offset, max_iterations):
@@ -199,11 +206,13 @@ def line_minimization(
             data["total_err"] = np.std(df_vmc["pgradtotal"], axis=0) / np.sqrt(
                 df_vmc["pgradtotal"].shape[0]
             )
+            if np.isnan(df_vmc["pgradtotal"]).any():
+                raise ValueError("NaN in optimization. Try reducing the step size or increasing stabilization.")
 
             step_data = {}
             step_data["energy"] = data["total"].real
             step_data["energy_error"] = data["total_err"].real
-            step_data["x"] = x0
+            #step_data["x"] = x0
             step_data["iteration"] = it
             step_data['sub_iteration'] = sub_it
             step_data["nconfig"] = coords.configs.shape[0]
@@ -214,7 +223,7 @@ def line_minimization(
             step_data.update(update_report)
             params = [x0 + dp for dp in dps]
 
-            stepsdata = correlated_compute(
+            correlated_data = correlated_compute(
                 wf,
                 coords,
                 params,
@@ -223,9 +232,9 @@ def line_minimization(
                 npartitions=npartitions,
             )
 
-            w = stepsdata["weight"]
+            w = correlated_data["weight"]
             w = w / np.mean(w, axis=1, keepdims=True)
-            en = np.real(np.mean(stepsdata["total"] * w, axis=1))
+            en = np.real(np.mean(correlated_data["total"] * w, axis=1))
 
             est_min = stable_fit(steps, en)
             x0 = pgrad.delta_p([est_min], data, verbose=False)[0][0] + x0
@@ -237,13 +246,14 @@ def line_minimization(
             if verbose:
                 print("descent en", data["total"], data["total_err"])
                 print("energies from correlated sampling", en)
+                
+            set_wf_params(wf, x0, pgrad)
 
             opt_hdf(
-                hdf_file, step_data, attr, coords, pgrad.transform.deserialize(wf, x0)
+                hdf_file, step_data, attr, coords, wf.parameters
             )
             df.append(step_data)
 
-            set_wf_params(wf, x0, pgrad)
         sub_iteration_offset = 0
     return wf, df
 

@@ -26,7 +26,11 @@ def nodal_regularization(grad2, nodal_cutoff=1e-3):
     f = a * r ** 2 + b * r ** 4 + c * r ** 6
 
     This uses the method from
-    Shivesh Pathak and Lucas K. Wagner. “A Light Weight Regularization for Wave Function Parameter Gradients in Quantum Monte Carlo.” AIP Advances 10, no. 8 (August 6, 2020): 085213. https://doi.org/10.1063/5.0004008.
+    Shivesh Pathak and Lucas K. Wagner. 
+    “A Light Weight Regularization for Wave Function
+    Parameter Gradients in Quantum Monte Carlo.”
+    AIP Advances 10, no. 8 (August 6, 2020): 085213.
+    https://doi.org/10.1063/5.0004008.
     """
     r = 1.0 / grad2
     mask = r < nodal_cutoff**2
@@ -43,7 +47,8 @@ def nodal_regularization(grad2, nodal_cutoff=1e-3):
 
 class StochasticReconfiguration:
     """
-    This class works as an accumulator, but has an extra method that computes the change in parameters
+    This class works as an accumulator, but has an extra method 
+    that computes the change in parameters
     given the averages given by avg() and __call__.
     """
 
@@ -91,11 +96,12 @@ class StochasticReconfiguration:
         dp_regularized = dp * f[:, np.newaxis]
 
         d = {k: np.average(it, weights=weights, axis=0) for k, it in den.items()}
-        d["dpH"] = np.einsum("i,ij->j", energy, weights[:, np.newaxis] * dp_regularized)
-        d["dppsi"] = np.average(dp_regularized, weights=weights, axis=0)
-        d["dpidpj"] = np.einsum(
-            "ij,ik->jk", dp, weights[:, np.newaxis] * dp_regularized, optimize=True
-        )
+        if self.transform.nparams > 0:
+            d["dpH"] = np.einsum("i,ij->j", energy, weights[:, np.newaxis] * dp_regularized)
+            d["dppsi"] = np.average(dp_regularized, weights=weights, axis=0)
+            d["dpidpj"] = np.einsum(
+                "ij,ik->jk", dp, weights[:, np.newaxis] * dp_regularized, optimize=True
+            )
 
         return d
 
@@ -137,7 +143,7 @@ class StochasticReconfiguration:
         v = np.einsum("ij,j->i", invSij, pgrad)
         dp = [-step * v for step in steps]
         report = {
-            "pgrad": pgrad,
+            "pgrad": np.linalg.norm(pgrad),
             "SRdot": np.dot(pgrad, v) / (np.linalg.norm(v) * np.linalg.norm(pgrad)),
         }
 
@@ -179,6 +185,9 @@ class StochasticReconfigurationMultipleWF:
 
         nconfig = weights.shape[-1]
         for wfi, dp in enumerate(dppsi):
+            if self.transforms[wfi].nparams == 0:
+
+                continue
             d[("dp", wfi)] = (
                 np.einsum("cp,jc->pj", dp, weights[wfi, :, :], optimize=True) / nconfig
             )
@@ -232,15 +241,20 @@ class StochasticReconfigurationMultipleWF:
             avg[k] = np.mean(it, axis=0) / Nij
             error[k] = scipy.stats.sem(it, axis=0) / Nij
 
+        
         nwf = weights.shape[1]
         for k in ["dp", "dpH"]:
             for w in range(nwf):
+                if self.transforms[w].nparams == 0:
+                    continue
                 it = data[(k, w)]
                 avg[(k, w)] = np.mean(it, axis=0) / Nij[w]
                 error[(k, w)] = scipy.stats.sem(it, axis=0) / Nij[w]
 
         for k in ["dpipj"]:
             for w in range(nwf):
+                if self.transforms[w].nparams == 0:
+                    continue
                 it = data[(k, w)]
                 avg[(k, w)] = np.mean(it, axis=0) / Nij[w, w]
                 error[(k, w)] = scipy.stats.sem(it, axis=0) / Nij[w, w]
@@ -257,6 +271,8 @@ class StochasticReconfigurationMultipleWF:
         ret["overlap"] = avg["overlap"] / Nij
         fac = np.ones((nwf, nwf)) + np.identity(nwf)
         for wfi in range(nwf):
+            if self.transforms[wfi].nparams == 0:
+                continue
             ret[("dp_energy", wfi)] = fac[wfi] * np.real(
                 avg[("dpH", wfi)] - avg["total"][wfi] * avg[("dp", wfi)]
             )
@@ -296,9 +312,19 @@ class StochasticReconfigurationMultipleWF:
         nwf = data["energy"].shape[0]
         dp_all = []
         for wf in range(nwf):
+            overlap_cost = 0.0
+            for i in range(wf):
+                overlap_cost += overlap_penalty[wf, i] * data["overlap"][wf, i]
+            if verbose:
+                print("wave function", wf)
+                print("Overlap cost", overlap_cost)
+
+            if self.transforms[wf].nparams == 0:
+                dp_all.append([np.zeros((0)) for step in steps])
+                continue
+
             Sij = np.real(data[("dpipj", wf)])
             ovlp = 0.0
-            overlap_cost = 0.0
             for i in range(wf):
                 ovlp += (
                     2.0
@@ -306,7 +332,6 @@ class StochasticReconfigurationMultipleWF:
                     * overlap_penalty[wf, i]
                     * data["overlap"][wf, i]
                 )
-                overlap_cost += overlap_penalty[wf, i] * data["overlap"][wf, i]
             pgrad = data[("dp_energy", wf)][:, wf] + ovlp
 
             invSij = np.linalg.inv(Sij + self.eps * np.eye(Sij.shape[0]))
@@ -318,8 +343,6 @@ class StochasticReconfigurationMultipleWF:
                 "SRdot": np.dot(pgrad, v) / (np.linalg.norm(v) * np.linalg.norm(pgrad)),
             }
             if verbose:
-                print("wave function", wf)
-                print("Overlap cost", overlap_cost)
                 print("overlap gradient norm", np.linalg.norm(ovlp))
                 print("Gradient norm: ", np.linalg.norm(pgrad))
                 print("Dot product between gradient and SR step: ", report["SRdot"])

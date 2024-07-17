@@ -100,7 +100,7 @@ def line_minimization(
     correlatedoptions=None,
     update_kws=None,
     verbose=False,
-    npts=5,
+    npts=10,
     hdf_file=None,
     client=None,
     npartitions=None,
@@ -210,6 +210,8 @@ def line_minimization(
             )
             if np.isnan(df_vmc["pgradtotal"]).any():
                 raise ValueError("NaN in optimization. Try reducing the step size or increasing stabilization.")
+            if verbose:
+                print("Current energy", data["total"], data["total_err"])
 
             step_data = {}
             step_data["energy"] = data["total"].real
@@ -234,7 +236,7 @@ def line_minimization(
                 npartitions=npartitions,
             )
 
-            w = correlated_data["weight"]
+            w = correlated_data["weight"].copy()
             w = w / np.mean(w, axis=1, keepdims=True)
             en = np.real(np.mean(correlated_data["total"] * w, axis=1))
 
@@ -246,11 +248,12 @@ def line_minimization(
             step_data["est_min"] = est_min
 
             if verbose:
-                print("descent en", data["total"], data["total_err"])
                 print("energies from correlated sampling", en)
-                
-            set_wf_params(wf, x0, pgrad)
+                print("Chose to move", est_min, "from", steps[0], "to", steps[-1])
+                print("weight variance", np.var(w, axis=1))
+                print("avg weights", np.mean(correlated_data['weight'], axis=1))
 
+            set_wf_params(wf, x0, pgrad)
             opt_hdf(
                 hdf_file, step_data, attr, coords, wf.parameters
             )
@@ -275,8 +278,9 @@ def correlated_compute(
 
     """
 
-    wfs = [copy.deepcopy(wf) for i in [0, -1]]
-    for i in [0, -1]:
+    ref_wfs = [0, 1]
+    wfs = [copy.deepcopy(wf) for i in ref_wfs]
+    for i in ref_wfs:
         set_wf_params(wfs[i], params[i], pgrad_acc)
     # sample combined distribution
     _, _, configs = sm.sample_overlap(
@@ -284,7 +288,7 @@ def correlated_compute(
     )
 
     if client is None:
-        return correlated_compute_worker(wf, configs, params, pgrad_acc)
+        return correlated_compute_worker(wf, configs, params, pgrad_acc, ref_wfs)
     config = configs.split(npartitions)
     runs = [
         client.submit(correlated_compute_worker, wf, conf, params, pgrad_acc)
@@ -297,7 +301,7 @@ def correlated_compute(
     return block_avg
 
 
-def correlated_compute_worker(wf, configs, params, pgrad_acc):
+def correlated_compute_worker(wf, configs, params, pgrad_acc, ref_wfs):
     """
     Evaluates accumulator on the same set of configs for correlated sampling of different wave function parameters
 
@@ -306,6 +310,8 @@ def correlated_compute_worker(wf, configs, params, pgrad_acc):
     :parameter params: (nsteps, nparams) array
         list of arrays of parameters (serialized) at each step
     :parameter pgrad_acc: PGradAccumulator
+    :parameter ref_wfs: Reference wave functions. assume that rho = sum_i exp(2*(psi_i))
+
     :returns: a single dict with indices [parameter, values]
 
     """
@@ -324,7 +330,7 @@ def correlated_compute_worker(wf, configs, params, pgrad_acc):
 
     ref = np.amax(psi, axis=0)
     psirel = np.exp(2 * (psi - ref))
-    rho = np.mean([psirel[i] for i in [0, -1]], axis=0)
+    rho = np.mean([psirel[i] for i in ref_wfs], axis=0)
     data_ret["weight"] = psirel / rho
     return data_ret
 

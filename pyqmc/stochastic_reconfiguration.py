@@ -139,7 +139,8 @@ class StochasticReconfiguration:
             data["dpidpj"] - np.einsum("i,j->ij", data["dppsi"], data["dppsi"])
         )
 
-        invSij = np.linalg.inv(Sij + self.eps * np.eye(Sij.shape[0]))
+        #invSij = np.linalg.inv(Sij + self.eps * np.eye(Sij.shape[0]))
+        invSij = np.linalg.pinv(Sij, rcond = 1e-3)
         v = np.einsum("ij,j->i", invSij, pgrad)
         dp = [-step * v for step in steps]
         report = {
@@ -148,8 +149,12 @@ class StochasticReconfiguration:
         }
 
         if verbose:
+            eigvals = np.linalg.eigvals(Sij)
+            print("eigenvalues of Sij", eigvals)
             print("Gradient norm: ", np.linalg.norm(pgrad))
             print("Dot product between gradient and SR step: ", report["SRdot"])
+            print("gradient", pgrad)
+            print("v", v)
         return dp, report
 
 

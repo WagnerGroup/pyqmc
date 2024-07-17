@@ -17,6 +17,8 @@ import pyqmc.sample_many
 import numpy as np
 import h5py
 from pyqmc import hdftools
+import pyqmc.gpu as gpu
+import os
 
 
 def hdf_save(hdf_file, data, attr, wfs):
@@ -94,8 +96,26 @@ def optimize_ensemble(
         sub_iterations = 1
         updater = [updater]
 
-    for i in range(max_iterations):
+    iteration_offset = 0
+    sub_iteration_offset = 0
+    if hdf_file is not None and os.path.isfile(hdf_file):  # restarting -- read in data
+        with h5py.File(hdf_file, "r") as hdf:
+            if "wf" in hdf.keys():
+                for wfi, wf in enumerate(wfs):
+                    grp = hdf[f"wf/{wfi}"]
+                    for k in grp.keys():
+                        wf.parameters[k] = gpu.cp.asarray(grp[k])
+            if "iteration" in hdf.keys():
+                iteration_offset = np.max(hdf["iteration"][...]) + 1
+            if "sub_iteration" in hdf.keys():
+                sub_iteration_offset = hdf["sub_iteration"][-1] + 1
+            configs.load_hdf(hdf)
+
+    for i in range(iteration_offset, max_iterations):
         for sub_iteration in range(sub_iterations):
+            if i == iteration_offset:
+                if sub_iteration < sub_iteration_offset:
+                    continue
             data_weighted, data_unweighted, configs = pyqmc.sample_many.sample_overlap(
                 wfs,
                 configs,
@@ -128,6 +148,7 @@ def optimize_ensemble(
 
             save_data = {
                 "energy": avg["total"],
+                "energy_error": error["total"],
                 "overlap": avg["overlap"],
                 "iteration": i,
                 "sub_iteration": sub_iteration,

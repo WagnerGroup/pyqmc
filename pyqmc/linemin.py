@@ -186,11 +186,13 @@ def line_minimization(
     df = []
     # Gradient descent cycles
     for it in range(iteration_offset, max_iterations):
-        for sub_it in range(sub_iteration_offset, sub_iterations):
+        for sub_it in range(0, sub_iterations):
+            if it == iteration_offset:
+                if sub_it < sub_iteration_offset:
+                    continue
             pgrad = pgrad_acc[sub_it]
             x0 = pgrad.transform.serialize_parameters(wf.parameters)
 
-            #set_wf_params(wf, x0, pgrad_acc)
             df_vmc, coords = pyqmc.mc.vmc(
                 wf,
                 coords,

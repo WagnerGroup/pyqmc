@@ -12,14 +12,13 @@
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
-from pyscf import lib, gto, scf
+from pyscf import gto, scf
 import pyscf.pbc
 import numpy as np
 import pyqmc.api as pyq
 import pyqmc.accumulators
 from rich import print
 
-# from pyqmc.optimize_excited_states import optimize
 from pyqmc.ensemble_optimization import optimize_ensemble
 from pyqmc.stochastic_reconfiguration import StochasticReconfigurationMultipleWF
 
@@ -73,7 +72,7 @@ def run_optimization_best_practice_3states(
         )
         wfs.append(wf)
         to_opts.append(to_opt)
-    configs = pyq.initial_guess(mol, 2000)
+    configs = pyq.initial_guess(mol, 200)
 
     pgrad1 = pyq.gradient_generator(mol, wfs[0], to_opt=to_opts[0])
     wfs[0], _ = pyq.line_minimization(
@@ -81,7 +80,7 @@ def run_optimization_best_practice_3states(
         configs,
         pgrad1,
         verbose=True,
-        max_iterations=10,
+        max_iterations=5,
         client=client,
         npartitions=npartitions,
     )
@@ -92,17 +91,25 @@ def run_optimization_best_practice_3states(
     for to_opt in to_opts[1:]:
         to_opt["wf1det_coeff"] = np.ones_like(to_opt["wf1det_coeff"])
 
-    transforms = [
-        pyqmc.accumulators.LinearTransform(wf.parameters, to_opt)
-        for wf, to_opt in zip(wfs, to_opts)
-    ]
+    energy = pyq.EnergyAccumulator(mol)
+    sr_accumulator = []
+    for wf in range(nstates):
+        to_opts_tmp = copy.deepcopy(to_opts)
+        for wfj in range(nstates):
+            if wfj != wf:
+                for k in to_opts_tmp[wfj]:
+                    to_opts_tmp[wfj][k] = np.zeros_like(to_opts_tmp[wfj][k])
+        transforms = [
+            pyqmc.accumulators.LinearTransform(wf.parameters, to_opt)
+            for wf, to_opt in zip(wfs, to_opts_tmp)
+        ]
+        sr_accumulator.append(StochasticReconfigurationMultipleWF(energy, transforms))
+
     for wf in wfs[1:]:
         for k in wf.parameters.keys():
             if "wf2" in k:
                 wf.parameters[k] = wfs[0].parameters[k].copy()
     _, configs = pyq.vmc(wfs[0], configs, client=client, npartitions=npartitions)
-    energy = pyq.EnergyAccumulator(mol)
-    sr_accumulator = StochasticReconfigurationMultipleWF(energy, transforms)
 
     return optimize_ensemble(
         wfs,
@@ -112,17 +119,17 @@ def run_optimization_best_practice_3states(
         max_iterations=max_iterations,
         client=client,
         npartitions=npartitions,
+        verbose=True,
     )
 
 
 if __name__ == "__main__":
     from concurrent.futures import ProcessPoolExecutor
 
-    with ProcessPoolExecutor(max_workers=2) as client:
-        if True:
-            run_optimization_best_practice_3states(
-                hdf_file=f"optimize.hdf5",
-                max_iterations=200,
-                client=client,
-                npartitions=2,
+    #with ProcessPoolExecutor(max_workers=2) as client:             
+    run_optimization_best_practice_3states(
+                hdf_file=f"{__file__}.hdf5",
+                max_iterations=20,
+                client=None,
+                npartitions=1,
             )

@@ -21,11 +21,12 @@ from pyqmc.stochastic_reconfiguration import StochasticReconfiguration
 import copy
 
 
-def gradient_generator(mol, wf, to_opt=None, nodal_cutoff=1e-3, **ewald_kwargs):
-    return PGradTransform(
+def gradient_generator(mol, wf, to_opt=None, nodal_cutoff=1e-3, eps=1e-1, **ewald_kwargs):
+    return StochasticReconfiguration(
         EnergyAccumulator(mol, **ewald_kwargs),
         LinearTransform(wf.parameters, to_opt),
         nodal_cutoff=nodal_cutoff,
+        eps=eps
     )
 
 
@@ -96,13 +97,18 @@ class LinearTransform:
         self.dtypes = {k: parameters[k].dtype for k in self.to_opt}
         self.complex = {k: d == complex for k, d in self.dtypes.items()}
         self.nimag = {k: to_opt[k].sum() if c else 0 for k, c in self.complex.items()}
-        self.complex_inds = np.concatenate(
-            [np.ones(to_opt[k].sum(), dtype=bool) * c for k, c in self.complex.items()]
-        )
+        if any(self.nimag.values()):
+            self.complex_inds = np.concatenate(
+             [np.ones(to_opt[k].sum(), dtype=bool) * c for k, c in self.complex.items()]
+          )
+        else:
+            self.complex_inds = np.asarray([], dtype=bool)
         self.nparams = np.sum([v.sum() for v in self.to_opt.values()])
 
     def serialize_parameters(self, parameters):
         """Convert the dictionary to a linear list of gradients"""
+        if len(self.to_opt) == 0:
+            return np.zeros((0))
         params = np.concatenate(
             [gpu.asnumpy(parameters[k])[opt] for k, opt in self.to_opt.items()]
         )
@@ -115,7 +121,8 @@ class LinearTransform:
             mask = ~np.repeat(opt[np.newaxis, :], pgrad[k].shape[0], axis=0)
             mask_grads = np.ma.array(pgrad[k], mask=mask).reshape(pgrad[k].shape[0], -1)
             grads.append(np.ma.compress_cols(mask_grads))
-
+        if len(grads) == 0:
+            return np.zeros((0))
         grads = np.concatenate(grads, axis=1)
         return np.concatenate((grads, grads[:, self.complex_inds] * 1j), axis=1)
 

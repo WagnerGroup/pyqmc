@@ -49,7 +49,10 @@ def create_supercell_twists(supercell, mf, tol=12):
     """
     kpts = mf.kpts
     super_reciprocal_vectors = supercell.reciprocal_vectors()
-    super_kpts, wraparound = pyqmc.pbc.enforce_pbc(super_reciprocal_vectors, kpts)
+    frac = kpts @ np.linalg.inv(super_reciprocal_vectors)
+    frac = np.around(frac, tol) % 1
+    super_kpts = frac @ super_reciprocal_vectors
+
     twists, indices, counts = np.unique(
         np.round(super_kpts, tol), axis=0, return_counts=True, return_inverse=True
     )

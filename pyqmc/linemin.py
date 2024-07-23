@@ -95,12 +95,14 @@ def line_minimization(
     steprange=0.2,
     max_iterations=30,
     warmup_options=None,
+    correlated_reference_wfs=None,
+    stderr_weight=1.0,
     vmcoptions=None,
     lmoptions=None,
     correlatedoptions=None,
     update_kws=None,
     verbose=False,
-    npts=10,
+    npts=40,
     hdf_file=None,
     client=None,
     npartitions=None,
@@ -113,7 +115,9 @@ def line_minimization(
     :parameter pgrad_acc: A PGradAccumulator-like object
     :parameter float steprange: How far to search in the line minimization
     :parameter int max_iterations: (maximum) number of steps in the gradient descent. If the calculation is continued from the same hdf file, the iterations from previous runs are included in the total, i.e. when calling line_minimization multiple times with the same hdf_file, max_iterations is the total number of iterations that will be run.
-    :parameter int warmup_options: kwargs to use for vmc warmup
+    :parameter dict warmup_options: kwargs to use for vmc warmup
+    :parameter list correlated_reference_wfs: which wave functions to use for correlated sampling (default [0,1])
+    :parameter int stderr_weight: weight of the standard error in the line minimization
     :parameter dict vmcoptions: a dictionary of options for the vmc method
     :parameter dict lmoptions: a dictionary of options for the lm method
     :parameter update: A function that generates a parameter change
@@ -140,6 +144,8 @@ def line_minimization(
     if "tstep" not in warmup_options and "tstep" in vmcoptions:
         warmup_options["tstep"] = vmcoptions["tstep"]
     assert npts >= 3, f"linemin npts={npts}; need npts >= 3 for correlated sampling"
+    if correlated_reference_wfs is None:
+        correlated_reference_wfs = [0, 1]
 
     iteration_offset = 0
     sub_iteration_offset = 0
@@ -174,7 +180,10 @@ def line_minimization(
         )
 
     # Attributes for linemin
-    attr = dict(max_iterations=max_iterations, npts=npts, steprange=steprange)
+    attr = dict(max_iterations=max_iterations,
+                npts=npts,
+                steprange=steprange,
+                correlated_reference_wfs=correlated_reference_wfs)
     try:
         sub_iterations = len(pgrad_acc)
     except TypeError:
@@ -187,6 +196,8 @@ def line_minimization(
     # Gradient descent cycles
     for it in range(iteration_offset, max_iterations):
         for sub_it in range(0, sub_iterations):
+            if verbose: 
+                print("#############################\nStarting iteration", it, "sub iteration", sub_it)
             if it == iteration_offset:
                 if sub_it < sub_iteration_offset:
                     continue
@@ -234,24 +245,29 @@ def line_minimization(
                 pgrad,
                 client=client,
                 npartitions=npartitions,
+                ref_wfs=correlated_reference_wfs
             )
 
             w = correlated_data["weight"].copy()
             w = w / np.mean(w, axis=1, keepdims=True)
             en = np.real(np.mean(correlated_data["total"] * w, axis=1))
-
-            est_min = stable_fit(steps, en)
+            en_std = np.std(correlated_data["total"], axis=1)
+            yfit = en + stderr_weight*en_std
+            est_min = stable_fit(steps, yfit)
             x0 = pgrad.delta_p([est_min], data, verbose=False)[0][0] + x0
 
             step_data["tau"] = steps
-            step_data["yfit"] = en
+            step_data["yfit"] = yfit
             step_data["est_min"] = est_min
+            step_data["correlated_energy"] = en
+            step_data["correlated_energy_std"] = en_std
 
             if verbose:
                 print("energies from correlated sampling", en)
                 print("Chose to move", est_min, "from", steps[0], "to", steps[-1])
                 print("weight variance", np.var(w, axis=1))
                 print("avg weights", np.mean(correlated_data['weight'], axis=1))
+                print("energy standard deviation", en_std)
 
             set_wf_params(wf, x0, pgrad)
             opt_hdf(
@@ -264,7 +280,7 @@ def line_minimization(
 
 
 def correlated_compute(
-    wf, configs, params, pgrad_acc, client=None, npartitions=None, **kws
+    wf, configs, params, pgrad_acc, client=None, npartitions=None, ref_wfs=None, **kws
 ):
     """
     Evaluates energy on the same set of configs for correlated sampling of different wave function parameters
@@ -277,8 +293,9 @@ def correlated_compute(
     :returns: a single dict with indices [parameter, values]
 
     """
+    if ref_wfs is None:
+        ref_wfs = [0, 1]
 
-    ref_wfs = [0, 1]
     wfs = [copy.deepcopy(wf) for i in ref_wfs]
     for i in ref_wfs:
         set_wf_params(wfs[i], params[i], pgrad_acc)

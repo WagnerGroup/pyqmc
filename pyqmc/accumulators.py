@@ -21,12 +21,13 @@ from pyqmc.stochastic_reconfiguration import StochasticReconfiguration
 import copy
 
 
-def gradient_generator(mol, wf, to_opt=None, nodal_cutoff=1e-3, eps=1e-1, **ewald_kwargs):
+def gradient_generator(mol, wf, to_opt=None, nodal_cutoff=1e-3, eps=1e-1, inverse_strategy="pseudo_inverse", **ewald_kwargs):
     return StochasticReconfiguration(
         EnergyAccumulator(mol, **ewald_kwargs),
         LinearTransform(wf.parameters, to_opt),
         nodal_cutoff=nodal_cutoff,
-        eps=eps
+        eps=eps,
+        inverse_strategy=inverse_strategy,
     )
 
 

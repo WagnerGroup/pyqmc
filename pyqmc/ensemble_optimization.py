@@ -153,6 +153,6 @@ def optimize_ensemble(
                 "iteration": i,
                 "sub_iteration": sub_iteration,
             }
-            hdf_save(hdf_file, save_data, {}, wfs)
+            hdf_save(hdf_file + report, save_data, {}, wfs)
 
     return wfs

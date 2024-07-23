@@ -317,7 +317,6 @@ class StochasticReconfigurationMultipleWF:
         Compute the change in parameters given the data from a stochastic reconfiguration step.
         Return the change in parameters, and data that we may want to use for diagnostics.
         """
-        # raise NotImplementedError("delta_p is not implemented yet for multiple wavefunctions")
         data = self._collect_terms(data, None)
         nwf = data["energy"].shape[0]
         dp_all = []
@@ -349,7 +348,7 @@ class StochasticReconfigurationMultipleWF:
             dp = [-step * v for step in steps]
             dp_all.append(dp)
             report = {
-                "pgrad": pgrad,
+                "pgrad": np.linalg.norm(pgrad),
                 "SRdot": np.dot(pgrad, v) / (np.linalg.norm(v) * np.linalg.norm(pgrad)),
             }
             if verbose:

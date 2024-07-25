@@ -111,9 +111,11 @@ def mol_eval_gto_grad(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits)
             nbas = (2 * l + 1)
             rad = radial_gto_grad(r2, rvec, bas)
             for b in range(nbas):
-                ao[sel+b_ind, 0] = spherical[l*l+b, 0] * rad[0]
+                for e in range(rad.shape[1]):
+                    ao[sel+b_ind, 0, e] = spherical[l*l+b, 0, e] * rad[0, e]
                 for i in range(1, 4):
-                    ao[sel+b_ind, i] = spherical[l*l+b, i] * rad[0] + spherical[l*l+b, 0] * rad[i]
+                    for e in range(rad.shape[1]):
+                        ao[sel+b_ind, i, e] = spherical[l*l+b, i, e] * rad[0, e] + spherical[l*l+b, 0, e] * rad[i, e]
                 b_ind += 1
             split += 1
         sel += b_ind
@@ -184,10 +186,11 @@ def radial_gto_grad(r2, rvec, coeffs):
     returns (4, n, )"""
     out = np.zeros((4, r2.shape[0]))
     for c in coeffs:
-        tmp = np.exp(-r2 * c[0]) * c[1]
-        out[0] += tmp
-        for i in range(3):
-            out[i+1] +=  -tmp * c[0] * 2 * rvec[:, i]
+        for a in range(r2.shape[0]):
+            tmp = np.exp(-r2[a] * c[0]) * c[1]
+            out[0, a] += tmp
+            for i in range(3):
+                out[i+1, a] +=  -tmp * 2 * c[0] * rvec[a, i]
     return out
 
 @njit("float64[:, :](float64[:], float64[:, :], float64[:, :])", fastmath=True)

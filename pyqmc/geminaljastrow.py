@@ -178,10 +178,10 @@ class GeminalJastrow:
                              + \sum_{e<j} g_{mn} \nabla^2\chi_n(\mathbf{r}'_e) \chi_m(\mathbf{r}_j)
         .. math:: \nabla_e^2 e^{J_G(\mathbf{R})} / e^{J_G(\mathbf{R})} = \nabla_e^2 J_G + |\nabla_e J_G|^2
         """
-        ao = self.orbitals.aos("GTOval_sph_deriv2", epos)[0][1:]
-        #ao = gpu.cp.concatenate(
-        #    [ao[1:4, ...], ao[[4, 7, 9], ...].sum(axis=0, keepdims=True)], axis=0
-        #)
+        ao = self.orbitals.aos("GTOval_sph_deriv2", epos)[0]
+        ao = gpu.cp.concatenate(
+            [ao[1:4, ...], ao[[4, 7, 9], ...].sum(axis=0, keepdims=True)], axis=0
+        )
         deriv = self._compute_value(ao, self.ao_val, e)
         grad = deriv[:3]
         lap3 = gpu.cp.einsum("dc,dc->c", grad, grad)

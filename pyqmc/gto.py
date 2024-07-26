@@ -150,11 +150,13 @@ def mol_eval_gto_lap(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
             bas = basis_arrays[splits[split]:splits[split+1]]
             rad = radial_gto_lap(r2, rvec, bas)
             for b in range(2*l+1):
-                ao[sel+b_ind, 0] = spherical[l*l+b, 0] * rad[0]
-                ao[sel+b_ind, 4] = spherical[l*l+b, 0] * rad[4]
+                for e in range(rad.shape[1]):
+                    ao[sel+b_ind, 0, e] = spherical[l*l+b, 0, e] * rad[0, e]
+                    ao[sel+b_ind, 4, e] = spherical[l*l+b, 0, e] * rad[4, e]
                 for i in range(1, 4):
-                    ao[sel+b_ind, i] = spherical[l*l+b, i] * rad[0] + spherical[l*l+b, 0] * rad[i]
-                    ao[sel+b_ind, 4] += 2 * spherical[l*l+b, i] * rad[i]
+                    for e in range(rad.shape[1]):
+                        ao[sel+b_ind, i, e] = spherical[l*l+b, i, e] * rad[0, e] + spherical[l*l+b, 0, e] * rad[i, e]
+                        ao[sel+b_ind, 4, e] += 2 * spherical[l*l+b, i, e] * rad[i, e]
                 b_ind += 1
             split += 1
         sel += b_ind
@@ -203,12 +205,13 @@ def radial_gto_lap(r2, rvec, coeffs):
     returns (5, n, )"""
     out = np.zeros((5, r2.shape[0]))
     for c in coeffs:
-        tmp = np.exp(-r2 * c[0]) * c[1]
-        out[0] += tmp
-        tmpx2xc = tmp * 2 * c[0]
-        for i in range(3):
-            out[i+1] +=  -tmpx2xc * rvec[:, i]
-        out[4] +=  tmpx2xc * (2*c[0] *r2 - 3)
+        for a in range(r2.shape[0]):
+            tmp = np.exp(-r2[a] * c[0]) * c[1]
+            out[0, a] += tmp
+            tmpx2xc = tmp * 2 * c[0]
+            for i in range(3):
+                out[i+1, a] +=  -tmpx2xc * rvec[a, i]
+            out[4, a] +=  tmpx2xc * (2*c[0] *r2[a] - 3)
     return out
 
  

@@ -69,7 +69,7 @@ class MoleculeOrbitalEvaluator:
         """"""
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
-        aos = gpu.cp.asarray([self.evaluator.eval_gto(eval_str, mycoords)])
+        aos = gpu.cp.asarray(self.evaluator.eval_gto(eval_str, mycoords))[np.newaxis]
         if len(aos.shape) == 4:  # if derivatives are included
             return aos.reshape((1, aos.shape[1], *mycoords.shape[:-1], aos.shape[-1]))
         else:

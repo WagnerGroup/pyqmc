@@ -308,7 +308,7 @@ def correlated_compute(
         return correlated_compute_worker(wf, configs, params, pgrad_acc, ref_wfs)
     config = configs.split(npartitions)
     runs = [
-        client.submit(correlated_compute_worker, wf, conf, params, pgrad_acc)
+        client.submit(correlated_compute_worker, wf, conf, params, pgrad_acc, ref_wfs)
         for conf in config
     ]
     allresults = [r.result() for r in runs]

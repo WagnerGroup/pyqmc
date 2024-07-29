@@ -260,6 +260,7 @@ def _single_atom_grad(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutof
     rvec_L = np.zeros(3)
     spherical = np.zeros((4, (max_l+1)**2))
     nbas = np.sum(basis_ls_a * 2 + 1)
+    rad = np.zeros(4)
     for e, v in enumerate(rvec):
         for j, L in enumerate(Ls_a):
             r2 = 0
@@ -280,7 +281,7 @@ def _single_atom_grad(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutof
                 if r2 > r2_l_cutoff[l_split_a+l_ind]: 
                     b_ind += 2*l+1
                     continue
-                rad = gto.single_radial_gto_grad(r2, rvec_L, basis_a[l_ind])
+                gto.single_radial_gto_grad(r2, rvec_L, basis_a[l_ind], rad)
                 for b in range(2*l+1):
                     for k, phase in enumerate(phases_j):
                         ao[k, e, astart+b_ind, 0] += spherical[0, l*l+b] * rad[0] * phase
@@ -365,6 +366,7 @@ def _single_atom_lap(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutoff
     rvec_L = np.zeros(3)
     spherical = np.zeros((4, (max_l+1)**2))
     nbas = np.sum(basis_ls_a * 2 + 1)
+    rad = np.zeros(5)
     for e, v in enumerate(rvec):
         for j, L in enumerate(Ls_a):
             r2 = 0
@@ -385,7 +387,7 @@ def _single_atom_lap(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutoff
                 if r2 > r2_l_cutoff[l_split_a+l_ind]: 
                     b_ind += 2*l+1
                     continue
-                rad = gto.single_radial_gto_lap(r2, rvec_L, basis_a[l_ind])
+                gto.single_radial_gto_lap(r2, rvec_L, basis_a[l_ind], rad)
                 for b in range(2*l+1):
                     for k, phase in enumerate(phases_j):
                         ao[k, e, astart+b_ind, 0] += spherical[0, l*l+b] * rad[0] * phase
@@ -518,6 +520,7 @@ class PeriodicAtomicOrbitalEvaluator(gto.AtomicOrbitalEvaluator):
 
 
     def eval_gto(self, eval_str, configs):
+        eval_str = eval_str.replace("PBC", "")
         rvec = self.dist.pairwise(self.atom_coords[np.newaxis], configs[np.newaxis])[0]
         return self._gto_func[eval_str](
             rvec,

@@ -229,8 +229,8 @@ def single_radial_gto(r2, coeffs):
     return out
 
 
-@njit("float64[:](float64, float64[:], float64[:, :])", fastmath=True)
-def single_radial_gto_grad(r2, rvec, coeffs):
+@njit("float64[:](float64, float64[:], float64[:, :], float64[:])", fastmath=True)
+def single_radial_gto_grad(r2, rvec, coeffs, out):
     """
     Value (0) and three gradient components (1, 2, 3)
     r2: float
@@ -238,7 +238,8 @@ def single_radial_gto_grad(r2, rvec, coeffs):
     coeffs: (ncontract, 2)
     l: int
     returns: (4,)"""
-    out = np.zeros(4)
+    for i in range(4):
+        out[i] = 0.
     for c in coeffs:
         tmp = np.exp(-r2 * c[0]) * c[1]
         out[0] += tmp
@@ -247,15 +248,16 @@ def single_radial_gto_grad(r2, rvec, coeffs):
     return out
 
 
-@njit("float64[:](float64, float64[:], float64[:, :])", fastmath=True)
-def single_radial_gto_lap(r2, rvec, coeffs):
+@njit("float64[:](float64, float64[:], float64[:, :], float64[:])", fastmath=True)
+def single_radial_gto_lap(r2, rvec, coeffs, out):
     """
     Evaluate gaussian contraction laplacian (vectorized for molecules)
     r: (n, )
     coeffs: (ncontract, 2)
     l: int
     returns (5, n, )"""
-    out = np.zeros(5)
+    for i in range(5):
+        out[i] = 0.
     for c in coeffs:
         tmp = np.exp(-r2 * c[0]) * c[1]
         out[0] += tmp

@@ -20,34 +20,62 @@ import pyqmc.spherical_harmonics as hsh
 import pyqmc.distance
 
 
-@njit(cache=False, fastmath=True)
-def eval_spherical(max_l, rvec):
-    """
-    evaluate spherical harmonics up to angular momentum max_l
-    max_l: (int)
-    rvec: (nvec, 3) points to evaluate at
-    """
-    out = np.zeros(((max_l + 1)**2, rvec.shape[0]))
+@njit(cache=True, fastmath=True)
+def sph0(v, out):
+    hsh.SPH0(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, out)
 
-    hsh.HARDCODED_SPH_MACRO(max_l, rvec[:, 0], rvec[:, 1], rvec[:, 2], rvec[:, 0]**2, rvec[:, 1]**2, rvec[:, 2]**2, out)
-    return out
-    
-@njit(cache=False, fastmath=True)
-def eval_spherical_grad(max_l, rvec):
-    """
-    evaluate spherical harmonic gradients up to angular momentum max_l
-    max_l: (int)
-    rvec: (nvec, 3) points to evaluate at
-    """
-    out = np.zeros((4, (max_l + 1)**2, rvec.shape[0]))
+@njit(cache=True, fastmath=True)
+def sph1(v, out):
+    hsh.SPH1(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, out)
+
+@njit(cache=True, fastmath=True)
+def sph2(v, out):
+    hsh.SPH2(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, out)
+
+@njit(cache=True, fastmath=True)
+def sph3(v, out):
+    hsh.SPH3(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, out)
+
+@njit(cache=True, fastmath=True)
+def sph4(v, out):
+    hsh.SPH4(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, out)
+
+@njit(cache=True, fastmath=True)
+def sph5(v, out):
+    hsh.SPH5(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, out)
+
+@njit(cache=True, fastmath=True)
+def sph0_grad(v, out):
     a, b, c, d = out
+    hsh.SPH0_GRAD(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, a, b, c, d)
 
-    hsh.HARDCODED_SPH_DERIVATIVE_MACRO(max_l, rvec[:, 0], rvec[:, 1], rvec[:, 2], rvec[:, 0]**2, rvec[:, 1]**2, rvec[:, 2]**2, a, b, c, d)
-    out = np.transpose(out, (1, 0, 2))
-    return out
-    
+@njit(cache=True, fastmath=True)
+def sph1_grad(v, out):
+    a, b, c, d = out
+    hsh.SPH1_GRAD(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, a, b, c, d)
 
-@njit
+@njit(cache=True, fastmath=True)
+def sph2_grad(v, out):
+    a, b, c, d = out
+    hsh.SPH2_GRAD(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, a, b, c, d)
+
+@njit(cache=True, fastmath=True)
+def sph3_grad(v, out):
+    a, b, c, d = out
+    hsh.SPH3_GRAD(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, a, b, c, d)
+
+@njit(cache=True, fastmath=True)
+def sph4_grad(v, out):
+    a, b, c, d = out
+    hsh.SPH4_GRAD(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, a, b, c, d)
+
+@njit(cache=True, fastmath=True)
+def sph5_grad(v, out):
+    a, b, c, d = out
+    hsh.SPH5_GRAD(v[0], v[1], v[2], v[0]**2, v[1]**2, v[2]**2, a, b, c, d)
+
+
+@njit(fastmath=True)
 def mol_eval_gto(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
     """
     all_rvec: (natom, nelec, 3) atom-electron distances
@@ -61,20 +89,29 @@ def mol_eval_gto(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
     ao = np.zeros((nbas_tot, all_rvec.shape[1]))
     sel = 0
     split = 0
+    rad = np.zeros(all_rvec.shape[1])
+    spherical = np.zeros((np.amax(max_l)**2, all_rvec.shape[1]))
 
     for a, rvec in enumerate(all_rvec):
+        if max_l[a] == 0: sph_func = sph0#hsh.SPH2
+        elif max_l[a] == 1: sph_func = sph1#hsh.SPH2
+        elif max_l[a] == 2: sph_func = sph2#hsh.SPH2
+        elif max_l[a] == 3: sph_func = sph3#hsh.SPH3
+        elif max_l[a] == 4: sph_func = sph4#hsh.SPH4
+        else: sph_func = sph5#hsh.SPH5
+
         r2 = np.zeros(rvec.shape[0])
         for e, v in enumerate(rvec):
             for i in range(3):
                 r2[e] += v[i]**2
         #r2 = np.sum(rvec**2, axis=-1)
-        spherical = eval_spherical(max_l[a], rvec)
+        sph_func(rvec.T, spherical)
         # this loops over all basis functions for the atom
         b_ind = 0
         for l in basis_ls[l_splits[a]:l_splits[a+1]]:
             bas = basis_arrays[splits[split]:splits[split+1]]
             nbas = (2 * l + 1)
-            rad = radial_gto(r2, bas)
+            rad = radial_gto(r2, bas, rad)
             for b in range(nbas):
                 ao[sel+b_ind] = spherical[l*l+b] * rad
                 b_ind += 1
@@ -83,7 +120,7 @@ def mol_eval_gto(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
         sel += b_ind
     return np.transpose(ao)
 
-@njit
+@njit(fastmath=True)
 def mol_eval_gto_grad(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
     """
     all_rvec: (natom, nelec, 3) atom-electron distances
@@ -97,20 +134,37 @@ def mol_eval_gto_grad(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits)
     ao = np.zeros((nbas_tot, 4, all_rvec.shape[1]))
     sel = 0
     split = 0
+    rad = np.zeros((4, all_rvec.shape[1]))
+    spherical = np.zeros((np.amax(max_l+1)**2, 4, all_rvec.shape[1]))
+    spherical_ = np.zeros((4, np.amax(max_l+1)**2, all_rvec.shape[1]))
+    sph_e = np.zeros((4, np.amax(max_l+1)**2))
 
     for a, rvec in enumerate(all_rvec):
+        if max_l[a] == 0: sph_func = sph0_grad#hsh.SPH2
+        elif max_l[a] == 1: sph_func = sph1_grad#hsh.SPH2
+        elif max_l[a] == 2: sph_func = sph2_grad#hsh.SPH2
+        elif max_l[a] == 3: sph_func = sph3_grad#hsh.SPH3
+        elif max_l[a] == 4: sph_func = sph4_grad#hsh.SPH4
+        else: sph_func = sph5_grad#hsh.SPH5
+
         r2 = np.zeros(rvec.shape[0])
         for e, v in enumerate(rvec):
             for i in range(3):
                 r2[e] += v[i]**2
-        #r2 = np.sum(rvec**2, axis=-1)
-        spherical = eval_spherical_grad(max_l[a], rvec)
+            #spherical = sph_func(max_l[a], rvec)
+            #sph_func(v, sph_e)
+            #for i in range(sph_e.shape[0]):
+            #    for j in range(sph_e.shape[1]):
+            #        spherical[j, i, e] = sph_e[i, j]
+        sph_func(rvec.T, spherical_)
+        spherical = np.transpose(spherical_, (1, 0, 2))
+       
         # this loops over all basis functions for the atom
         b_ind = 0
         for l in basis_ls[l_splits[a]:l_splits[a+1]]:
             bas = basis_arrays[splits[split]:splits[split+1]]
             nbas = (2 * l + 1)
-            rad = radial_gto_grad(r2, rvec, bas)
+            rad = radial_gto_grad(r2, rvec, bas, rad)
             for b in range(nbas):
                 for e in range(rad.shape[1]):
                     ao[sel+b_ind, 0, e] = spherical[l*l+b, 0, e] * rad[0, e]
@@ -123,7 +177,7 @@ def mol_eval_gto_grad(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits)
     return np.transpose(ao, (1, 2, 0))
 
 
-@njit
+@njit(fastmath=True)
 def mol_eval_gto_lap(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
     """
     all_rvec: (natom, nelec, 3) atom-electron distances
@@ -137,19 +191,31 @@ def mol_eval_gto_lap(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
     ao = np.zeros((nbas_tot, 5, all_rvec.shape[1]))
     sel = 0
     split = 0
+    rad = np.zeros((5, all_rvec.shape[1]))
+    spherical = np.zeros((np.amax(max_l)**2, 5, all_rvec.shape[1]))
+    spherical_ = np.zeros((5, np.amax(max_l)**2, all_rvec.shape[1]))
 
     for a, rvec in enumerate(all_rvec):
+        if max_l[a] == 0: sph_func = sph0_grad#hsh.SPH2
+        elif max_l[a] == 1: sph_func = sph1_grad#hsh.SPH2
+        elif max_l[a] == 2: sph_func = sph2_grad#hsh.SPH2
+        elif max_l[a] == 3: sph_func = sph3_grad#hsh.SPH3
+        elif max_l[a] == 4: sph_func = sph4_grad#hsh.SPH4
+        else: sph_func = sph5_grad#hsh.SPH5
+
         r2 = np.zeros(rvec.shape[0])
         for e, v in enumerate(rvec):
             for i in range(3):
                 r2[e] += v[i]**2
         #r2 = np.sum(rvec**2, axis=-1)
-        spherical = eval_spherical_grad(max_l[a], rvec)
+        #spherical = sph_func(max_l[a], rvec)
+        sph_func(rvec.T, spherical_)
+        spherical = np.transpose(spherical_, (1, 0, 2))
         # this loops over all basis functions for the atom
         b_ind = 0
         for l in basis_ls[l_splits[a]:l_splits[a+1]]:
             bas = basis_arrays[splits[split]:splits[split+1]]
-            rad = radial_gto_lap(r2, rvec, bas)
+            rad = radial_gto_lap(r2, rvec, bas, rad)
             for b in range(2*l+1):
                 for e in range(rad.shape[1]):
                     ao[sel+b_ind, 0, e] = spherical[l*l+b, 0, e] * rad[0, e]
@@ -164,22 +230,23 @@ def mol_eval_gto_lap(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
     return np.transpose(ao, (1, 2, 0))
 
 
-@njit("float64[:](float64[:], float64[:, :])", fastmath=True)
-def radial_gto(r2, coeffs):
+@njit("float64[:](float64[:], float64[:, :], float64[:])", fastmath=True)
+def radial_gto(r2, coeffs, out):
     """
     Evaluate gaussian contraction (vectorized for molecules)
     r: (n, )
     coeffs: (ncontract, 2)
     l: int
     returns (n, )"""
-    out = np.zeros_like(r2)
+    out[:] = 0.#np.zeros_like(r2)
     for c in coeffs:
-        out += np.exp(-r2 * c[0]) * c[1]
+        for a in range(r2.shape[0]):
+            out[a] += np.exp(-r2[a] * c[0]) * c[1]
     return out
 
 
-@njit("float64[:, :](float64[:], float64[:, :], float64[:, :])", fastmath=True)
-def radial_gto_grad(r2, rvec, coeffs):
+@njit("float64[:, :](float64[:], float64[:, :], float64[:, :], float64[:, :])", fastmath=True)
+def radial_gto_grad(r2, rvec, coeffs, out):
     """
     Evaluate gaussian contraction gradient (vectorized for molecules)
     r2: (n, )
@@ -187,24 +254,30 @@ def radial_gto_grad(r2, rvec, coeffs):
     coeffs: (ncontract, 2)
     l: int
     returns (4, n, )"""
-    out = np.zeros((4, r2.shape[0]))
+    #out = np.zeros((4, r2.shape[0]))
+    #for i in range(4):
+    #    for j in range(len(r2)):
+    #        out[i, j] = 0.
+    out[:] = 0.
+        
     for c in coeffs:
-        for a in range(r2.shape[0]):
-            tmp = np.exp(-r2[a] * c[0]) * c[1]
+        c0, c1 = c
+        for a, _r2 in enumerate(r2):
+            tmp = np.exp(-_r2 * c0) * c1
             out[0, a] += tmp
             for i in range(3):
-                out[i+1, a] +=  -tmp * 2 * c[0] * rvec[a, i]
+                out[i+1, a] +=  -tmp * 2 * c0 * rvec[a, i]
     return out
 
-@njit("float64[:, :](float64[:], float64[:, :], float64[:, :])", fastmath=True)
-def radial_gto_lap(r2, rvec, coeffs):
+@njit("float64[:, :](float64[:], float64[:, :], float64[:, :], float64[:, :])", fastmath=True)
+def radial_gto_lap(r2, rvec, coeffs, out):
     """
     Evaluate gaussian contraction laplacian (vectorized for molecules)
     r: (n, )
     coeffs: (ncontract, 2)
     l: int
     returns (5, n, )"""
-    out = np.zeros((5, r2.shape[0]))
+    out[:] = 0.# = np.zeros((5, r2.shape[0]))
     for c in coeffs:
         for a in range(r2.shape[0]):
             tmp = np.exp(-r2[a] * c[0]) * c[1]
@@ -300,7 +373,7 @@ def normalize_basis_coeffs(basis):
     return basis_coeffs
             
 
-@njit
+@njit(cache=True)
 def mol_cutoffs(basis_ls, basis_arrays, splits, l_splits, expcutoff=20):
     """
     compute cutoffs for Gaussian exponent. not used for molecules now.

@@ -104,7 +104,6 @@ def mol_eval_gto(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
         for e, v in enumerate(rvec):
             for i in range(3):
                 r2[e] += v[i]**2
-        #r2 = np.sum(rvec**2, axis=-1)
         sph_func(rvec.T, spherical)
         # this loops over all basis functions for the atom
         b_ind = 0
@@ -115,7 +114,6 @@ def mol_eval_gto(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
             for b in range(nbas):
                 ao[sel+b_ind] = spherical[l*l+b] * rad
                 b_ind += 1
-            #ao[sel:sel+nbas] += spherical[l**2:(l+1)**2] * rad
             split += 1
         sel += b_ind
     return np.transpose(ao)
@@ -135,9 +133,7 @@ def mol_eval_gto_grad(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits)
     sel = 0
     split = 0
     rad = np.zeros((4, all_rvec.shape[1]))
-    spherical = np.zeros((np.amax(max_l+1)**2, 4, all_rvec.shape[1]))
     spherical_ = np.zeros((4, np.amax(max_l+1)**2, all_rvec.shape[1]))
-    sph_e = np.zeros((4, np.amax(max_l+1)**2))
 
     for a, rvec in enumerate(all_rvec):
         if max_l[a] == 0: sph_func = sph0_grad#hsh.SPH2
@@ -151,11 +147,6 @@ def mol_eval_gto_grad(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits)
         for e, v in enumerate(rvec):
             for i in range(3):
                 r2[e] += v[i]**2
-            #spherical = sph_func(max_l[a], rvec)
-            #sph_func(v, sph_e)
-            #for i in range(sph_e.shape[0]):
-            #    for j in range(sph_e.shape[1]):
-            #        spherical[j, i, e] = sph_e[i, j]
         sph_func(rvec.T, spherical_)
         spherical = np.transpose(spherical_, (1, 0, 2))
        
@@ -168,8 +159,7 @@ def mol_eval_gto_grad(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits)
             for b in range(nbas):
                 for e in range(rad.shape[1]):
                     ao[sel+b_ind, 0, e] = spherical[l*l+b, 0, e] * rad[0, e]
-                for i in range(1, 4):
-                    for e in range(rad.shape[1]):
+                    for i in range(1, 4):
                         ao[sel+b_ind, i, e] = spherical[l*l+b, i, e] * rad[0, e] + spherical[l*l+b, 0, e] * rad[i, e]
                 b_ind += 1
             split += 1
@@ -207,8 +197,6 @@ def mol_eval_gto_lap(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
         for e, v in enumerate(rvec):
             for i in range(3):
                 r2[e] += v[i]**2
-        #r2 = np.sum(rvec**2, axis=-1)
-        #spherical = sph_func(max_l[a], rvec)
         sph_func(rvec.T, spherical_)
         spherical = np.transpose(spherical_, (1, 0, 2))
         # this loops over all basis functions for the atom

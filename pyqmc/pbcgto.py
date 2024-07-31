@@ -147,9 +147,6 @@ def _single_atom(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutoff, cu
 
             phases_j = phases[j]
             sph_func(rvec_L, spherical)
-            # for some reason numba doesn't accept this
-            #sph_func(rvec_L[0], rvec_L[1], rvec_L[2], rvec_L[0]**2, rvec_L[1]**2, rvec_L[2]**2, spherical)
-            #spherical[1:4] = spherical[np.array([3, 1, 2])]
 
             # this loops over all basis functions for the atom
             bstart=astart
@@ -246,9 +243,6 @@ def _single_atom_grad(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutof
 
             phases_j = phases[j]
             sph_func(rvec_L, spherical)
-            # for some reason numba doesn't accept this
-            #sph_func(rvec_L[0], rvec_L[1], rvec_L[2], rvec_L[0]**2, rvec_L[1]**2, rvec_L[2]**2, spherical)
-            #spherical[1:4] = spherical[np.array([3, 1, 2])]
 
             # this loops over all basis functions for the atom
             b_ind = 0
@@ -349,9 +343,6 @@ def _single_atom_lap(ao, rvec, basis_ls_a, basis_a, l_split_a, Ls_a, r2_l_cutoff
 
             phases_j = phases[j]
             sph_func(rvec_L, spherical)
-            # for some reason numba doesn't accept this
-            #sph_func(rvec_L[0], rvec_L[1], rvec_L[2], rvec_L[0]**2, rvec_L[1]**2, rvec_L[2]**2, spherical)
-            #spherical[1:4] = spherical[np.array([3, 1, 2])]
 
             # this loops over all basis functions for the atom
             b_ind = 0

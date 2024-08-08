@@ -52,7 +52,7 @@ class StochasticReconfiguration:
     given the averages given by avg() and __call__.
     """
 
-    def __init__(self, enacc, transform, nodal_cutoff=1e-3, eps=1e-1):
+    def __init__(self, enacc, transform, nodal_cutoff=1e-3, eps=1e-1, inverse_strategy="pseudo_inverse"):
         """
         eps here is the regularization for SR.
         """
@@ -60,6 +60,7 @@ class StochasticReconfiguration:
         self.transform = transform
         self.nodal_cutoff = nodal_cutoff
         self.eps = eps
+        self.inverse_strategy = inverse_strategy
 
     def __call__(self, configs, wf):
         pgrad = wf.pgradient()
@@ -139,7 +140,12 @@ class StochasticReconfiguration:
             data["dpidpj"] - np.einsum("i,j->ij", data["dppsi"], data["dppsi"])
         )
 
-        invSij = np.linalg.inv(Sij + self.eps * np.eye(Sij.shape[0]))
+        if self.inverse_strategy == "pseudo_inverse":
+            invSij = np.linalg.pinv(Sij, rcond=self.eps)
+        elif self.inverse_strategy == "regularized_inverse":
+            invSij = np.linalg.inv(Sij + self.eps * np.eye(Sij.shape[0]))
+        else:
+            raise ValueError("Invalid inverse strategy. Valid options are pseudo_inverse and regularized_inverse.")
         v = np.einsum("ij,j->i", invSij, pgrad)
         dp = [-step * v for step in steps]
         report = {
@@ -148,8 +154,12 @@ class StochasticReconfiguration:
         }
 
         if verbose:
+            eigvals = np.linalg.eigvals(Sij)
+            print("eigenvalues of Sij", eigvals)
             print("Gradient norm: ", np.linalg.norm(pgrad))
             print("Dot product between gradient and SR step: ", report["SRdot"])
+            print("gradient", pgrad)
+            print("v", v)
         return dp, report
 
 
@@ -307,7 +317,6 @@ class StochasticReconfigurationMultipleWF:
         Compute the change in parameters given the data from a stochastic reconfiguration step.
         Return the change in parameters, and data that we may want to use for diagnostics.
         """
-        # raise NotImplementedError("delta_p is not implemented yet for multiple wavefunctions")
         data = self._collect_terms(data, None)
         nwf = data["energy"].shape[0]
         dp_all = []
@@ -339,7 +348,7 @@ class StochasticReconfigurationMultipleWF:
             dp = [-step * v for step in steps]
             dp_all.append(dp)
             report = {
-                "pgrad": pgrad,
+                "pgrad": np.linalg.norm(pgrad),
                 "SRdot": np.dot(pgrad, v) / (np.linalg.norm(v) * np.linalg.norm(pgrad)),
             }
             if verbose:

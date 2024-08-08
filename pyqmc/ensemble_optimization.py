@@ -153,6 +153,10 @@ def optimize_ensemble(
                 "iteration": i,
                 "sub_iteration": sub_iteration,
             }
+            for k in ['total']:
+                save_data[str(k)] = data_weighted[k]
+            save_data.update(data_unweighted)
+            save_data.update(report)
             hdf_save(hdf_file, save_data, {}, wfs)
 
     return wfs

@@ -67,26 +67,28 @@ def expand_beta_qwalk(beta0, n):
     return beta
 
 
-def default_jastrow_basis(mol, ion_cusp=False, na=4, nb=3, rcut=None):
+def default_jastrow_basis(mol, ion_cusp=False, na=4, nb=3, rcut=None, cusp_gamma = None, beta_a=0.2, beta_b = 0.5):
+    if cusp_gamma is None:
+        cusp_gamma = 24
     if rcut is None:
         if hasattr(mol, "a"):
             rcut = np.amin(np.pi / np.linalg.norm(mol.reciprocal_vectors(), axis=1))
         else:
             rcut = 7.5
 
-    beta_abasis = expand_beta_qwalk(0.2, na)
-    beta_bbasis = expand_beta_qwalk(0.5, nb)
+    beta_abasis = expand_beta_qwalk(beta_a, na)
+    beta_bbasis = expand_beta_qwalk(beta_b, nb)
     if ion_cusp:
-        abasis = [func3d.CutoffCuspFunction(gamma=24, rcut=rcut)]
+        abasis = [func3d.CutoffCuspFunction(gamma=cusp_gamma, rcut=rcut)]
     else:
         abasis = []
     abasis += [func3d.PolyPadeFunction(beta=ba, rcut=rcut) for ba in beta_abasis]
-    bbasis = [func3d.CutoffCuspFunction(gamma=24, rcut=rcut)]
+    bbasis = [func3d.CutoffCuspFunction(gamma=cusp_gamma, rcut=rcut)]
     bbasis += [func3d.PolyPadeFunction(beta=bb, rcut=rcut) for bb in beta_bbasis]
     return abasis, bbasis
 
 
-def generate_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
+def generate_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None, cusp_gamma = None, beta_a = 0.2, beta_b = 0.5):
     """
     Default 2-body jastrow from QWalk,
 
@@ -106,7 +108,7 @@ def generate_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None):
     else:
         assert isinstance(ion_cusp, list)
 
-    abasis, bbasis = default_jastrow_basis(mol, len(ion_cusp) > 0, na, nb, rcut)
+    abasis, bbasis = default_jastrow_basis(mol, len(ion_cusp) > 0, na, nb, rcut, cusp_gamma, beta_a, beta_b)
     jastrow = jastrowspin.JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
     if len(ion_cusp) > 0:
         coefs = mol.atom_charges().copy()

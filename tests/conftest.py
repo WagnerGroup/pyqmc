@@ -19,6 +19,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 import pytest
 from pyscf import lib, gto, scf
 import pyscf.pbc
+import pyscf.pbc.dft
 import numpy as np
 #import pyscf.hci
 
@@ -234,11 +235,11 @@ def diamond_primitive():
     cell.verbose = 5
     cell.atom=[
         ['C', np.array([0., 0., 0.])], 
-        ['C', np.array([0.8925, 0.8925, 0.8925])]
+        ['C', np.array([0.8917, 0.8917, 0.8917])]
                ]
-    cell.a=[[0.0, 1.785, 1.785], 
-            [1.785, 0.0, 1.785], 
-            [1.785, 1.785, 0.0]]
+    cell.a=[[0.0, 1.7834, 1.7834], 
+            [1.7834, 0.0, 1.7834], 
+            [1.7834, 1.7834, 0.0]]
     cell.basis = 'ccecpccpvdz'
     cell.ecp = 'ccecp'
     cell.exp_to_discard=0.3

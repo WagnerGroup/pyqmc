@@ -99,6 +99,7 @@ class PBCOrbitalEvaluatorKpoints:
         self.Lprim = self._cell.lattice_vectors()
 
         self._kpts = [0, 0, 0] if kpts is None else kpts
+        self._kpts = np.reshape(np.asarray(kpts), (-1, 3))
         # If gamma-point only, AOs are real-valued
         isgamma = np.abs(self._kpts).sum() < 1e-9
         if mo_coeff is not None:

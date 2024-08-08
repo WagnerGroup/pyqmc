@@ -50,8 +50,16 @@ def test_testvalue_many(wf, configs, tol=1e-6):
     e_all = np.arange(ne)
 
     tmany = wfcopy.testvalue_many(e_all, epos)
-    terr = tmany - tval
-    assert np.max(np.abs(terr)) < tol
+    terr = tmany / tval - 1
+    maxerr = np.max(np.abs(terr))
+    nfail = np.count_nonzero(np.abs(terr) > tol)
+    wherefail = np.where(np.abs(terr) > tol)
+    if nfail > 0:
+        print("failed electron pos")
+        for i, j in zip(*wherefail):
+            print(configs.configs[i, j])
+            print(tmany[i, j], tval[i, j], terr[i, j])
+    assert maxerr < tol, f"tol {tol}, maxerr {maxerr}, nfail {nfail} \n{terr}"
 
 
 def test_testvalue_aux(wf, configs, aux, tol=1e-6):

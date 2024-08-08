@@ -34,7 +34,10 @@ def run_tests(wf, epos, epsilon):
         assert item < epsilon
 
     testwf.test_mask(wf, 0, epos.electron(0))
-    # testwf.test_testvalue_many(wf,epos)
+    try:
+        testwf.test_testvalue_many(wf, epos)
+    except AttributeError as err:
+        print(err)
 
     for fname, func in zip(
         ["gradient", "laplacian", "pgradient"],
@@ -45,7 +48,7 @@ def run_tests(wf, epos, epsilon):
         ],
     ):
         err = [func(wf, epos, delta) for delta in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8]]
-        assert min(err) < epsilon, "epsilon {0}".format(epsilon)
+        assert min(err) < epsilon, f"{fname} epsilon {epsilon}"
 
     for fname, func in zip(
         ["gradient_value", "gradient_laplacian"],
@@ -87,6 +90,7 @@ def test_obc_wfs(LiH_sto3g_rhf, epsilon=1e-5, nconf=10):
 
         epos = pyq.initial_guess(mol, nconf)
         print(type(wf))
+        _, epos = pyq.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node
         run_tests(wf, epos, epsilon)
 
 

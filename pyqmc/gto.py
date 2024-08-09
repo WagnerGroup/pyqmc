@@ -181,8 +181,7 @@ def mol_eval_gto_lap(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
     sel = 0
     split = 0
     rad = np.zeros((5, all_rvec.shape[1]))
-    spherical = np.zeros((np.amax(max_l)**2, 5, all_rvec.shape[1]))
-    spherical_ = np.zeros((5, np.amax(max_l)**2, all_rvec.shape[1]))
+    spherical_ = np.zeros((4, np.amax(max_l+1)**2, all_rvec.shape[1]))
 
     for a, rvec in enumerate(all_rvec):
         if max_l[a] == 0: sph_func = sph0_grad#hsh.SPH2
@@ -207,8 +206,7 @@ def mol_eval_gto_lap(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
                 for e in range(rad.shape[1]):
                     ao[sel+b_ind, 0, e] = spherical[l*l+b, 0, e] * rad[0, e]
                     ao[sel+b_ind, 4, e] = spherical[l*l+b, 0, e] * rad[4, e]
-                for i in range(1, 4):
-                    for e in range(rad.shape[1]):
+                    for i in range(1, 4):
                         ao[sel+b_ind, i, e] = spherical[l*l+b, i, e] * rad[0, e] + spherical[l*l+b, 0, e] * rad[i, e]
                         ao[sel+b_ind, 4, e] += 2 * spherical[l*l+b, i, e] * rad[i, e]
                 b_ind += 1

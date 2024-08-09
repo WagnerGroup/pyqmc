@@ -260,18 +260,19 @@ def radial_gto_lap(r2, rvec, coeffs, out):
     """
     Evaluate gaussian contraction laplacian (vectorized for molecules)
     r: (n, )
+    rvec: (n, 3)
     coeffs: (ncontract, 2)
     l: int
     returns (5, n, )"""
     out[:] = 0.# = np.zeros((5, r2.shape[0]))
     for c in coeffs:
-        for a in range(r2.shape[0]):
-            tmp = np.exp(-r2[a] * c[0]) * c[1]
+        c0, c1 = c
+        for a, _r2 in enumerate(r2):
+            tmp = np.exp(-_r2 * c0) * c1
             out[0, a] += tmp
-            tmpx2xc = tmp * 2 * c[0]
             for i in range(3):
-                out[i+1, a] +=  -tmpx2xc * rvec[a, i]
-            out[4, a] +=  tmpx2xc * (2*c[0] *r2[a] - 3)
+                out[i+1, a] +=  -tmp * 2 * c0 * rvec[a, i]
+            out[4, a] +=  tmp*2*c0 * (2*c0 *_r2 - 3)
     return out
 
  

@@ -89,7 +89,7 @@ def mol_eval_gto(all_rvec, basis_ls, basis_arrays, max_l, splits, l_splits):
     sel = 0
     split = 0
     rad = np.zeros(all_rvec.shape[1])
-    spherical = np.zeros((np.amax(max_l)**2, all_rvec.shape[1]))
+    spherical = np.zeros((np.amax(max_l+1)**2, all_rvec.shape[1]))
 
     for a, rvec in enumerate(all_rvec):
         if max_l[a] == 0: sph_func = sph0#hsh.SPH2

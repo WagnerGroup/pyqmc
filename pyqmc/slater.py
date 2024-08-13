@@ -161,6 +161,7 @@ class Slater:
         twist=0,
         determinants=None,
         eval_gto_precision=None,
+        evaluate_orbitals_with="pyscf",
     ):
         """
         determinants should be a list of tuples, for example
@@ -196,6 +197,7 @@ class Slater:
             determinants=determinants,
             tol=self.tol,
             eval_gto_precision=self.eval_gto_precision,
+            evaluate_orbitals_with=evaluate_orbitals_with,
         )
 
         self.parameters = JoinParameters([self.myparameters, self.orbitals.parameters])

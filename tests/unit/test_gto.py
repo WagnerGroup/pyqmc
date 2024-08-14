@@ -83,11 +83,11 @@ def test_spherical_radial_funcs():
     for sval, sgrad in zip(sph_funcs, sph_grads):
         def _sval(rvec):
             out = np.zeros((36, rvec.shape[0]))
-            sval(rvec.T, out)
+            sval(np.asfortranarray(rvec.T), out)
             return out.sum(axis=0)
         def _sgrad(rvec):
             out = np.zeros((4, 36, rvec.shape[0]))
-            sgrad(rvec.T, out)
+            sgrad(np.asfortranarray(rvec.T), out)
             return out.sum(axis=1)
         print(sval)
         print(sgrad)

@@ -58,8 +58,14 @@ class MoleculeOrbitalEvaluator:
         evaluator = pyqmc.gto.AtomicOrbitalEvaluator(mol)
         self.ao_dtype = evaluator.dtype
         self.mo_dtype = complex if iscomplex else self.ao_dtype
+        def mol_eval_gto(evalstr, primcoords):
+            aos = mol.eval_gto(evalstr, primcoords)
+            if "deriv2" in evalstr:
+                aos[4] += aos[7] + aos[9]
+                aos = aos[:5]
+            return aos
         if evaluate_orbitals_with == "pyscf":
-            self.eval_gto = mol.eval_gto
+            self.eval_gto = mol_eval_gto
         else:
             self.eval_gto = evaluator.eval_gto
 
@@ -135,13 +141,18 @@ class PBCOrbitalEvaluatorKpoints:
         Ls = self._cell.get_lattice_Ls(rcut=self.rcut.max(), dimension=3)
         self.Ls = Ls[np.argsort(np.linalg.norm(Ls, axis=1))]
         def cell_eval_gto(evalstr, primcoords):
-            return pyscf.pbc.gto.eval_gto.eval_gto(
+            aos = pyscf.pbc.gto.eval_gto.eval_gto(
                 self._cell,
                 evalstr,
                 primcoords,
                 kpts=self._kpts,
                 Ls=self.Ls,
             )
+            aos = np.asarray(aos)
+            if "deriv2" in evalstr:
+                aos[:, 4] += aos[:, 7] + aos[:, 9]
+                aos = aos[:, :5]
+            return aos
         if evaluate_orbitals_with == "pyscf":
             self.eval_gto = cell_eval_gto
         else:

@@ -70,23 +70,47 @@ def test_spherical_radial_funcs():
         [0.170907, 0.256056],
         [0.086794, 0.541482],
     ]))
-    sph_funcs = [lambda x: gto.eval_spherical(max_l, x).sum(axis=0) for max_l in [2, 3, 4, 5]]
-    sph_grads = [lambda x: gto.eval_spherical_grad(max_l, x).sum(axis=0) for max_l in [2, 3, 4, 5]]
-    rad_funcs = [lambda x: gto.radial_gto(np.sum(x**2, axis=-1), c) for c in coeffs]
-    rad_grads = [lambda x: gto.radial_gto_grad(np.sum(x**2, axis=-1), x, c) for c in coeffs]
-    rad_laps = [lambda x: gto.radial_gto_lap(np.sum(x**2, axis=-1), x, c) for c in coeffs]
+    sph_funcs = [gto.sph2, gto.sph3, gto.sph4, gto.sph5]
+    sph_grads = [gto.sph2_grad, gto.sph3_grad, gto.sph4_grad, gto.sph5_grad]
+    #sph_funcs = [lambda x: gto.eval_spherical(max_l, x).sum(axis=0) for max_l in [2, 3, 4, 5]]
+    #sph_grads = [lambda x: gto.eval_spherical_grad(max_l, x).sum(axis=0) for max_l in [2, 3, 4, 5]]
+    #rad_funcs = [lambda x, out: gto.radial_gto(np.sum(x**2, axis=-1), c, out) for c in coeffs]
+    #rad_grads = [lambda x, out: gto.radial_gto_grad(np.sum(x**2, axis=-1), x, c, out) for c in coeffs]
+    #rad_laps = [lambda x, out: gto.radial_gto_lap(np.sum(x**2, axis=-1), x, c, out) for c in coeffs]
 
     tol = 3e-5
     print("spherical")
     for sval, sgrad in zip(sph_funcs, sph_grads):
-        gerr = _gradient(sval, sgrad, 1e-5)
+        def _sval(rvec):
+            out = np.zeros((36, rvec.shape[0]))
+            sval(rvec.T, out)
+            return out.sum(axis=0)
+        def _sgrad(rvec):
+            out = np.zeros((4, 36, rvec.shape[0]))
+            sgrad(rvec.T, out)
+            return out.sum(axis=1)
+        print(sval)
+        print(sgrad)
+        gerr = _gradient(_sval, _sgrad, 1e-5)
         print("grad", gerr)
         assert gerr < tol
     print("radial")
-    for rval, rgrad, rlap in zip(rad_funcs, rad_grads, rad_laps):
-        gerr = _gradient(rval, rgrad, 1e-5)
+    for c in coeffs:
+        def _rval(x):
+            out = np.zeros(x.shape[0])
+            gto.radial_gto(np.sum(x**2, axis=-1), c, out)
+            return out
+        def _rgrad(x):
+            out = np.zeros((4, x.shape[0]))
+            gto.radial_gto_grad(np.sum(x**2, axis=-1), x, c, out)
+            return out
+        def _rlap(x):
+            out = np.zeros((5, x.shape[0]))
+            gto.radial_gto_lap(np.sum(x**2, axis=-1), x, c, out)
+            return out
+        gerr = _gradient(_rval, _rgrad, 1e-5)
         print("grad", gerr)
-        lerr = _laplacian(rgrad, rlap, 1e-5)
+        lerr = _laplacian(_rgrad, _rlap, 1e-5)
         print("lap", lerr)
         assert gerr < tol
         assert lerr < tol

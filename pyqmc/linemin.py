@@ -87,6 +87,23 @@ def stable_fit(xfit, yfit, tolerance=1e-2):
         est_min = xfit[a]
     return est_min
 
+def stable_fit2(xfit, yfit, tolerance=1e-2):
+    """Fit a line and quadratic to xfit and yfit.
+    1. If the linear fit is as good as the quadriatic, choose the lower endpoint.
+    2. If the curvature is positive, estimate the minimum x value.
+    3. If the lowest yfit is less than the new guess, use that xfit instead.
+
+    :parameter list xfit: scalar step sizes along line
+    :parameter list yfit: estimated energies at xfit points
+    :parameter float tolerance: how good the quadratic fit needs to be
+    :returns: estimated x-value of minimum
+    :rtype: float
+    """
+    steprange = np.max(xfit)
+    minstep = np.min(xfit)
+    a = np.argmin(yfit)
+    est_min = xfit[a]
+    return est_min
 
 def line_minimization(
     wf,
@@ -253,7 +270,7 @@ def line_minimization(
             en = np.real(np.mean(correlated_data["total"] * w, axis=1))
             en_std = np.std(correlated_data["total"], axis=1)
             yfit = en + stderr_weight*en_std
-            est_min = stable_fit(steps, yfit)
+            est_min = stable_fit2(steps, yfit)
             x0 = pgrad.delta_p([est_min], data, verbose=False)[0][0] + x0
 
             step_data["tau"] = steps

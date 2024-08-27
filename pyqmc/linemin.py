@@ -271,6 +271,7 @@ def line_minimization(
             en_std = np.std(correlated_data["total"], axis=1)
             yfit = en + stderr_weight*en_std
             est_min = stable_fit2(steps, yfit)
+
             x0 = pgrad.delta_p([est_min], data, verbose=False)[0][0] + x0
 
             step_data["tau"] = steps

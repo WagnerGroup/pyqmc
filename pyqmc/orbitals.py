@@ -66,8 +66,10 @@ class MoleculeOrbitalEvaluator:
             return aos
         if evaluate_orbitals_with == "pyscf":
             self.eval_gto = mol_eval_gto
-        else:
+        elif evaluate_orbitals_with == "numba":
             self.eval_gto = evaluator.eval_gto
+        else:
+            raise ValueError(f"{evaluate_orbitals_with} not recognized; evaluate_orbitals_with must be 'pyscf' or 'numba'")
 
     def nmo(self):
         return [
@@ -155,8 +157,10 @@ class PBCOrbitalEvaluatorKpoints:
             return aos
         if evaluate_orbitals_with == "pyscf":
             self.eval_gto = cell_eval_gto
-        else:
+        elif evaluate_orbitals_with == "numba":
             self.eval_gto = evaluator.eval_gto
+        else:
+            raise ValueError(f"{evaluate_orbitals_with} not recognized; evaluate_orbitals_with must be 'pyscf' or 'numba'")
 
     def nmo(self):
         return [

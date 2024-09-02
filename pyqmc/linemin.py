@@ -53,6 +53,8 @@ def stable_fit(xfit, yfit, tolerance=1e-2):
     2. If the curvature is positive, estimate the minimum x value.
     3. If the lowest yfit is less than the new guess, use that xfit instead.
 
+    We've stopped using this function because it sometimes thinks that the quadratic fit is bad and instead uses the linear fit, and it ends up not moving parameters or moving backwards (or moving forwards too much!). We've replaced it with find_minimum.
+
     :parameter list xfit: scalar step sizes along line
     :parameter list yfit: estimated energies at xfit points
     :parameter float tolerance: how good the quadratic fit needs to be
@@ -88,6 +90,15 @@ def stable_fit(xfit, yfit, tolerance=1e-2):
     return est_min
 
 
+def find_minimum(xfit, yfit):
+    """
+    Here we just take the minimum of the yfit. This is a simpler version of stable_fit.
+    """
+    a = np.argmin(yfit)
+    est_min = xfit[a]
+    return est_min
+
+
 def line_minimization(
     wf,
     coords,
@@ -96,7 +107,7 @@ def line_minimization(
     max_iterations=30,
     warmup_options=None,
     correlated_reference_wfs=None,
-    stderr_weight=1.0,
+    stderr_weight=3.0,
     vmcoptions=None,
     lmoptions=None,
     correlatedoptions=None,
@@ -113,11 +124,11 @@ def line_minimization(
     :parameter wf: initial wave function
     :parameter coords: initial configurations
     :parameter pgrad_acc: A PGradAccumulator-like object
-    :parameter float steprange: How far to search in the line minimization
+    :parameter float steprange: How far to search in the line minimization. If you find that est_min is always at the edge of steprange, you may need to increase steprange. If you find that est_min is always much smaller than steprange, decrease this.
     :parameter int max_iterations: (maximum) number of steps in the gradient descent. If the calculation is continued from the same hdf file, the iterations from previous runs are included in the total, i.e. when calling line_minimization multiple times with the same hdf_file, max_iterations is the total number of iterations that will be run.
     :parameter dict warmup_options: kwargs to use for vmc warmup
     :parameter list correlated_reference_wfs: which wave functions to use for correlated sampling (default [0,1])
-    :parameter int stderr_weight: weight of the standard error in the line minimization
+    :parameter int stderr_weight: weight of the standard error in the line minimization. Increase this if your optimization is struggling to find downhill directions.
     :parameter dict vmcoptions: a dictionary of options for the vmc method
     :parameter dict lmoptions: a dictionary of options for the lm method
     :parameter update: A function that generates a parameter change
@@ -253,7 +264,8 @@ def line_minimization(
             en = np.real(np.mean(correlated_data["total"] * w, axis=1))
             en_std = np.std(correlated_data["total"], axis=1)
             yfit = en + stderr_weight*en_std
-            est_min = stable_fit(steps, yfit)
+            est_min = find_minimum(steps, yfit)
+
             x0 = pgrad.delta_p([est_min], data, verbose=False)[0][0] + x0
 
             step_data["tau"] = steps

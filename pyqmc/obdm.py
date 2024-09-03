@@ -68,7 +68,7 @@ class OBDMAccumulator:
         orb_coeff,
         nsweeps=5,
         tstep=0.50,
-        warmup=100,
+        warmup=10000,
         naux=None,
         spin=None,
         electrons=None,

@@ -105,7 +105,7 @@ class OBDMAccumulator:
         self._tstep = tstep
         self.nelec = len(self._electrons)
         self._nsweeps = nsweeps
-        self._nstep = nsweeps * self.nelec
+        self._nstep = nsweeps 
         self._warmup = warmup
         self._naux = naux
         self._warmed_up = False
@@ -160,7 +160,7 @@ class OBDMAccumulator:
         borb_configs = borb_configs.reshape(nconf, self.nelec, -1)
 
         bauxsquared = cp.abs(borb_aux) ** 2
-        fsum = cp.sum(bauxsquared, axis=-1, keepdims=True)
+        fsum = cp.sum(bauxsquared, axis=-1, keepdims=True) / self.norb
         norm = bauxsquared / fsum
         baux_f = borb_aux / fsum
 

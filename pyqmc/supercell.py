@@ -19,7 +19,7 @@ def get_supercell_kpts(supercell):
     Sinv = np.linalg.inv(supercell.S).T
     u = [0, 1]
     unit_box = np.stack([x.ravel() for x in np.meshgrid(*[u] * 3, indexing="ij")]).T
-    unit_box_ = np.dot(unit_box, supercell.S.T)
+    unit_box_ = np.dot(unit_box, np.asarray(supercell.S).T)
     xyz_range = np.stack([f(unit_box_, axis=0) for f in (np.amin, np.amax)]).T
     kptmesh = np.meshgrid(*[np.arange(*r) for r in xyz_range], indexing="ij")
     possible_kpts = np.dot(np.stack([x.ravel() for x in kptmesh]).T, Sinv)
@@ -53,23 +53,23 @@ def get_supercell(cell, S):
     """
     import pyscf.pbc
 
-    scale = np.abs(int(np.round(np.linalg.det(S))))
+    scale = abs(int(np.round(np.linalg.det(S))))
     superlattice = np.dot(S, cell.lattice_vectors())
     Rpts = get_supercell_copies(cell.lattice_vectors(), S)
     atom = []
     for name, xyz in cell._atom:
         atom.extend([(name, xyz + R) for R in Rpts])
     supercell = pyscf.pbc.gto.Cell()
-    supercell.a = superlattice
+    supercell.a = superlattice.tolist()
     supercell.atom = atom
     supercell.ecp = cell.ecp
     supercell.basis = cell.basis
     supercell.exp_to_discard = cell.exp_to_discard
     supercell.unit = "Bohr"
-    supercell.spin = cell.spin * scale
+    supercell.spin = int(cell.spin * scale)
     supercell.build()
     supercell.original_cell = cell
-    supercell.S = S
+    supercell.S = S.tolist()
     supercell.scale = scale
     supercell.output = None
     supercell.stdout = None

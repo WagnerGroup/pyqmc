@@ -81,6 +81,7 @@ def H2_ccecp_uhf():
 
 @pytest.fixture(scope="module")
 def H2_ccecp_hci(H2_ccecp_rhf):
+    import pyscf.hci
     mol, mf = H2_ccecp_rhf
 
     cisolver = pyscf.hci.SCI(mol)

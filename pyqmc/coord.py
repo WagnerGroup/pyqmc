@@ -27,6 +27,7 @@ class OpenElectron:
     def mask(self, mask):
         return OpenElectron(self.configs[mask], dist=self.dist)
 
+
 class OpenConfigs:
     def __init__(self, configs, dist=None):
         self.configs = configs
@@ -129,7 +130,7 @@ class PeriodicElectron:
 
     def mask(self, mask):
         return PeriodicElectron(
-            self.configs[mask], self.lvec, wrap=self.wrap[mask], dist=self.dist
+            self.configs[mask], self.lvec, self.dist, wrap=self.wrap[mask]
         )
 
 

@@ -161,6 +161,7 @@ class Slater:
         twist=0,
         determinants=None,
         eval_gto_precision=None,
+        evaluate_orbitals_with="pyscf",
     ):
         """
         determinants should be a list of tuples, for example
@@ -196,6 +197,7 @@ class Slater:
             determinants=determinants,
             tol=self.tol,
             eval_gto_precision=self.eval_gto_precision,
+            evaluate_orbitals_with=evaluate_orbitals_with,
         )
 
         self.parameters = JoinParameters([self.myparameters, self.orbitals.parameters])
@@ -403,7 +405,7 @@ class Slater:
         s = int(e >= self._nelec[0])
         ao = self.orbitals.aos("GTOval_sph_deriv2", epos)
         ao_val = ao[:, 0, :, :]
-        ao_lap = gpu.cp.sum(ao[:, [4, 7, 9], :, :], axis=1)
+        ao_lap = ao[:, 4, :, :]
         mos = gpu.cp.stack(
             [self.orbitals.mos(x, s)[..., self._det_occup[s]] for x in [ao_val, ao_lap]]
         )
@@ -413,9 +415,6 @@ class Slater:
     def gradient_laplacian(self, e, epos):
         s = int(e >= self._nelec[0])
         ao = self.orbitals.aos("GTOval_sph_deriv2", epos)
-        ao = gpu.cp.concatenate(
-            [ao[:, 0:4, ...], ao[:, [4, 7, 9], ...].sum(axis=1, keepdims=True)], axis=1
-        )
         mo = self.orbitals.mos(ao, s)
         mo_vals = mo[:, :, self._det_occup[s]]
         ratios = self._testrowderiv(e, mo_vals)

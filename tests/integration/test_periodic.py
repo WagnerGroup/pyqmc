@@ -48,15 +48,15 @@ def runtest(mol, mf, kind=0):
     #####################################
     ## evaluate KE integral with VMC
     #####################################
-    wf = Slater(mol, mf)
+    wf = Slater(mol, mf, eval_gto_precision=1e-6)
     coords = pyq.initial_guess(mol, 1200, 0.7)
-    warmup = 10
+    warmup = 1
     start = time.time()
     df, coords = pyq.vmc(
         wf,
         coords,
-        nsteps=100 + warmup,
-        tstep=1,
+        nblocks=10 + warmup,
+        tstep=4,
         accumulators={"energy": pyq.EnergyAccumulator(mol)},
         verbose=False,
         hdf_file=str(uuid.uuid4()),
@@ -65,8 +65,11 @@ def runtest(mol, mf, kind=0):
 
     df = pd.DataFrame(df)
     dfke = pyq.avg_reblock(df["energyke"][warmup:], 10)
+    dfg2 = pyq.avg_reblock(df["energygrad2"][warmup:]/2, 10)
     vmcke, err = dfke.mean(), dfke.sem()
+    vmcg2, errg2 = dfg2.mean(), dfg2.sem()
     print("VMC kinetic energy: {0} +- {1}".format(vmcke, err), df["energyke"])
+    print("VMC grad squared: {0} +- {1}".format(vmcg2, errg2), df["energygrad2"])
 
     assert (
         np.abs(vmcke - pyscfke) < 5 * err

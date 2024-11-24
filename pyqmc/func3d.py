@@ -136,17 +136,30 @@ def polypadevalue(z, beta):
 
 @gpu.fuse()
 def polypadegradvalue(r, beta, rcut):
-    z = r / rcut
-    z1 = z - 1
+    z1 = r/rcut - 1
     z12 = z1 * z1
     p = (3 * z12 + 4 * z1) * z12 + 1
     obp = 1 / (1 + beta * p)
-    dpdz = 12 * z * (z * z - 2 * z + 1)
     dbdp = -(1 + beta) * obp * obp
-    dzdx_rvec = 1 / (r * rcut)
-    grad_rvec = dbdp * dpdz * dzdx_rvec
+    grad_rvec = dbdp * z12 * (12 / rcut**2)
     value = (1 - p) * obp
     return grad_rvec, value
+
+
+def polypadegradlap(rvec, r, beta, rcut):
+    z1 = r/rcut - 1
+    z12 = z1 * z1
+    p = (3 * z12 + 4 * z1) * z12 + 1
+    obp = 1 / (1 + beta * p)
+    grad_rvec = -(1 + beta) * 12 / rcut**2 * obp**2 * z12
+    grad = grad_rvec * rvec
+    dbdp_x_dpdz_x_d2zdx2 = grad_rvec * (1 - (rvec/r)**2)
+    d2bdp2_over_dbdp_x_dpdz_x_dzdx = (-24 * beta / rcut**2)* z12 * obp# * rvec
+    d2pdz2_over_dpdz_x_dzdx = (3 + 2/z1) /r**2# * rvec
+    lap = dbdp_x_dpdz_x_d2zdx2 + (
+        grad_rvec * (d2bdp2_over_dbdp_x_dpdz_x_dzdx + d2pdz2_over_dpdz_x_dzdx) * rvec**2
+    )
+    return grad, lap
 
 
 class PolyPadeFunction:
@@ -207,24 +220,10 @@ class PolyPadeFunction:
         r = r[..., np.newaxis]
         r = r[mask]
         rvec = rvec[mask]
-        z = r / self.parameters["rcut"]
-        z1 = z - 1
-        z12 = z1 * z1
         beta = self.parameters["beta"]
+        rcut = self.parameters["rcut"]
 
-        p = (3 * z12 + 4 * z1) * z12 + 1
-        obp = 1 / (1 + beta * p)
-        dpdz = 12 * z * z12
-        dbdp = -(1 + beta) * obp * obp
-        dzdx = rvec / (r * self.parameters["rcut"])
-        gradmask = dbdp * dpdz * dzdx
-        d2pdz2_over_dpdz = (3 * z - 1) / (z * z1)
-        d2bdp2_over_dbdp = -2 * beta * obp
-        d2zdx2 = (1 - (rvec / r) ** 2) / (r * self.parameters["rcut"])
-        grad[mask] = gradmask
-        lap[mask] += dbdp * dpdz * d2zdx2 + (
-            gradmask * (d2bdp2_over_dbdp * dpdz * dzdx + d2pdz2_over_dpdz * dzdx)
-        )
+        grad[mask], lap[mask] = polypadegradlap(rvec, r, beta, rcut)
         return grad, lap
 
     def pgradient(self, rvec, r):

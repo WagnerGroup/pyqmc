@@ -308,8 +308,8 @@ class GroupJastrowSpin:
         b_partial_e = gpu.cp.zeros((*rnew.shape[:-1], *self._b_partial.shape[2:]))
         bgrad, bval = self.b_basis.gradient_value(dnew, rnew) # (configs, electrons, basis, xyz)
         bcoeff = self.parameters["bcoeff"]
-        grad += gpu.cp.einsum("b,cebx->xc", bcoeff[:, edown], bgrad[:, :nup-eup]) 
-        grad += gpu.cp.einsum("b,cebx->xc", bcoeff[:, 1+edown], bgrad[:, nup-eup:])
+        grad += gpu.cp.einsum("b,cbx->xc", bcoeff[:, edown], bgrad[:, :nup-eup].sum(axis=1))
+        grad += gpu.cp.einsum("b,cbx->xc", bcoeff[:, 1+edown], bgrad[:, nup-eup:].sum(axis=1))
         b_partial_e[..., 0] = bval[..., : nup - eup, :].sum(axis=-2)
         b_partial_e[..., 1] = bval[..., nup - eup :, :].sum(axis=-2)
 

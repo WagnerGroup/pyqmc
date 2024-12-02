@@ -25,19 +25,16 @@ to any variational parameters the funtion has.
 @gpu.fuse()
 def polypadevalue(r, beta, rcut):
     z = r / rcut
-    z2 = z * z
-    p = z2 * (6 - 8 * z + 3 * z2)
+    p = ((3*z - 8) * z + 6) * z**2
     return (1 - p) / (1 + beta * p)
 
 
 @gpu.fuse()
 def polypadegradvalue(r, beta, rcut):
     z1 = r/rcut - 1
-    z12 = z1 * z1
-    p = (3 * z12 + 4 * z1) * z12 + 1
+    p = (3 * z1 + 4) * z1**2 * z1 + 1
     obp = 1 / (1 + beta * p)
-    dbdp = -(1 + beta) * obp * obp
-    grad_rvec = dbdp * z12 * (12 / rcut**2)
+    grad_rvec = (z1 * obp)**2 * (-(1 + beta) * 12 / rcut**2) 
     value = (1 - p) * obp
     return grad_rvec, value
 
@@ -323,16 +320,18 @@ class CutoffFunc3dEvaluator:
 
     def _grad_x(self, d, r, funcs):
         d = gpu.cp.asarray(d)
-        #r = gpu.cp.linalg.norm(d)
         select = r < self.rcut
-        out = gpu.cp.zeros((*r.shape, self.nbas, 4))
         dselect = d[select]
         rselect = r[select]
-        outselect = gpu.cp.zeros((self.nbas, *rselect.shape, 4))
+        gradsel = gpu.cp.zeros((*rselect.shape, self.nbas, 3))
+        scalsel = gpu.cp.zeros((*rselect.shape, self.nbas)) # lap or val
         for l, f in enumerate(funcs):
-            outselect[l, ..., 1:], outselect[l, ..., 0] = f(dselect, rselect)
-        out[select] = np.moveaxis(outselect, 0, -2)
-        return out[..., 1:], out[..., 0]
+            gradsel[..., l, :], scalsel[..., l] = f(dselect, rselect)
+        grad = gpu.cp.zeros((*r.shape, self.nbas, 3))
+        scal = gpu.cp.zeros((*r.shape, self.nbas))
+        grad[select] = gradsel
+        scal[select] = scalsel
+        return grad, scal
 
     def gradient_value(self, d, r):
         funcs = [b.gradient_value for b in self.basis_functions]

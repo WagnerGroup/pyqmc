@@ -22,6 +22,7 @@ from pyqmc.group_jastrow import GroupJastrowSpin
 import pyqmc.api as pyq
 
 
+# This test ensures that GroupJastrowSpin gives the same results as JastrowSpin
 def run_tests(mol, configs, epsilon):
     a_basis, b_basis = default_jastrow_basis(mol)
     jastrow = JastrowSpin(mol, a_basis, b_basis)

@@ -174,9 +174,9 @@ class GroupJastrowSpin:
         r = gpu.cp.linalg.norm(d, axis=-1)
         b_partial_e = gpu.cp.zeros((*r.shape[:-1], *self._b_partial.shape[2:]))
 
-        bvals = np.moveaxis(self.b_basis.value(d, r), -1, -2)
-        b_partial_e[..., 0] = bvals[..., :sep].sum(axis=-1)
-        b_partial_e[..., 1] = bvals[..., sep:].sum(axis=-1)
+        bvals = self.b_basis.value(d, r)
+        b_partial_e[..., 0] = bvals[..., :sep, :].sum(axis=-2)
+        b_partial_e[..., 1] = bvals[..., sep:, :].sum(axis=-2)
 
         return b_partial_e, bvals
 
@@ -240,7 +240,7 @@ class GroupJastrowSpin:
 
         oldbvals = self.b_basis.value(dold, rold)
         bdiff = savedbvals - oldbvals
-        self._b_partial[eind, mind, :, edown] += bdiff.transpose((1, 0, 2))
+        self._b_partial[eind, mind, :, edown] += np.moveaxis(bdiff, 1, 0)
         self._b_partial[e, ..., 0][mask] = savedbvals[..., :sep, :].sum(axis=-2)
         self._b_partial[e, ..., 1][mask] = savedbvals[..., sep:, :].sum(axis=-2)
 

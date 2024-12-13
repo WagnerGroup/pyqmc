@@ -136,6 +136,23 @@ def optimize_ensemble(
                 wfs, configs, update, client=client, npartitions=npartitions, **vmc_kwargs
             )
             avg, error = update.block_average(data_weighted, data_unweighted["overlap"])
+            energy = np.zeros(len(wfs))
+            energy_err = np.zeros(len(wfs))
+            for i, wf in enumerate(wfs):
+                df_vmc = pyqmc.mc.vmc(
+                    wf,
+                    configs,
+                    accumulators={"": updater[0].enacc},
+                    client=client,
+                    npartitions=npartitions,
+                    **vmc_kwargs,
+                )[0]
+                energy[i] = np.mean(df_vmc["total"], axis=0)
+                energy_err[i] = np.std(df_vmc["total"], axis=0) / np.sqrt(
+                    df_vmc["total"].shape[0]
+                )
+            avg["total"] = energy
+            error["total"] = energy_err
             if verbose:
                 print("Iteration", i, "Energy", avg["total"], "Overlap", avg["overlap"])
             dp, report = update.delta_p([tau], avg, overlap_penalty, verbose=True)
@@ -153,8 +170,6 @@ def optimize_ensemble(
                 "iteration": i,
                 "sub_iteration": sub_iteration,
             }
-            for k in ['total']:
-                save_data[str(k)] = data_weighted[k]
             save_data.update(data_unweighted)
             save_data.update(report)
             hdf_save(hdf_file, save_data, {}, wfs)

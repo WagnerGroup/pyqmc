@@ -14,7 +14,6 @@
 
 import numpy as np
 import pyqmc.gpu as gpu
-import pyqmc.func3d as func3d
 
 """ 
 Collection of 3d function objects. Each has a dictionary parameters, which corresponds
@@ -292,14 +291,6 @@ class CutoffFunc3dEvaluator:
         for b in basis_functions:
             assert b.parameters["rcut"] == rcut
         self.basis_functions = []
-        for bf in basis_functions:
-            p = bf.parameters
-            if isinstance(bf, func3d.PolyPadeFunction):
-                self.basis_functions.append(PolyPadeFunction(p["beta"], p["rcut"]))
-            elif isinstance(bf, func3d.CutoffCuspFunction):
-                self.basis_functions.append(CutoffCuspFunction(p["gamma"], p["rcut"]))
-            else:
-                raise NotImplementedError(f"GroupFunc3d does not recognize {type(bf)}")
         self.rcut = rcut
         self.nbas = len(basis_functions)
 

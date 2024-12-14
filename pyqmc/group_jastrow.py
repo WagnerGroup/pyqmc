@@ -276,8 +276,8 @@ class GroupJastrowSpin:
 
         bgrad = self.b_basis.gradient(dnew, rnew) # (configs, electrons, basis, xyz)
         bcoeff = self.parameters["bcoeff"]
-        grad += gpu.cp.einsum("b,cebx->xc", bcoeff[:, edown], bgrad[:, :nup-eup]) 
-        grad += gpu.cp.einsum("b,cebx->xc", bcoeff[:, 1+edown], bgrad[:, nup-eup:])
+        grad += gpu.cp.einsum("b,cbx->xc", bcoeff[:, edown], bgrad[:, :nup-eup].sum(axis=1))
+        grad += gpu.cp.einsum("b,cbx->xc", bcoeff[:, 1+edown], bgrad[:, nup-eup:].sum(axis=1))
 
         agrad = self.a_basis.gradient(dinew, rinew) # (configs, atoms, basis, xyz)
         acoeff = self.parameters["acoeff"][:, :, edown]
@@ -353,10 +353,10 @@ class GroupJastrowSpin:
         # b-value component
         bgrad, blap = self.b_basis.gradient_laplacian(dnew, rnew) # (configs, electrons, basis, xyz)
         bcoeff = self.parameters["bcoeff"]
-        grad += gpu.cp.einsum("b,cebx->xc", bcoeff[:, edown], bgrad[:, :nup-eup]) 
-        grad += gpu.cp.einsum("b,cebx->xc", bcoeff[:, 1+edown], bgrad[:, nup-eup:])
-        lap += gpu.cp.einsum("b,cebx->c", bcoeff[:, edown], blap[:, :nup-eup]) 
-        lap += gpu.cp.einsum("b,cebx->c", bcoeff[:, 1+edown], blap[:, nup-eup:])
+        grad += gpu.cp.einsum("b,cbx->xc", bcoeff[:, edown], bgrad[:, :nup-eup].sum(axis=1)) 
+        grad += gpu.cp.einsum("b,cbx->xc", bcoeff[:, 1+edown], bgrad[:, nup-eup:].sum(axis=1))
+        lap += gpu.cp.einsum("b,cbx->c", bcoeff[:, edown], blap[:, :nup-eup].sum(axis=1)) 
+        lap += gpu.cp.einsum("b,cbx->c", bcoeff[:, 1+edown], blap[:, nup-eup:].sum(axis=1))
 
         return gpu.asnumpy(grad), gpu.asnumpy(lap + gpu.cp.sum(grad**2, axis=0))
 

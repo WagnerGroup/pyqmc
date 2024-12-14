@@ -146,7 +146,6 @@ class GroupJastrowSpin:
             d = gpu.cp.asarray(epos.dist.pairwise(self.atom_coords, epos.configs[mask]))
             d = gpu.cp.moveaxis(d, 2, 0)
         r = gpu.cp.linalg.norm(d, axis=-1)
-        #a_partial_e = gpu.cp.zeros((*r.shape, self._a_partial.shape[3]))
         a_partial_e = self.a_basis.value(d, r)
         return a_partial_e
 
@@ -223,12 +222,6 @@ class GroupJastrowSpin:
         sep = nup - int(e < nup)
         not_e = np.arange(self._nelec) != e
         edown = int(e >= nup)
-        # d = gpu.cp.asarray(
-        #    epos.dist.dist_i(
-        #        self._configscurrent.configs[mask][:, not_e], epos.configs[mask]
-        #    )
-        # )
-        # r = gpu.cp.linalg.norm(d, axis=-1)
         dold = gpu.cp.asarray(
             epos.dist.dist_i(
                 self._configscurrent.configs[mask][:, not_e],
@@ -456,9 +449,6 @@ class GroupJastrowSpin:
         u_onebody["up"], u_onebody["dn"] = gpu.cp.einsum("abs,cb->sca", acoeff, a_value)
 
         u_twobody = {"upup": [], "updn": [], "dndn": []}
-        #b_value = gpu.cp.asarray(
-        #    list(map(lambda x: x.value(rvec, r), self.b_basis[1:]))
-        #)
         b_value = self.b_basis.value(rvec, r)
         bcoeff = self.parameters["bcoeff"][1:]
         tmp = gpu.cp.einsum("bs,cb->sc", bcoeff, b_value)

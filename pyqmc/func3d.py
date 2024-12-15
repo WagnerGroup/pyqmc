@@ -290,7 +290,7 @@ class CutoffFunc3dEvaluator:
     def __init__(self, basis_functions, rcut):
         for b in basis_functions:
             assert b.parameters["rcut"] == rcut
-        self.basis_functions = []
+        self.basis_functions = basis_functions
         self.rcut = rcut
         self.nbas = len(basis_functions)
 

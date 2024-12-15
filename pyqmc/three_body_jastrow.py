@@ -13,6 +13,7 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
+import pyqmc.func3d as func3d
 
 
 class ThreeBodyJastrow:
@@ -48,8 +49,8 @@ class ThreeBodyJastrow:
         b_basis : list of func3d objects that comprise the electron-electron basis
 
         """
-        self.a_basis = a_basis
-        self.b_basis = b_basis
+        self.a_basis = func3d.CutoffFunc3dEvaluator(a_basis, a_basis[0].parameters["rcut"])
+        self.b_basis = func3d.CutoffFunc3dEvaluator(b_basis, b_basis[0].parameters["rcut"])
         self.parameters = {}
         self._nelec = np.sum(mol.nelec)
         self._mol = mol
@@ -84,10 +85,8 @@ class ThreeBodyJastrow:
             di[e] = configs.dist.dist_i(self._mol.atom_coords(), epos)
         ri = np.linalg.norm(di, axis=-1)
 
-        a_values = np.zeros((self._nelec, nconf, self._mol.natm, na))
-        for i, a in enumerate(self.a_basis):
-            # di dim nconf,I,nelec
-            a_values[:, :, :, i] = a.value(di, ri)
+        # di dim nconf,I,nelec
+        a_values = self.a_basis.value(di, ri)
 
         self.C = (
             self.parameters["ccoeff"] + self.parameters["ccoeff"].swapaxes(1, 2)
@@ -195,13 +194,9 @@ class ThreeBodyJastrow:
         re = np.linalg.norm(de, axis=-1)
         ri_e = np.linalg.norm(di_e, axis=-1)
 
-        ae = np.zeros((*epos.shape[-2::-1], self._mol.natm, na))
-        for i, a in enumerate(self.a_basis):
-            ae[..., :, i] = a.value(di_e, ri_e)
+        ae = self.a_basis.value(di_e, ri_e)
 
-        b_values = np.zeros((*epos.shape[-2::-1], self._nelec - 1, nb))
-        for i, b in enumerate(self.b_basis):
-            b_values[..., :, i] = b.value(de, re)
+        b_values = self.b_basis.value(de, re)
         # epos shape nconfig,naux,3
         e_partial = np.zeros((self._nelec - 1, *epos.shape[-2::-1]))
 
@@ -258,13 +253,9 @@ class ThreeBodyJastrow:
         ri_e = np.linalg.norm(di_e, axis=-1)
 
         # *epos.shape[-2::-1] is naux,nconf or just nconf
-        ae = np.zeros((*epos.shape[-2::-1], self._mol.natm, na))
-        for i, a in enumerate(self.a_basis):
-            ae[..., :, i] = a.value(di_e, ri_e)
+        ae = self.a_basis.value(di_e, ri_e)
 
-        b_values = np.zeros((*epos.shape[-2::-1], self._nelec, nb))
-        for i, b in enumerate(self.b_basis):
-            b_values[..., :, i] = b.value(de, re)
+        b_values = self.b_basis.value(de, re)
         # epos shape nconfig,naux,3
         e_partial = np.zeros((e.shape[0], *epos.shape[-2::-1]))
         e_partial_common = np.zeros((self._nelec, *epos.shape[-2::-1]))
@@ -368,17 +359,11 @@ class ThreeBodyJastrow:
         re = np.linalg.norm(de, axis=-1)
 
         # set values of a basis evaluations needed.
-        a_gradients = np.zeros((nconf, self._mol.natm, na, 3))
-        a_e = np.zeros((nconf, self._mol.natm, na))
-        for k, a in enumerate(self.a_basis):
-            # di dim nconf,I,nelec
-            a_gradients[:, :, k, :], a_e[..., k] = a.gradient_value(di_e, ri_e)
+        # di dim nconf,I,nelec
+        a_gradients, a_e = self.a_basis.gradient_value(di_e, ri_e)
 
         # set values of b basis evaluations needed
-        b_values = np.zeros((nconf, self._nelec - 1, nb))
-        b_gradients = np.zeros((nconf, self._nelec - 1, nb, 3))
-        for m, b in enumerate(self.b_basis):
-            b_gradients[:, :, m], b_values[:, :, m] = b.gradient_value(de, re)
+        b_gradients, b_values = self.b_basis.gradient_value(de, re)
 
         edown = int(e >= nup)
         sep = nup - int(e < nup)
@@ -439,16 +424,12 @@ class ThreeBodyJastrow:
         re = np.linalg.norm(de, axis=-1)
 
         # set values of a basis evaluations needed.
-        a_gradients = np.zeros((nconf, self._mol.natm, na, 3))
-        a_e = np.zeros((nconf, self._mol.natm, na))
-        for k, a in enumerate(self.a_basis):
-            # di dim nconf,I,nelec
-            a_gradients[:, :, k, :], a_e[..., k] = a.gradient_value(di_e, ri_e)
+        # di dim nconf,I,nelec
+        a_gradients, a_e = self.a_basis.gradient_value(di_e, ri_e)
 
         # set values of b basis evaluations needed
         b_gradvals = np.zeros((nconf, self._nelec - 1, nb, 4))
-        for m, b in enumerate(self.b_basis):
-            b_gradvals[:, :, m, 1:], b_gradvals[:, :, m, 0] = b.gradient_value(de, re)
+        b_gradvals[:, :, :, 1:], b_gradvals[:, :, :, 0] = self.b_basis.gradient_value(de, re)
 
         spin_up = (np.arange(self._nelec - 1) < sep).astype(float)
         spin = np.stack([spin_up, 1 - spin_up], axis=0)
@@ -486,21 +467,13 @@ class ThreeBodyJastrow:
         re = np.linalg.norm(de, axis=-1)
 
         # set values of a basis evaluations needed.
-        a_gradients = np.zeros((nconf, self._mol.natm, na, 3))
-        a_e = np.zeros((nconf, self._mol.natm, na))
-        a_double_ders = np.zeros((nconf, self._mol.natm, na, 3))
-        for k, a in enumerate(self.a_basis):
-            # di dim nconf,I,nelec
-            a_gradients[:, :, k, :], a_e[..., k] = a.gradient_value(di_e, ri_e)
-            a_double_ders[:, :, k, :] = a.laplacian(di_e, ri_e)
+        # di dim nconf,I,nelec
+        a_double_ders = self.a_basis.laplacian(di_e, ri_e)
+        a_gradients, a_e = self.a_basis.gradient_value(di_e, ri_e)
 
         # set values of b basis evaluations needed
-        b_values = np.zeros((nconf, self._nelec - 1, nb))
-        b_gradients = np.zeros((nconf, self._nelec - 1, nb, 3))
-        b_double_ders = np.zeros((nconf, self._nelec - 1, nb, 3))
-        for m, b in enumerate(self.b_basis):
-            b_gradients[:, :, m, :], b_values[:, :, m] = b.gradient_value(de, re)
-            b_double_ders[:, :, m, :] = b.laplacian(de, re)
+        b_gradients, b_values = self.b_basis.gradient_value(de, re)
+        b_double_ders = self.b_basis.laplacian(de, re)
 
         sep = nup - int(e < nup)
         edown = int(e >= nup)
@@ -624,7 +597,7 @@ class ThreeBodyJastrow:
         # order of spin channel: upup,updown,downdown
         d_all, ij = configs.dist.dist_matrix(configs.configs)
         r_all = np.linalg.norm(d_all, axis=-1)
-        bvalues = np.stack([b.value(d_all, r_all) for b in self.b_basis], axis=-1)
+        bvalues = self.b_basis.value(d_all, r_all)
         inds = tuple(zip(*ij))
         b_2d_values = np.zeros((nelec, nelec, nconf, nb))
         b_2d_values[inds] = bvalues.swapaxes(0, 1)

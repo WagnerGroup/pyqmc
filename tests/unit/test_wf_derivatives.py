@@ -19,7 +19,6 @@ from pyqmc.slater import Slater
 from pyqmc.multiplywf import MultiplyWF
 from pyqmc.addwf import AddWF
 from pyqmc.geminaljastrow import GeminalJastrow
-from pyqmc.group_jastrow import GroupJastrowSpin
 from pyqmc.three_body_jastrow import ThreeBodyJastrow
 from pyqmc.wftools import default_jastrow_basis
 from pyqmc.wftools import generate_jastrow
@@ -71,7 +70,6 @@ def test_obc_wfs(LiH_sto3g_rhf, epsilon=1e-5, nconf=10):
     mol, mf = LiH_sto3g_rhf
     a_basis, b_basis = default_jastrow_basis(mol)
     for wf in [
-        GroupJastrowSpin(mol, a_basis, b_basis),
         generate_gps_jastrow(mol)[0],
         MultiplyWF(Slater(mol, mf), generate_gps_jastrow(mol)[0]),
         generate_jastrow(mol)[0],

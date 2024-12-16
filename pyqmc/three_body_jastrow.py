@@ -208,6 +208,7 @@ class ThreeBodyJastrow:
             a_values[:sep],
             b_values[..., :sep, :],
             self.C[..., edown],
+            optimize="greedy",
         )
         e_partial[sep:] = np.einsum(
             "...nIk,j...nIl,...njm,Iklm->j...n",
@@ -215,6 +216,7 @@ class ThreeBodyJastrow:
             a_values[sep:],
             b_values[..., sep:, :],
             self.C[..., edown + 1],
+            optimize="greedy",
         )
         return e_partial, ae
 
@@ -265,6 +267,7 @@ class ThreeBodyJastrow:
             self.a_values[:nup],
             b_values[..., :nup, :],
             self.C[..., spin],
+            optimize="greedy",
         )
         e_partial_common[nup:, :] = np.einsum(
             "...nIk,j...nIl,...njm,Iklm->j...n",
@@ -272,6 +275,7 @@ class ThreeBodyJastrow:
             self.a_values[nup:],
             b_values[..., nup:, :],
             self.C[..., spin + 1],
+            optimize="greedy",
         )
         e_partial[:, :] = e_partial_common.sum(axis=0) - e_partial_common[e]
         return e_partial
@@ -374,6 +378,7 @@ class ThreeBodyJastrow:
             self.a_values[not_e][:sep],
             a_gradients,
             b_values[:, :sep],
+            optimize="greedy",
         )
         term1 += np.einsum(
             "Iklm,jnIl,nIkd,njm->dn",
@@ -381,6 +386,7 @@ class ThreeBodyJastrow:
             self.a_values[not_e][sep:],
             a_gradients,
             b_values[:, sep:],
+            optimize="greedy",
         )
 
         term2 = np.einsum(
@@ -389,6 +395,7 @@ class ThreeBodyJastrow:
             self.a_values[not_e][:sep],
             a_e,
             b_gradients[:, :sep],
+            optimize="greedy",
         )
         term2 += np.einsum(
             "Iklm,jnIl,nIk,njmd->dn",
@@ -396,6 +403,7 @@ class ThreeBodyJastrow:
             self.a_values[not_e][sep:],
             a_e,
             b_gradients[:, sep:],
+            optimize="greedy",
         )
 
         grad = term1 + term2
@@ -428,26 +436,39 @@ class ThreeBodyJastrow:
         a_gradients, a_e = self.a_basis.gradient_value(di_e, ri_e)
 
         # set values of b basis evaluations needed
-        b_gradvals = np.zeros((nconf, self._nelec - 1, nb, 4))
-        b_gradvals[:, :, :, 1:], b_gradvals[:, :, :, 0] = self.b_basis.gradient_value(de, re)
-
+        #b_gradvals = np.zeros((nconf, self._nelec - 1, nb, 4))
+        b_grad, b_vals = self.b_basis.gradient_value(de, re)
         spin_up = (np.arange(self._nelec - 1) < sep).astype(float)
         spin = np.stack([spin_up, 1 - spin_up], axis=0)
-        Cab_j = np.einsum(
-            "jnIl,njmd,Iklms,sj->djnIk",
+        e_partial_new = np.einsum(
+            "nIk,jnIl,njm,Iklms,sj->jn",
+            a_e,
             self.a_values[not_e],
-            b_gradvals,
+            b_vals,
             self.C[..., edown : edown + 2],
             spin,
+            optimize="greedy",
         )
-
-        e_partial_new = np.einsum("nIk,jnIk->jn", a_e, Cab_j[0])
-        Cab = Cab_j.sum(axis=1)
-
         val = np.exp(np.sum(e_partial_new, axis=0) - self.P_i[e])
 
-        grad_term1 = np.einsum("nIkd,nIk->dn", a_gradients, Cab[0])
-        grad_term2 = np.einsum("nIk,dnIk->dn", a_e, Cab[1:])
+        grad_term1 = np.einsum(
+            "nIkd,jnIl,njm,Iklms,sj->dn",
+            a_gradients,
+            self.a_values[not_e],
+            b_vals,
+            self.C[..., edown : edown + 2],
+            spin,
+            optimize="greedy",
+        )
+        grad_term2 = np.einsum(
+            "nIk,jnIl,njmd,Iklms,sj->dn",
+            a_e,
+            self.a_values[not_e],
+            b_grad,
+            self.C[..., edown : edown + 2],
+            spin,
+            optimize="greedy",
+        )
         return grad_term1 + grad_term2, val, (e_partial_new, a_e)
 
     def gradient_laplacian(self, e, epos):
@@ -484,6 +505,7 @@ class ThreeBodyJastrow:
             self.a_values[not_e][:sep],
             a_gradients,
             b_values[:, :sep],
+            optimize="greedy",
         )
         grad_term1 += np.einsum(
             "Iklm,jnIl,nIkd,njm->dn",
@@ -491,6 +513,7 @@ class ThreeBodyJastrow:
             self.a_values[not_e][sep:],
             a_gradients,
             b_values[:, sep:],
+            optimize="greedy",
         )
 
         grad_term2 = np.einsum(
@@ -499,6 +522,7 @@ class ThreeBodyJastrow:
             self.a_values[not_e][:sep],
             a_e,
             b_gradients[:, :sep],
+            optimize="greedy",
         )
         grad_term2 += np.einsum(
             "Iklm,jnIl,nIk,njmd->dn",
@@ -506,6 +530,7 @@ class ThreeBodyJastrow:
             self.a_values[not_e][sep:],
             a_e,
             b_gradients[:, sep:],
+            optimize="greedy",
         )
 
         grad = grad_term1 + grad_term2
@@ -517,6 +542,7 @@ class ThreeBodyJastrow:
             a_double_ders,
             self.a_values[not_e][:sep],
             b_values[:, :sep],
+            optimize="greedy",
         )
         # downspin term1
         lap += np.einsum(
@@ -525,6 +551,7 @@ class ThreeBodyJastrow:
             a_double_ders,
             self.a_values[not_e][sep:],
             b_values[:, sep:],
+            optimize="greedy",
         )
         # upspin term 2
         lap += 2 * np.einsum(
@@ -533,6 +560,7 @@ class ThreeBodyJastrow:
             a_gradients,
             self.a_values[not_e][:sep],
             b_gradients[:, :sep],
+            optimize="greedy",
         )
         # downspin term 2
         lap += 2 * np.einsum(
@@ -541,6 +569,7 @@ class ThreeBodyJastrow:
             a_gradients,
             self.a_values[not_e][sep:],
             b_gradients[:, sep:],
+            optimize="greedy",
         )
         # upspin term 3
         lap += np.einsum(
@@ -549,6 +578,7 @@ class ThreeBodyJastrow:
             a_e,
             self.a_values[not_e][:sep],
             b_double_ders[:, :sep],
+            optimize="greedy",
         )
         # downspin term 3
         lap += np.einsum(
@@ -557,6 +587,7 @@ class ThreeBodyJastrow:
             a_e,
             self.a_values[not_e][sep:],
             b_double_ders[:, sep:],
+            optimize="greedy",
         )
         return grad, lap + np.sum(grad**2, axis=0)
 
@@ -606,9 +637,10 @@ class ThreeBodyJastrow:
         up, down = slice(0, nup), slice(nup, None)
         c_ders = np.zeros((nconf, self._mol.natm, na, na, nb, 3))
         einstr = "inIk,jnIl,ijnm->nIklm"
-        c_ders[..., 0] = np.einsum(einstr, a[up], a[up], b_2d_values[up, up])
-        c_ders[..., 1] = np.einsum(einstr, a[up], a[down], b_2d_values[up, down])
-        c_ders[..., 2] = np.einsum(einstr, a[down], a[down], b_2d_values[down, down])
+        kw = dict(optimize="greedy")
+        c_ders[..., 0] = np.einsum(einstr, a[up], a[up], b_2d_values[up, up], **kw)
+        c_ders[..., 1] = np.einsum(einstr, a[up], a[down], b_2d_values[up, down], **kw)
+        c_ders[..., 2] = np.einsum(einstr, a[down], a[down], b_2d_values[down, down], **kw)
         c_ders += c_ders.swapaxes(2, 3)
 
         return {"ccoeff": 0.5 * c_ders}

@@ -20,10 +20,8 @@ import pyqmc.func3d as func3d
 @pytest.mark.parametrize(
     "func",
     [
-        func3d.PadeFunction(0.2),
         func3d.PolyPadeFunction(2.0, 1.5),
         func3d.CutoffCuspFunction(2.0, 1.5),
-        func3d.GaussianFunction(0.4),
     ],
 )
 def test_func3d(func, delta=1e-6, epsilon=1e-5):

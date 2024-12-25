@@ -14,7 +14,6 @@
 
 import numpy as np
 import pyqmc.func3d as func3d
-import numba
 
 
 class ThreeBodyJastrow:

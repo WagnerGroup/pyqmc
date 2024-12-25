@@ -14,6 +14,7 @@
 
 import numpy as np
 import pyqmc.func3d as func3d
+import numba
 
 
 class ThreeBodyJastrow:
@@ -437,39 +438,62 @@ class ThreeBodyJastrow:
 
         # set values of b basis evaluations needed
         #b_gradvals = np.zeros((nconf, self._nelec - 1, nb, 4))
-        b_grad, b_vals = self.b_basis.gradient_value(de, re)
-        spin_up = (np.arange(self._nelec - 1) < sep).astype(float)
-        spin = np.stack([spin_up, 1 - spin_up], axis=0)
-        e_partial_new = np.einsum(
-            "nIk,jnIl,njm,Iklms,sj->jn",
+        b_gradients, b_values = self.b_basis.gradient_value(de, re)
+
+        e_partial_new = np.zeros((self._nelec - 1, *epos.configs.shape[-2::-1]))
+        e_partial_new[:sep] = np.einsum(
+            "nIk,jnIl,njm,Iklm->jn",
             a_e,
-            self.a_values[not_e],
-            b_vals,
-            self.C[..., edown : edown + 2],
-            spin,
+            self.a_values[not_e][:sep],
+            b_values[:, :sep],
+            self.C[..., edown],
+            optimize="greedy",
+        )
+        e_partial_new[sep:] = np.einsum(
+            "nIk,jnIl,njm,Iklm->jn",
+            a_e,
+            self.a_values[not_e][sep:],
+            b_values[:, sep:],
+            self.C[..., edown + 1],
             optimize="greedy",
         )
         val = np.exp(np.sum(e_partial_new, axis=0) - self.P_i[e])
 
-        grad_term1 = np.einsum(
-            "nIkd,jnIl,njm,Iklms,sj->dn",
+        grad = np.einsum(
+            "Iklm,jnIl,nIkd,njm->dn",
+            self.C[..., edown],
+            self.a_values[not_e][:sep],
             a_gradients,
-            self.a_values[not_e],
-            b_vals,
-            self.C[..., edown : edown + 2],
-            spin,
+            b_values[:, :sep],
             optimize="greedy",
         )
-        grad_term2 = np.einsum(
-            "nIk,jnIl,njmd,Iklms,sj->dn",
+        grad += np.einsum(
+            "Iklm,jnIl,nIkd,njm->dn",
+            self.C[..., edown + 1],
+            self.a_values[not_e][sep:],
+            a_gradients,
+            b_values[:, sep:],
+            optimize="greedy",
+        )
+
+        grad += np.einsum(
+            "Iklm,jnIl,nIk,njmd->dn",
+            self.C[..., edown],
+            self.a_values[not_e][:sep],
             a_e,
-            self.a_values[not_e],
-            b_grad,
-            self.C[..., edown : edown + 2],
-            spin,
+            b_gradients[:, :sep],
             optimize="greedy",
         )
-        return grad_term1 + grad_term2, val, (e_partial_new, a_e)
+        grad += np.einsum(
+            "Iklm,jnIl,nIk,njmd->dn",
+            self.C[..., edown + 1],
+            self.a_values[not_e][sep:],
+            a_e,
+            b_gradients[:, sep:],
+            optimize="greedy",
+        )
+
+        return grad, val, (e_partial_new, a_e)
 
     def gradient_laplacian(self, e, epos):
         r"""computes gradient and laplacian, so we can reuse evaluations of the basis and its derivative."""
@@ -499,7 +523,7 @@ class ThreeBodyJastrow:
         sep = nup - int(e < nup)
         edown = int(e >= nup)
 
-        grad_term1 = np.einsum(
+        grad = np.einsum(
             "Iklm,jnIl,nIkd,njm->dn",
             self.C[..., edown],
             self.a_values[not_e][:sep],
@@ -507,7 +531,7 @@ class ThreeBodyJastrow:
             b_values[:, :sep],
             optimize="greedy",
         )
-        grad_term1 += np.einsum(
+        grad += np.einsum(
             "Iklm,jnIl,nIkd,njm->dn",
             self.C[..., edown + 1],
             self.a_values[not_e][sep:],
@@ -516,7 +540,7 @@ class ThreeBodyJastrow:
             optimize="greedy",
         )
 
-        grad_term2 = np.einsum(
+        grad += np.einsum(
             "Iklm,jnIl,nIk,njmd->dn",
             self.C[..., edown],
             self.a_values[not_e][:sep],
@@ -524,7 +548,7 @@ class ThreeBodyJastrow:
             b_gradients[:, :sep],
             optimize="greedy",
         )
-        grad_term2 += np.einsum(
+        grad += np.einsum(
             "Iklm,jnIl,nIk,njmd->dn",
             self.C[..., edown + 1],
             self.a_values[not_e][sep:],
@@ -532,8 +556,6 @@ class ThreeBodyJastrow:
             b_gradients[:, sep:],
             optimize="greedy",
         )
-
-        grad = grad_term1 + grad_term2
 
         # j in upspin term1
         lap = np.einsum(
@@ -625,22 +647,36 @@ class ThreeBodyJastrow:
         na, nb = len(self.a_basis), len(self.b_basis)
         nup, ndown = self._mol.nelec
 
+        a = self.a_values
+        c_ders = np.zeros((nconf, self._mol.natm, na, na, nb, 3))
+        kw = dict(optimize="greedy")
+
         # order of spin channel: upup,updown,downdown
-        d_all, ij = configs.dist.dist_matrix(configs.configs)
+        # up up
+        d_all, ij = configs.dist.dist_matrix(configs.configs[:, :nup])
         r_all = np.linalg.norm(d_all, axis=-1)
         bvalues = self.b_basis.value(d_all, r_all)
-        inds = tuple(zip(*ij))
-        b_2d_values = np.zeros((nelec, nelec, nconf, nb))
-        b_2d_values[inds] = bvalues.swapaxes(0, 1)
 
-        a = self.a_values
-        up, down = slice(0, nup), slice(nup, None)
-        c_ders = np.zeros((nconf, self._mol.natm, na, na, nb, 3))
-        einstr = "inIk,jnIl,ijnm->nIklm"
-        kw = dict(optimize="greedy")
-        c_ders[..., 0] = np.einsum(einstr, a[up], a[up], b_2d_values[up, up], **kw)
-        c_ders[..., 1] = np.einsum(einstr, a[up], a[down], b_2d_values[up, down], **kw)
-        c_ders[..., 2] = np.einsum(einstr, a[down], a[down], b_2d_values[down, down], **kw)
+        t = 0
+        for i in range(nup):
+            c_ders[..., 0] += np.einsum("nIk,jnIl,njm->nIklm", a[i], a[i+1:nup], bvalues[:, t:t+nup-i-1], **kw)
+            t += nup - i - 1
+
+        # down down
+        d_all, ij = configs.dist.dist_matrix(configs.configs[:, nup:])
+        r_all = np.linalg.norm(d_all, axis=-1)
+        bvalues = self.b_basis.value(d_all, r_all)
+        t = 0
+        for i in range(nup, nelec):
+            c_ders[..., 2] += np.einsum("nIk,jnIl,njm->nIklm", a[i], a[i+1:nelec], bvalues[:, t:t+nelec-i-1], **kw)
+            t += nelec - i - 1
+
+        # up down
+        d_all = configs.dist.pairwise(configs.configs[:, :nup], configs.configs[:, nup:])
+        r_all = np.linalg.norm(d_all, axis=-1)
+        bvalues = self.b_basis.value(d_all, r_all)
+        c_ders[..., 1] += np.einsum("inIk,jnIl,nijm->nIklm", a[:nup], a[nup:], bvalues, **kw)
+
         c_ders += c_ders.swapaxes(2, 3)
 
         return {"ccoeff": 0.5 * c_ders}

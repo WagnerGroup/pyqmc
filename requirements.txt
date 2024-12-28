@@ -2,3 +2,4 @@ scipy
 pandas
 pyscf
 h5py
+numba

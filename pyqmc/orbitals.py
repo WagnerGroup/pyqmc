@@ -17,6 +17,10 @@ import pyqmc.gpu as gpu
 import pyscf.pbc.gto.eval_gto
 import pyscf.pbc.gto.cell
 import pyqmc.pbc
+import pyqmc.gto
+import pyqmc.pbcgto
+import pyqmc.distance
+import pyqmc.coord
 
 """
 The evaluators have the concept of a 'set' of atomic orbitals, that may apply to 
@@ -42,17 +46,30 @@ def get_complex_phase(x):
 
 
 class MoleculeOrbitalEvaluator:
-    def __init__(self, mol, mo_coeff):
+    def __init__(self, mol, mo_coeff, evaluate_orbitals_with="pyscf"):
         self.parameters = {
             "mo_coeff_alpha": gpu.cp.asarray(mo_coeff[0]),
             "mo_coeff_beta": gpu.cp.asarray(mo_coeff[1]),
         }
         self.parm_names = ["mo_coeff_alpha", "mo_coeff_beta"]
         iscomplex = bool(sum(map(gpu.cp.iscomplexobj, self.parameters.values())))
-        self.ao_dtype = True
-        self.mo_dtype = complex if iscomplex else float
 
         self._mol = mol
+        evaluator = pyqmc.gto.AtomicOrbitalEvaluator(mol)
+        self.ao_dtype = evaluator.dtype
+        self.mo_dtype = complex if iscomplex else self.ao_dtype
+        def mol_eval_gto(evalstr, primcoords):
+            aos = mol.eval_gto(evalstr, primcoords)
+            if "deriv2" in evalstr:
+                aos[4] += aos[7] + aos[9]
+                aos = aos[:5]
+            return aos
+        if evaluate_orbitals_with == "pyscf":
+            self.eval_gto = mol_eval_gto
+        elif evaluate_orbitals_with == "numba":
+            self.eval_gto = evaluator.eval_gto
+        else:
+            raise ValueError(f"{evaluate_orbitals_with} not recognized; evaluate_orbitals_with must be 'pyscf' or 'numba'")
 
     def nmo(self):
         return [
@@ -64,7 +81,7 @@ class MoleculeOrbitalEvaluator:
         """"""
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
-        aos = gpu.cp.asarray([self._mol.eval_gto(eval_str, mycoords)])
+        aos = gpu.cp.asarray(self.eval_gto(eval_str, mycoords))[np.newaxis]
         if len(aos.shape) == 4:  # if derivatives are included
             return aos.reshape((1, aos.shape[1], *mycoords.shape[:-1], aos.shape[-1]))
         else:
@@ -87,7 +104,7 @@ class PBCOrbitalEvaluatorKpoints:
 
     """
 
-    def __init__(self, cell, mo_coeff=None, kpts=None, eval_gto_precision=None):
+    def __init__(self, cell, mo_coeff=None, kpts=None, eval_gto_precision=None, evaluate_orbitals_with="pyscf"):
         """
         :parameter cell: PyQMC supercell object (from get_supercell)
         :parameter mo_coeff: (2, nk, nao, nelec) array. MO coefficients for all kpts of primitive cell. If None, this object can't evaluate mos(), but can still evaluate aos().
@@ -98,10 +115,12 @@ class PBCOrbitalEvaluatorKpoints:
         self.S = cell.S
         self.Lprim = self._cell.lattice_vectors()
 
-        self._kpts = [0, 0, 0] if kpts is None else kpts
-        self._kpts = np.reshape(np.asarray(kpts), (-1, 3))
-        # If gamma-point only, AOs are real-valued
-        isgamma = np.abs(self._kpts).sum() < 1e-9
+        self._kpts = np.zeros((1, 3)) if kpts is None else np.asarray(kpts).reshape((-1, 3))
+        self.isgamma = np.abs(self._kpts).sum() < 1e-9
+
+        eval_gto_precision = 1e-2 if eval_gto_precision is None else eval_gto_precision
+        evaluator = pyqmc.pbcgto.PeriodicAtomicOrbitalEvaluator(cell.original_cell, kpts=self._kpts, eval_gto_precision=eval_gto_precision)
+
         if mo_coeff is not None:
             nelec_per_kpt = [np.asarray([m.shape[1] for m in mo]) for mo in mo_coeff]
             self.param_split = [np.cumsum(nelec_per_kpt[spin]) for spin in [0, 1]]
@@ -110,19 +129,38 @@ class PBCOrbitalEvaluatorKpoints:
                 "mo_coeff_alpha": gpu.cp.asarray(np.concatenate(mo_coeff[0], axis=1)),
                 "mo_coeff_beta": gpu.cp.asarray(np.concatenate(mo_coeff[1], axis=1)),
             }
-            iscomplex = (not isgamma) or bool(
+            iscomplex = bool(
                 sum(map(gpu.cp.iscomplexobj, self.parameters.values()))
             )
         else:
-            iscomplex = not isgamma
+            iscomplex = False
 
-        self.ao_dtype = float if isgamma else complex
-        self.mo_dtype = complex if iscomplex else float
+        self.ao_dtype = evaluator.dtype
+        self.mo_dtype = complex if iscomplex else self.ao_dtype
+        self.get_wrapphase = get_wrapphase_complex if iscomplex else get_wrapphase_real
 
-        eval_gto_precision = 1e-2 if eval_gto_precision is None else eval_gto_precision
         self.rcut = _estimate_rcut(self._cell, eval_gto_precision)
         Ls = self._cell.get_lattice_Ls(rcut=self.rcut.max(), dimension=3)
         self.Ls = Ls[np.argsort(np.linalg.norm(Ls, axis=1))]
+        def cell_eval_gto(evalstr, primcoords):
+            aos = pyscf.pbc.gto.eval_gto.eval_gto(
+                self._cell,
+                evalstr,
+                primcoords,
+                kpts=self._kpts,
+                Ls=self.Ls,
+            )
+            aos = np.asarray(aos)
+            if "deriv2" in evalstr:
+                aos[:, 4] += aos[:, 7] + aos[:, 9]
+                aos = aos[:, :5]
+            return aos
+        if evaluate_orbitals_with == "pyscf":
+            self.eval_gto = cell_eval_gto
+        elif evaluate_orbitals_with == "numba":
+            self.eval_gto = evaluator.eval_gto
+        else:
+            raise ValueError(f"{evaluate_orbitals_with} not recognized; evaluate_orbitals_with must be 'pyscf' or 'numba'")
 
     def nmo(self):
         return [
@@ -141,17 +179,8 @@ class PBCOrbitalEvaluatorKpoints:
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
         primcoords, primwrap = pyqmc.pbc.enforce_pbc(self.Lprim, mycoords)
-        ao = gpu.cp.asarray(
-            pyscf.pbc.gto.eval_gto.eval_gto(
-                self._cell,
-                "PBC" + eval_str,
-                primcoords,
-                kpts=self._kpts,
-                rcut=self.rcut,
-                Ls=self.Ls,
-            )
-        )
-        if self.ao_dtype == complex:
+        ao = gpu.cp.asarray(self.eval_gto(eval_str, primcoords))
+        if self.isgamma == False:
             wrap = configs.wrap if mask is None else configs.wrap[mask]
             wrap = np.dot(wrap, self.S)
             wrap = wrap.reshape((-1, wrap.shape[-1])) + primwrap
@@ -159,7 +188,7 @@ class PBCOrbitalEvaluatorKpoints:
                 (self._kpts, self._cell.lattice_vectors().T, wrap.T)
             )
             # k, coordinate
-            wrap_phase = get_wrapphase_complex(kdotR)
+            wrap_phase = self.get_wrapphase(kdotR)
             ao = gpu.cp.einsum("k...,k...a->k...a", wrap_phase, ao)
         if len(ao.shape) == 4:  # if derivatives are included
             return ao.reshape(
@@ -205,25 +234,6 @@ class PBCOrbitalEvaluatorKpoints:
         return self.param_split[spin], ao
 
 
-# Copyright 2014-2020 The PySCF Developers. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
-# Author: Qiming Sun <osirpt.sun@gmail.com>
-#
-
-
-# We modified _estimate_rcut slightly to take a new precision argument instead of using cell.precision
 def _estimate_rcut(cell, eval_gto_precision):
     """
     Returns the cutoff raidus, above which each shell decays to a value less than the

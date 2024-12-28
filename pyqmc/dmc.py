@@ -19,7 +19,7 @@ import h5py
 import logging
 
 
-def limdrift(g, tau, acyrus=0.25):
+def limdrift(g, tau, acyrus=0.5):
     """
     Use Cyrus Umrigar's algorithm to limit the drift near nodes.
 
@@ -230,7 +230,7 @@ def compute_S(e_trial, e_est, branchcut, v2, tau, eloc, nelec):
     e_cut = e_est - eloc
     mask = np.abs(e_cut) > branchcut
     e_cut[mask] = branchcut * np.sign(e_cut[mask])
-    denominator = 1 + (v2 * tau / nelec) ** 2
+    denominator = np.sqrt(1 + (v2 * tau / nelec) ** 2)
 
     return e_trial - e_est + e_cut / denominator
 
@@ -286,7 +286,7 @@ def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **k
     configs.join(allresults[1])
     weights = np.concatenate(allresults[2])
     confweight = np.array([len(c.configs) for c in config], dtype=float)
-    weight = np.array([w["weight"] for w in allresults[0]]) * confweight
+    weight = np.array([w["weight"] for w in allresults[0]]) * confweight*npartitions/np.sum(confweight)
     weight_avg = weight / np.sum(weight)
     block_avg = {
         k: np.sum(
@@ -299,7 +299,7 @@ def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **k
     return block_avg, configs, weights
 
 
-def branch(configs, weights):
+def branch(configs, weights, var_trigger_branch=0.05):
     """
     Perform branching on a set of walkers using the 'stochastic comb'
 
@@ -307,8 +307,19 @@ def branch(configs, weights):
 
     :parameter configs: (nconfig,nelec,3) walker coordinates
     :parameter weights: (nconfig,) walker weights
+    :parameter var_trigger_branch: variance at which to perform branching.
     :returns: resampled walker configurations and weights all equal to average weight
+
     """
+    if np.var(weights) < var_trigger_branch:
+        return (
+        configs,
+        weights,
+        {
+            "max branches": 0,
+            "Number of walkers killed": 0,
+        },
+    )
 
     nconfig = configs.configs.shape[0]
     if np.any(weights > 2.0):

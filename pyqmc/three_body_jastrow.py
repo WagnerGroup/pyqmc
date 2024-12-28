@@ -93,17 +93,55 @@ class ThreeBodyJastrow:
         ) / 2
 
         self.P_i = np.zeros((nelec, nconf))
-        arange_e = np.arange(nelec)
         for e, epos in enumerate(configs.configs.swapaxes(0, 1)):
-            not_e = arange_e != e
-            self.P_i[e] = self.single_e_partial(configs, e, epos, a_values[not_e])[
-                0
-            ].sum(axis=0)
-
+            self.P_i[e], _ = self.single_e_partial_sum(configs, e, epos, a_values)
         self.val = 0.5 * self.P_i.sum(axis=0)
         self.a_values = a_values
 
         return self.value()
+
+    def single_e_partial_sum(self, configs, e, epos, a_values):
+            nconf, nelec = configs.configs.shape[:2]
+            arange_e = np.arange(nelec)
+            nup = self._mol.nelec[0]
+            sep = nup - int(e < nup)
+            edown = int(e >= self._mol.nelec[0])
+            not_e = arange_e != e
+            upsel = np.where(not_e * (arange_e < nup))
+            downsel = np.where(not_e * (arange_e >= nup))
+
+            if len(epos.shape) == 2:
+                de = configs.dist.dist_i(configs.configs[:, not_e], epos)
+                di_e = configs.dist.dist_i(self._mol.atom_coords(), epos)
+            else:
+                de = configs.dist.pairwise(configs.configs[:, not_e], epos)
+                di_e = configs.dist.pairwise(self._mol.atom_coords()[np.newaxis], epos)
+                de = np.moveaxis(de, 2, 0)
+                di_e = np.moveaxis(di_e, 2, 0)
+
+            re = np.linalg.norm(de, axis=-1)
+            ri_e = np.linalg.norm(di_e, axis=-1)
+
+            ae = self.a_basis.value(di_e, ri_e)
+            b_values = self.b_basis.value(de, re)
+
+            P_i = np.einsum(
+                "...nIk,j...nIl,...njm,Iklm->...n",
+                ae,
+                a_values[upsel],
+                b_values[..., :sep, :],
+                self.C[..., edown],
+                optimize="greedy",
+            )
+            P_i += np.einsum(
+                "...nIk,j...nIl,...njm,Iklm->...n",
+                ae,
+                a_values[downsel],
+                b_values[..., sep:, :],
+                self.C[..., edown + 1],
+                optimize="greedy",
+            )
+            return P_i, ae
 
     def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
         r"""
@@ -289,15 +327,13 @@ class ThreeBodyJastrow:
         if mask is None:
             mask = np.ones(nconf, dtype=bool)
 
-        not_e = np.arange(self._nelec) != e
-
-        e_partial_new, a_e = self.single_e_partial(
-            configs.mask(mask), e, epos.configs[mask], self.a_values[not_e][:, mask]
+        e_partial_new_sum, a_e = self.single_e_partial_sum(
+            configs.mask(mask), e, epos.configs[mask], self.a_values[:, mask]
         )
 
-        val = np.exp(e_partial_new.sum(axis=0) - self.P_i[e, mask])
+        val = np.exp(e_partial_new_sum - self.P_i[e, mask])
         # if val is dim 2 naux,nconf, val.T flips it, else it leaves it be. for a 1d array, A : A = A.T
-        return val.T, (e_partial_new, a_e)
+        return val.T, None#(e_partial_new, a_e) # it's faster not to save e_partial_new
 
     def testvalue_many(self, e, epos, mask=None):
         r"""Args:
@@ -440,23 +476,23 @@ class ThreeBodyJastrow:
         b_gradients, b_values = self.b_basis.gradient_value(de, re)
 
         e_partial_new = np.zeros((self._nelec - 1, *epos.configs.shape[-2::-1]))
-        e_partial_new[:sep] = np.einsum(
-            "nIk,jnIl,njm,Iklm->jn",
+        P_i_new = np.einsum(
+            "nIk,jnIl,njm,Iklm->n",
             a_e,
             self.a_values[not_e][:sep],
             b_values[:, :sep],
             self.C[..., edown],
             optimize="greedy",
         )
-        e_partial_new[sep:] = np.einsum(
-            "nIk,jnIl,njm,Iklm->jn",
+        P_i_new += np.einsum(
+            "nIk,jnIl,njm,Iklm->n",
             a_e,
             self.a_values[not_e][sep:],
             b_values[:, sep:],
             self.C[..., edown + 1],
             optimize="greedy",
         )
-        val = np.exp(np.sum(e_partial_new, axis=0) - self.P_i[e])
+        val = np.exp(P_i_new - self.P_i[e])
 
         grad = np.einsum(
             "Iklm,jnIl,nIkd,njm->dn",
@@ -492,7 +528,7 @@ class ThreeBodyJastrow:
             optimize="greedy",
         )
 
-        return grad, val, (e_partial_new, a_e)
+        return grad, val, None#(e_partial_new, a_e) # it's faster not to save e_partial_new
 
     def gradient_laplacian(self, e, epos):
         r"""computes gradient and laplacian, so we can reuse evaluations of the basis and its derivative."""

@@ -21,6 +21,7 @@ import pyqmc.gto
 import pyqmc.pbcgto
 import pyqmc.distance
 import pyqmc.coord
+import functools
 
 """
 The evaluators have the concept of a 'set' of atomic orbitals, that may apply to 
@@ -45,6 +46,14 @@ def get_complex_phase(x):
     return x / np.abs(x)
 
 
+def mol_eval_gto(mol, evalstr, primcoords):
+    aos = mol.eval_gto(evalstr, primcoords)
+    if "deriv2" in evalstr:
+        aos[4] += aos[7] + aos[9]
+        aos = aos[:5]
+    return aos
+
+
 class MoleculeOrbitalEvaluator:
     def __init__(self, mol, mo_coeff, evaluate_orbitals_with="pyscf"):
         self.parameters = {
@@ -58,14 +67,8 @@ class MoleculeOrbitalEvaluator:
         evaluator = pyqmc.gto.AtomicOrbitalEvaluator(mol)
         self.ao_dtype = evaluator.dtype
         self.mo_dtype = complex if iscomplex else self.ao_dtype
-        def mol_eval_gto(evalstr, primcoords):
-            aos = mol.eval_gto(evalstr, primcoords)
-            if "deriv2" in evalstr:
-                aos[4] += aos[7] + aos[9]
-                aos = aos[:5]
-            return aos
         if evaluate_orbitals_with == "pyscf":
-            self.eval_gto = mol_eval_gto
+            self.eval_gto = functools.partial(mol_eval_gto, self._mol)
         elif evaluate_orbitals_with == "numba":
             self.eval_gto = evaluator.eval_gto
         else:
@@ -93,6 +96,22 @@ class MoleculeOrbitalEvaluator:
     def pgradient(self, ao, spin):
         nelec = [self.parameters[self.parm_names[spin]].shape[1]]
         return (gpu.cp.array(nelec), ao)
+
+
+
+def cell_eval_gto(orb_evaluator, evalstr, primcoords):
+    aos = pyscf.pbc.gto.eval_gto.eval_gto(
+        orb_evaluator._cell,
+        evalstr,
+        primcoords,
+        kpts=orb_evaluator._kpts,
+        Ls=orb_evaluator.Ls,
+    )
+    aos = np.asarray(aos)
+    if "deriv2" in evalstr:
+        aos[:, 4] += aos[:, 7] + aos[:, 9]
+        aos = aos[:, :5]
+    return aos
 
 
 class PBCOrbitalEvaluatorKpoints:
@@ -142,21 +161,8 @@ class PBCOrbitalEvaluatorKpoints:
         self.rcut = _estimate_rcut(self._cell, eval_gto_precision)
         Ls = self._cell.get_lattice_Ls(rcut=self.rcut.max(), dimension=3)
         self.Ls = Ls[np.argsort(np.linalg.norm(Ls, axis=1))]
-        def cell_eval_gto(evalstr, primcoords):
-            aos = pyscf.pbc.gto.eval_gto.eval_gto(
-                self._cell,
-                evalstr,
-                primcoords,
-                kpts=self._kpts,
-                Ls=self.Ls,
-            )
-            aos = np.asarray(aos)
-            if "deriv2" in evalstr:
-                aos[:, 4] += aos[:, 7] + aos[:, 9]
-                aos = aos[:, :5]
-            return aos
         if evaluate_orbitals_with == "pyscf":
-            self.eval_gto = cell_eval_gto
+            self.eval_gto = functools.partial(cell_eval_gto, self)
         elif evaluate_orbitals_with == "numba":
             self.eval_gto = evaluator.eval_gto
         else:

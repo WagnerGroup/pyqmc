@@ -140,7 +140,6 @@ class GPSJastrow:
         alphader = np.einsum('csi,csi->cs', self.e_cs[:, :, :, 0], -A[:, :, :, 0])
 
         Xsup = self.parameters["Xsupport"][np.newaxis]
-        print("Xsup", Xsup.shape)
         d_cs = np.zeros((self.nconfig, self.n_support, self.nelec, 2, 3))
         d_cs[:, :, :, 0, :] = configs.dist.pairwise(Xsup[:, :, 0, :],
                                                     configs.configs)

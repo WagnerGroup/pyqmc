@@ -120,7 +120,7 @@ class LinearTransform:
         grads = []
         for k, opt in self.to_opt.items():
             mask = ~np.repeat(opt[np.newaxis, :], pgrad[k].shape[0], axis=0)
-            print(k, "mask", mask.shape, pgrad[k].shape, self.to_opt[k].shape)
+            #print(k, "mask", mask.shape, pgrad[k].shape, self.to_opt[k].shape)
             mask_grads = np.ma.array(pgrad[k], mask=mask).reshape(pgrad[k].shape[0], -1)
             grads.append(np.ma.compress_cols(mask_grads))
         if len(grads) == 0:

@@ -2,7 +2,12 @@ import numpy as np
 
 
 class GPSJastrow:
-    def __init__(self, mol, X_support):
+    def __init__(self, mol, X_support, f=100):
+        """
+        X_support: (nsupport, 2, 3) array
+        alpha: (nsupport) weights of each gaussian
+        f: spread of the gaussians
+        """
         self.n_support = X_support.shape[0]
         self.dtype = float
         self.parameters = {}
@@ -11,7 +16,7 @@ class GPSJastrow:
         # Xsupport.shape is nsupport,2,3
         self.parameters["Xsupport"] = X_support
         self.parameters["alpha"] = np.zeros(self.n_support)
-        self.parameters["f"] = np.array([100])
+        self.parameters["f"] = np.array([f], dtype=float)
 
     def recompute(self, configs):
         self._configscurrent = configs

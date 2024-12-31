@@ -473,7 +473,6 @@ class ThreeBodyJastrow:
 
         # set values of b basis evaluations needed
         #b_gradvals = np.zeros((nconf, self._nelec - 1, nb, 4))
-<<<<<<< HEAD
         b_gradients, b_values = self.b_basis.gradient_value(de, re)
 
         e_partial_new = np.zeros((self._nelec - 1, *epos.configs.shape[-2::-1]))

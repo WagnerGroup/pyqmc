@@ -60,7 +60,7 @@ def run_tests(wf, epos, epsilon):
     ):
         d = func(wf, epos)
         for k, v in d.items():
-            assert v < 1e-10, (k, v)
+            assert v < 1e-10, (wf, fname, k, v)
 
 
 def test_obc_wfs(LiH_sto3g_rhf, epsilon=1e-5, nconf=11):

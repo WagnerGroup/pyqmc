@@ -23,6 +23,7 @@ from pyqmc.three_body_jastrow import ThreeBodyJastrow
 from pyqmc.wftools import default_jastrow_basis
 from pyqmc.wftools import generate_jastrow
 from pyqmc.wftools import generate_gps_jastrow
+from pyqmc.gps2 import GPSJastrow
 import pyqmc.api as pyq
 
 
@@ -62,7 +63,7 @@ def run_tests(wf, epos, epsilon):
             assert v < 1e-10, (wf, fname, k, v)
 
 
-def test_obc_wfs(LiH_sto3g_rhf, epsilon=1e-5, nconf=10):
+def test_obc_wfs(LiH_sto3g_rhf, epsilon=1e-5, nconf=11):
     """
     Ensure that the wave function objects are consistent in several situations.
     """
@@ -83,6 +84,7 @@ def test_obc_wfs(LiH_sto3g_rhf, epsilon=1e-5, nconf=10):
             ThreeBodyJastrow(mol, a_basis, b_basis),
         ),
         Slater(mol, mf),
+        GPSJastrow(mol, pyq.initial_guess(mol, 2).configs.reshape(-1, 2, 3)),
     ]:
         for k in wf.parameters:
             if k != "mo_coeff":

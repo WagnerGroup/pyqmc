@@ -292,6 +292,9 @@ def test_wf_gradient_laplacian(wf, configs):
 
 
 def compare_nested_saved_vals(saved1, saved2):
+    if saved1 is None:
+        assert saved2 is None
+        return 0.
     if hasattr(saved1, "shape"):
         return np.amax(np.abs(saved1 - saved2))
     else:

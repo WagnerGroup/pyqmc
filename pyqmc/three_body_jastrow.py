@@ -93,17 +93,55 @@ class ThreeBodyJastrow:
         ) / 2
 
         self.P_i = np.zeros((nelec, nconf))
-        arange_e = np.arange(nelec)
         for e, epos in enumerate(configs.configs.swapaxes(0, 1)):
-            not_e = arange_e != e
-            self.P_i[e] = self.single_e_partial(configs, e, epos, a_values[not_e])[
-                0
-            ].sum(axis=0)
-
+            self.P_i[e], _ = self.single_e_partial_sum(configs, e, epos, a_values)
         self.val = 0.5 * self.P_i.sum(axis=0)
         self.a_values = a_values
 
         return self.value()
+
+    def single_e_partial_sum(self, configs, e, epos, a_values):
+            nconf, nelec = configs.configs.shape[:2]
+            arange_e = np.arange(nelec)
+            nup = self._mol.nelec[0]
+            sep = nup - int(e < nup)
+            edown = int(e >= self._mol.nelec[0])
+            not_e = arange_e != e
+            upsel = np.where(not_e * (arange_e < nup))
+            downsel = np.where(not_e * (arange_e >= nup))
+
+            if len(epos.shape) == 2:
+                de = configs.dist.dist_i(configs.configs[:, not_e], epos)
+                di_e = configs.dist.dist_i(self._mol.atom_coords(), epos)
+            else:
+                de = configs.dist.pairwise(configs.configs[:, not_e], epos)
+                di_e = configs.dist.pairwise(self._mol.atom_coords()[np.newaxis], epos)
+                de = np.moveaxis(de, 2, 0)
+                di_e = np.moveaxis(di_e, 2, 0)
+
+            re = np.linalg.norm(de, axis=-1)
+            ri_e = np.linalg.norm(di_e, axis=-1)
+
+            ae = self.a_basis.value(di_e, ri_e)
+            b_values = self.b_basis.value(de, re)
+
+            P_i = np.einsum(
+                "...nIk,j...nIl,...njm,Iklm->...n",
+                ae,
+                a_values[upsel],
+                b_values[..., :sep, :],
+                self.C[..., edown],
+                optimize="greedy",
+            )
+            P_i += np.einsum(
+                "...nIk,j...nIl,...njm,Iklm->...n",
+                ae,
+                a_values[downsel],
+                b_values[..., sep:, :],
+                self.C[..., edown + 1],
+                optimize="greedy",
+            )
+            return P_i, ae
 
     def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
         r"""
@@ -289,15 +327,13 @@ class ThreeBodyJastrow:
         if mask is None:
             mask = np.ones(nconf, dtype=bool)
 
-        not_e = np.arange(self._nelec) != e
-
-        e_partial_new, a_e = self.single_e_partial(
-            configs.mask(mask), e, epos.configs[mask], self.a_values[not_e][:, mask]
+        e_partial_new_sum, a_e = self.single_e_partial_sum(
+            configs.mask(mask), e, epos.configs[mask], self.a_values[:, mask]
         )
 
-        val = np.exp(e_partial_new.sum(axis=0) - self.P_i[e, mask])
+        val = np.exp(e_partial_new_sum - self.P_i[e, mask])
         # if val is dim 2 naux,nconf, val.T flips it, else it leaves it be. for a 1d array, A : A = A.T
-        return val.T, (e_partial_new, a_e)
+        return val.T, None#(e_partial_new, a_e) # it's faster not to save e_partial_new
 
     def testvalue_many(self, e, epos, mask=None):
         r"""Args:
@@ -437,39 +473,62 @@ class ThreeBodyJastrow:
 
         # set values of b basis evaluations needed
         #b_gradvals = np.zeros((nconf, self._nelec - 1, nb, 4))
-        b_grad, b_vals = self.b_basis.gradient_value(de, re)
-        spin_up = (np.arange(self._nelec - 1) < sep).astype(float)
-        spin = np.stack([spin_up, 1 - spin_up], axis=0)
-        e_partial_new = np.einsum(
-            "nIk,jnIl,njm,Iklms,sj->jn",
-            a_e,
-            self.a_values[not_e],
-            b_vals,
-            self.C[..., edown : edown + 2],
-            spin,
-            optimize="greedy",
-        )
-        val = np.exp(np.sum(e_partial_new, axis=0) - self.P_i[e])
+        b_gradients, b_values = self.b_basis.gradient_value(de, re)
 
-        grad_term1 = np.einsum(
-            "nIkd,jnIl,njm,Iklms,sj->dn",
-            a_gradients,
-            self.a_values[not_e],
-            b_vals,
-            self.C[..., edown : edown + 2],
-            spin,
-            optimize="greedy",
-        )
-        grad_term2 = np.einsum(
-            "nIk,jnIl,njmd,Iklms,sj->dn",
+        e_partial_new = np.zeros((self._nelec - 1, *epos.configs.shape[-2::-1]))
+        P_i_new = np.einsum(
+            "nIk,jnIl,njm,Iklm->n",
             a_e,
-            self.a_values[not_e],
-            b_grad,
-            self.C[..., edown : edown + 2],
-            spin,
+            self.a_values[not_e][:sep],
+            b_values[:, :sep],
+            self.C[..., edown],
             optimize="greedy",
         )
-        return grad_term1 + grad_term2, val, (e_partial_new, a_e)
+        P_i_new += np.einsum(
+            "nIk,jnIl,njm,Iklm->n",
+            a_e,
+            self.a_values[not_e][sep:],
+            b_values[:, sep:],
+            self.C[..., edown + 1],
+            optimize="greedy",
+        )
+        val = np.exp(P_i_new - self.P_i[e])
+
+        grad = np.einsum(
+            "Iklm,jnIl,nIkd,njm->dn",
+            self.C[..., edown],
+            self.a_values[not_e][:sep],
+            a_gradients,
+            b_values[:, :sep],
+            optimize="greedy",
+        )
+        grad += np.einsum(
+            "Iklm,jnIl,nIkd,njm->dn",
+            self.C[..., edown + 1],
+            self.a_values[not_e][sep:],
+            a_gradients,
+            b_values[:, sep:],
+            optimize="greedy",
+        )
+
+        grad += np.einsum(
+            "Iklm,jnIl,nIk,njmd->dn",
+            self.C[..., edown],
+            self.a_values[not_e][:sep],
+            a_e,
+            b_gradients[:, :sep],
+            optimize="greedy",
+        )
+        grad += np.einsum(
+            "Iklm,jnIl,nIk,njmd->dn",
+            self.C[..., edown + 1],
+            self.a_values[not_e][sep:],
+            a_e,
+            b_gradients[:, sep:],
+            optimize="greedy",
+        )
+
+        return grad, val, None#(e_partial_new, a_e) # it's faster not to save e_partial_new
 
     def gradient_laplacian(self, e, epos):
         r"""computes gradient and laplacian, so we can reuse evaluations of the basis and its derivative."""
@@ -499,7 +558,7 @@ class ThreeBodyJastrow:
         sep = nup - int(e < nup)
         edown = int(e >= nup)
 
-        grad_term1 = np.einsum(
+        grad = np.einsum(
             "Iklm,jnIl,nIkd,njm->dn",
             self.C[..., edown],
             self.a_values[not_e][:sep],
@@ -507,7 +566,7 @@ class ThreeBodyJastrow:
             b_values[:, :sep],
             optimize="greedy",
         )
-        grad_term1 += np.einsum(
+        grad += np.einsum(
             "Iklm,jnIl,nIkd,njm->dn",
             self.C[..., edown + 1],
             self.a_values[not_e][sep:],
@@ -516,7 +575,7 @@ class ThreeBodyJastrow:
             optimize="greedy",
         )
 
-        grad_term2 = np.einsum(
+        grad += np.einsum(
             "Iklm,jnIl,nIk,njmd->dn",
             self.C[..., edown],
             self.a_values[not_e][:sep],
@@ -524,7 +583,7 @@ class ThreeBodyJastrow:
             b_gradients[:, :sep],
             optimize="greedy",
         )
-        grad_term2 += np.einsum(
+        grad += np.einsum(
             "Iklm,jnIl,nIk,njmd->dn",
             self.C[..., edown + 1],
             self.a_values[not_e][sep:],
@@ -532,8 +591,6 @@ class ThreeBodyJastrow:
             b_gradients[:, sep:],
             optimize="greedy",
         )
-
-        grad = grad_term1 + grad_term2
 
         # j in upspin term1
         lap = np.einsum(
@@ -625,22 +682,36 @@ class ThreeBodyJastrow:
         na, nb = len(self.a_basis), len(self.b_basis)
         nup, ndown = self._mol.nelec
 
+        a = self.a_values
+        c_ders = np.zeros((nconf, self._mol.natm, na, na, nb, 3))
+        kw = dict(optimize="greedy")
+
         # order of spin channel: upup,updown,downdown
-        d_all, ij = configs.dist.dist_matrix(configs.configs)
+        # up up
+        d_all, ij = configs.dist.dist_matrix(configs.configs[:, :nup])
         r_all = np.linalg.norm(d_all, axis=-1)
         bvalues = self.b_basis.value(d_all, r_all)
-        inds = tuple(zip(*ij))
-        b_2d_values = np.zeros((nelec, nelec, nconf, nb))
-        b_2d_values[inds] = bvalues.swapaxes(0, 1)
 
-        a = self.a_values
-        up, down = slice(0, nup), slice(nup, None)
-        c_ders = np.zeros((nconf, self._mol.natm, na, na, nb, 3))
-        einstr = "inIk,jnIl,ijnm->nIklm"
-        kw = dict(optimize="greedy")
-        c_ders[..., 0] = np.einsum(einstr, a[up], a[up], b_2d_values[up, up], **kw)
-        c_ders[..., 1] = np.einsum(einstr, a[up], a[down], b_2d_values[up, down], **kw)
-        c_ders[..., 2] = np.einsum(einstr, a[down], a[down], b_2d_values[down, down], **kw)
+        t = 0
+        for i in range(nup):
+            c_ders[..., 0] += np.einsum("nIk,jnIl,njm->nIklm", a[i], a[i+1:nup], bvalues[:, t:t+nup-i-1], **kw)
+            t += nup - i - 1
+
+        # down down
+        d_all, ij = configs.dist.dist_matrix(configs.configs[:, nup:])
+        r_all = np.linalg.norm(d_all, axis=-1)
+        bvalues = self.b_basis.value(d_all, r_all)
+        t = 0
+        for i in range(nup, nelec):
+            c_ders[..., 2] += np.einsum("nIk,jnIl,njm->nIklm", a[i], a[i+1:nelec], bvalues[:, t:t+nelec-i-1], **kw)
+            t += nelec - i - 1
+
+        # up down
+        d_all = configs.dist.pairwise(configs.configs[:, :nup], configs.configs[:, nup:])
+        r_all = np.linalg.norm(d_all, axis=-1)
+        bvalues = self.b_basis.value(d_all, r_all)
+        c_ders[..., 1] += np.einsum("inIk,jnIl,nijm->nIklm", a[:nup], a[nup:], bvalues, **kw)
+
         c_ders += c_ders.swapaxes(2, 3)
 
         return {"ccoeff": 0.5 * c_ders}

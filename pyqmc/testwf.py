@@ -189,7 +189,8 @@ def test_wf_pgradient(wf, configs, delta=1e-5):
     error = {}
     for k in gradient.keys():  # We only check the gradients that are exposed.
         flt = wf.parameters[k].reshape(-1)
-        # print(flt.shape,wf.parameters[k].shape,gradient[k].shape)
+        print(k, flt.shape, wf.parameters[k].shape, gradient[k].shape)
+        assert wf.parameters[k].shape == gradient[k].shape[1:]
         nparms = len(flt)
         numgrad = np.zeros((configs.configs.shape[0], nparms), dtype=wf.dtype)
         for i, c in enumerate(flt):
@@ -291,6 +292,9 @@ def test_wf_gradient_laplacian(wf, configs):
 
 
 def compare_nested_saved_vals(saved1, saved2):
+    if saved1 is None:
+        assert saved2 is None
+        return 0.
     if hasattr(saved1, "shape"):
         return np.amax(np.abs(saved1 - saved2))
     else:

@@ -169,7 +169,7 @@ def line_minimization(
             if "iteration" in hdf.keys():
                 iteration_offset = np.max(hdf["iteration"][...]) + 1
             if "sub_iteration" in hdf.keys():
-                sub_iteration_offset = hdf["sub_iteration"][-1] + 1
+                sub_iteration_offset = hdf["sub_iteration"][-1] 
             coords.load_hdf(hdf)
 
     else:  # not restarting -- VMC warm up period

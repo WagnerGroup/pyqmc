@@ -98,7 +98,7 @@ def recover_pyscf(chkfile, ci_checkfile=None, cancel_outputs=True):
 
 
 def orbital_evaluator_from_pyscf(
-    mol, mf, mc=None, twist=0, determinants=None, tol=None, eval_gto_precision=None
+    mol, mf, mc=None, twist=0, determinants=None, tol=None, eval_gto_precision=None, evaluate_orbitals_with="pyscf",
 ):
     """
     mol: A Mole object
@@ -121,13 +121,14 @@ def orbital_evaluator_from_pyscf(
     periodic = hasattr(mol, "a")
     f_max_orb = lambda a: int(np.max(a, initial=0)) + 1 if len(a) > 0 else 0
 
+    if periodic:
+        mf = pyscf.pbc.scf.addons.convert_to_khf(mf)
+
     try:
         mf = mf.to_uhf()
     except TypeError:
         mf = mf.to_uhf(mf)
 
-    if periodic:
-        mf = pyscf.pbc.scf.addons.convert_to_khf(mf)
     if determinants is None:
         determinants = determinants_from_pyscf(mol, mf, mc=mc, tol=tol)
 
@@ -158,7 +159,7 @@ def orbital_evaluator_from_pyscf(
         ]
 
         evaluator = orbitals.PBCOrbitalEvaluatorKpoints(
-            mol, mo_coeff, kpts, eval_gto_precision
+            mol, mo_coeff, kpts, eval_gto_precision, evaluate_orbitals_with
         )
         determinants = determinant_tools.flatten_determinants(
             determinants, max_orb, kinds
@@ -167,7 +168,7 @@ def orbital_evaluator_from_pyscf(
         max_orb = [[f_max_orb(s) for s in det] for wt, det in determinants]
         max_orb = np.amax(max_orb, axis=0)
         mo_coeff = [_mo_coeff[spin][:, 0 : max_orb[spin]] for spin in [0, 1]]
-        evaluator = orbitals.MoleculeOrbitalEvaluator(mol, mo_coeff)
+        evaluator = orbitals.MoleculeOrbitalEvaluator(mol, mo_coeff, evaluate_orbitals_with)
 
     detcoeff, occup, det_map = determinant_tools.create_packed_objects(
         determinants, tol=tol

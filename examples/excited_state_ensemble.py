@@ -90,8 +90,7 @@ def run_ensemble(
         sr_accumulator.append([StochasticReconfigurationWfbyWf(energy, pyqmc.accumulators.LinearTransform(wf.parameters, to_opt))])
                 
     configs = pyq.initial_guess(mol, nconfig)
-    _, configs = pyq.vmc(wfs[0], configs, client=client, npartitions=npartitions)
-
+    
     return optimize_ensemble(
         wfs,
         configs,
@@ -117,7 +116,6 @@ if __name__ == "__main__":
                      output=jastrow_checkfile, 
                      verbose=True)
     ensemble_checkfile = f"{__file__}.ensemble.hdf5"
-    if not os.path.isfile(ensemble_checkfile):
-        run_ensemble(
-            scf_checkfile, ci_checkfile, jastrow_checkfile, ensemble_checkfile, max_iterations=50
-        )
+    run_ensemble(
+        scf_checkfile, ci_checkfile, jastrow_checkfile, ensemble_checkfile, max_iterations=50
+    )

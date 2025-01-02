@@ -182,7 +182,7 @@ class StochasticReconfigurationWfbyWf:
         return dp, report
 
 
-def hdf_save(hdf_file, data, attr, wfs):
+def hdf_save(hdf_file, data, attr, wfs, configs):
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
             for wfi, wf in enumerate(wfs):
@@ -192,6 +192,9 @@ def hdf_save(hdf_file, data, attr, wfs):
                         hdf[f"wf/{wfi}/" + k] = it.copy()
 
             hdftools.append_hdf(hdf, data)
+            if 'configs' not in hdf.keys():
+                configs.initialize_hdf(hdf)
+            configs.to_hdf(hdf)
             for wfi, wf in enumerate(wfs):
                 for k, it in wf.parameters.items():
                     hdf[f"wf/{wfi}/" + k][:] = it.copy()
@@ -249,10 +252,32 @@ def optimize_ensemble(
         overlap_penalty = np.ones((nwf, nwf)) * 0.5
 
     iteration_offset = 0
+    wf_start = 0
+    sub_iteration_start = 0
+    if hdf_file is not None and os.path.isfile(hdf_file):  # restarting -- read in data
+        with h5py.File(hdf_file, "r") as hdf:
+            if "wf" in hdf.keys():
+                for wfi, wf in enumerate(wfs):
+                    grp = hdf[f"wf/{wfi}"]
+                    for k in grp.keys():
+                        wf.parameters[k] = gpu.cp.asarray(grp[k])
+            if "iteration" in hdf.keys():
+                iteration_offset = np.max(hdf["iteration"][...]) 
+            if "sub_iteration" in hdf.keys():
+                sub_iteration_offset = hdf["sub_iteration"][-1]+1
+            if 'wavefunction' in hdf.keys():
+                wf_start = hdf['wavefunction'][-1]
+            configs.load_hdf(hdf)
+    else:
+        _, configs = pyqmc.mc.vmc(wfs[0], configs, client=client, npartitions=npartitions, **vmc_kwargs)
 
     for i in range(iteration_offset, max_iterations):
-        for wfi, (wf, transform_list) in enumerate(zip(wfs, updater)):
-            for sub_iteration, transform in enumerate(transform_list):
+        for wfi in range(wf_start, nwf):
+            wf = wfs[wfi]
+            transform_list = updater[wfi]
+
+            for sub_iteration in range(sub_iteration_offset, len(transform_list)):
+                transform = transform_list[sub_iteration]
                 data_weighted, data_unweighted, configs = pyqmc.sample_many.sample_overlap(
                     wfs,
                     configs,
@@ -297,6 +322,8 @@ def optimize_ensemble(
                 }
                 #save_data.update(data_unweighted)
                 #save_data.update(report)
-                hdf_save(hdf_file, save_data, {"tau": tau}, wfs)
+                hdf_save(hdf_file, save_data, {"tau": tau}, wfs, configs)
+            sub_iteration_offset = 0
+        wf_start = 0
 
     return wfs

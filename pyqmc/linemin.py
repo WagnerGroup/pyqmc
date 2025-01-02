@@ -169,7 +169,7 @@ def line_minimization(
             if "iteration" in hdf.keys():
                 iteration_offset = np.max(hdf["iteration"][...]) + 1
             if "sub_iteration" in hdf.keys():
-                sub_iteration_offset = hdf["sub_iteration"][-1] 
+                sub_iteration_offset = hdf["sub_iteration"][-1] + 1
             coords.load_hdf(hdf)
 
     else:  # not restarting -- VMC warm up period
@@ -206,12 +206,9 @@ def line_minimization(
     df = []
     # Gradient descent cycles
     for it in range(iteration_offset, max_iterations):
-        for sub_it in range(0, sub_iterations):
+        for sub_it in range(sub_iteration_offset, sub_iterations):
             if verbose: 
                 print("#############################\nStarting iteration", it, "sub iteration", sub_it)
-            if it == iteration_offset:
-                if sub_it < sub_iteration_offset:
-                    continue
             pgrad = pgrad_acc[sub_it]
             x0 = pgrad.transform.serialize_parameters(wf.parameters)
 

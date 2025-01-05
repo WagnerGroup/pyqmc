@@ -19,7 +19,6 @@ import h5py
 from pyqmc import hdftools
 import pyqmc.gpu as gpu
 import os
-from pyqmc.accumulators_multiwf import invert_list_of_dicts
 from pyqmc.stochastic_reconfiguration import StochasticReconfiguration
 import scipy.stats
 
@@ -40,7 +39,7 @@ class StochasticReconfigurationWfbyWf:
 
     def onewf(self):
         return self._onewf
-    
+
     def allwfs(self):
         return self
 
@@ -48,13 +47,12 @@ class StochasticReconfigurationWfbyWf:
         """
         Compute (weighted) average
         """
-        wfi = len(wfs) -1 
+        wfi = len(wfs) - 1
         dp = self.transform.serialize_gradients(wfs[wfi].pgradient())
         nconfig = weights.shape[-1]
         # here we assume that you are evaluating the derivative wrt the last wave function
         d = {}
         d["wtdp"] = np.einsum("cp,jkc->pjk", dp, weights, optimize=True) / nconfig
-        #print("wtdp", d["wtdp"])
         return d
 
     def keys(self):
@@ -114,7 +112,7 @@ class StochasticReconfigurationWfbyWf:
         ret["dpidpj"] = np.real(
             avg["dpidpj"] - np.einsum("i,j->ij", avg["dppsi"], avg["dppsi"])
         )
-        
+
         # overlap gradient
         fac = np.ones((nwf, nwf)) + np.identity(nwf)
         wfi = nwf-1
@@ -253,7 +251,7 @@ def optimize_ensemble(
 
     iteration_offset = 0
     wf_start = 0
-    sub_iteration_start = 0
+    sub_iteration_offset = 0
     if hdf_file is not None and os.path.isfile(hdf_file):  # restarting -- read in data
         with h5py.File(hdf_file, "r") as hdf:
             if "wf" in hdf.keys():
@@ -320,8 +318,6 @@ def optimize_ensemble(
                     'wavefunction': wfi,
                     "sub_iteration": sub_iteration,
                 }
-                #save_data.update(data_unweighted)
-                #save_data.update(report)
                 hdf_save(hdf_file, save_data, {"tau": tau}, wfs, configs)
             sub_iteration_offset = 0
         wf_start = 0

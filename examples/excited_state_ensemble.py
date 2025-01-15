@@ -12,105 +12,85 @@
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
-from pyscf import gto, scf
-import pyscf.pbc
-import numpy as np
+from pyscf import gto, scf, mcscf
+import h5py
 import pyqmc.api as pyq
 import pyqmc.accumulators
 from rich import print
+import os
+import copy
 
-from pyqmc.ensemble_optimization import optimize_ensemble
-from pyqmc.stochastic_reconfiguration import StochasticReconfigurationMultipleWF
+
+def run_scf(atoms, scf_checkfile):
+    mol = gto.M(atom=atoms, basis='ccecpccpvtz', ecp='ccecp', unit='bohr')
+    mf = scf.RHF(mol)
+    mf.chkfile = scf_checkfile
+    dm = mf.init_guess_by_atom()
+    mf.kernel(dm)
 
 
-def H2_casci():
-    mol = gto.M(
-        atom="H 0. 0. 0.0; H 0. 0. 1.4",
-        basis=f"ccpvtz",
-        unit="bohr",
-        charge=0,
-        spin=0,
-        verbose=1,
-    )
-    mf = scf.ROHF(mol).run()
-    mc = pyscf.mcscf.CASCI(mf, 2, 2)
+def run_casci(scf_checkfile, ci_checkfile):
+    cell, mf = pyq.recover_pyscf(scf_checkfile, cancel_outputs=False)
+    mc = mcscf.CASCI(mf, 2, 2)
     mc.fcisolver.nroots = 4
     mc.kernel()
-    return mol, mf, mc
+
+    print(mc.__dict__.keys())
+    with h5py.File(ci_checkfile, "a") as f:
+        f.create_group("ci")
+        f["ci/ncas"] = mc.ncas
+        f["ci/nelecas"] = list(mc.nelecas)
+        f["ci/ci"] = mc.ci
+        f["ci/mo_coeff"] = mc.mo_coeff
+    return mc
 
 
-def run_optimization_best_practice_3states(
+def run_pyscf_h2(scf_checkfile, ci_checkfile):
+    run_scf("H 0. 0. 0.0; H 0. 0. 1.4", scf_checkfile)
+    run_casci(scf_checkfile, ci_checkfile)
+
+
+def run_ensemble(
+    scf_checkfile,
+    ci_checkfile,
+    jastrow_checkfile,
     hdf_file,
     max_iterations,
     client=None,
     npartitions=None,
+    nstates=3,
+    tau=0.1,
+    nconfig=800
 ):
     """
-    First optimize the ground state and then optimize the excited
-    states while fixing the
     """
+    from pyqmc.ensemble_optimization_wfbywf import optimize_ensemble, StochasticReconfigurationWfbyWf
 
-    mol, mf, mc = H2_casci()
-    import copy
+    mol, mf, mc = pyq.recover_pyscf(
+        scf_checkfile, ci_checkfile, cancel_outputs=False
+    )
 
-    mf.output = None
-    mol.output = None
-    mc.output = None
-    mc.stdout = None
-    mol.stdout = None
-    mc.stdout = None
-    nstates = 3
     mcs = [copy.copy(mc) for i in range(nstates)]
     for i in range(nstates):
         mcs[i].ci = mc.ci[i]
 
     wfs = []
-    to_opts = []
+    energy = pyq.EnergyAccumulator(mol)
+    sr_accumulator = []
+
     for i in range(nstates):
         wf, to_opt = pyq.generate_wf(
             mol, mf, mc=mcs[i], slater_kws=dict(optimize_determinants=True)
         )
+        with h5py.File(jastrow_checkfile, "r") as f:
+            for k in wf.parameters.keys():
+                if 'wf2' in k:
+                    wf.parameters[k] = f['wf'][k][()]
         wfs.append(wf)
-        to_opts.append(to_opt)
-    configs = pyq.initial_guess(mol, 200)
-
-    pgrad1 = pyq.gradient_generator(mol, wfs[0], to_opt=to_opts[0])
-    wfs[0], _ = pyq.line_minimization(
-        wfs[0],
-        configs,
-        pgrad1,
-        verbose=True,
-        max_iterations=5,
-        client=client,
-        npartitions=npartitions,
-    )
-
-    for k in to_opts[0]:
-        to_opts[0][k] = np.zeros_like(to_opts[0][k])
-    to_opts[0]["wf1det_coeff"][0] = True  # Bug workaround for linear transform
-    for to_opt in to_opts[1:]:
-        to_opt["wf1det_coeff"] = np.ones_like(to_opt["wf1det_coeff"])
-
-    energy = pyq.EnergyAccumulator(mol)
-    sr_accumulator = []
-    for wf in range(nstates):
-        to_opts_tmp = copy.deepcopy(to_opts)
-        for wfj in range(nstates):
-            if wfj != wf:
-                for k in to_opts_tmp[wfj]:
-                    to_opts_tmp[wfj][k] = np.zeros_like(to_opts_tmp[wfj][k])
-        transforms = [
-            pyqmc.accumulators.LinearTransform(wf.parameters, to_opt)
-            for wf, to_opt in zip(wfs, to_opts_tmp)
-        ]
-        sr_accumulator.append(StochasticReconfigurationMultipleWF(energy, transforms))
-
-    for wf in wfs[1:]:
-        for k in wf.parameters.keys():
-            if "wf2" in k:
-                wf.parameters[k] = wfs[0].parameters[k].copy()
-    _, configs = pyq.vmc(wfs[0], configs, client=client, npartitions=npartitions)
-
+        sr_accumulator.append([StochasticReconfigurationWfbyWf(energy, pyqmc.accumulators.LinearTransform(wf.parameters, to_opt))])
+                
+    configs = pyq.initial_guess(mol, nconfig)
+    
     return optimize_ensemble(
         wfs,
         configs,
@@ -120,16 +100,22 @@ def run_optimization_best_practice_3states(
         client=client,
         npartitions=npartitions,
         verbose=True,
+        tau=tau,
     )
 
-
 if __name__ == "__main__":
-    from concurrent.futures import ProcessPoolExecutor
-
-    #with ProcessPoolExecutor(max_workers=2) as client:             
-    run_optimization_best_practice_3states(
-                hdf_file=f"{__file__}.hdf5",
-                max_iterations=20,
-                client=None,
-                npartitions=1,
-            )
+    scf_checkfile = f"{__file__}.scf.hdf5"
+    ci_checkfile = f"{__file__}.ci.hdf5"
+    if not os.path.isfile(scf_checkfile) or not os.path.isfile(ci_checkfile):
+        run_pyscf_h2(scf_checkfile, ci_checkfile)
+    
+    jastrow_checkfile = f"{__file__}.jastrow.hdf5"
+    if not os.path.isfile(jastrow_checkfile):
+        pyq.OPTIMIZE(dft_checkfile=scf_checkfile, 
+                     ci_checkfile=ci_checkfile,
+                     output=jastrow_checkfile, 
+                     verbose=True)
+    ensemble_checkfile = f"{__file__}.ensemble.hdf5"
+    run_ensemble(
+        scf_checkfile, ci_checkfile, jastrow_checkfile, ensemble_checkfile, max_iterations=50
+    )

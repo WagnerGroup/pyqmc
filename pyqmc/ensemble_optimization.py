@@ -72,7 +72,7 @@ def optimize_ensemble(
     overlap_penalty=None,
     npartitions=None,
     client=None,
-    verbose = False,
+    verbose=False,
     vmc_kwargs={},
 ):
     """Optimize a set of wave functions using ensemble VMC.
@@ -92,7 +92,9 @@ def optimize_ensemble(
         sub_iterations = len(updater)
     except TypeError:
         if verbose:
-            print("Was passed a single PGradAccumulator; using 1 sub_iteration. This is deprecated behavior.")
+            print(
+                "Was passed a single PGradAccumulator; using 1 sub_iteration. This is deprecated behavior."
+            )
         sub_iterations = 1
         updater = [updater]
 
@@ -133,7 +135,12 @@ def optimize_ensemble(
             renormalize(wfs, norm.diagonal(), pivot=0)
 
             data_weighted, data_unweighted, configs = pyqmc.sample_many.sample_overlap(
-                wfs, configs, update, client=client, npartitions=npartitions, **vmc_kwargs
+                wfs,
+                configs,
+                update,
+                client=client,
+                npartitions=npartitions,
+                **vmc_kwargs,
             )
             avg, error = update.block_average(data_weighted, data_unweighted["overlap"])
             if verbose:
@@ -153,7 +160,7 @@ def optimize_ensemble(
                 "iteration": i,
                 "sub_iteration": sub_iteration,
             }
-            for k in ['total']:
+            for k in ["total"]:
                 save_data[str(k)] = data_weighted[k]
             save_data.update(data_unweighted)
             save_data.update(report)

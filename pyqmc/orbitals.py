@@ -152,7 +152,7 @@ class PBCOrbitalEvaluatorKpoints:
         else:
             iscomplex = False
 
-        self.mo_dtype = complex if iscomplex else self.ao_dtype
+        self.mo_dtype = complex if iscomplex else float
         self.get_wrapphase = get_wrapphase_complex if iscomplex else get_wrapphase_real
 
         self.rcut = _estimate_rcut(self._cell, eval_gto_precision)

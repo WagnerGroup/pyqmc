@@ -16,9 +16,6 @@ import numpy as np
 import pyqmc.gpu as gpu
 import pyscf.pbc.gto.eval_gto
 import pyscf.pbc.gto.cell
-import pyqmc.pbc
-import pyqmc.gto
-import pyqmc.pbcgto
 import pyqmc.distance
 import pyqmc.coord
 import functools
@@ -64,12 +61,14 @@ class MoleculeOrbitalEvaluator:
         iscomplex = bool(sum(map(gpu.cp.iscomplexobj, self.parameters.values())))
 
         self._mol = mol
-        evaluator = pyqmc.gto.AtomicOrbitalEvaluator(mol)
-        self.ao_dtype = evaluator.dtype
+        self.ao_dtype = float # evaluator.dtype
         self.mo_dtype = complex if iscomplex else self.ao_dtype
         if evaluate_orbitals_with == "pyscf":
             self.eval_gto = functools.partial(mol_eval_gto, self._mol)
         elif evaluate_orbitals_with == "numba":
+            import pyqmc.gto
+            evaluator = pyqmc.gto.AtomicOrbitalEvaluator(mol)
+
             self.eval_gto = evaluator.eval_gto
         else:
             raise ValueError(f"{evaluate_orbitals_with} not recognized; evaluate_orbitals_with must be 'pyscf' or 'numba'")
@@ -138,7 +137,6 @@ class PBCOrbitalEvaluatorKpoints:
         self.isgamma = np.abs(self._kpts).sum() < 1e-9
 
         eval_gto_precision = 1e-2 if eval_gto_precision is None else eval_gto_precision
-        evaluator = pyqmc.pbcgto.PeriodicAtomicOrbitalEvaluator(cell.original_cell, kpts=self._kpts, eval_gto_precision=eval_gto_precision)
 
         if mo_coeff is not None:
             nelec_per_kpt = [np.asarray([m.shape[1] for m in mo]) for mo in mo_coeff]
@@ -154,7 +152,6 @@ class PBCOrbitalEvaluatorKpoints:
         else:
             iscomplex = False
 
-        self.ao_dtype = evaluator.dtype
         self.mo_dtype = complex if iscomplex else self.ao_dtype
         self.get_wrapphase = get_wrapphase_complex if iscomplex else get_wrapphase_real
 
@@ -164,6 +161,8 @@ class PBCOrbitalEvaluatorKpoints:
         if evaluate_orbitals_with == "pyscf":
             self.eval_gto = functools.partial(cell_eval_gto, self)
         elif evaluate_orbitals_with == "numba":
+            import pyqmc.pbcgto
+            evaluator = pyqmc.pbcgto.PeriodicAtomicOrbitalEvaluator(cell.original_cell, kpts=self._kpts, eval_gto_precision=eval_gto_precision)
             self.eval_gto = evaluator.eval_gto
         else:
             raise ValueError(f"{evaluate_orbitals_with} not recognized; evaluate_orbitals_with must be 'pyscf' or 'numba'")

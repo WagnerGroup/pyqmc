@@ -185,7 +185,7 @@ class PBCOrbitalEvaluatorKpoints:
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
         primcoords, primwrap = pyqmc.pbc.enforce_pbc(self.Lprim, mycoords)
         ao = gpu.cp.asarray(self.eval_gto(eval_str, primcoords))
-        if self.isgamma == False:
+        if not self.isgamma:
             wrap = configs.wrap if mask is None else configs.wrap[mask]
             wrap = np.dot(wrap, self.S)
             wrap = wrap.reshape((-1, wrap.shape[-1])) + primwrap

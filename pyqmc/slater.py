@@ -208,12 +208,21 @@ class Slater:
         self.dtype = complex if iscomplex else float
         self.get_phase = get_complex_phase if iscomplex else gpu.cp.sign
 
+        if mol.cart:
+            self._gtoval = "GTOval_cart"
+            self._gtoval_deriv1 = "GTOval_cart_deriv1"
+            self._gtoval_deriv2 = "GTOval_cart_deriv2"
+        else:
+            self._gtoval = "GTOval_sph"
+            self._gtoval_deriv1 = "GTOval_sph_deriv1"
+            self._gtoval_deriv2 = "GTOval_sph_deriv2"
+
     def recompute(self, configs):
         """This computes the value from scratch. Returns the logarithm of the wave function as
         (phase,logdet). If the wf is real, phase will be +/- 1."""
 
         nconf, nelec, ndim = configs.configs.shape
-        aos = self.orbitals.aos("GTOval_sph", configs)
+        aos = self.orbitals.aos(self._gtoval, configs)
         self._aovals = aos.reshape(-1, nconf, nelec, aos.shape[-1])
         self._dets = []
         self._inverse = []
@@ -259,7 +268,7 @@ class Slater:
 
         eeff = e - s * self._nelec[0]
         if saved_values is None:
-            ao = self.orbitals.aos("GTOval_sph", epos, mask)
+            ao = self.orbitals.aos(self._gtoval, epos, mask)
             self._aovals[:, mask, e, :] = ao
             mo = self.orbitals.mos(ao, s)
         else:
@@ -375,7 +384,7 @@ class Slater:
         Note that this can be called even if the internals have not been updated for electron e,
         if epos differs from the current position of electron e."""
         s = int(e >= self._nelec[0])
-        aograd = self.orbitals.aos("GTOval_sph_deriv1", epos)
+        aograd = self.orbitals.aos(self._gtoval_deriv1, epos)
         mograd = self.orbitals.mos(aograd, s)
 
         mograd_vals = mograd[:, :, self._det_occup[s]]
@@ -388,7 +397,7 @@ class Slater:
         Note that this can be called even if the internals have not been updated for electron e,
         if epos differs from the current position of electron e."""
         s = int(e >= self._nelec[0])
-        aograd = self.orbitals.aos("GTOval_sph_deriv1", epos)
+        aograd = self.orbitals.aos(self._gtoval_deriv1, epos)
         mograd = self.orbitals.mos(aograd, s)
 
         mograd_vals = mograd[:, :, self._det_occup[s]]
@@ -403,7 +412,7 @@ class Slater:
     def laplacian(self, e, epos):
         """Compute the laplacian Psi/ Psi."""
         s = int(e >= self._nelec[0])
-        ao = self.orbitals.aos("GTOval_sph_deriv2", epos)
+        ao = self.orbitals.aos(self._gtoval_deriv2, epos)
         ao_val = ao[:, 0, :, :]
         ao_lap = ao[:, 4, :, :]
         mos = gpu.cp.stack(
@@ -414,7 +423,7 @@ class Slater:
 
     def gradient_laplacian(self, e, epos):
         s = int(e >= self._nelec[0])
-        ao = self.orbitals.aos("GTOval_sph_deriv2", epos)
+        ao = self.orbitals.aos(self._gtoval_deriv2, epos)
         mo = self.orbitals.mos(ao, s)
         mo_vals = mo[:, :, self._det_occup[s]]
         ratios = self._testrowderiv(e, mo_vals)
@@ -431,7 +440,7 @@ class Slater:
         :rtype ratio: ndarray (nconfig[, naip])
         """
         s = int(e >= self._nelec[0])
-        ao = self.orbitals.aos("GTOval_sph", epos, mask)
+        ao = self.orbitals.aos(self._gtoval, epos, mask)
         mo = self.orbitals.mos(ao, s)
         mo_vals = mo[..., self._det_occup[s]]
         if len(epos.configs.shape) > 2:
@@ -444,7 +453,7 @@ class Slater:
         """return the ratio between the current wave function and the wave function if
         electron e's position is replaced by epos for each electron"""
         s = (e >= self._nelec[0]).astype(int)
-        ao = self.orbitals.aos("GTOval_sph", epos, mask)
+        ao = self.orbitals.aos(self._gtoval, epos, mask)
         ratios = gpu.cp.zeros((epos.configs.shape[0], e.shape[0]), dtype=self.dtype)
         for spin in [0, 1]:
             ind = s == spin

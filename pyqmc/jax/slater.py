@@ -7,13 +7,6 @@ import pyscf.gto
 from typing import NamedTuple
 
 
-cpu=True
-if cpu:
-    jax.config.update('jax_platform_name', 'cpu')
-    jax.config.update("jax_enable_x64", True)
-else:
-    pass 
-
 
 
 class SlaterState(NamedTuple):
@@ -309,6 +302,14 @@ class JAXSlater:
 
 
 if __name__=="__main__":
+
+    cpu=True
+    if cpu:
+        jax.config.update('jax_platform_name', 'cpu')
+        jax.config.update("jax_enable_x64", True)
+    else:
+        pass 
+
     import time
     import pandas as pd
     import matplotlib.pyplot as plt

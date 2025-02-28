@@ -394,7 +394,6 @@ class JAXSlater:
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
         if len(xyz.shape) ==3:
-            print("calling with size", np.sum(mask))
             allvals = []
             for i in range(xyz.shape[1]):
                 newvals, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz[:,i,:])

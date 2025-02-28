@@ -395,14 +395,11 @@ class JAXSlater:
         e = e - self._nelec[0]*spin
         if len(xyz.shape) ==3:
             print("calling with size", np.sum(mask))
+            allvals = []
             for i in range(xyz.shape[1]):
                 newvals, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz[:,i,:])
-                if i ==0:
-                    allvals = newvals
-                else:
-                    allvals = jnp.concatenate((allvals, newvals), axis=0)
-            newvals = allvals.reshape(xyz.shape[0:2])
-            return np.array(newvals)[mask,:], None
+                allvals.append(newvals)
+            return np.array(allvals).T[mask,:], None
         else: 
             newvals, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
             return np.array(newvals)[mask], saved

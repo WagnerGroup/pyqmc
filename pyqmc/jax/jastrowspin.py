@@ -60,14 +60,13 @@ def vmap_over_configs(func):
 def create_jastrow_evaluator(basis_params):
     beta_a, beta_b, ion_cusp, rcut, gamma = basis_params
 
-    # vectorize polypade functions
+    # vectorize polypade function
     _inner_polypade = jax.vmap(polypade, in_axes=(0, None, None), out_axes=0) # [(n,), float, float] -> (n,)
-    jit_vmapped_polypade = jax.jit(jax.vmap(_inner_polypade, in_axes=(None, 0, None), out_axes=1)) # [(n,), (nbasis,), float] -> (n, nbasis)
-    jit_cutoffcusp = jax.jit(cutoffcusp)
+    vmapped_polypade = jax.vmap(_inner_polypade, in_axes=(None, 0, None), out_axes=1) # [(n,), (nbasis,), float] -> (n, nbasis)
 
-    a_sum_evaluator = partial(compute_basis_sum, basis=jit_vmapped_polypade, param=beta_a, rcut=rcut)
-    b_sum_evaluator = partial(compute_basis_sum, basis=jit_vmapped_polypade, param=beta_b, rcut=rcut)
-    cusp_sum_evaluator = partial(compute_basis_sum, basis=jit_cutoffcusp, param=gamma, rcut=rcut)
+    a_sum_evaluator = partial(compute_basis_sum, basis=vmapped_polypade, param=beta_a, rcut=rcut)
+    b_sum_evaluator = partial(compute_basis_sum, basis=vmapped_polypade, param=beta_b, rcut=rcut)
+    cusp_sum_evaluator = partial(compute_basis_sum, basis=cutoffcusp, param=gamma, rcut=rcut)
 
     return [jax.jit(vmap_over_configs(evaluator)) for evaluator in [a_sum_evaluator, b_sum_evaluator, cusp_sum_evaluator]]
 
@@ -112,16 +111,14 @@ class JAXJastrowSpin:
         self.basis_params = BasisParameters(beta_a, beta_b, ion_cusp, rcut, gamma)
 
         self.parameters = {}
-        if len(ion_cusp) > 0:
-            self.parameters["acoeff"] = jnp.zeros((self._mol.natm, len(beta_a)+1, 2))
-        else:
-            self.parameters["acoeff"] = jnp.zeros((self._mol.natm, len(beta_a), 2))
+        self.parameters["acoeff"] = jnp.zeros((self._mol.natm, len(beta_a)+1, 2))
         self.parameters["bcoeff"] = jnp.zeros((len(beta_b)+1, 3))
         
         if len(ion_cusp) > 0:
-            coefs = mol.atom_charges().copy()
-            coefs[[l[0] not in ion_cusp for l in mol._atom]] = 0.0
-            self.parameters["acoeff"] = self.parameters["acoeff"].at[:, 0, :].set(jnp.array(coefs[:, None]))
+            coefs = jnp.array(mol.atom_charges())
+            mask = jnp.array([l[0] not in ion_cusp for l in mol._atom])
+            coefs = coefs.at[mask].set(0.0)
+            self.parameters["acoeff"] = self.parameters["acoeff"].at[:, 0, :].set(coefs[:, None])
         self.parameters["bcoeff"] = self.parameters["bcoeff"].at[0, [0, 1, 2]].set(jnp.array([-0.25, -0.50, -0.25]))
         
 
@@ -140,26 +137,16 @@ class JAXJastrowSpin:
         nconfig = configs.configs.shape[0]
         atom_coords = jnp.array(self._mol.atom_coords())
         tiled_atom_coords = jnp.tile(atom_coords, (nconfig, 1, 1))
-
         configs_up = jnp.array(configs.configs[:, :nup, :])
         configs_dn = jnp.array(configs.configs[:, nup:, :])
-
         acoeff = self.parameters["acoeff"]
         bcoeff = self.parameters["bcoeff"]
 
-        # Should we prioritize clarity or compactness?
-
         # compute a terms for up and down electrons
-        if len(self.basis_params.ion_cusp) > 0:
-            a_up = self._recompute[0](configs_up, tiled_atom_coords, acoeff[:, 1:, 0])
-            a_dn = self._recompute[0](configs_dn, tiled_atom_coords, acoeff[:, 1:, 1])
-            ac_up = self._recompute[2](configs_up, tiled_atom_coords, acoeff[:, 0, 0])
-            ac_dn = self._recompute[2](configs_dn, tiled_atom_coords, acoeff[:, 0, 1])
-        else:
-            a_up = self._recompute[0](configs_up, tiled_atom_coords, acoeff[:, :, 0])
-            a_dn = self._recompute[0](configs_dn, tiled_atom_coords, acoeff[:, :, 1])
-            ac_up = jnp.zeros((nconfig, nup))
-            ac_dn = jnp.zeros((nconfig, ndn))
+        a_up = self._recompute[0](configs_up, tiled_atom_coords, acoeff[:, 1:, 0])
+        a_dn = self._recompute[0](configs_dn, tiled_atom_coords, acoeff[:, 1:, 1])
+        ac_up = self._recompute[2](configs_up, tiled_atom_coords, acoeff[:, 0, 0])
+        ac_dn = self._recompute[2](configs_dn, tiled_atom_coords, acoeff[:, 0, 1])
 
         # compute b terms for up-up, up-down, down-down electron pairs
         b_upup = self._recompute[1](configs_up, configs_up, jnp.tile(bcoeff[1:, 0], (nup, 1)))
@@ -175,7 +162,6 @@ class JAXJastrowSpin:
         b = jnp.sum((b_upup + b_dndn + bc_upup  + bc_dndn)/2 + b_updn + bc_updn, axis=1)
         b -= bdiag_corr / 2
         return a+b
-
 
 
 if __name__ == "__main__":

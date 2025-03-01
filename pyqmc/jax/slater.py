@@ -365,7 +365,7 @@ class JAXSlater:
 #                          mos: jnp.ndarray, # nelec_s
 #                          determinant: jnp.ndarray # nelec_s
 #                          ): 
-        if True or saved_values is None:
+        if  saved_values is None:
             self.recompute(configs)
             return
 

@@ -73,9 +73,7 @@ def compute_bdiag_corr(mol, basis_params, parameters):
     return diag + diagc
 
 
-def evaluate_jastrow(mol, basis_params, parameters, configs):
-    beta_a, beta_b, ion_cusp, rcut, gamma = basis_params
-
+def evaluate_jastrow(mol, basis_params, basis_sum_evaluators, parameters, configs):
     nup, ndn = mol.nelec
     nconfig = configs.shape[0]
     configs_up, configs_dn = configs[:, :nup, :], configs[:, nup:, :]
@@ -83,9 +81,7 @@ def evaluate_jastrow(mol, basis_params, parameters, configs):
     tiled_atom_coords = jnp.tile(atom_coords, (nconfig, 1, 1))
     acoeff, bcoeff = parameters["acoeff"], parameters["bcoeff"]
 
-    # vmapped over electrons and configurations
-    a_value, b_value, cusp_value = [vmap_configs(vmap_elecs(partial(compute_basis_sum, basis=basis, param=param, rcut=rcut)))
-                                    for basis, param in zip([vmapped_polypade, vmapped_polypade, cutoffcusp], [beta_a, beta_b, gamma])]
+    a_value, b_value, cusp_value = basis_sum_evaluators
     
     # compute a terms for up and down electrons
     a_up = a_value(configs_up, tiled_atom_coords, acoeff[:, 1:, 0]) \
@@ -110,9 +106,7 @@ def evaluate_jastrow(mol, basis_params, parameters, configs):
     return a, b, logj
 
 
-def evaluate_testvalue(mol, basis_params, parameters, configs_old, e, spin, epos):
-    beta_a, beta_b, ion_cusp, rcut, gamma = basis_params
-
+def evaluate_testvalue(mol, basis_sum_evaluators, parameters, configs_old, e, spin, epos):
     nup, ndn = mol.nelec
     nconfig = configs_old.shape[0]
     epos_old = configs_old[:, e, :]
@@ -123,9 +117,7 @@ def evaluate_testvalue(mol, basis_params, parameters, configs_old, e, spin, epos
     tiled_atom_coords = jnp.tile(atom_coords, (nconfig, 1, 1))
     acoeff, bcoeff = parameters["acoeff"], parameters["bcoeff"]
 
-    # vmapped over configurations but not over electrons
-    a_value, b_value, cusp_value = [vmap_configs(partial(compute_basis_sum, basis=basis, param=param, rcut=rcut))
-                                    for basis, param in zip([vmapped_polypade, vmapped_polypade, cutoffcusp], [beta_a, beta_b, gamma])]
+    a_value, b_value, cusp_value = basis_sum_evaluators
 
     # compute a term contributed by electron e
     a = a_value(epos, tiled_atom_coords, acoeff[:, 1:, spin]) \
@@ -144,14 +136,32 @@ def evaluate_testvalue(mol, basis_params, parameters, configs_old, e, spin, epos
              + cusp_value(epos_old, configs_old_dn, jnp.tile(bcoeff[0, spin+1], (ndn)))
 
     delta_a = a - a_old
-    delta_b = (b_up + b_dn - b_up_old - b_dn_old) / 1
+    # factor of 1/2 cancelled by the double appearance of b terms contributed by electron e
+    delta_b = b_up + b_dn - b_up_old - b_dn_old 
     delta_logj =  delta_a + delta_b
     return jnp.exp(delta_logj)
 
 
 def create_jastrow_evaluator(mol, basis_params):
-    value_func = jax.jit(partial(evaluate_jastrow, mol, basis_params))
-    testval_func = jax.jit(partial(evaluate_testvalue, mol, basis_params))
+    beta_a, beta_b, ion_cusp, rcut, gamma = basis_params
+    basis_sum_evaluators_elecconf = [
+        jax.vmap( # vmapping over configurations
+            jax.vmap( # vmapping over electrons
+                partial(compute_basis_sum, basis=basis, param=param, rcut=rcut), 
+                in_axes=(0, None, None)
+            ), in_axes=(0, 0, None)
+        )
+        for basis, param in zip([vmapped_polypade, vmapped_polypade, cutoffcusp], [beta_a, beta_b, gamma])]
+
+    basis_sum_evaluators_conf = [
+        jax.vmap( # vmapping over configurations
+            partial(compute_basis_sum, basis=basis, param=param, rcut=rcut), 
+            in_axes=(0, 0, None)
+        )
+        for basis, param in zip([vmapped_polypade, vmapped_polypade, cutoffcusp], [beta_a, beta_b, gamma])]
+
+    value_func = jax.jit(partial(evaluate_jastrow, mol, basis_params, basis_sum_evaluators_elecconf))
+    testval_func = jax.jit(partial(evaluate_testvalue, mol, basis_sum_evaluators_conf))
     return value_func, testval_func
 
 

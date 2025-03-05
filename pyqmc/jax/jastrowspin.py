@@ -7,7 +7,7 @@ from typing import NamedTuple
 
 class BasisParameters(NamedTuple):
     """
-    These are parameters for the basis functions (polypade or cusp).
+    These are parameters for the basis functions (polypade and cusp).
     """
     beta_a: float
     beta_b: float
@@ -130,7 +130,7 @@ def evaluate_jastrow(mol, basis_params, basis_sum_evaluators, parameters, config
 
 def evaluate_testvalue(mol, basis_sum_evaluators, parameters, configs_old, e, spin, epos):
     """
-    Evaluate the test value (:math:`\log J(\vec{R}')/\logJ(\vec{R})`) for a single-electron update
+    Evaluate the test value (:math:`\log J(\vec{R}')/\logJ(\vec{R})`) for a single-electron update.
 
     Args:
         mol (pyscf.gto.Mole): PySCF molecule object.

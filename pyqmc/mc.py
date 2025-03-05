@@ -18,6 +18,7 @@ import os
 import numpy as np
 import h5py
 import logging
+import pyqmc.hdftools as hdftools
 
 
 def initial_guess(mol, nconfig, r=1.0):
@@ -86,7 +87,6 @@ def limdrift(g, cutoff=1):
 
 
 def vmc_file(hdf_file, data, attr, configs):
-    import pyqmc.hdftools as hdftools
 
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:

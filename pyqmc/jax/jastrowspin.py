@@ -31,11 +31,6 @@ def polypade(r, beta, rcut):
     return jnp.where(r > rcut, 0.0, p)
 
 
-# vectorize polypade function
-_inner_polypade = jax.vmap(polypade, in_axes=(0, None, None), out_axes=0) # [(n,), float, float] -> (n,)
-vmapped_polypade = jax.vmap(_inner_polypade, in_axes=(None, 0, None), out_axes=1) # [(n,), (nbasis,), float] -> (n, nbasis)
-
-
 def cutoffcusp(r, gamma, rcut):
     y = r / rcut
     y1 = y - 1
@@ -185,6 +180,13 @@ def create_jastrow_evaluator(mol, basis_params):
     """
     Create a set of functions that can be used to evaluate the Jastrow factor.
     """
+    polypade_grad = jax.grad(polypade, argnums=0)
+    cutoffcusp_grad = jax.grad(cutoffcusp, argnums=0)
+
+    # vectorize polypade function
+    _inner_polypade = jax.vmap(polypade, in_axes=(0, None, None), out_axes=0) # [(n,), float, float] -> (n,)
+    vmapped_polypade = jax.vmap(_inner_polypade, in_axes=(None, 0, None), out_axes=1) # [(n,), (nbasis,), float] -> (n, nbasis)
+
     beta_a, beta_b, ion_cusp, rcut, gamma = basis_params
     basis_sum_evaluators_elecconf = [
         jax.vmap( # vmapping over configurations

@@ -53,7 +53,7 @@ def _cartesian_gto(
   # Cartesian monomials.
   xyz_ijk: jax.Array = jnp.prod(ctr_xyz**ijk, axis=1)[:,jnp.newaxis] # (N,1)
   # Actual Gaussian.
-  gauss: jax.Array = jnp.exp(-expts * jnp.sum(ctr_xyz**2, axis=1)[:,jnp.newaxis]) # (N,M)
+  gauss: jax.Array = jnp.exp(-expts * jnp.sum(ctr_xyz**2, axis=1)[:, jnp.newaxis]) # (N,M)
   all_prod: jax.Array = coeffs* gauss * xyz_ijk 
 
   return jnp.sum(all_prod, axis=1) #(N)
@@ -90,13 +90,60 @@ def create_gto_evaluator(mol):
       expts[ii] = jnp.pad(expts[ii], (0, max_len - len(expts[ii])))
       coeffs[ii] = jnp.pad(coeffs[ii], (0, max_len - len(coeffs[ii])))
 
-    evaluator = jax.jit(partial(
+    evaluator = partial(
         _cartesian_gto,
         jnp.array(centers_aos),
         jnp.array(ijks),
         jnp.array(expts),
         jnp.array(coeffs),
-    ))
+    )
     return evaluator
 
 
+if __name__=="__main__":
+    cpu=True
+    if cpu:
+        jax.config.update('jax_platform_name', 'cpu')
+        jax.config.update("jax_enable_x64", True)
+    else:
+        pass 
+
+    import pyscf
+    mol = pyscf.gto.Mole(atom = '''O 0 0 0; H  0 2.0 0; H 0 0 2.0''', basis = 'unc-ccecp-ccpvdz', ecp='ccecp', cart=True)
+    mol.build()
+
+    import time
+    evaluator = create_gto_evaluator(mol)
+    evaluator_val = jax.jit(jax.vmap(evaluator, in_axes=(0)))
+    evaluator_gradient = jax.jacfwd(evaluator)
+    evaluator_gradient = jax.vmap(evaluator_gradient, in_axes=(0))
+    evaluator_gradient = jax.jit(evaluator_gradient)
+
+
+    nconfig = 2000
+    seed = 32123
+    key = jax.random.key(seed)
+    coords = jax.random.normal(key, (nconfig, 3))
+
+    res = evaluator_val(coords)
+    jax.block_until_ready(res)
+
+    start = time.time()
+    res = evaluator_val(coords)
+    jax.block_until_ready(res)
+    end = time.time()
+    val_time = end-start
+    print("Time taken for value: ", end-start)
+
+
+    res = evaluator_gradient(coords)
+    jax.block_until_ready(res)
+
+    start = time.time()
+    res = evaluator_gradient(coords)
+    jax.block_until_ready(res)
+    end = time.time()
+    grad_time = end-start
+    print("Time taken for gradient: ", end-start)
+
+    print("grad ratio", grad_time/val_time)

@@ -24,41 +24,69 @@ class CoefficientParameters(NamedTuple):
     bcoeff: jax.Array
 
 
-def polypade(r, beta, rcut):
-    x = r / rcut
+def polypade(ri, rj, beta, rcut):
+    """
+    :math:`a(\vec{r}_i, \vec{r}_j, \beta_k, r_{cut}) = \frac{1-z(r_{ij}/r_{cut})}{1+\beta_k z(r_{ij}/r_{cut})}`, where
+    :math:`z(x) = x^2(6-8x+3x^2)`.
+
+    Args:
+        ri, rj (jax.Array): Positions. (3,)
+        beta (float): Beta parameter.
+        rcut (float): Cutoff radius.
+
+    Return:
+        float: Function value.
+    """
+    rij = jnp.linalg.norm(ri - rj, axis=-1)
+    x = rij / rcut
     z = ((3*x - 8) * x + 6) * x**2
     p = (1 - z) / (1 + beta * z)
-    return jnp.where(r > rcut, 0.0, p)
+    return jnp.where(rij > rcut, 0.0, p)
 
 
-def cutoffcusp(r, gamma, rcut):
-    y = r / rcut
+def cutoffcusp(ri, rj, gamma, rcut):
+    """
+    :math:`a(\vec{r}_i, \vec{r}_j, \gamma, r_{cut}) = r_{cut} (-\frac{p(y)}{1+\gamma p(y)} + \frac{1}{3+\gamma})`, where
+    :math:`p(y) = \frac{(y-1)^3+1}{3}`.
+
+    Args:
+        ri, rj (jax.Array): Positions. (3,)
+        gamma (float): Gamma parameter.
+        rcut (float): Cutoff radius.
+
+    Return:
+        float: Function value.
+    """
+    rij = jnp.linalg.norm(ri - rj, axis=-1)
+    y = rij / rcut
     y1 = y - 1
     p = (y1 * y1 * y1 + 1) / 3
     func = -p / (1 + gamma * p) + 1 / (3 + gamma)
-    return jnp.where(r > rcut, 0.0, func * rcut)
+    return jnp.where(rij > rcut, 0.0, func * rcut)
 
 
-def compute_basis_sum(elec_coord, coords, coeff, basis, param, rcut):
+def partial_basis_sum(elec_coord, coords, coeff, basis, param, rcut):
     """
     For a given electron, compute the sum over basis functions and atom coordinates (one-body) or electron coordinates (two-body).
+    Given :math:`i`, compute :math:`\sum_{I,k} c_{I,k,\sigma(i)}^{en} a(r_{iI}, \beta_{k}^a)` or :math:`\sum_{j,k} c_{k,\sigma(ij)}^{ee} b(r_{ij}, \beta_{k}^b)`.
     To be vmapped over configurations and/or electrons for use in evaluators.
-    In the following, n = natom or nelec_up or nelec_dn.
+    In the following,
+    n = natom for a terms, (nelec_up or nelec_dn) for b terms.
+    nbasis = (na or nb) for polypade, 1 for cutoffcusp.
     
     Args:
         elec_coord (jax.Array): Electron coordinates. (3,)
         coords (jax.Array): Array of atom or electron coordinates. (n, 3)
-        coeff (jax.Array): Jastrow coefficients. (n, nbasis) for polypade, (n,) for cutoffcusp
-        basis (Callable[(n,), (nbasis,) or float, float -> (n, nbasis) or (n,)]): Vmapped polypade or cutoffcusp.
-        param (jax.Array or float): The beta parameters (nbasis,) or the cusp gamma parameter (float).
+        coeff (jax.Array): Jastrow coefficients. (n, nbasis)
+        basis (Callable[(3,), (n, 3), (nbasis,), float -> (n, nbasis)]): Vmapped basis function (polypade or cutoffcusp).
+        param (jax.Array): The beta parameters or the cusp gamma parameter. (nbasis,)
         rcut (float): Cutoff radius.
             
     Return:
         float: Sum.
     """
-    rij = jnp.linalg.norm(elec_coord - coords, axis=-1)
-    basis_value = basis(rij, param, rcut)
-    return jnp.sum(coeff * basis_value)
+    basis_val = basis(elec_coord, coords, param, rcut) # (n, nbasis)
+    return jnp.sum(coeff * basis_val)
 
 
 def compute_bdiag_corr(mol, basis_params, parameters):
@@ -73,14 +101,14 @@ def compute_bdiag_corr(mol, basis_params, parameters):
     return diag + diagc
 
 
-def evaluate_jastrow(mol, basis_params, basis_sum_evaluators, parameters, configs):
+def evaluate_jastrow(mol, basis_params, partial_sum_evaluators, parameters, configs):
     """
-    Evaluate the log Jastrow factor.
+    Evaluate the log Jastrow factor (:math:`\log J(\vec{R})`).
 
     Args:
         mol (pyscf.gto.Mole): PySCF molecule object.
         basis_params (BasisParameters): Basis parameters.
-        basis_sum_evaluators (list): List of vmapped compute_basis_sum() functions for evaluating different terms.
+        partial_sum_evaluators (list): List of vmapped partial_basis_sum() functions.
         parameters (CoefficientParameters): Jastrow coeffcients.
         configs (jax.Array): Electron configurations. (nconfig, nelec, 3)
     
@@ -97,22 +125,24 @@ def evaluate_jastrow(mol, basis_params, basis_sum_evaluators, parameters, config
     tiled_atom_coords = jnp.tile(atom_coords, (nconfig, 1, 1))
     acoeff, bcoeff = parameters
 
-    a_value, b_value, cusp_value = basis_sum_evaluators
+    a_eval, b_eval, cusp_eval = partial_sum_evaluators
     
     # compute a terms for up and down electrons
-    a_up = a_value(configs_up, tiled_atom_coords, acoeff[:, 1:, 0]) \
-         + cusp_value(configs_up, tiled_atom_coords, acoeff[:, 0, 0])
-    a_dn = a_value(configs_dn, tiled_atom_coords, acoeff[:, 1:, 1]) \
-         + cusp_value(configs_dn, tiled_atom_coords, acoeff[:, 0, 1])
+    # (nconfig, nelec)
+    a_up = a_eval(configs_up, tiled_atom_coords, acoeff[:, 1:, 0]) \
+         + cusp_eval(configs_up, tiled_atom_coords, acoeff[:, :1, 0])
+    a_dn = a_eval(configs_dn, tiled_atom_coords, acoeff[:, 1:, 1]) \
+         + cusp_eval(configs_dn, tiled_atom_coords, acoeff[:, :1, 1])
 
     # compute b terms for up-up, up-down, down-down electron pairs
     # bcoeff is tiled to match the first dimension (n) of acoeff
-    b_upup = b_value(configs_up, configs_up, jnp.tile(bcoeff[1:, 0], (nup, 1))) \
-           + cusp_value(configs_up, configs_up, jnp.tile(bcoeff[0, 0], (nup)))
-    b_updn = b_value(configs_up, configs_dn, jnp.tile(bcoeff[1:, 1], (ndn, 1))) \
-           + cusp_value(configs_up, configs_dn, jnp.tile(bcoeff[0, 1], (ndn)))
-    b_dndn = b_value(configs_dn, configs_dn, jnp.tile(bcoeff[1:, 2], (ndn, 1))) \
-           + cusp_value(configs_dn, configs_dn, jnp.tile(bcoeff[0, 2], (ndn)))
+    # (nconfig, nelec)
+    b_upup = b_eval(configs_up, configs_up, jnp.tile(bcoeff[1:, 0], (nup, 1))) \
+           + cusp_eval(configs_up, configs_up, jnp.tile(bcoeff[:1, 0], (nup, 1)))
+    b_updn = b_eval(configs_up, configs_dn, jnp.tile(bcoeff[1:, 1], (ndn, 1))) \
+           + cusp_eval(configs_up, configs_dn, jnp.tile(bcoeff[:1, 1], (nup, 1)))
+    b_dndn = b_eval(configs_dn, configs_dn, jnp.tile(bcoeff[1:, 2], (ndn, 1))) \
+           + cusp_eval(configs_dn, configs_dn, jnp.tile(bcoeff[:1, 2], (nup, 1)))
     bdiag_corr = compute_bdiag_corr(mol, basis_params, parameters)
 
     # sum the terms up to obtain the log Jastrow factor
@@ -123,13 +153,13 @@ def evaluate_jastrow(mol, basis_params, basis_sum_evaluators, parameters, config
     return a, b, logj
 
 
-def evaluate_testvalue(mol, basis_sum_evaluators, parameters, configs_old, e, spin, epos):
+def evaluate_testvalue(mol, partial_sum_evaluators, parameters, configs_old, e, spin, epos):
     """
-    Evaluate the test value (:math:`\log J(\vec{R}')/\logJ(\vec{R})`) for a single-electron update.
+    Evaluate the test value (:math:`\log J(\vec{R}')/\log J(\vec{R})`) for a single-electron update.
 
     Args:
         mol (pyscf.gto.Mole): PySCF molecule object.
-        basis_sum_evaluators (list): List of vmapped compute_basis_sum() functions for evaluating different terms.
+        partial_sum_evaluators (list): List of vmapped partial_basis_sum() functions.
         parameters (CoefficientParameters): Jastrow coeffcients.
         configs_old (jax.Array): Electron configurations before the update. (nconfig, nelec, 3)
         e (int): Index of the updated electron.
@@ -150,24 +180,26 @@ def evaluate_testvalue(mol, basis_sum_evaluators, parameters, configs_old, e, sp
     tiled_atom_coords = jnp.tile(atom_coords, (nconfig, 1, 1))
     acoeff, bcoeff = parameters
 
-    a_value, b_value, cusp_value = basis_sum_evaluators
+    a_eval, b_eval, cusp_eval = partial_sum_evaluators
 
     # compute a term contributed by electron e
-    a = a_value(epos, tiled_atom_coords, acoeff[:, 1:, spin]) \
-      + cusp_value(epos, tiled_atom_coords, acoeff[:, 0, spin])
-    a_old = a_value(epos_old, tiled_atom_coords, acoeff[:, 1:, spin])\
-          + cusp_value(epos_old, tiled_atom_coords, acoeff[:, 0, spin])
+    # (nconfig,)
+    a = a_eval(epos, tiled_atom_coords, acoeff[:, 1:, spin]) \
+      + cusp_eval(epos, tiled_atom_coords, acoeff[:, :1, spin])
+    a_old = a_eval(epos_old, tiled_atom_coords, acoeff[:, 1:, spin])\
+          + cusp_eval(epos_old, tiled_atom_coords, acoeff[:, :1, spin])
 
     # compute b terms contributed by electron e
     # bcoeff is tiled to match the first dimension (n) of acoeff
-    b_up = b_value(epos, configs_up, jnp.tile(bcoeff[1:, spin+0], (nup, 1))) \
-         + cusp_value(epos, configs_up, jnp.tile(bcoeff[0, spin+0], (nup)))
-    b_dn = b_value(epos, configs_dn, jnp.tile(bcoeff[1:, spin+1], (ndn, 1))) \
-         + cusp_value(epos, configs_dn, jnp.tile(bcoeff[0, spin+1], (ndn)))
-    b_up_old = b_value(epos_old, configs_old_up, jnp.tile(bcoeff[1:, spin+0], (nup, 1))) \
-             + cusp_value(epos_old, configs_old_up, jnp.tile(bcoeff[0, spin+0], (nup)))
-    b_dn_old = b_value(epos_old, configs_old_dn, jnp.tile(bcoeff[1:, spin+1], (ndn, 1))) \
-             + cusp_value(epos_old, configs_old_dn, jnp.tile(bcoeff[0, spin+1], (ndn)))
+    # (nconfig,)
+    b_up = b_eval(epos, configs_up, jnp.tile(bcoeff[1:, spin+0], (nup, 1))) \
+         + cusp_eval(epos, configs_up, jnp.tile(bcoeff[:1, spin+0], (nup, 1)))
+    b_dn = b_eval(epos, configs_dn, jnp.tile(bcoeff[1:, spin+1], (ndn, 1))) \
+         + cusp_eval(epos, configs_dn, jnp.tile(bcoeff[:1, spin+1], (nup, 1)))
+    b_up_old = b_eval(epos_old, configs_old_up, jnp.tile(bcoeff[1:, spin+0], (nup, 1))) \
+             + cusp_eval(epos_old, configs_old_up, jnp.tile(bcoeff[:1, spin+0], (nup, 1)))
+    b_dn_old = b_eval(epos_old, configs_old_dn, jnp.tile(bcoeff[1:, spin+1], (ndn, 1))) \
+             + cusp_eval(epos_old, configs_old_dn, jnp.tile(bcoeff[:1, spin+1], (nup, 1)))
 
     delta_a = a - a_old
     # factor of 1/2 cancelled by the double appearance (row and column) of b terms contributed by electron e
@@ -176,37 +208,90 @@ def evaluate_testvalue(mol, basis_sum_evaluators, parameters, configs_old, e, sp
     return jnp.exp(delta_logj)
 
 
+def evaluate_gradient(mol, partial_sum_grad_evaluators, parameters, configs_up, configs_dn, spin, epos):
+    """
+    Evaluate the gradient of log Jastrow factor (:math:`\nabla_e \log J(\vec{R})`).
+
+    Args:
+        mol (pyscf.gto.Mole): PySCF molecule object.
+        partial_sum_grad_evaluators (list): List of vmapped partial_basis_sum() gradient functions.
+        parameters (CoefficientParameters): Jastrow coeffcients.
+        configs_up (jax.Array): Spin-up electron configurations with electron e removed (if spin=0). (nconfig, nup, 3)
+        configs_dn (jax.Array): Spin-down electron configurations with electron e removed (if spin=1). (nconfig, nup, 3)
+        spin (int): Spin of the electron with respect to which the gradient is taken.
+        epos (jax.Array): Positions of the electron e. (nconfig, 3)
+        
+    Return:
+        jax.Array: Gradient values. (3, nconfig)
+    """
+    nup = configs_up.shape[1]
+    ndn = configs_dn.shape[1]
+    nconfig = configs_up.shape[0]
+    atom_coords = jnp.array(mol.atom_coords())
+    # tiled to match the expected shape of coords in basis_sum_evaluators 
+    tiled_atom_coords = jnp.tile(atom_coords, (nconfig, 1, 1))
+    acoeff, bcoeff = parameters
+
+    a_grad_eval, b_grad_eval, cusp_grad_eval = partial_sum_grad_evaluators
+
+    # compute gradient of a term
+    # (3, nconfig)
+    a_grad = a_grad_eval(epos, tiled_atom_coords, acoeff[:, 1:, spin]) \
+      + cusp_grad_eval(epos, tiled_atom_coords, acoeff[:, :1, spin])
+    
+    # compute gradient of b terms
+    # bcoeff is tiled to match the first dimension (n) of acoeff
+    # (3, nconfig)
+    b_grad_up = b_grad_eval(epos, configs_up, jnp.tile(bcoeff[1:, spin+0], (nup, 1))) \
+         + cusp_grad_eval(epos, configs_up, jnp.tile(bcoeff[:1, spin+0], (nup, 1)))
+    b_grad_dn = b_grad_eval(epos, configs_dn, jnp.tile(bcoeff[1:, spin+1], (ndn, 1))) \
+         + cusp_grad_eval(epos, configs_dn, jnp.tile(bcoeff[:1, spin+1], (ndn, 1)))
+    
+    grad_logj = a_grad + b_grad_up + b_grad_dn
+    return grad_logj
+
+
 def create_jastrow_evaluator(mol, basis_params):
     """
     Create a set of functions that can be used to evaluate the Jastrow factor.
     """
-    polypade_grad = jax.grad(polypade, argnums=0)
-    cutoffcusp_grad = jax.grad(cutoffcusp, argnums=0)
+    # vectorize basis functions
+    _inner_polypade = jax.vmap(polypade, in_axes=(None, 0, None, None), out_axes=0) # [(3,), (n,), float, float] -> (n,)
+    vmapped_polypade = jax.vmap(_inner_polypade, in_axes=(None, None, 0, None), out_axes=1) # [(3,), (n,), (nbasis,), float] -> (n, nbasis)
+    _inner_cutoffcusp = jax.vmap(cutoffcusp, in_axes=(None, 0, None, None), out_axes=0)
+    vmapped_cutoffcusp = jax.vmap(_inner_cutoffcusp, in_axes=(None, None, 0, None), out_axes=1)
 
-    # vectorize polypade function
-    _inner_polypade = jax.vmap(polypade, in_axes=(0, None, None), out_axes=0) # [(n,), float, float] -> (n,)
-    vmapped_polypade = jax.vmap(_inner_polypade, in_axes=(None, 0, None), out_axes=1) # [(n,), (nbasis,), float] -> (n, nbasis)
-
+    partial_basis_sum_grad = jax.grad(partial_basis_sum, argnums=0)
     beta_a, beta_b, ion_cusp, rcut, gamma = basis_params
-    basis_sum_evaluators_elecconf = [
+
+    partial_sum_evals_elecconf = [
         jax.vmap( # vmapping over configurations
             jax.vmap( # vmapping over electrons
-                partial(compute_basis_sum, basis=basis, param=param, rcut=rcut), 
+                partial(partial_basis_sum, basis=basis, param=param, rcut=rcut), 
                 in_axes=(0, None, None)
             ), in_axes=(0, 0, None)
         )
-        for basis, param in zip([vmapped_polypade, vmapped_polypade, cutoffcusp], [beta_a, beta_b, gamma])]
+        for basis, param in zip([vmapped_polypade, vmapped_polypade, vmapped_cutoffcusp], [beta_a, beta_b, gamma])]
 
-    basis_sum_evaluators_conf = [
+    partial_sum_evals_conf = [
         jax.vmap( # vmapping over configurations
-            partial(compute_basis_sum, basis=basis, param=param, rcut=rcut), 
+            partial(partial_basis_sum, basis=basis, param=param, rcut=rcut), 
             in_axes=(0, 0, None)
         )
-        for basis, param in zip([vmapped_polypade, vmapped_polypade, cutoffcusp], [beta_a, beta_b, gamma])]
+        for basis, param in zip([vmapped_polypade, vmapped_polypade, vmapped_cutoffcusp], [beta_a, beta_b, gamma])]
+    
+    partial_sum_grad_evals_conf = [
+        jax.vmap( # vmapping over configurations
+            partial(partial_basis_sum_grad, basis=basis, param=param, rcut=rcut), 
+            in_axes=(0, 0, None),
+            out_axes=1
+        )
+        for basis, param in zip([vmapped_polypade, vmapped_polypade, vmapped_cutoffcusp], [beta_a, beta_b, gamma])]
 
-    value_func = jax.jit(partial(evaluate_jastrow, mol, basis_params, basis_sum_evaluators_elecconf))
-    testval_func = jax.jit(partial(evaluate_testvalue, mol, basis_sum_evaluators_conf))
-    return value_func, testval_func
+    value_func = jax.jit(partial(evaluate_jastrow, mol, basis_params, partial_sum_evals_elecconf))
+    testval_func = jax.jit(partial(evaluate_testvalue, mol, partial_sum_evals_conf))
+    grad_func = jax.jit(partial(evaluate_gradient, mol, partial_sum_grad_evals_conf))
+    return value_func, testval_func, grad_func
 
 
 class _parameterMap:
@@ -259,7 +344,7 @@ class JAXJastrowSpin:
     def __init__(self, mol, ion_cusp=None, na=4, nb=3, rcut=None, gamma=None, beta0_a=0.2, beta0_b=0.5):
         self._mol = mol
         self._init_params(ion_cusp, na, nb, rcut, gamma, beta0_a, beta0_b)
-        self._recompute, self._testvalue = create_jastrow_evaluator(self._mol, self.basis_params)
+        self._recompute, self._testvalue, self._gradient = create_jastrow_evaluator(self._mol, self.basis_params)
 
 
     def _init_params(self, ion_cusp, na, nb, rcut, gamma, beta0_a, beta0_b):
@@ -290,8 +375,9 @@ class JAXJastrowSpin:
             else:
                 rcut = 7.5
 
-        beta_a = pyqmc.wftools.expand_beta_qwalk(beta0_a, na)
-        beta_b = pyqmc.wftools.expand_beta_qwalk(beta0_b, nb)
+        beta_a = jnp.array(pyqmc.wftools.expand_beta_qwalk(beta0_a, na))
+        beta_b = jnp.array(pyqmc.wftools.expand_beta_qwalk(beta0_b, nb))
+        gamma = jnp.array([gamma])
         self.basis_params = BasisParameters(beta_a, beta_b, ion_cusp, rcut, gamma)
 
         acoeff = jnp.zeros((self._mol.natm, len(beta_a)+1, 2))
@@ -307,16 +393,35 @@ class JAXJastrowSpin:
         
 
     def recompute(self, configs):
+        self._configscurrent = configs.copy()
         _configs = jnp.array(configs.configs)
         self._a, self._b, self._logj = self._recompute(self.parameters.jax_parameters, _configs)
         return self._logj
 
 
-    def testvalue(self, configs_old, e, epos, mask=None):
-        _configs_old = jnp.array(configs_old.configs)
+    def testvalue(self, e, epos, mask=None):
+        _configs_old = jnp.array(self._configscurrent.configs)
         _epos = jnp.array(epos.configs)
         spin = int(e >= self._mol.nelec[0])
         return self._testvalue(self.parameters.jax_parameters, _configs_old, e, spin, _epos)
+
+
+    def gradient(self, e):
+        _configs = jnp.array(self._configscurrent.configs)
+        _epos = _configs[:, e, :]
+        spin = int(e >= self._mol.nelec[0])
+        nelec = self._mol.nelec[0] + self._mol.nelec[1]
+
+        # remove electron e from the configurations to avoid singularity in gradient
+        mask = jnp.arange(nelec) != e
+        nup, ndn = self._mol.nelec
+        nup = nup - (1-spin)
+        ndn = ndn - spin
+        configs_up = _configs[:, mask, :][:, :nup, :]
+        configs_dn = _configs[:, mask, :][:, nup:, :]
+
+        self._grad = self._gradient(self.parameters.jax_parameters, configs_up, configs_dn, spin, _epos)
+        return self._grad
 
 
 if __name__ == "__main__":
@@ -347,7 +452,7 @@ if __name__ == "__main__":
 
     data = []
     # for nconfig in [10, 1000, 100000]:
-    for nconfig in [10]:
+    for nconfig in [2]:
         configs = pyq.initial_guess(mol['h2o'], nconfig)
 
         jax_jastrowval = jax_jastrow.recompute(configs) 
@@ -367,17 +472,53 @@ if __name__ == "__main__":
         print("jax values", jax_jastrowval)
         print("pyqmc values", pyqmc_jastrowval[1])
 
+        data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'jax', 'value': 'Jastrow'})
+        data.append({'N': nconfig, 'time': slater_end-slater_start, 'method': 'pyqmc', 'value': 'Jastrow'})
+
+
+
         new_configs = configs.copy()
         new_configs.electron(7).configs += np.random.normal(0, 0.1, configs.electron(7).configs.shape)
 
-        jax_testval = jax_jastrow.testvalue(configs, 7, new_configs.electron(7))
+        jax_testval = jax_jastrow.testvalue(7, new_configs.electron(7))
+        jax.block_until_ready(jax_testval)
+
+        jax_start = time.perf_counter()
+        jax_testval = jax_jastrow.testvalue(7, new_configs.electron(7))
+        jax.block_until_ready(jax_testval)
+        jax_end = time.perf_counter()
+
+        slater_start = time.perf_counter()
         pyqmc_testval = jastrow.testvalue(7, new_configs.electron(7))[0]
+        slater_end = time.perf_counter()
+
         print("jax testval", jax_testval)
         print("pyqmc testval", pyqmc_testval)
 
-        data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'jax'})
-        data.append({'N': nconfig, 'time': slater_end-slater_start, 'method': 'pyqmc'})
+        data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'jax', 'value': 'Testvalue'})
+        data.append({'N': nconfig, 'time': slater_end-slater_start, 'method': 'pyqmc', 'value': 'Testvalue'})
+
+
+
+        jax_gradient = jax_jastrow.gradient(7)
+        jax.block_until_ready(jax_gradient)
+
+        jax_start = time.perf_counter()
+        jax_gradient = jax_jastrow.gradient(7)
+        jax.block_until_ready(jax_testval)
+        jax_end = time.perf_counter()
+
+        slater_start = time.perf_counter()
+        pyqmc_gradient = jastrow.gradient(7, configs.electron(7))
+        slater_end = time.perf_counter()
+
+        print("jax gradient", jax_gradient)
+        print("pyqmc gradient", pyqmc_gradient)
+
+        data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'jax', 'value': 'Gradient'})
+        data.append({'N': nconfig, 'time': slater_end-slater_start, 'method': 'pyqmc', 'value': 'Gradient'})
     
-    sns.lineplot(data = pd.DataFrame(data), x='N', y='time', hue='method')
+    data = pd.DataFrame(data)
+    g = sns.relplot(data=data, x='N', y='time', hue='method', col='value', kind='line')
     plt.ylim(0)
     # plt.savefig("jax_vs_pyqmc.png")

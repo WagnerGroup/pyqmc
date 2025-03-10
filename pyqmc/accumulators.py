@@ -19,7 +19,7 @@ import pyqmc.ewald as ewald
 import pyqmc.eval_ecp as eval_ecp
 from pyqmc.stochastic_reconfiguration import StochasticReconfiguration
 import copy
-
+import time
 
 def gradient_generator(mol, wf, to_opt=None, nodal_cutoff=1e-3, eps=1e-1, inverse_strategy="regularized_inverse", **ewald_kwargs):
     return StochasticReconfiguration(
@@ -44,9 +44,14 @@ class EnergyAccumulator:
             self.coulomb = energy.OpenCoulomb(mol, **kwargs)
 
     def __call__(self, configs, wf):
+        start = time.perf_counter()
         ee, ei, ii = self.coulomb.energy(configs)
+        mid1 = time.perf_counter()
         ecp_val = eval_ecp.ecp(self.mol, configs, wf, self.threshold, self.naip)
+        mid2 = time.perf_counter()
         ke, grad2 = energy.kinetic(configs, wf)
+        end = time.perf_counter()
+        print('time_ecp', mid2 - mid1)
         return {
             "ke": ke,
             "ee": ee,

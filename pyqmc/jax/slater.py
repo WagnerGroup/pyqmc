@@ -220,7 +220,7 @@ def create_wf_evaluator(mol, mf):
 
     """
     # Basis evaluators
-    gto_1e = gto.create_gto_evaluator(mol)
+    gto_1e, gto_1e_vg, gto_1e_vgl = gto.create_gto_evaluator(mol)
     gto_ne = jax.vmap(gto_1e, in_axes=0, out_axes=0)# over electrons
 
     # determinant expansion
@@ -240,13 +240,13 @@ def create_wf_evaluator(mol, mf):
     _testvalue_down = partial(testvalue_down, gto_1e, expansion)
 
     # electron gradient will be testvalue with gradient of gto_1e
-    gto_1e_grad = jax.jacfwd(gto_1e)
-    grad_up = partial(testvalue_up, gto_1e_grad, expansion)
-    grad_down = partial(testvalue_down, gto_1e_grad, expansion)
+    #gto_1e_grad = jax.jacfwd(gto_1e)
+    grad_up = partial(testvalue_up, gto_1e_vg, expansion)
+    grad_down = partial(testvalue_down, gto_1e_vg, expansion)
 
-    gto_1e_laplacian = jax.jacfwd(gto_1e_grad)
-    laplacian_up = partial(testvalue_up, gto_1e_laplacian, expansion)
-    laplacian_down = partial(testvalue_down, gto_1e_laplacian, expansion)
+    #gto_1e_laplacian = jax.jacfwd(gto_1e_grad)
+    laplacian_up = partial(testvalue_up, gto_1e_vgl, expansion)
+    laplacian_down = partial(testvalue_down, gto_1e_vgl, expansion)
 
     # pgradient is derivative of value with respect to ci_coeff and mo_coeff 
     pgradient = jax.jacobian(value, argnums=0)
@@ -366,9 +366,10 @@ class JAXSlater:
 #                          mos: jnp.ndarray, # nelec_s
 #                          determinant: jnp.ndarray # nelec_s
 #                          ): 
-        if  saved_values is None:
+        if saved_values is None:
             self.recompute(configs)
             return
+        
         
         if mask is None: 
             mask = jnp.ones((configs.configs.shape[0],), dtype=bool)
@@ -411,10 +412,10 @@ class JAXSlater:
         xyz = jnp.array(epos.configs)
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
-        values, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
+        #values, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
 
         grad, saved = self._grad[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz) # pyqmc wants (3, nconfig)
-        return np.asarray(grad.T/values)
+        return np.asarray(grad[:,1:].T/grad[:,0])
     
 
     def gradient_value(self, e, epos):
@@ -422,10 +423,9 @@ class JAXSlater:
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
         
-        values, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
-        jax.block_until_ready(values)
-        derivatives, throwaway = self._grad[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz) # pyqmc wants (3, nconfig)
-        convert = derivatives.T/values, values, saved
+        derivatives, saved = self._grad[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz) # pyqmc wants (3, nconfig)
+        #print("saved", saved.shape)
+        convert = derivatives[:,1:].T/derivatives[:,0], derivatives[:,0], saved[:,0, :] 
         return convert
 
 
@@ -433,10 +433,8 @@ class JAXSlater:
         xyz = jnp.array(epos.configs)
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
-        values, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
-        gradient, _ = self._grad[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz) # pyqmc wants (3, nconfig)
-        laplacian = jnp.trace(self._lap[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)[0], axis1=1, axis2=2)
-        return np.array(gradient.T/values), np.asarray(laplacian/values)
+        laplacian, saved = self._lap[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
+        return np.array(laplacian[:,1:4].T/laplacian[:,0]), np.asarray(laplacian[:,4]/laplacian[:,0])
         
         
 
@@ -444,9 +442,8 @@ class JAXSlater:
         xyz = jnp.array(epos.configs)
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
-        values, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
         lap, saved = self._lap[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
-        return np.array(jnp.trace(lap, axis1=1, axis2=2)/values)
+        return lap[:,4].T/lap[:,0]
     
     def pgradient(self, configs):
         xyz = jnp.array(configs.configs)

@@ -217,7 +217,7 @@ def evaluate_gradient(mol, partial_sum_grad_evaluators, parameters, configs_up, 
         partial_sum_grad_evaluators (list): List of vmapped partial_basis_sum() gradient functions.
         parameters (CoefficientParameters): Jastrow coeffcients.
         configs_up (jax.Array): Spin-up electron configurations with electron e removed (if spin=0). (nconfig, nup, 3)
-        configs_dn (jax.Array): Spin-down electron configurations with electron e removed (if spin=1). (nconfig, nup, 3)
+        configs_dn (jax.Array): Spin-down electron configurations with electron e removed (if spin=1). (nconfig, ndn, 3)
         spin (int): Spin of the electron with respect to which the gradient is taken.
         epos (jax.Array): Positions of the electron e. (nconfig, 3)
         

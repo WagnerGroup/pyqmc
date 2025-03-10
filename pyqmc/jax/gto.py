@@ -59,6 +59,57 @@ def _cartesian_gto(
   return jnp.sum(all_prod, axis=1) #(N)
 
 
+
+def _cartesian_gto_grad(
+    centers: jax.Array,
+    ijk: jax.Array,
+    expts: jax.Array,
+    coeffs: jax.Array,
+    xyz: jax.Array) -> jax.Array:
+  ''' Evaluate a Cartesian Gaussian-type orbital.
+
+    This evaluates a potentially large collection of basis functions, each of
+    which is a mixture of Gaussians.  For JAX reasons we assume that all the
+    mixtures have the same number of Gaussians.  We take there to be N basis
+    functions, each with M Gaussians.
+
+    This function is based on code originally written by Ryan Adams, with modification by Lucas Wagner
+
+  Args:
+    centers: The centers of each Gaussian mixture. (N, 3)
+
+    ijk: The angular momentum of each Gaussian mixture. (N, 3)
+
+    expts: The exponents of each Gaussian mixture. (N, M)
+
+    coeffs: The coefficients of each Gaussian mixture. (N, M) 
+             It's assumed these are chose such that x^i y^j z^k exp(-alpha r^2) 
+             is normalized to whatever standard you want (we don't do any normalization of the functions).
+
+    xyz: The point at which to evaluate the basis functions. (3,)
+
+  Returns:
+    The value of each basis function at the point. (N,)
+  '''
+  # Distances
+  centers2d: jax.Array = jnp.atleast_2d(centers)
+  ctr_xyz: jax.Array = xyz[jnp.newaxis,:] - centers2d # (N, 3)
+  ctr_r = jnp.linalg.norm(ctr_xyz, axis=1) # (N,1)
+
+  # value
+  xyz_ijk: jax.Array = jnp.prod(ctr_xyz**ijk, axis=1) # (N)
+  gauss: jax.Array = jnp.exp(-expts * ctr_r[:,jnp.newaxis]**2) # (N,)
+  value: jax.Array = coeffs* gauss * xyz_ijk[:,jnp.newaxis] 
+
+  # Gradient
+  grad: jax.Array = value[:,:,jnp.newaxis] * (ijk[:,jnp.newaxis,:]/ctr_xyz[:,jnp.newaxis,:]-2*expts[:,:,jnp.newaxis]*ctr_xyz[:,jnp.newaxis,:]) # (N,3)
+  #return (jnp.sum(value, axis=1), #(N)
+  #       jnp.sum(grad, axis=1) #(N,3)
+  #       )
+  return jnp.concatenate([jnp.sum(value, axis=1)[:,jnp.newaxis], jnp.sum(grad, axis=1)], axis=1) #(N,4)
+
+
+
 def create_gto_evaluator(mol):
     centers = mol.atom_coords()
     centers = jnp.array(centers)
@@ -97,7 +148,15 @@ def create_gto_evaluator(mol):
         jnp.array(expts),
         jnp.array(coeffs),
     )
-    return evaluator
+
+    gradient = partial(
+        _cartesian_gto_grad,
+        jnp.array(centers_aos),
+        jnp.array(ijks),
+        jnp.array(expts),
+        jnp.array(coeffs),
+    )
+    return evaluator, gradient
 
 
 if __name__=="__main__":
@@ -109,16 +168,21 @@ if __name__=="__main__":
         pass 
 
     import pyscf
-    mol = pyscf.gto.Mole(atom = '''O 0 0 0; H  0 2.0 0; H 0 0 2.0''', basis = 'unc-ccecp-ccpvdz', ecp='ccecp', cart=True)
+    mol = pyscf.gto.Mole(atom = '''O 0 0 0; H  0 2.0 0; H 0 0 2.0''', 
+                         basis = 'unc-ccecp-ccpvdz', 
+                         #basis='sto-3g',
+                         ecp='ccecp', cart=True)
     mol.build()
 
     import time
-    evaluator = create_gto_evaluator(mol)
+    evaluator, gradient = create_gto_evaluator(mol)
     evaluator_val = jax.jit(jax.vmap(evaluator, in_axes=(0)))
     evaluator_gradient = jax.jacfwd(evaluator)
     evaluator_gradient = jax.vmap(evaluator_gradient, in_axes=(0))
     evaluator_gradient = jax.jit(evaluator_gradient)
 
+    analytic_gradient = jax.vmap(gradient, in_axes=(0))
+    analytic_gradient = jax.jit(analytic_gradient)
 
     nconfig = 2000
     seed = 32123
@@ -128,22 +192,33 @@ if __name__=="__main__":
     res = evaluator_val(coords)
     jax.block_until_ready(res)
 
-    start = time.time()
-    res = evaluator_val(coords)
-    jax.block_until_ready(res)
-    end = time.time()
+    start = time.perf_counter()
+    res_val = evaluator_val(coords)
+    jax.block_until_ready(res_val)
+    end = time.perf_counter()
     val_time = end-start
     print("Time taken for value: ", end-start)
 
 
     res = evaluator_gradient(coords)
     jax.block_until_ready(res)
-
-    start = time.time()
+    start = time.perf_counter()
     res = evaluator_gradient(coords)
     jax.block_until_ready(res)
-    end = time.time()
+    end = time.perf_counter()
     grad_time = end-start
     print("Time taken for gradient: ", end-start)
 
-    print("grad ratio", grad_time/val_time)
+    analytic_res = analytic_gradient(coords)
+    jax.block_until_ready(analytic_res)
+    start = time.perf_counter()
+    analytic_res = analytic_gradient(coords)
+    jax.block_until_ready(analytic_res)
+    end = time.perf_counter()
+    analytic_grad_time = end-start
+    print("Time taken for analytic gradient: ", end-start)
+
+    print("gradient squared err", jnp.mean(jnp.linalg.norm(res-analytic_res[:,:,1:])))
+    print("value", jnp.mean(jnp.linalg.norm(res_val-analytic_res[:,:, 0])))
+    print("grad ratio for AD", grad_time/val_time)
+    print("grad ratio for analytic", analytic_grad_time/val_time)

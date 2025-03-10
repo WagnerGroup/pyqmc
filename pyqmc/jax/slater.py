@@ -251,6 +251,11 @@ def create_wf_evaluator(mol, mf):
     # pgradient is derivative of value with respect to ci_coeff and mo_coeff 
     pgradient = jax.jacobian(value, argnums=0)
 
+    # these are for batches in which a single configuration needs to be updated
+    _testval_up_batch = jax.jit(jax.vmap(_testvalue_up, in_axes = (None, None, None, None, 0), out_axes = 0))
+    _testval_down_batch = jax.jit(jax.vmap(_testvalue_down, in_axes = (None, None, None, None, 0), out_axes = 0))
+
+
     # compile all the testvalue functions
     testval_funcs = [_testvalue_up, _testvalue_down, grad_up, grad_down, laplacian_up, laplacian_down]
     testval_funcs = ( jax.jit(
@@ -277,7 +282,7 @@ def create_wf_evaluator(mol, mf):
                 for f in value_func)
 
     # The vmaps here are over configurations
-    return det_params, expansion, value_func, testval_funcs
+    return det_params, expansion, value_func, testval_funcs, _testval_up_batch, _testval_down_batch
 
 
 def gradient_value(spin, e, xyz, testvalue, grad, jax_parameters, dets_up, dets_down):
@@ -339,8 +344,10 @@ class _parameterMap:
 class JAXSlater:
     def __init__(self, mol, mf):
         _parameters, self.expansion, (self._recompute, self._pgradient), \
-        (_testvalue_up, _testvalue_down, _grad_up, _grad_down, _lap_up, _lap_down) = create_wf_evaluator(mol, mf)
+        (_testvalue_up, _testvalue_down, _grad_up, _grad_down, _lap_up, _lap_down),\
+             _batch_up, _batch_down = create_wf_evaluator(mol, mf)
         self._testvalue=(_testvalue_up, _testvalue_down)
+        self._testvalue_batch = (_batch_up, _batch_down)
         self._grad = (_grad_up, _grad_down)
         self._lap = (_lap_up, _lap_down)
         self._nelec = tuple(mol.nelec)
@@ -361,11 +368,6 @@ class JAXSlater:
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
 
-#        def _sherman_morrison_row(e: int, 
-#                          inverse: jnp.ndarray, # nelec_s, nelec_s
-#                          mos: jnp.ndarray, # nelec_s
-#                          determinant: jnp.ndarray # nelec_s
-#                          ): 
         if saved_values is None:
             self.recompute(configs)
             return
@@ -398,12 +400,30 @@ class JAXSlater:
         xyz = jnp.array(epos.configs)
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
-        if len(xyz.shape) ==3:
+        if len(xyz.shape) ==3 and mask is not None: # This is an optimization for ECPs. 
             allvals = []
-            for i in range(xyz.shape[1]):
-                newvals, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz[:,i,:])
+            print("mask", np.sum(mask))
+            for i, xyz_i in enumerate(xyz[mask,:,:]):
+                dets_up = SlaterState(None, self._dets_up.sign[i], self._dets_up.logabsdet[i], self._dets_up.inverse[i])
+                dets_down = SlaterState(None, self._dets_down.sign[i], self._dets_down.logabsdet[i], self._dets_down.inverse[i])
+                newvals, saved = self._testvalue_batch[spin](self.parameters.jax_parameters, dets_up, dets_down, e, xyz_i)
                 allvals.append(newvals)
-            return np.array(allvals).T[mask,:], None
+            return jnp.array(allvals), None
+
+
+            #dets_up = SlaterState(None, self._dets_up.sign[mask], self._dets_up.logabsdet[mask], self._dets_up.inverse[mask])
+            #dets_down = SlaterState(None, self._dets_down.sign[mask], self._dets_down.logabsdet[mask], self._dets_down.inverse[mask])
+            #allvals, saved = self._testvalue_batch[spin](self.parameters.jax_parameters, dets_up, dets_down, e, xyz[mask,:,:])
+            #return allvals, None
+
+
+            #allvals, saved = self._testvalue_batch[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
+            #for i in range(xyz.shape[1]):
+            #    newvals, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz[:,i,:])
+            #    allvals.append(newvals)
+            #print("allvals", allvals.shape)
+            #print(np.sum(mask))
+            #return allvals[mask,:], None #np.array(allvals)[mask,:], None
         else: 
             newvals, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
             return np.array(newvals)[mask], saved

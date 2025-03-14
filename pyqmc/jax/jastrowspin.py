@@ -24,45 +24,64 @@ class CoefficientParameters(NamedTuple):
     bcoeff: jax.Array
 
 
-def polypade(ri, rj, beta, rcut):
+def z(x): return x**2 * (6 - 8*x + 3*x**2)
+def p(y): return ((y-1)**3 + 1)/3
+def p_grad(y): return (y-1)**2
+def z_grad(x): return 12*x * (1 - 2*x + x**2)
+
+
+def polypade(rij, beta, rcut):
     """
-    :math:`a(\vec{r}_i, \vec{r}_j, \beta_k, r_{cut}) = \frac{1-z(r_{ij}/r_{cut})}{1+\beta_k z(r_{ij}/r_{cut})}`, where
-    :math:`z(x) = x^2(6-8x+3x^2)`.
+    :math:`a(\vec{r}_i, \vec{r}_j, \beta_k, r_{cut}) = \frac{1-z(r)}{1+\beta_k z(r)}`, where
+    :math:`r = r_{ij}/r_{cut}, z(x) = x^2(6-8x+3x^2)`.
 
     Args:
-        ri, rj (jax.Array): Positions. (3,)
+        rij (float): Distance.
         beta (float): Beta parameter.
         rcut (float): Cutoff radius.
 
     Return:
         float: Function value.
     """
-    rij = jnp.linalg.norm(ri - rj, axis=-1)
-    x = rij / rcut
-    z = ((3*x - 8) * x + 6) * x**2
-    p = (1 - z) / (1 + beta * z)
-    return jnp.where(rij > rcut, 0.0, p)
+    r = rij / rcut
+    func = (1 - z(r)) / (1 + beta * z(r))
+    return jnp.where(rij > rcut, 0.0, func)
 
 
-def cutoffcusp(ri, rj, gamma, rcut):
+def cutoffcusp(rij, gamma, rcut):
     """
-    :math:`a(\vec{r}_i, \vec{r}_j, \gamma, r_{cut}) = r_{cut} (-\frac{p(y)}{1+\gamma p(y)} + \frac{1}{3+\gamma})`, where
-    :math:`p(y) = \frac{(y-1)^3+1}{3}`.
+    :math:`a(\vec{r}_i, \vec{r}_j, \gamma, r_{cut}) = r_{cut} (-\frac{p(r)}{1+\gamma p(r)} + \frac{1}{3+\gamma})`, where
+    :math:`r = r_{ij}/r_{cut}, p(y) = \frac{(y-1)^3+1}{3}`.
 
     Args:
-        ri, rj (jax.Array): Positions. (3,)
+        rij (float): Distance.
         gamma (float): Gamma parameter.
         rcut (float): Cutoff radius.
 
     Return:
         float: Function value.
     """
-    rij = jnp.linalg.norm(ri - rj, axis=-1)
-    y = rij / rcut
-    y1 = y - 1
-    p = (y1 * y1 * y1 + 1) / 3
-    func = -p / (1 + gamma * p) + 1 / (3 + gamma)
+    r = rij / rcut
+    func = - p(r) / (1 + gamma * p(r)) + 1 / (3 + gamma)
     return jnp.where(rij > rcut, 0.0, func * rcut)
+
+
+def polypade_grad(rij, beta, rcut):
+    """
+    Derivative of polypade with respect to rij.
+    """
+    r = rij / rcut
+    func = - (1 + beta) * z_grad(r) / (rcut * (1 + beta * z(r))**2)
+    return jnp.where(rij > rcut, 0.0, func)
+
+
+def cutoffcusp_grad(rij, gamma, rcut):
+    """
+    Derivative of cutoffcusp with respect to rij.
+    """
+    r = rij / rcut
+    func = - p_grad(r) / (1 + gamma * p(r))**2
+    return jnp.where(rij > rcut, 0.0, func)
 
 
 def partial_basis_sum(elec_coord, coords, coeff, basis, param, rcut):
@@ -85,8 +104,33 @@ def partial_basis_sum(elec_coord, coords, coeff, basis, param, rcut):
     Return:
         float: Sum.
     """
-    basis_val = basis(elec_coord, coords, param, rcut) # (n, nbasis)
+    rij = jnp.linalg.norm(elec_coord - coords, axis=-1)
+    basis_val = basis(rij, param, rcut) # (n, nbasis)
     return jnp.sum(coeff * basis_val)
+
+
+def partial_basis_sum_grad(elec_coord, coords, coeff, basis_grad, param, rcut):
+    """
+    Analytic gradient of partial basis sum with respect to elec_coord.
+    """
+    rij_vec = elec_coord - coords
+    rij = jnp.linalg.norm(rij_vec, axis=-1)
+    rij_hat = rij_vec / rij[:, jnp.newaxis]
+    basis_grad_val = basis_grad(rij, param, rcut) # (n, nbasis)
+    return jnp.einsum("Ik,Ik,Ii->i", coeff, basis_grad_val, rij_hat)
+
+
+# vectorize basis functions
+_inner_polypade = jax.vmap(polypade, in_axes=(0, None, None), out_axes=0) # [(n,), float, float] -> (n,)
+vmapped_polypade = jax.vmap(_inner_polypade, in_axes=(None, 0, None), out_axes=1) # [(n,), (nbasis,), float] -> (n, nbasis)
+_inner_cutoffcusp = jax.vmap(cutoffcusp, in_axes=(0, None, None), out_axes=0)
+vmapped_cutoffcusp = jax.vmap(_inner_cutoffcusp, in_axes=(None, 0, None), out_axes=1)
+
+# for analytic gradient
+_inner_polypade_grad = jax.vmap(polypade_grad, in_axes=(0, None, None), out_axes=0) # [(n,), float, float] -> (n,)
+vmapped_polypade_grad = jax.vmap(_inner_polypade_grad, in_axes=(None, 0, None), out_axes=1) # [(n,), (nbasis,), float] -> (n, nbasis)
+_inner_cutoffcusp_grad = jax.vmap(cutoffcusp_grad, in_axes=(0, None, None), out_axes=0)
+vmapped_cutoffcusp_grad = jax.vmap(_inner_cutoffcusp_grad, in_axes=(None, 0, None), out_axes=1)
 
 
 def compute_bdiag_corr(mol, basis_params, parameters):
@@ -198,13 +242,14 @@ def evaluate_testvalue(mol, partial_sum_evaluators, parameters, coords_old, e, s
     return jnp.exp(delta_logj)
 
 
-def evaluate_gradient(mol, partial_sum_grad_evaluators, parameters, coords_up, coords_dn, spin, epos):
+def evaluate_derivative(mol, partial_sum_derv_evaluators, parameters, coords_up, coords_dn, spin, epos):
     """
-    Evaluate the gradient of log Jastrow factor (:math:`\nabla_e \log J(\vec{R})`).
+    Evaluate the derivative (gradient or hessian) of the log Jastrow factor
+    (:math:`\nabla_e \log J(\vec{R})` or :math:`H(\log J(\vec{R}))`).
 
     Args:
         mol (pyscf.gto.Mole): PySCF molecule object.
-        partial_sum_grad_evaluators (list): List of partial_basis_sum() gradient functions.
+        partial_sum_derv_evaluators (list): List of partial_basis_sum() derivative functions.
         parameters (CoefficientParameters): Jastrow coeffcients.
         coords_up (jax.Array): Spin-up electron coordinates with electron e removed (if spin=0). (nup, 3)
         coords_dn (jax.Array): Spin-down electron coordinates with electron e removed (if spin=1). (ndn, 3)
@@ -212,40 +257,34 @@ def evaluate_gradient(mol, partial_sum_grad_evaluators, parameters, coords_up, c
         epos (jax.Array): Position of the electron e. (3,)
         
     Return:
-        jax.Array: Gradient values. (3,)
+        jax.Array: Gradient values (3,) or Hessian values (3, 3)
     """
     nup = coords_up.shape[0]
     ndn = coords_dn.shape[0]
     atom_coords = jnp.array(mol.atom_coords())
     acoeff, bcoeff = parameters
 
-    a_grad_eval, b_grad_eval, cusp_grad_eval = partial_sum_grad_evaluators
+    a_derv_eval, b_derv_eval, cusp_derv_eval = partial_sum_derv_evaluators
 
-    # compute gradient of a term
-    a_grad = a_grad_eval(epos, atom_coords, acoeff[:, 1:, spin]) \
-      + cusp_grad_eval(epos, atom_coords, acoeff[:, :1, spin]) # (3,)
+    # compute derivative of a term
+    a_derv = a_derv_eval(epos, atom_coords, acoeff[:, 1:, spin]) \
+      + cusp_derv_eval(epos, atom_coords, acoeff[:, :1, spin]) # (3,) or (3, 3)
     
-    # compute gradient of b terms
+    # compute derivative of b terms
     # bcoeff is tiled to match the first dimension (n) of coords_spin
-    b_grad_up = b_grad_eval(epos, coords_up, jnp.tile(bcoeff[1:, spin+0], (nup, 1))) \
-         + cusp_grad_eval(epos, coords_up, jnp.tile(bcoeff[:1, spin+0], (nup, 1))) # (3,)
-    b_grad_dn = b_grad_eval(epos, coords_dn, jnp.tile(bcoeff[1:, spin+1], (ndn, 1))) \
-         + cusp_grad_eval(epos, coords_dn, jnp.tile(bcoeff[:1, spin+1], (ndn, 1)))
+    b_derv_up = b_derv_eval(epos, coords_up, jnp.tile(bcoeff[1:, spin+0], (nup, 1))) \
+         + cusp_derv_eval(epos, coords_up, jnp.tile(bcoeff[:1, spin+0], (nup, 1))) # (3,) or (3, 3)
+    b_derv_dn = b_derv_eval(epos, coords_dn, jnp.tile(bcoeff[1:, spin+1], (ndn, 1))) \
+         + cusp_derv_eval(epos, coords_dn, jnp.tile(bcoeff[:1, spin+1], (ndn, 1)))
     
-    grad_logj = a_grad + b_grad_up + b_grad_dn
-    return grad_logj
+    derv_logj = a_derv + b_derv_up + b_derv_dn
+    return derv_logj
 
 
 def create_jastrow_evaluator(mol, basis_params):
     """
     Create a set of functions that can be used to evaluate the Jastrow factor.
     """
-    # vectorize basis functions
-    _inner_polypade = jax.vmap(polypade, in_axes=(None, 0, None, None), out_axes=0) # [(3,), (n,), float, float] -> (n,)
-    vmapped_polypade = jax.vmap(_inner_polypade, in_axes=(None, None, 0, None), out_axes=1) # [(3,), (n,), (nbasis,), float] -> (n, nbasis)
-    _inner_cutoffcusp = jax.vmap(cutoffcusp, in_axes=(None, 0, None, None), out_axes=0)
-    vmapped_cutoffcusp = jax.vmap(_inner_cutoffcusp, in_axes=(None, None, 0, None), out_axes=1)
-
     beta_a, beta_b, ion_cusp, rcut, gamma = basis_params
 
     partial_sum_evals_elec = [
@@ -261,6 +300,12 @@ def create_jastrow_evaluator(mol, basis_params):
     partial_sum_grad_evals = [partial(jax.grad(partial_basis_sum, argnums=0), basis=basis, param=param, rcut=rcut)
         for basis, param in zip([vmapped_polypade, vmapped_polypade, vmapped_cutoffcusp], [beta_a, beta_b, gamma])]
 
+    partial_sum_grad_evals_an = [partial(partial_basis_sum_grad, basis_grad=basis, param=param, rcut=rcut)
+        for basis, param in zip([vmapped_polypade_grad, vmapped_polypade_grad, vmapped_cutoffcusp_grad], [beta_a, beta_b, gamma])]
+
+    partial_sum_hess_evals = [partial(jax.hessian(partial_basis_sum, argnums=0), basis=basis, param=param, rcut=rcut)
+        for basis, param in zip([vmapped_polypade, vmapped_polypade, vmapped_cutoffcusp], [beta_a, beta_b, gamma])]
+
     # vmapping over configurations
     value_func = jax.jit(jax.vmap(
         partial(evaluate_jastrow, mol, basis_params, partial_sum_evals_elec), 
@@ -271,10 +316,18 @@ def create_jastrow_evaluator(mol, basis_params):
         in_axes=((None, 0, None, None, 0)))
     )
     grad_func = jax.jit(jax.vmap(
-        partial(evaluate_gradient, mol, partial_sum_grad_evals),
-        in_axes=(None, 0, 0, None, 0), out_axes=1)
+        partial(evaluate_derivative, mol, partial_sum_grad_evals),
+        in_axes=(None, 0, 0, None, 0), out_axes=0)
     )
-    return value_func, testval_func, grad_func
+    grad_func_an = jax.jit(jax.vmap(
+        partial(evaluate_derivative, mol, partial_sum_grad_evals_an),
+        in_axes=(None, 0, 0, None, 0), out_axes=0)
+    )
+    hess_func = jax.jit(jax.vmap(
+        partial(evaluate_derivative, mol, partial_sum_hess_evals),
+        in_axes=(None, 0, 0, None, 0), out_axes=0)
+    )
+    return value_func, testval_func, grad_func, grad_func_an, hess_func
 
 
 class _parameterMap:
@@ -327,7 +380,7 @@ class JAXJastrowSpin:
     def __init__(self, mol, ion_cusp=None, na=4, nb=3, rcut=None, gamma=None, beta0_a=0.2, beta0_b=0.5):
         self._mol = mol
         self._init_params(ion_cusp, na, nb, rcut, gamma, beta0_a, beta0_b)
-        self._recompute, self._testvalue, self._gradient = create_jastrow_evaluator(self._mol, self.basis_params)
+        self._recompute, self._testvalue, self._gradient, self._gradient_an, self._hessian = create_jastrow_evaluator(self._mol, self.basis_params)
 
 
     def _init_params(self, ion_cusp, na, nb, rcut, gamma, beta0_a, beta0_b):
@@ -389,7 +442,11 @@ class JAXJastrowSpin:
         return self._testvalue(self.parameters.jax_parameters, _configs_old, e, spin, _epos)
 
 
-    def gradient(self, e):
+    def _split_configs(self, e):
+        """
+        Split the configurations according to spin and remove electron e, helper function for
+        computing gradient and laplacian.
+        """
         _configs = jnp.array(self._configscurrent.configs)
         _epos = _configs[:, e, :]
         spin = int(e >= self._mol.nelec[0])
@@ -402,9 +459,49 @@ class JAXJastrowSpin:
         ndn = ndn - spin
         configs_up = _configs[:, mask, :][:, :nup, :]
         configs_dn = _configs[:, mask, :][:, nup:, :]
+        return configs_up, configs_dn, spin, _epos
 
-        self._grad = self._gradient(self.parameters.jax_parameters, configs_up, configs_dn, spin, _epos)
+
+    def gradient(self, e):
+        """
+        :math:`\frac{\nabla_e J(\vec{R})}{J(\vec{R})} = \nabla_e \log J(\vec{R})`.
+        """
+        configs_up, configs_dn, spin, _epos = self._split_configs(e)
+        self._grad = self._gradient(self.parameters.jax_parameters, configs_up, configs_dn, spin, _epos).T
         return self._grad
+
+
+    def gradient_an(self, e):
+        configs_up, configs_dn, spin, _epos = self._split_configs(e)
+        self._grad = self._gradient_an(self.parameters.jax_parameters, configs_up, configs_dn, spin, _epos).T
+        return self._grad
+
+
+    def gradient_value(self, e):
+        return self.gradient(e), self._logj
+
+
+    def gradient_laplacian(self, e):
+        """
+        :math:`\frac{\nabla_e^2 J(\vec{R})}{J(\vec{R})} = \nabla_e^2 \log J(\vec{R}) + |\nabla_e \log J(\vec{R})|^2.`
+        """
+        configs_up, configs_dn, spin, _epos = self._split_configs(e)
+        self._grad = self._gradient(self.parameters.jax_parameters, configs_up, configs_dn, spin, _epos).T
+        self._lap = jnp.trace(
+            self._hessian(self.parameters.jax_parameters, configs_up, configs_dn, spin, _epos), 
+            axis1=1, axis2=2
+        ) + jnp.sum(self._grad**2, axis=0)
+        return self._grad, self._lap
+
+
+    def laplacian(self, e):
+        self.gradient_laplacian(e)
+        return self._lap
+    
+
+    def pgradient(self):
+        pass
+
 
 
 if __name__ == "__main__":
@@ -483,13 +580,16 @@ if __name__ == "__main__":
 
 
 
-        jax_gradient = jax_jastrow.gradient(7)
-        jax.block_until_ready(jax_gradient)
 
         jax_start = time.perf_counter()
         jax_gradient = jax_jastrow.gradient(7)
-        jax.block_until_ready(jax_testval)
+        jax.block_until_ready(jax_gradient)
         jax_end = time.perf_counter()
+
+        # jax_start_an = time.perf_counter()
+        # jax_gradient_an = jax_jastrow.gradient_an(7)
+        # jax.block_until_ready(jax_gradient_an)
+        # jax_end_an = time.perf_counter()
 
         slater_start = time.perf_counter()
         pyqmc_gradient = jastrow.gradient(7, configs.electron(7))
@@ -498,8 +598,24 @@ if __name__ == "__main__":
         print("jax gradient", jax_gradient)
         print("pyqmc gradient", pyqmc_gradient)
 
+        # data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'autodiff', 'value': 'Gradient'})
+        # data.append({'N': nconfig, 'time': jax_end_an-jax_start_an, 'method': 'analytic', 'value': 'Gradient'})
         data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'jax', 'value': 'Gradient'})
         data.append({'N': nconfig, 'time': slater_end-slater_start, 'method': 'pyqmc', 'value': 'Gradient'})
+
+
+
+        jax_start = time.perf_counter()
+        jax_laplacian = jax_jastrow.laplacian(7)
+        jax.block_until_ready(jax_laplacian)
+        jax_end = time.perf_counter()
+
+        slater_start = time.perf_counter()
+        pyqmc_laplacian = jastrow.laplacian(7, configs.electron(7))
+        slater_end = time.perf_counter()
+
+        print("jax laplacian", jax_laplacian)
+        print("pyqmc laplacian", pyqmc_laplacian)
     
     data = pd.DataFrame(data)
     g = sns.relplot(data=data, x='N', y='time', hue='method', col='value', kind='line')

@@ -401,14 +401,15 @@ class JAXSlater:
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
         if len(xyz.shape) ==3 and mask is not None: # This is an optimization for ECPs. 
-            allvals = []
-            print("mask", np.sum(mask))
+            nmask = np.sum(mask)
+            allvals = np.zeros((nmask, xyz.shape[1]))
+            #print("mask", np.sum(mask))
             for i, xyz_i in enumerate(xyz[mask,:,:]):
                 dets_up = SlaterState(None, self._dets_up.sign[i], self._dets_up.logabsdet[i], self._dets_up.inverse[i])
                 dets_down = SlaterState(None, self._dets_down.sign[i], self._dets_down.logabsdet[i], self._dets_down.inverse[i])
                 newvals, saved = self._testvalue_batch[spin](self.parameters.jax_parameters, dets_up, dets_down, e, xyz_i)
-                allvals.append(newvals)
-            return jnp.array(allvals), None
+                allvals[i,:]=newvals
+            return allvals, None
 
 
             #dets_up = SlaterState(None, self._dets_up.sign[mask], self._dets_up.logabsdet[mask], self._dets_up.inverse[mask])

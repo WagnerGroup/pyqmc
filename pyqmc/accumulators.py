@@ -20,6 +20,7 @@ import pyqmc.eval_ecp as eval_ecp
 from pyqmc.stochastic_reconfiguration import StochasticReconfiguration
 import copy
 import time
+import pyqmc.ecp_accumulator as ecp_accumulator
 
 def gradient_generator(mol, wf, to_opt=None, nodal_cutoff=1e-3, eps=1e-1, inverse_strategy="regularized_inverse", **ewald_kwargs):
     return StochasticReconfiguration(
@@ -34,7 +35,7 @@ def gradient_generator(mol, wf, to_opt=None, nodal_cutoff=1e-3, eps=1e-1, invers
 class EnergyAccumulator:
     """Returns local energy of each configuration in a dictionary."""
 
-    def __init__(self, mol, threshold=10, naip=None, **kwargs):
+    def __init__(self, mol, threshold=100, naip=None, **kwargs):
         self.mol = mol
         self.threshold = threshold
         self.naip = naip
@@ -42,21 +43,29 @@ class EnergyAccumulator:
             self.coulomb = ewald.Ewald(mol, **kwargs)
         else:
             self.coulomb = energy.OpenCoulomb(mol, **kwargs)
+        self.ecp = ecp_accumulator.ECPAccumulator(mol, threshold, naip)
+
 
     def __call__(self, configs, wf):
         start = time.perf_counter()
         ee, ei, ii = self.coulomb.energy(configs)
         mid1 = time.perf_counter()
+        np.random.seed(128)
         ecp_val = eval_ecp.ecp(self.mol, configs, wf, self.threshold, self.naip)
         mid2 = time.perf_counter()
+        np.random.seed(128)
+        ecp_batch_val = self.ecp(configs, wf)
+        mid3 = time.perf_counter()
         ke, grad2 = energy.kinetic(configs, wf)
         end = time.perf_counter()
-        print('time_ecp', mid2 - mid1)
+        print('time_ecp old ', mid2 - mid1, 'batch', mid3-mid2)
+        print("MAD difference ", np.mean(np.abs(ecp_val - ecp_batch_val))) #, ecp_val-ecp_batch_val, ecp_val, ecp_batch_val)
         return {
             "ke": ke,
             "ee": ee,
             "ei": ei,
             "ecp": ecp_val,
+            "ecp_batch": ecp_batch_val,
             "grad2": grad2,
             "total": ke + ee + ei + ecp_val + ii,
         }

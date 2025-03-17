@@ -64,7 +64,7 @@ class ECPAccumulator:
             # evaluate the wave function ratio
             ratio = wf.testvalue(e, epos, move_info.mask)[0]
             ratio_time = time.perf_counter()
-            print("ratio time", ratio_time - mid_time, "move_info time", mid_time - midmidtime, "atomic_info time", midmidtime - start_time)
+            #print("ratio time", ratio_time - mid_time, "move_info time", mid_time - midmidtime, "atomic_info time", midmidtime - start_time)
             # compute the ECP value
             # n: nconf, a: aip, l: angular momentum channel
             #print(ratio.shape, move_info.P_l.shape, move_info.v_l.shape)
@@ -79,11 +79,21 @@ class ECPAccumulator:
     def avg(self, configs, wf):
         return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
 
-    def compute_tmoves(self, configs, wf, e, tau):
-        raise NotImplementedError("ECP does not support T-moves yet")
+    def nonlocal_tmoves(self, configs, wf, e, tau):
+        atomic_info = gather_atomic(self._atomic_coordinates, configs, e)
+        move_info = self._vl_evaluator(atomic_info)
+        epos_rot = (configs.configs[:, e, :] - atomic_info.r_ea_vec)[:, np.newaxis] + move_info.r_ea_i
+        epos = configs.make_irreducible(e, epos_rot, move_info.mask)
+        # evaluate the wave function ratio
+        ratio = np.zeros((configs.configs.shape[0], self.naip))
+        ratio[move_info.mask,:] = wf.testvalue(e, epos, move_info.mask)[0]
+
+        weight = np.einsum("ik, ijk -> ij", np.exp(-tau*move_info.v_l)-1, move_info.P_l)
+
+        return {'ratio': ratio, 'weight': weight, 'configs':epos} 
 
     def has_nonlocal_moves(self):
-        return self.mol._ecp != {}
+        return self._ecp != {}
 
     def keys(self):
         return set(["ecp"])

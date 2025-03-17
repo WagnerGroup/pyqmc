@@ -251,13 +251,13 @@ def create_wf_evaluator(mol, mf):
     # pgradient is derivative of value with respect to ci_coeff and mo_coeff 
     pgradient = jax.jacobian(value, argnums=0)
 
-    # these are for batches in which a single configuration needs to be updated
-    _testval_up_batch = jax.jit(jax.vmap(_testvalue_up, in_axes = (None, None, None, None, 0), out_axes = 0))
-    _testval_down_batch = jax.jit(jax.vmap(_testvalue_down, in_axes = (None, None, None, None, 0), out_axes = 0))
+    # these are for batches in which we want to evaluate the wavefunction at multiple positions
+    _testval_up_batch = jax.vmap(_testvalue_up, in_axes = (None, None, None, None, 0), out_axes = 0)
+    _testval_down_batch = jax.vmap(_testvalue_down, in_axes = (None, None, None, None, 0), out_axes = 0)
 
 
     # compile all the testvalue functions
-    testval_funcs = [_testvalue_up, _testvalue_down, grad_up, grad_down, laplacian_up, laplacian_down]
+    testval_funcs = [_testvalue_up, _testvalue_down, grad_up, grad_down, laplacian_up, laplacian_down, _testval_up_batch, _testval_down_batch]
     testval_funcs = ( jax.jit(
                        jax.vmap(f,
                                     in_axes=(None, #parameters
@@ -282,15 +282,8 @@ def create_wf_evaluator(mol, mf):
                 for f in value_func)
 
     # The vmaps here are over configurations
-    return det_params, expansion, value_func, testval_funcs, _testval_up_batch, _testval_down_batch
+    return det_params, expansion, value_func, testval_funcs
 
-
-#def gradient_value(spin, e, xyz, testvalue, grad, jax_parameters, dets_up, dets_down):
-#        values, saved = testvalue[spin](jax_parameters, dets_up, dets_down, e, xyz)
-#        derivatives, throwaway = grad[spin](jax_parameters, dets_up, dets_down, e, xyz) # pyqmc wants (3, nconfig)
-#        return derivatives, values, saved
-
-#gradient_value = jax.jit(gradient_value, static_argnums=(0,))
 
 class _parameterMap:
     """
@@ -344,8 +337,8 @@ class _parameterMap:
 class JAXSlater:
     def __init__(self, mol, mf):
         _parameters, self.expansion, (self._recompute, self._pgradient), \
-        (_testvalue_up, _testvalue_down, _grad_up, _grad_down, _lap_up, _lap_down),\
-             _batch_up, _batch_down = create_wf_evaluator(mol, mf)
+        (_testvalue_up, _testvalue_down, _grad_up, _grad_down, _lap_up, _lap_down, _batch_up, _batch_down),\
+              = create_wf_evaluator(mol, mf)
         self._testvalue=(_testvalue_up, _testvalue_down)
         self._testvalue_batch = (_batch_up, _batch_down)
         self._grad = (_grad_up, _grad_down)
@@ -399,12 +392,24 @@ class JAXSlater:
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
         if len(xyz.shape) ==3 and mask is not None: # This is an optimization for ECPs. 
-            allvals = []
-            for i in range(xyz.shape[1]):
-                newvals, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz[:,i,:])
-                allvals.append(newvals)
-    
-            return np.array(allvals).T[mask,:], None
+            print('nmask', np.sum(mask))
+            if True:
+                start_eval = time.perf_counter()
+                newvals, saved = self._testvalue_batch[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
+                jax.block_until_ready(newvals)
+                end_eval = time.perf_counter()
+                # for some reason JAX's mask is very slow.
+                ret = np.array(newvals)[mask,:], None
+                print("Time for batch", end_eval-start_eval, 'time for mask', time.perf_counter()-end_eval)
+                return ret
+                return newvals[mask,:], None
+            else:
+                allvals = []
+                for i in range(xyz.shape[1]):
+                    newvals, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz[:,i,:])
+                    allvals.append(newvals)
+                allvals = jnp.array(allvals)
+                return allvals.T[mask,:], None
         else: 
             newvals, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
             return np.array(newvals)[mask], saved
@@ -413,8 +418,6 @@ class JAXSlater:
         xyz = jnp.array(epos.configs)
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
-        #values, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
-
         grad, saved = self._grad[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz) # pyqmc wants (3, nconfig)
         return np.asarray(grad[:,1:].T/grad[:,0])
     
@@ -423,7 +426,6 @@ class JAXSlater:
         xyz = jnp.array(epos.configs)
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
-        
         derivatives, saved = self._grad[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz) # pyqmc wants (3, nconfig)
         #print("saved", saved.shape)
         convert = derivatives[:,1:].T/derivatives[:,0], derivatives[:,0], saved[:,0, :] 
@@ -436,8 +438,6 @@ class JAXSlater:
         e = e - self._nelec[0]*spin
         laplacian, saved = self._lap[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
         return np.array(laplacian[:,1:4].T/laplacian[:,0]), np.asarray(laplacian[:,4]/laplacian[:,0])
-        
-        
 
     def laplacian(self, e, epos, mask=None):
         xyz = jnp.array(epos.configs)

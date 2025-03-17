@@ -37,7 +37,6 @@ class ECPAccumulator:
         self._ecp = mol._ecp
         self._atom_names = [atom[0] for atom in mol._atom]
         functors = [generate_ecp_functors(mol._ecp[at_name][1]) for at_name in self._atom_names]
-        print(functors)
         self._vl_evaluator = partial(evaluate_vl, functors, self.threshold, self.naip)
 
 

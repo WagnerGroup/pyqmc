@@ -285,12 +285,12 @@ def create_wf_evaluator(mol, mf):
     return det_params, expansion, value_func, testval_funcs, _testval_up_batch, _testval_down_batch
 
 
-def gradient_value(spin, e, xyz, testvalue, grad, jax_parameters, dets_up, dets_down):
-        values, saved = testvalue[spin](jax_parameters, dets_up, dets_down, e, xyz)
-        derivatives, throwaway = grad[spin](jax_parameters, dets_up, dets_down, e, xyz) # pyqmc wants (3, nconfig)
-        return derivatives, values, saved
+#def gradient_value(spin, e, xyz, testvalue, grad, jax_parameters, dets_up, dets_down):
+#        values, saved = testvalue[spin](jax_parameters, dets_up, dets_down, e, xyz)
+#        derivatives, throwaway = grad[spin](jax_parameters, dets_up, dets_down, e, xyz) # pyqmc wants (3, nconfig)
+#        return derivatives, values, saved
 
-gradient_value = jax.jit(gradient_value, static_argnums=(0,))
+#gradient_value = jax.jit(gradient_value, static_argnums=(0,))
 
 class _parameterMap:
     """
@@ -361,9 +361,7 @@ class JAXSlater:
     
     def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
         """
-        I haven't gotten around to implementing this in an efficient way.
-        saved_values should be a SlaterState that we use to update the inverse.
-
+        Update the internal state of the wavefunction given that electron e has been moved to epos
         """
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
@@ -401,30 +399,12 @@ class JAXSlater:
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
         if len(xyz.shape) ==3 and mask is not None: # This is an optimization for ECPs. 
-            nmask = np.sum(mask)
-            allvals = np.zeros((nmask, xyz.shape[1]))
-            #print("mask", np.sum(mask))
-            for i, xyz_i in enumerate(xyz[mask,:,:]):
-                dets_up = SlaterState(None, self._dets_up.sign[i], self._dets_up.logabsdet[i], self._dets_up.inverse[i])
-                dets_down = SlaterState(None, self._dets_down.sign[i], self._dets_down.logabsdet[i], self._dets_down.inverse[i])
-                newvals, saved = self._testvalue_batch[spin](self.parameters.jax_parameters, dets_up, dets_down, e, xyz_i)
-                allvals[i,:]=newvals
-            return allvals, None
-
-
-            #dets_up = SlaterState(None, self._dets_up.sign[mask], self._dets_up.logabsdet[mask], self._dets_up.inverse[mask])
-            #dets_down = SlaterState(None, self._dets_down.sign[mask], self._dets_down.logabsdet[mask], self._dets_down.inverse[mask])
-            #allvals, saved = self._testvalue_batch[spin](self.parameters.jax_parameters, dets_up, dets_down, e, xyz[mask,:,:])
-            #return allvals, None
-
-
-            #allvals, saved = self._testvalue_batch[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
-            #for i in range(xyz.shape[1]):
-            #    newvals, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz[:,i,:])
-            #    allvals.append(newvals)
-            #print("allvals", allvals.shape)
-            #print(np.sum(mask))
-            #return allvals[mask,:], None #np.array(allvals)[mask,:], None
+            allvals = []
+            for i in range(xyz.shape[1]):
+                newvals, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz[:,i,:])
+                allvals.append(newvals)
+    
+            return np.array(allvals).T[mask,:], None
         else: 
             newvals, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
             return np.array(newvals)[mask], saved

@@ -223,6 +223,7 @@ def create_gto_evaluator(mol):
                     * (4 * exp_coeffs[:, 0]) ** (ijk_sum + 1)
                     * jnp.sqrt(2 * exp_coeffs[:, 0] / jnp.pi)
                 )  # (N,1)
+                print("norm", norm*norms[ell], norms[ell])
 
                 coeffs.append(exp_coeffs[:, 1] * norms[ell] * norm)
 
@@ -236,11 +237,14 @@ def create_gto_evaluator(mol):
     expts = jnp.array(expts)
     coeffs = jnp.array(coeffs)
     if hasattr(mol, "lattice_vectors"):
+        if expts.shape[1] > 1:
+          raise ValueError("Only unc basis is supported for PBC systems, at least for now. unc is faster with current implementation anyway.")
+
         nlat = []
         for i, j, k in itertools.product(range(-1, 2), repeat=3):
             nlat.append([i, j, k])
         images = jnp.array(nlat)@jnp.array(mol.lattice_vectors()) 
-        print("images", images.shape)
+        print("images", images)
     else:
         images = jnp.array([[0, 0, 0]])
 
@@ -398,7 +402,7 @@ def test_pbc():
         ["C", np.array([0.8917, 0.8917, 0.8917])],
     ]
     cell.a = [[0.0, 1.7834, 1.7834], [1.7834, 0.0, 1.7834], [1.7834, 1.7834, 0.0]]
-    cell.basis = "unc-ccecpccpvdz"
+    cell.basis = "unc-ccecp-ccpvtz"
     cell.ecp = "ccecp"
     cell.exp_to_discard = 0.3
     cell.cart = True
@@ -408,11 +412,14 @@ def test_pbc():
     evaluator_val = jax.vmap(evaluator, in_axes=(0))
 
     nconfig = 10
-    coords = np.random.rand(nconfig,3)
-    jax_val = evaluator_val(jnp.array([[0.0, 0.0, 0.0]]))
+    #coords = np.random.rand(nconfig,3)
+    #coords = np.array([[0.0, 0.0, 0.0]])
+    coords = np.array([[0.8917, 0.8917, 0.8917]])
+    jax_val = evaluator_val(jnp.array(coords))
     print(jax_val)
-    pyscf_val = cell.eval_gto("GTOval_cart", np.array([[0.0, 0.0, 0.0]]))
+    pyscf_val = cell.eval_gto("GTOval_cart", coords)
     print(pyscf_val)
+    print("errors", jax_val-pyscf_val)
 
 if __name__ == "__main__":
     test_pbc()

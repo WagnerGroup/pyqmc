@@ -6,6 +6,7 @@ from pyqmc.jax import gto
 import pyscf.gto 
 from typing import NamedTuple
 import numpy as np
+import time 
 
 ##############################
 # Data storage tuples
@@ -219,7 +220,7 @@ def create_wf_evaluator(mol, mf):
 
     """
     # Basis evaluators
-    gto_1e = gto.create_gto_evaluator(mol)
+    gto_1e, gto_1e_vg, gto_1e_vgl = gto.create_gto_evaluator(mol)
     gto_ne = jax.vmap(gto_1e, in_axes=0, out_axes=0)# over electrons
 
     # determinant expansion
@@ -239,19 +240,24 @@ def create_wf_evaluator(mol, mf):
     _testvalue_down = partial(testvalue_down, gto_1e, expansion)
 
     # electron gradient will be testvalue with gradient of gto_1e
-    gto_1e_grad = jax.jacobian(gto_1e)
-    grad_up = partial(testvalue_up, gto_1e_grad, expansion)
-    grad_down = partial(testvalue_down, gto_1e_grad, expansion)
+    #gto_1e_grad = jax.jacfwd(gto_1e)
+    grad_up = partial(testvalue_up, gto_1e_vg, expansion)
+    grad_down = partial(testvalue_down, gto_1e_vg, expansion)
 
-    gto_1e_laplacian = jax.hessian(gto_1e)
-    laplacian_up = partial(testvalue_up, gto_1e_laplacian, expansion)
-    laplacian_down = partial(testvalue_down, gto_1e_laplacian, expansion)
+    #gto_1e_laplacian = jax.jacfwd(gto_1e_grad)
+    laplacian_up = partial(testvalue_up, gto_1e_vgl, expansion)
+    laplacian_down = partial(testvalue_down, gto_1e_vgl, expansion)
 
     # pgradient is derivative of value with respect to ci_coeff and mo_coeff 
     pgradient = jax.jacobian(value, argnums=0)
 
+    # these are for batches in which we want to evaluate the wavefunction at multiple positions
+    _testval_up_batch = jax.vmap(_testvalue_up, in_axes = (None, None, None, None, 0), out_axes = 0)
+    _testval_down_batch = jax.vmap(_testvalue_down, in_axes = (None, None, None, None, 0), out_axes = 0)
+
+
     # compile all the testvalue functions
-    testval_funcs = [_testvalue_up, _testvalue_down, grad_up, grad_down, laplacian_up, laplacian_down]
+    testval_funcs = [_testvalue_up, _testvalue_down, grad_up, grad_down, laplacian_up, laplacian_down, _testval_up_batch, _testval_down_batch]
     testval_funcs = ( jax.jit(
                        jax.vmap(f,
                                     in_axes=(None, #parameters
@@ -278,13 +284,6 @@ def create_wf_evaluator(mol, mf):
     # The vmaps here are over configurations
     return det_params, expansion, value_func, testval_funcs
 
-
-def gradient_value(spin, e, xyz, testvalue, grad, jax_parameters, dets_up, dets_down):
-        values, saved = testvalue[spin](jax_parameters, dets_up, dets_down, e, xyz)
-        derivatives, throwaway = grad[spin](jax_parameters, dets_up, dets_down, e, xyz) # pyqmc wants (3, nconfig)
-        return derivatives, values, saved
-
-gradient_value = jax.jit(gradient_value, static_argnums=(0,))
 
 class _parameterMap:
     """
@@ -338,8 +337,10 @@ class _parameterMap:
 class JAXSlater:
     def __init__(self, mol, mf):
         _parameters, self.expansion, (self._recompute, self._pgradient), \
-        (_testvalue_up, _testvalue_down, _grad_up, _grad_down, _lap_up, _lap_down) = create_wf_evaluator(mol, mf)
+        (_testvalue_up, _testvalue_down, _grad_up, _grad_down, _lap_up, _lap_down, _batch_up, _batch_down),\
+              = create_wf_evaluator(mol, mf)
         self._testvalue=(_testvalue_up, _testvalue_down)
+        self._testvalue_batch = (_batch_up, _batch_down)
         self._grad = (_grad_up, _grad_down)
         self._lap = (_lap_up, _lap_down)
         self._nelec = tuple(mol.nelec)
@@ -353,21 +354,18 @@ class JAXSlater:
     
     def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
         """
-        I haven't gotten around to implementing this in an efficient way.
-        saved_values should be a SlaterState that we use to update the inverse.
-
+        Update the internal state of the wavefunction given that electron e has been moved to epos
         """
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
 
-#        def _sherman_morrison_row(e: int, 
-#                          inverse: jnp.ndarray, # nelec_s, nelec_s
-#                          mos: jnp.ndarray, # nelec_s
-#                          determinant: jnp.ndarray # nelec_s
-#                          ): 
-        if  saved_values is None:
+        if saved_values is None:
             self.recompute(configs)
             return
+        
+        
+        if mask is None: 
+            mask = jnp.ones((configs.configs.shape[0],), dtype=bool)
 
         if spin ==0:
             ratio, inverse = sherman_morrison_row(e, self._dets_up.inverse, saved_values, self.expansion.determinants_up)
@@ -393,12 +391,20 @@ class JAXSlater:
         xyz = jnp.array(epos.configs)
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
-        if len(xyz.shape) ==3:
-            allvals = []
-            for i in range(xyz.shape[1]):
-                newvals, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz[:,i,:])
-                allvals.append(newvals)
-            return np.array(allvals).T[mask,:], None
+        if len(xyz.shape) ==3 and mask is not None: # This is an optimization for ECPs. 
+            if True:
+                newvals, saved = self._testvalue_batch[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
+                jax.block_until_ready(newvals)
+                # for some reason JAX's mask is very slow.
+                ret = np.array(newvals)[mask,:], None
+                return ret
+            else:
+                allvals = []
+                for i in range(xyz.shape[1]):
+                    newvals, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz[:,i,:])
+                    allvals.append(newvals)
+                allvals = jnp.array(allvals)
+                return allvals.T[mask,:], None
         else: 
             newvals, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
             return np.array(newvals)[mask], saved
@@ -407,39 +413,33 @@ class JAXSlater:
         xyz = jnp.array(epos.configs)
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
-        values, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
-
         grad, saved = self._grad[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz) # pyqmc wants (3, nconfig)
-        return np.array(grad.T/values)
+        return np.asarray(grad[:,1:].T/grad[:,0])
     
 
     def gradient_value(self, e, epos):
         xyz = jnp.array(epos.configs)
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
-        values, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
-        derivatives, throwaway = self._grad[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz) # pyqmc wants (3, nconfig)
-
-        return np.array(derivatives.T/values), np.array(values), saved
+        derivatives, saved = self._grad[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz) # pyqmc wants (3, nconfig)
+        #print("saved", saved.shape)
+        convert = derivatives[:,1:].T/derivatives[:,0], derivatives[:,0], saved[:,0, :] 
+        return convert
 
 
     def gradient_laplacian(self, e, epos):
         xyz = jnp.array(epos.configs)
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
-        values, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
-        gradient, _ = self._grad[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz) # pyqmc wants (3, nconfig)
-        laplacian = jnp.trace(self._lap[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)[0], axis1=1, axis2=2)
-        return np.array(gradient.T/values), np.asarray(laplacian)
-        
+        laplacian, saved = self._lap[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
+        return np.array(laplacian[:,1:4].T/laplacian[:,0]), np.asarray(laplacian[:,4]/laplacian[:,0])
 
     def laplacian(self, e, epos, mask=None):
         xyz = jnp.array(epos.configs)
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
-        values, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
         lap, saved = self._lap[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
-        return np.array(jnp.trace(lap, axis1=1, axis2=2)/values)
+        return lap[:,4].T/lap[:,0]
     
     def pgradient(self, configs):
         xyz = jnp.array(configs.configs)
@@ -527,7 +527,7 @@ def run_test():
     slater = pyq.Slater(mol['h2o'], mf['h2o'])
 
     data = []
-    for nconfig in [2]:
+    for nconfig in [ 2000, 10000]:
         configs = pyq.initial_guess(mol['h2o'], nconfig)
         configs_aux = pyq.initial_guess(mol['h2o'], nconfig)
 
@@ -543,21 +543,32 @@ def run_test():
         values_ref = slater.recompute(configs)
         slater_end = time.perf_counter()
 
+        print(nconfig, "recompute times: jax", jax_end-jax_start, "slater", slater_end-slater_start, "ratio", (jax_end-jax_start)/(slater_end-slater_start))
+
         electron = 3
         gauss = np.random.normal(1, size=(nconfig, 3))
         newcoorde = configs.configs[:, electron, :] + gauss 
         newcoorde = configs.make_irreducible(electron, newcoorde)
 
         newval_jax = jax_slater.gradient(electron, newcoorde)
+        jax_start = time.perf_counter()
+        newval_jax = jax_slater.gradient(electron, newcoorde)
+        jax_end = time.perf_counter()
         newval_pyqmc = slater.gradient(electron,newcoorde)
+        pyqmc_end = time.perf_counter()
         print("MaD error in gradient from pyqmc", jnp.mean(jnp.abs(newval_jax-newval_pyqmc)))
-
+        print(nconfig, "gradient time", 'jax', jax_end-jax_start, 'pyqmc', pyqmc_end-jax_end, 'jax/pyqmc', (jax_end-jax_start)/(pyqmc_end-jax_end))
 
 
         newval_jax, testval_jax, saved = jax_slater.gradient_value(electron, newcoorde)
+        jax_start = time.perf_counter()
+        newval_jax, testval_jax, saved = jax_slater.gradient_value(electron, newcoorde)
+        jax_end = time.perf_counter()
         newval_pyqmc, testval_pyqmc, saved_pyqmc = slater.gradient_value(electron,newcoorde)
+        pyqmc_end = time.perf_counter()
         print("MaD error in gradient_value gradient from pyqmc", jnp.mean(jnp.abs(newval_jax-newval_pyqmc)))
         print("MaD error in gradient_value value from pyqmc", jnp.mean(jnp.abs(testval_jax-testval_pyqmc)))
+        print(nconfig, "gradient_value time", 'jax', jax_end-jax_start, 'pyqmc', pyqmc_end-jax_end, 'jax/pyqmc', (jax_end-jax_start)/(pyqmc_end-jax_end))
 
 
         newval_jax = jax_slater.laplacian(electron, newcoorde)
@@ -577,24 +588,22 @@ def run_test():
         newcoorde = configs.make_irreducible(electron, newcoorde)
 
         newval_jax, saved = jax_slater.testvalue(electron, newcoorde)
+        jax_start = time.perf_counter()
+        newval_jax, saved = jax_slater.testvalue(electron, newcoorde)
+        jax_end = time.perf_counter()
         newval_pyqmc, saved_pyqmc = slater.testvalue(electron, newcoorde)
+        pyqmc_end = time.perf_counter()
         print("MaD error in testvalue from pyqmc", jnp.mean(jnp.abs(newval_jax-newval_pyqmc)))
+        print(nconfig, "testvalue time", 'jax', jax_end-jax_start, 'pyqmc', pyqmc_end-jax_end, 'jax/pyqmc', (jax_end-jax_start)/(pyqmc_end-jax_end))
+
 
 
         jax_slater.updateinternals(electron, configs.electron(electron), configs, saved_values=saved)
 
         newval, saved = jax_slater.testvalue(electron, configs.electron(electron))
         jax_slater.updateinternals(electron, configs.electron(electron), configs, saved_values=saved)
-        print("newvalue", newval)
 
 
-        print("times: jax", jax_end-jax_start, "slater", slater_end-slater_start)
-        data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'jax'})
-        data.append({'N': nconfig, 'time': slater_end-slater_start, 'method': 'pyqmc'})
-        print('MAD values', jnp.mean(jnp.abs(values_ref[1] - wfval[1])))
-    sns.lineplot(data = pd.DataFrame(data), x='N', y='time', hue='method')
-    plt.ylim(0)
-    plt.savefig("jax_vs_pyqmc.png")
 
 
 

@@ -24,12 +24,18 @@ def ecp(mol, configs, wf, threshold, naip=None):
     nconf, nelec = configs.configs.shape[0:2]
     ecp_tot = np.zeros(nconf, dtype=wf.dtype)
     if mol._ecp != {}:
-        for atom in mol._atom:
-            if atom[0] in mol._ecp.keys():
-                for e in range(nelec):
-                    ecp_tot += ecp_ea(mol, configs, wf, e, atom, threshold, naip)[
-                        "total"
-                    ]
+        for e in range(nelec):
+            ecp_en = np.zeros(nconf, dtype=wf.dtype)
+            ecp_local = np.zeros(nconf)
+            for atom in mol._atom:
+                if atom[0] in mol._ecp.keys():
+                    ecp_ret = ecp_ea(mol, configs, wf, e, atom, threshold, naip)
+                    ecp_en += ecp_ret['total']
+                    ecp_local += ecp_ret['local']
+                    #print(atom, ecp_ret['ratio'])
+            ecp_tot+=ecp_en
+            #print('ecp_energy', e, ecp_en.round(4))
+            #print("ecp local", e, ecp_local)
     return ecp_tot
 
 

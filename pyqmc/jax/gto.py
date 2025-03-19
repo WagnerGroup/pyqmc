@@ -76,6 +76,7 @@ def _cartesian_gto_grad(
     ijk: jax.Array,
     expts: jax.Array,
     coeffs: jax.Array,
+    images: jax.Array,
     xyz: jax.Array,
 ) -> jax.Array:
     """Evaluate a Cartesian Gaussian-type orbital.
@@ -105,18 +106,19 @@ def _cartesian_gto_grad(
     """
     # Distances
     centers2d: jax.Array = jnp.atleast_2d(centers)
-    ctr_xyz: jax.Array = xyz[jnp.newaxis, :] - centers2d  # (N, 3)
-    ctr_r = jnp.linalg.norm(ctr_xyz, axis=1)  # (N,1)
-
+    ctr_xyz_first: jax.Array = xyz[jnp.newaxis, :] - centers2d  # (N, 3)
+    ctr_xyz = ctr_xyz_first[:, jnp.newaxis, :] + images  # (N, nimages, 3)
+    ctr_r = jnp.linalg.norm(ctr_xyz, axis=-1)  # (N,nimages, 1)
     # value
-    xyz_ijk: jax.Array = jnp.prod(ctr_xyz**ijk, axis=1)  # (N)
-    gauss: jax.Array = jnp.exp(-expts * ctr_r[:, jnp.newaxis] ** 2)  # (N,)
-    value: jax.Array = coeffs * gauss * xyz_ijk[:, jnp.newaxis]
+    xyz_ijk: jax.Array = jnp.prod(ctr_xyz**ijk[:,jnp.newaxis,:], axis=-1)  # (N, nimages)
+    gauss: jax.Array = jnp.exp(-expts[:,jnp.newaxis,:] * ctr_r[:,:, jnp.newaxis] ** 2)  # (N,nimages, M)
+    value: jax.Array = coeffs * jnp.sum(gauss * xyz_ijk[:,:,jnp.newaxis], axis=1) # sum over images (N,M)
 
-    # Gradient
-    grad: jax.Array = value[:, :, jnp.newaxis] * (
-        ijk[:, jnp.newaxis, :] / ctr_xyz[:, jnp.newaxis, :]
-        - 2 * expts[:, :, jnp.newaxis] * ctr_xyz[:, jnp.newaxis, :]
+    # Gradient dimensions are basis, image, coeff, xyz
+    grad: jax.Array = value[:, :, jnp.newaxis] * jnp.sum(
+        ijk[:, jnp.newaxis, jnp.newaxis, :] / ctr_xyz[:, :, jnp.newaxis, :]
+        - 2 * expts[:, jnp.newaxis, :, jnp.newaxis] * ctr_xyz[:, :, jnp.newaxis, :],
+        axis=1 # over images
     )  # (N,3)
     return jnp.concatenate(
         [jnp.sum(value, axis=1)[:, jnp.newaxis], jnp.sum(grad, axis=1)], axis=1
@@ -128,6 +130,7 @@ def _cartesian_gto_vgl(
     ijk: jax.Array,
     expts: jax.Array,
     coeffs: jax.Array,
+    images: jax.Array,
     xyz: jax.Array,
 ) -> jax.Array:
     """Evaluate a Cartesian Gaussian-type orbital.
@@ -157,25 +160,24 @@ def _cartesian_gto_vgl(
     """
     # Distances
     centers2d: jax.Array = jnp.atleast_2d(centers)
-    ctr_xyz: jax.Array = xyz[jnp.newaxis, :] - centers2d  # (N, 3)
-    ctr_r = jnp.linalg.norm(ctr_xyz, axis=1)  # (N,1)
-
+    ctr_xyz_first: jax.Array = xyz[jnp.newaxis, :] - centers2d  # (N, 3)
+    ctr_xyz = ctr_xyz_first[:, jnp.newaxis, :] + images  # (N, nimages, 3)
+    ctr_r = jnp.linalg.norm(ctr_xyz, axis=-1)  # (N,nimages, 1)
     # value
-    xyz_ijk: jax.Array = jnp.prod(ctr_xyz**ijk, axis=1)  # (N)
-    gauss: jax.Array = jnp.exp(-expts * ctr_r[:, jnp.newaxis] ** 2)  # (N,)
-    value: jax.Array = coeffs * gauss * xyz_ijk[:, jnp.newaxis]
+    xyz_ijk: jax.Array = jnp.prod(ctr_xyz**ijk[:,jnp.newaxis,:], axis=-1)  # (N, nimages)
+    gauss: jax.Array = jnp.exp(-expts[:,jnp.newaxis,:] * ctr_r[:,:, jnp.newaxis] ** 2)  # (N,nimages, M)
+    value: jax.Array = coeffs * jnp.sum(gauss * xyz_ijk[:,:,jnp.newaxis], axis=1) # sum over images (N,M)
 
     # Gradient dimensions are basis, coeff, xyz
-    gpart: jax.Array = (
-        ijk[:, jnp.newaxis, :] / ctr_xyz[:, jnp.newaxis, :]
-        - 2 * expts[:, :, jnp.newaxis] * ctr_xyz[:, jnp.newaxis, :]
-    )
-    grad: jax.Array = value[:, :, jnp.newaxis] * gpart  # (N,3)
-    # print("gpart", gpart.shape)
-    lap_part = (
+    gpart: jax.Array = ijk[:, jnp.newaxis, jnp.newaxis, :] / ctr_xyz[:, :, jnp.newaxis, :]\
+        - 2 * expts[:, jnp.newaxis, :, jnp.newaxis] * ctr_xyz[:, :, jnp.newaxis, :]
+
+    grad: jax.Array = value[:, :, jnp.newaxis] * jnp.sum(gpart, axis=1)  # (N,3)
+    lap_part = jnp.sum(
         gpart**2
-        - ijk[:, jnp.newaxis, :] / ctr_xyz[:, jnp.newaxis, :] ** 2
-        - 2 * expts[:, :, jnp.newaxis]
+        - ijk[:, jnp.newaxis, jnp.newaxis, :] / ctr_xyz[:,:, jnp.newaxis, :] ** 2
+        - 2 * expts[:, jnp.newaxis, :, jnp.newaxis],
+        axis=1
     )
     # print("lap_part", lap_part.shape)
     laplacian: jax.Array = value * jnp.sum(
@@ -235,7 +237,6 @@ def create_gto_evaluator(mol, nimages=1):
                     * (4 * exp_coeffs[:, 0]) ** (ijk_sum + 1)
                     * jnp.sqrt(2 * exp_coeffs[:, 0] / jnp.pi)
                 )  # (N,1)
-                print("norm", norm*norms[ell], norms[ell])
 
                 coeffs.append(exp_coeffs[:, 1] * norms[ell] * norm)
 
@@ -256,7 +257,6 @@ def create_gto_evaluator(mol, nimages=1):
         for i, j, k in itertools.product(range(-nimages, nimages+1), repeat=3):
             nlat.append([i, j, k])
         images = jnp.array(nlat)@jnp.array(mol.lattice_vectors()) 
-        print("images", images)
     else:
         images = jnp.array([[0, 0, 0]])
 
@@ -275,6 +275,7 @@ def create_gto_evaluator(mol, nimages=1):
         ijks,
         expts,
         coeffs,
+        images,
     )
 
     vgl = partial(
@@ -283,6 +284,7 @@ def create_gto_evaluator(mol, nimages=1):
         ijks,
         expts,
         coeffs,
+        images,
     )
     return evaluator, gradient, vgl
 
@@ -319,10 +321,10 @@ def test_laplacian():
     ad_laplacian = jax.jit(ad_laplacian)
 
     analytic_gradient = jax.vmap(gradient, in_axes=(0))
-    analytic_gradient = jax.jit(analytic_gradient)
+    #analytic_gradient = jax.jit(analytic_gradient)
 
     vgl = jax.vmap(vgl, in_axes=(0))
-    vgl = jax.jit(vgl)
+    #vgl = jax.jit(vgl)
 
     nconfig = 200
     seed = 32123
@@ -342,8 +344,8 @@ def test_laplacian():
     res = evaluator_gradient(coords)
     jax.block_until_ready(res)
     start = time.perf_counter()
-    res = evaluator_gradient(coords)
-    jax.block_until_ready(res)
+    res_grad = evaluator_gradient(coords)
+    jax.block_until_ready(res_grad)
     end = time.perf_counter()
     grad_time = end - start
     print("Time taken for gradient: ", end - start)
@@ -356,12 +358,12 @@ def test_laplacian():
     end = time.perf_counter()
     analytic_grad_time = end - start
     print(
-        "gradient squared err", jnp.mean(jnp.linalg.norm(res - analytic_res[:, :, 1:]))
+        "gradient squared err", jnp.mean(jnp.linalg.norm(res_grad - analytic_res[:, :, 1:]))
     )
     print("Time taken for analytic gradient: ", end - start)
 
     print(
-        "rms errors for value",
+        "rms errors for value from gradient",
         jnp.mean(jnp.linalg.norm(res_val - analytic_res[:, :, 0])),
     )
     print("grad ratio for AD", grad_time / val_time)
@@ -390,6 +392,15 @@ def test_laplacian():
     # print('analytic laplacian', analytic_res[:,:, 4])
 
     print(
+        "rms errors for value from laplacian",
+        jnp.mean(jnp.linalg.norm(res_val - analytic_res[:, :, 0])),
+    )
+
+    print(
+        "gradient squared err (from laplacian)", jnp.mean(jnp.linalg.norm(res_grad - analytic_res[:, :, 1:4]))
+    )
+
+    print(
         "laplacian squared err", jnp.mean(jnp.linalg.norm(res - analytic_res[:, :, 4]))
     )
 
@@ -405,7 +416,7 @@ def test_pbc():
         jax.config.update("jax_enable_x64", True)
     else:
         pass
-
+    import time
     import pyscf.pbc.gto
     cell = pyscf.pbc.gto.Cell()
 
@@ -421,19 +432,27 @@ def test_pbc():
     cell.cart = True
     cell.build()
 
-    evaluator, gradient, vgl = create_gto_evaluator(cell, nimages=2)
-    evaluator_val = jax.vmap(evaluator, in_axes=(0))
+    evaluator, gradient, vgl = create_gto_evaluator(cell, nimages=1)
+    evaluator_val = jax.jit(jax.vmap(evaluator, in_axes=(0)))
 
-    nconfig = 1
+    nconfig = 10000
     coords = pyq.initial_guess(cell, nconfig)
     #coords = np.array([[0.0, 0.0, 0.0]])
     #coords = np.array([[0.8917, 0.8917, 0.8917]])
     jax_val = evaluator_val(jnp.array(coords.configs[:,0,:]))
-    print('jax values', jax_val)
+    jax.block_until_ready(jax_val)
+
+    jax_start = time.perf_counter()
+    jax_val = evaluator_val(jnp.array(coords.configs[:,0,:]))
+    jax.block_until_ready(jax_val)
+    jax_end = time.perf_counter()
+    print('jax values time', jax_end-jax_start)
+
+    pyscf_start = time.perf_counter()
     pyscf_val = cell.eval_gto("PBCGTOval_cart", coords.configs[:,0,:])
-    print('pyscf values', pyscf_val)
-    print("errors", jax_val-pyscf_val)
+    pyscf_end = time.perf_counter()
+    print('pyscf values time', pyscf_end-pyscf_start)
     print("MAD", jnp.mean(jnp.abs(jax_val-pyscf_val)))
 
 if __name__ == "__main__":
-    test_pbc()
+    test_laplacian()

@@ -192,7 +192,19 @@ def _cartesian_gto_vgl(
     )  # (N,4)
 
 
-def create_gto_evaluator(mol):
+def create_gto_evaluator(mol, nimages=1):
+    """
+    Create a JAX evaluator for a Gaussian type orbital
+    Args:
+        mol: pyscf molecule
+        nimages: number of images to evaluate the basis functions at (relevant for PBC)
+    Returns:
+        evaluator: function that evaluates the basis functions
+        gradient: function that evaluates the gradient of the basis functions 
+        vgl: function that evaluates the value, gradient and laplacian of the basis functions
+
+    Note that the PBC implementation only works for uncontracted basis functions for now.
+    """
     centers = mol.atom_coords()
     centers = jnp.array(centers)
     natom = mol.natm
@@ -241,7 +253,7 @@ def create_gto_evaluator(mol):
           raise ValueError("Only unc basis is supported for PBC systems, at least for now. unc is faster with current implementation anyway.")
 
         nlat = []
-        for i, j, k in itertools.product(range(-1, 2), repeat=3):
+        for i, j, k in itertools.product(range(-nimages, nimages+1), repeat=3):
             nlat.append([i, j, k])
         images = jnp.array(nlat)@jnp.array(mol.lattice_vectors()) 
         print("images", images)
@@ -386,7 +398,7 @@ def test_pbc():
     """
     Test the periodic boundary conditions
     """
-
+    import pyqmc.api as pyq
     cpu = True
     if cpu:
         jax.config.update("jax_platform_name", "cpu")
@@ -396,6 +408,7 @@ def test_pbc():
 
     import pyscf.pbc.gto
     cell = pyscf.pbc.gto.Cell()
+
     cell.verbose = 5
     cell.atom = [
         ["C", np.array([0.0, 0.0, 0.0])],
@@ -408,18 +421,19 @@ def test_pbc():
     cell.cart = True
     cell.build()
 
-    evaluator, gradient, vgl = create_gto_evaluator(cell)
+    evaluator, gradient, vgl = create_gto_evaluator(cell, nimages=2)
     evaluator_val = jax.vmap(evaluator, in_axes=(0))
 
-    nconfig = 10
-    #coords = np.random.rand(nconfig,3)
+    nconfig = 1
+    coords = pyq.initial_guess(cell, nconfig)
     #coords = np.array([[0.0, 0.0, 0.0]])
-    coords = np.array([[0.8917, 0.8917, 0.8917]])
-    jax_val = evaluator_val(jnp.array(coords))
-    print(jax_val)
-    pyscf_val = cell.eval_gto("GTOval_cart", coords)
-    print(pyscf_val)
+    #coords = np.array([[0.8917, 0.8917, 0.8917]])
+    jax_val = evaluator_val(jnp.array(coords.configs[:,0,:]))
+    print('jax values', jax_val)
+    pyscf_val = cell.eval_gto("PBCGTOval_cart", coords.configs[:,0,:])
+    print('pyscf values', pyscf_val)
     print("errors", jax_val-pyscf_val)
+    print("MAD", jnp.mean(jnp.abs(jax_val-pyscf_val)))
 
 if __name__ == "__main__":
     test_pbc()

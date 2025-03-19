@@ -165,24 +165,24 @@ def _cartesian_gto_vgl(
     # value
     xyz_ijk: jax.Array = jnp.prod(ctr_xyz**ijk[:,jnp.newaxis,:], axis=-1)  # (N, nimages)
     gauss: jax.Array = jnp.exp(-expts[:,jnp.newaxis,:] * ctr_r[:,:, jnp.newaxis] ** 2)  # (N,nimages, M)
-    value: jax.Array = coeffs * jnp.sum(gauss * xyz_ijk[:,:,jnp.newaxis], axis=1) # sum over images (N,M)
+    value: jax.Array = coeffs[:,jnp.newaxis,:] * gauss * xyz_ijk[:,:,jnp.newaxis] #  (N, images, M)
 
-    # Gradient dimensions are basis, coeff, xyz
+    # Gradient dimensions are basis, image, coeff, xyz
     gpart: jax.Array = ijk[:, jnp.newaxis, jnp.newaxis, :] / ctr_xyz[:, :, jnp.newaxis, :]\
         - 2 * expts[:, jnp.newaxis, :, jnp.newaxis] * ctr_xyz[:, :, jnp.newaxis, :]
 
-    grad: jax.Array = value[:, :, jnp.newaxis] * jnp.sum(gpart, axis=1)  # (N,3)
-    lap_part = jnp.sum(
+    grad: jax.Array = value[:, :, :, jnp.newaxis] * gpart  # (N,3)
+    lap_part = (
         gpart**2
         - ijk[:, jnp.newaxis, jnp.newaxis, :] / ctr_xyz[:,:, jnp.newaxis, :] ** 2
-        - 2 * expts[:, jnp.newaxis, :, jnp.newaxis],
-        axis=1
+        - 2 * expts[:, jnp.newaxis, :, jnp.newaxis]
     )
-    # print("lap_part", lap_part.shape)
     laplacian: jax.Array = value * jnp.sum(
-        lap_part, axis=2
+        lap_part, axis=-1
     )  # value is (N, M), lap_part is (N, M, 3)
-    # print(laplacian.shape)
+    value = jnp.sum(value, axis=1)  # (N,M)
+    grad = jnp.sum(grad, axis=1)  # (N,M,3)
+    laplacian = jnp.sum(laplacian, axis=1)  # (N,M)
     return jnp.concatenate(
         [
             jnp.sum(value, axis=1)[:, jnp.newaxis],
@@ -431,11 +431,17 @@ def test_pbc():
     cell.cart = True
     cell.build()
 
-    evaluator, gradient, vgl = create_gto_evaluator(cell, nimages=2)
+    evaluator, gradient, vgl = create_gto_evaluator(cell, nimages=1)
     evaluator_val = jax.jit(jax.vmap(evaluator, in_axes=(0)))
     gradient = jax.jit(jax.vmap(gradient, in_axes=(0)))
+    vgl = jax.jit(jax.vmap(vgl, in_axes=(0)))
 
     ad_gradient = jax.jacfwd(evaluator)
+    ad_laplacian = jax.jacfwd(ad_gradient)
+
+    ad_laplacian = jax.vmap(ad_laplacian, in_axes=(0))
+    ad_laplacian = jax.jit(ad_laplacian)
+
     ad_gradient = jax.vmap(ad_gradient, in_axes=(0))
     ad_gradient = jax.jit(ad_gradient)
 
@@ -491,6 +497,42 @@ def test_pbc():
     print("MAD pyscf vs analytic", jnp.mean(jnp.abs(jax_grad[:,:,1:]-pyscf_grad[:,:,1:])))
     print("MAD AD vs analytic", jnp.mean(jnp.abs(jax_grad[:,:,1:]-ad_grad)))
     print("MAD AD vs pyscf", jnp.mean(jnp.abs(pyscf_grad[:,:,1:]-ad_grad)))
+
+
+
+    jax_vgl = vgl(jnp.array(xyz))
+    jax.block_until_ready(jax_vgl)
+
+    jax_start = time.perf_counter()
+    jax_vgl = vgl(jnp.array(xyz))
+    jax.block_until_ready(jax_vgl)
+    jax_end = time.perf_counter()
+    print('jax vgl time', jax_end-jax_start)
+
+
+
+    ad_lap = ad_laplacian(jnp.array(xyz))
+    jax.block_until_ready(ad_lap)
+
+    jax_start = time.perf_counter()
+    ad_lap = ad_laplacian(jnp.array(xyz))
+    jax.block_until_ready(ad_lap)
+    jax_end = time.perf_counter()
+    print('jax AD laplacian time', jax_end-jax_start)
+    ad_lap = jnp.trace(ad_lap, axis1=2, axis2=3)
+
+
+    pyscf_start = time.perf_counter()
+    pyscf_vgl = cell.eval_gto("PBCGTOval_cart_deriv2", xyz)
+    pyscf_end = time.perf_counter()
+    pyscf_vgl = pyscf_vgl.transpose(1, 2, 0)
+    print(pyscf_grad.shape, jax_grad.shape)  
+    print('pyscf vgl time', pyscf_end-pyscf_start)
+    print("MAD vgl gradient pyscf vs analytic", jnp.mean(jnp.abs(jax_vgl[:,:,1:4]-pyscf_grad[:,:,1:4])))
+    pyscf_lap = pyscf_vgl[:, :, 4]+pyscf_vgl[:,:,7]+pyscf_vgl[:,:,9]
+    print("MAD vgl laplacian pyscf vs analytic", jnp.mean(jnp.abs(jax_vgl[:,:,4]-pyscf_lap)))
+    print("MAD AD vs analytic", jnp.mean(jnp.abs(jax_vgl[:,:,4]-ad_lap)))
+    print("MAD AD vs pyscf", jnp.mean(jnp.abs(pyscf_lap-ad_lap)))
 
 
 if __name__ == "__main__":

@@ -193,28 +193,34 @@ def create_gto_evaluator(mol):
       expts[ii] = jnp.pad(expts[ii], (0, max_len - len(expts[ii])))
       coeffs[ii] = jnp.pad(coeffs[ii], (0, max_len - len(coeffs[ii])))
 
+    centers_aos = jnp.array(centers_aos)
+    ijks = jnp.array(ijks)
+    expts = jnp.array(expts)
+    coeffs = jnp.array(coeffs)
+
+
     evaluator = partial(
         _cartesian_gto,
-        jnp.array(centers_aos),
-        jnp.array(ijks),
-        jnp.array(expts),
-        jnp.array(coeffs),
+        centers_aos,
+        ijks,
+        expts,
+        coeffs,
     )
 
     gradient = partial(
         _cartesian_gto_grad,
-        jnp.array(centers_aos),
-        jnp.array(ijks),
-        jnp.array(expts),
-        jnp.array(coeffs),
+        centers_aos,
+        ijks,
+        expts,
+        coeffs,
     )
 
     vgl = partial(
         _cartesian_gto_vgl,
-        jnp.array(centers_aos),
-        jnp.array(ijks),
-        jnp.array(expts),
-        jnp.array(coeffs),
+        centers_aos,
+        ijks,
+        expts,
+        coeffs,
     )
     return evaluator, gradient, vgl
 

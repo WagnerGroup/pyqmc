@@ -392,17 +392,12 @@ class JAXSlater:
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
         if len(xyz.shape) ==3 and mask is not None: # This is an optimization for ECPs. 
-            print('nmask', np.sum(mask))
             if True:
-                start_eval = time.perf_counter()
                 newvals, saved = self._testvalue_batch[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
                 jax.block_until_ready(newvals)
-                end_eval = time.perf_counter()
                 # for some reason JAX's mask is very slow.
                 ret = np.array(newvals)[mask,:], None
-                print("Time for batch", end_eval-start_eval, 'time for mask', time.perf_counter()-end_eval)
                 return ret
-                return newvals[mask,:], None
             else:
                 allvals = []
                 for i in range(xyz.shape[1]):

@@ -431,7 +431,7 @@ def test_pbc():
     cell.cart = True
     cell.build()
 
-    evaluator, gradient, vgl = create_gto_evaluator(cell, nimages=1)
+    evaluator, gradient, vgl = create_gto_evaluator(cell, nimages=2)
     evaluator_val = jax.jit(jax.vmap(evaluator, in_axes=(0)))
     gradient = jax.jit(jax.vmap(gradient, in_axes=(0)))
     vgl = jax.jit(jax.vmap(vgl, in_axes=(0)))

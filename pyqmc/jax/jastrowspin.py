@@ -295,7 +295,7 @@ def evaluate_pgradient(mol, basis_params, partial_sum_pgrad_evaluators, paramete
     
     Return:
         a_pgrad (jax.Array): Gradient with respect to a coefficients. (natom, nbasis, 2)
-        b_pgrad (jax.Array): Gradient with respect to b coefficients. (nelec_spin, nbasis, 3)
+        b_pgrad (jax.Array): Gradient with respect to b coefficients. (nbasis, 3)
     """
     nup, ndn = mol.nelec
     coords_up, coords_dn = coords[:nup, :], coords[nup:, :]
@@ -317,7 +317,7 @@ def evaluate_pgradient(mol, basis_params, partial_sum_pgrad_evaluators, paramete
 
     # compute gradient with respect to b coefficients
     b_pgrad = jnp.zeros_like(bcoeff)
-    b_upup_pgrad = b_pgrad_eval(coords_up, coords_up, jnp.tile(bcoeff[1:, 0], (nup, 1))) / 2 # (nelec, nelec, natom, nbasis, 3)
+    b_upup_pgrad = b_pgrad_eval(coords_up, coords_up, jnp.tile(bcoeff[1:, 0], (nup, 1))) / 2 # (nelec, nelec, nbasis, 3)
     bc_upup_pgrad = cusp_pgrad_eval(coords_up, coords_up, jnp.tile(bcoeff[:1, 0], (nup, 1))) / 2
     b_updn_pgrad = b_pgrad_eval(coords_up, coords_dn, jnp.tile(bcoeff[1:, 1], (ndn, 1)))
     bc_updn_pgrad = cusp_pgrad_eval(coords_up, coords_dn, jnp.tile(bcoeff[:1, 1], (nup, 1)))

@@ -281,6 +281,60 @@ def evaluate_derivative(mol, partial_sum_derv_evaluators, parameters, coords_up,
     return derv_logj
 
 
+def evaluate_pgradient(mol, basis_params, partial_sum_pgrad_evaluators, parameters, coords):
+    """
+    Evaluate the coefficient gradient of the log Jastrow factor
+    (:math:`\nabla_c \log J(\vec{R})`).
+
+    Args:
+        mol (pyscf.gto.Mole): PySCF molecule object.
+        basis_params (BasisParameters): Basis parameters.
+        partial_sum_pgrad_evaluators (list): List of vmapped partial_basis_sum() pgradient functions.
+        parameters (CoefficientParameters): Jastrow coeffcients.
+        coords (jax.Array): Electron coordinates. (nelec, 3)
+    
+    Return:
+        a_pgrad (jax.Array): Gradient with respect to a coefficients. (natom, nbasis, 2)
+        b_pgrad (jax.Array): Gradient with respect to b coefficients. (nelec_spin, nbasis, 3)
+    """
+    nup, ndn = mol.nelec
+    coords_up, coords_dn = coords[:nup, :], coords[nup:, :]
+    atom_coords = jnp.array(mol.atom_coords())
+    acoeff, bcoeff = parameters
+
+    a_pgrad_eval, b_pgrad_eval, cusp_pgrad_eval = partial_sum_pgrad_evaluators
+
+    # compute gradient with respect to a coefficients
+    a_pgrad = jnp.zeros_like(acoeff)
+    a_up_pgrad = a_pgrad_eval(coords_up, atom_coords, acoeff[:, 1:, 0]) # (nelec, natom, nbasis, 2)
+    ac_up_pgrad = cusp_pgrad_eval(coords_up, atom_coords, acoeff[:, :1, 0])
+    a_dn_pgrad = a_pgrad_eval(coords_dn, atom_coords, acoeff[:, 1:, 1])
+    ac_dn_pgrad = cusp_pgrad_eval(coords_dn, atom_coords, acoeff[:, :1, 1])
+    a_pgrad = a_pgrad.at[:, 1:, 0].set(jnp.sum(a_up_pgrad, axis=0))
+    a_pgrad = a_pgrad.at[:, :1, 0].set(jnp.sum(ac_up_pgrad, axis=0))
+    a_pgrad = a_pgrad.at[:, 1:, 1].set(jnp.sum(a_dn_pgrad, axis=0))
+    a_pgrad = a_pgrad.at[:, :1, 1].set(jnp.sum(ac_dn_pgrad, axis=0))
+
+    # compute gradient with respect to b coefficients
+    b_pgrad = jnp.zeros_like(bcoeff)
+    b_upup_pgrad = b_pgrad_eval(coords_up, coords_up, jnp.tile(bcoeff[1:, 0], (nup, 1))) / 2 # (nelec, nelec, natom, nbasis, 3)
+    bc_upup_pgrad = cusp_pgrad_eval(coords_up, coords_up, jnp.tile(bcoeff[:1, 0], (nup, 1))) / 2
+    b_updn_pgrad = b_pgrad_eval(coords_up, coords_dn, jnp.tile(bcoeff[1:, 1], (ndn, 1)))
+    bc_updn_pgrad = cusp_pgrad_eval(coords_up, coords_dn, jnp.tile(bcoeff[:1, 1], (nup, 1)))
+    b_dndn_pgrad = b_pgrad_eval(coords_dn, coords_dn, jnp.tile(bcoeff[1:, 2], (ndn, 1))) / 2
+    bc_dndn_pgrad = cusp_pgrad_eval(coords_dn, coords_dn, jnp.tile(bcoeff[:1, 2], (nup, 1))) / 2
+    rcut, gamma = basis_params.rcut, basis_params.gamma[0]
+    diagc = rcut / (3+gamma) # gradient of the diagonal correction term
+    b_pgrad = b_pgrad.at[1:, 0].set(jnp.sum(b_upup_pgrad, axis=(0, 1)) - nup/2)
+    b_pgrad = b_pgrad.at[:1, 0].set(jnp.sum(bc_upup_pgrad, axis=(0, 1)) - nup*diagc/2)
+    b_pgrad = b_pgrad.at[1:, 1].set(jnp.sum(b_updn_pgrad, axis=(0, 1)))
+    b_pgrad = b_pgrad.at[:1, 1].set(jnp.sum(bc_updn_pgrad, axis=(0, 1)))
+    b_pgrad = b_pgrad.at[1:, 2].set(jnp.sum(b_dndn_pgrad, axis=(0, 1)) - ndn/2)
+    b_pgrad = b_pgrad.at[:1, 2].set(jnp.sum(bc_dndn_pgrad, axis=(0, 1)) - ndn*diagc/2)
+
+    return a_pgrad, b_pgrad
+
+
 def create_jastrow_evaluator(mol, basis_params):
     """
     Create a set of functions that can be used to evaluate the Jastrow factor.
@@ -290,6 +344,13 @@ def create_jastrow_evaluator(mol, basis_params):
     partial_sum_evals_elec = [
             jax.vmap( # vmapping over electrons
                 partial(partial_basis_sum, basis=basis, param=param, rcut=rcut), 
+                in_axes=(0, None, None)
+            )
+        for basis, param in zip([vmapped_polypade, vmapped_polypade, vmapped_cutoffcusp], [beta_a, beta_b, gamma])]
+
+    partial_sum_pgrad_evals = [
+            jax.vmap( # vmapping over electrons
+                partial(jax.grad(partial_basis_sum, argnums=2), basis=basis, param=param, rcut=rcut), 
                 in_axes=(0, None, None)
             )
         for basis, param in zip([vmapped_polypade, vmapped_polypade, vmapped_cutoffcusp], [beta_a, beta_b, gamma])]
@@ -327,7 +388,11 @@ def create_jastrow_evaluator(mol, basis_params):
         partial(evaluate_derivative, mol, partial_sum_hess_evals),
         in_axes=(None, 0, 0, None, 0), out_axes=0)
     )
-    return value_func, testval_func, grad_func, grad_func_an, hess_func
+    pgrad_func = jax.jit(jax.vmap(
+        partial(evaluate_pgradient, mol, basis_params, partial_sum_pgrad_evals), 
+        in_axes=(None, 0))
+    )
+    return value_func, testval_func, grad_func, grad_func_an, hess_func, pgrad_func
 
 
 class _parameterMap:
@@ -380,7 +445,8 @@ class JAXJastrowSpin:
     def __init__(self, mol, ion_cusp=None, na=4, nb=3, rcut=None, gamma=None, beta0_a=0.2, beta0_b=0.5):
         self._mol = mol
         self._init_params(ion_cusp, na, nb, rcut, gamma, beta0_a, beta0_b)
-        self._recompute, self._testvalue, self._gradient, self._gradient_an, self._hessian = create_jastrow_evaluator(self._mol, self.basis_params)
+        self._recompute, self._testvalue, self._gradient, \
+            self._gradient_an, self._hessian, self._pgradient = create_jastrow_evaluator(self._mol, self.basis_params)
 
 
     def _init_params(self, ion_cusp, na, nb, rcut, gamma, beta0_a, beta0_b):
@@ -500,7 +566,13 @@ class JAXJastrowSpin:
     
 
     def pgradient(self):
-        pass
+        self._configscurrent = configs.copy()
+        _configs = jnp.array(configs.configs)
+        self._a_pgrad, self._b_pgrad = self._pgradient(self.parameters.jax_parameters, _configs)
+        return {
+            "bcoeff": self._b_pgrad,
+            "acoeff": self._a_pgrad,
+        }
 
 
 
@@ -616,6 +688,25 @@ if __name__ == "__main__":
 
         print("jax laplacian", jax_laplacian)
         print("pyqmc laplacian", pyqmc_laplacian)
+
+
+
+        jax_pgrad = jax_jastrow.pgradient() 
+        jax.block_until_ready(jax_pgrad)
+
+        jax_start = time.perf_counter()
+        jax_pgrad = jax_jastrow.pgradient() 
+        jax.block_until_ready(jax_pgrad)
+        jax_end = time.perf_counter()
+
+        slater_start = time.perf_counter()
+        pyqmc_pgrad = jastrow.pgradient()
+        slater_end = time.perf_counter()
+
+        print("jax values", jax_pgrad)
+        print("pyqmc values", pyqmc_pgrad)
+
+
     
     data = pd.DataFrame(data)
     g = sns.relplot(data=data, x='N', y='time', hue='method', col='value', kind='line')

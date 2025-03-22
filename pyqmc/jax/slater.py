@@ -214,7 +214,7 @@ sherman_morrison_row = jax.jit(sherman_morrison_row)
 # Generating objects
 #############################
 
-def create_wf_evaluator(mol, mf):
+def create_wf_evaluator(mol, mf, det_tol=1e-9):
     """
     Create a set of functions that can be used to evaluate the wavefunction.
 
@@ -224,16 +224,19 @@ def create_wf_evaluator(mol, mf):
     gto_ne = jax.vmap(gto_1e, in_axes=0, out_axes=0)# over electrons
 
     # determinant expansion
-    _determinants = pyqmc.pyscftools.determinants_from_pyscf(mol, mf, mc=None, tol=1e-9)
+    _determinants = pyqmc.pyscftools.determinants_from_pyscf(mol, mf, mc=None, tol=det_tol)
     ci_coeff, determinants, mapping = pyqmc.determinant_tools.create_packed_objects(_determinants, tol=1e-9)
 
     ci_coeff = jnp.array(ci_coeff)
-    determinants = jnp.array(determinants)
+    #determinants = jnp.array(determinants)
     mapping = jnp.array(mapping)
-    mo_coeff = mf.mo_coeff[:,:jnp.max(determinants)+1] # this only works for RHF for now..
+    mo_coeff_up = mf.mo_coeff[:,:np.max(determinants[0])+1] 
+    mo_coeff_down = mf.mo_coeff[:,:np.max(determinants[1])+1] 
 
-    det_params = DeterminantParameters(ci_coeff, mo_coeff, mo_coeff)
-    expansion = DeterminantExpansion( mapping[0], mapping[1], determinants[0], determinants[1])
+    det_params = DeterminantParameters(ci_coeff, mo_coeff_up, mo_coeff_down)
+    expansion = DeterminantExpansion( mapping[0], mapping[1], 
+                                     jnp.array(determinants[0]), 
+                                     jnp.array(determinants[1]))
     nelec = tuple(mol.nelec)
     value = partial(evaluate_expansion, gto_ne, expansion, nelec)
     _testvalue_up = partial(testvalue_up, gto_1e, expansion)

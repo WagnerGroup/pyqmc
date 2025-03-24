@@ -501,6 +501,23 @@ class JAXJastrowSpin:
         return self._logj
 
 
+    def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
+        """
+        Update the saved log Jastrow value.
+        """
+        if mask is None:
+            mask = [True] * self._configscurrent.configs.shape[0]
+        jnpmask = jnp.array(mask, dtype=bool)
+        if saved_values is None:
+            new_logj = self.testvalue(e, epos)
+            delta_logj = new_logj - self._logj
+        else:
+            delta_logj = saved_values
+        delta_logj = delta_logj.at[jnp.logical_not(jnpmask)].set(0)
+        self._logj += delta_logj
+        self._configscurrent.move(e, epos, mask)
+
+
     def testvalue(self, e, epos, mask=None):
         _configs_old = jnp.array(self._configscurrent.configs)
         _epos = jnp.array(epos.configs)
@@ -514,7 +531,7 @@ class JAXJastrowSpin:
         computing gradient and laplacian.
         """
         _configs = jnp.array(self._configscurrent.configs)
-        _epos = _configs[:, e, :]
+        # _epos = _configs[:, e, :]
         spin = int(e >= self._mol.nelec[0])
         nelec = self._mol.nelec[0] + self._mol.nelec[1]
 
@@ -525,14 +542,15 @@ class JAXJastrowSpin:
         ndn = ndn - spin
         configs_up = _configs[:, mask, :][:, :nup, :]
         configs_dn = _configs[:, mask, :][:, nup:, :]
-        return configs_up, configs_dn, spin, _epos
+        return configs_up, configs_dn, spin
 
 
-    def gradient(self, e):
+    def gradient(self, e, epos):
         """
         :math:`\frac{\nabla_e J(\vec{R})}{J(\vec{R})} = \nabla_e \log J(\vec{R})`.
         """
-        configs_up, configs_dn, spin, _epos = self._split_configs(e)
+        configs_up, configs_dn, spin = self._split_configs(e)
+        _epos = jnp.array(epos.configs)
         return self._gradient(self.parameters.jax_parameters, configs_up, configs_dn, spin, _epos).T
 
 
@@ -541,8 +559,11 @@ class JAXJastrowSpin:
         return self._gradient_an(self.parameters.jax_parameters, configs_up, configs_dn, spin, _epos).T
 
 
-    def gradient_value(self, e):
-        return self.gradient(e), self._logj
+    def gradient_value(self, e, epos):
+        grad = self.gradient(e, epos)
+        new_logj = self.testvalue(e, epos)
+        delta_logj = new_logj - self._logj
+        return grad, new_logj, delta_logj
 
 
     def gradient_laplacian(self, e):
@@ -563,8 +584,8 @@ class JAXJastrowSpin:
         _configs = jnp.array(configs.configs)
         a_pgrad, b_pgrad = self._pgradient(self.parameters.jax_parameters, _configs)
         return {
-            "bcoeff": a_pgrad,
-            "acoeff": b_pgrad,
+            "acoeff": a_pgrad,
+            "bcoeff": b_pgrad,
         }
 
 
@@ -644,11 +665,11 @@ if __name__ == "__main__":
         data.append({'N': nconfig, 'time': slater_end-slater_start, 'method': 'pyqmc', 'value': 'Testvalue'})
 
 
-        jax_gradient = jax_jastrow.gradient(7)
+        jax_gradient, jax_new_logj, jax_delta_logj = jax_jastrow.gradient_value(7, new_configs.electron(7))
         jax.block_until_ready(jax_gradient)
 
         jax_start = time.perf_counter()
-        jax_gradient = jax_jastrow.gradient(7)
+        jax_gradient, jax_new_logj, jax_delta_logj = jax_jastrow.gradient_value(7, new_configs.electron(7))
         jax.block_until_ready(jax_gradient)
         jax_end = time.perf_counter()
 
@@ -661,11 +682,11 @@ if __name__ == "__main__":
         # jax_end_an = time.perf_counter()
 
         slater_start = time.perf_counter()
-        pyqmc_gradient = jastrow.gradient(7, configs.electron(7))
+        pyqmc_gradient, pyqmc_new_logj = jastrow.gradient_value(7, new_configs.electron(7))[:2]
         slater_end = time.perf_counter()
 
-        print("jax gradient", jax_gradient)
-        print("pyqmc gradient", pyqmc_gradient)
+        print("jax gradient value", jax_gradient, jax_new_logj)
+        print("pyqmc gradient value", pyqmc_gradient, pyqmc_new_logj)
 
         # data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'autodiff', 'value': 'Gradient'})
         # data.append({'N': nconfig, 'time': jax_end_an-jax_start_an, 'method': 'analytic', 'value': 'Gradient'})
@@ -673,20 +694,20 @@ if __name__ == "__main__":
         data.append({'N': nconfig, 'time': slater_end-slater_start, 'method': 'pyqmc', 'value': 'Gradient'})
 
 
-        jax_laplacian = jax_jastrow.gradient_laplacian(7)[1]
-        jax.block_until_ready(jax_laplacian)
+        # jax_laplacian = jax_jastrow.gradient_laplacian(7)[1]
+        # jax.block_until_ready(jax_laplacian)
 
-        jax_start = time.perf_counter()
-        jax_laplacian = jax_jastrow.gradient_laplacian(7)[1]
-        jax.block_until_ready(jax_laplacian)
-        jax_end = time.perf_counter()
+        # jax_start = time.perf_counter()
+        # jax_laplacian = jax_jastrow.gradient_laplacian(7)[1]
+        # jax.block_until_ready(jax_laplacian)
+        # jax_end = time.perf_counter()
 
-        slater_start = time.perf_counter()
-        pyqmc_laplacian = jastrow.laplacian(7, configs.electron(7))
-        slater_end = time.perf_counter()
+        # slater_start = time.perf_counter()
+        # pyqmc_laplacian = jastrow.laplacian(7, configs.electron(7))
+        # slater_end = time.perf_counter()
 
-        print("jax laplacian", jax_laplacian)
-        print("pyqmc laplacian", pyqmc_laplacian)
+        # print("jax laplacian", jax_laplacian)
+        # print("pyqmc laplacian", pyqmc_laplacian)
 
 
 

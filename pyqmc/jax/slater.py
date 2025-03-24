@@ -349,6 +349,7 @@ class JAXSlater:
         self._nelec = tuple(mol.nelec)
         self.parameters = _parameterMap(_parameters)
         self.dtype = float
+        self._cached_pad_ecp = 0
 
     def recompute(self, configs):        
         xyz = jnp.array(configs.configs)
@@ -396,18 +397,28 @@ class JAXSlater:
         e = e - self._nelec[0]*spin
         if len(xyz.shape) ==3 and mask is not None: # This is an optimization for ECPs. 
             if True:
-                newvals, saved = self._testvalue_batch[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
-                jax.block_until_ready(newvals)
+                nmask = np.sum(mask)
+                if self._cached_pad_ecp < nmask:
+                    self._cached_pad_ecp = int(nmask*1.1)
+                #print(nmask, self._cached_pad_ecp)
+                xyz = jnp.pad(xyz[mask], ((0, self._cached_pad_ecp-nmask), (0,0), (0,0)), mode='empty')
+                #print(xyz.shape)
+                det_up = SlaterState(None, 
+                                     jnp.pad(self._dets_up.sign[mask], ((0, self._cached_pad_ecp-nmask), (0,0)), mode='constant'),
+                                     jnp.pad(self._dets_up.logabsdet[mask], ((0, self._cached_pad_ecp-nmask), (0,0)), mode='constant'),
+                                     jnp.pad(self._dets_up.inverse[mask], ((0, self._cached_pad_ecp-nmask), (0,0), (0,0), (0,0)), mode='constant'))
+                det_down = SlaterState(None,    
+                                        jnp.pad(self._dets_down.sign[mask], ((0, self._cached_pad_ecp-nmask), (0,0)), mode='constant'),
+                                        jnp.pad(self._dets_down.logabsdet[mask], ((0, self._cached_pad_ecp-nmask), (0,0)), mode='constant'),
+                                        jnp.pad(self._dets_down.inverse[mask], ((0, self._cached_pad_ecp-nmask), (0,0), (0,0), (0,0)), mode='constant'))
+                newvals, saved = self._testvalue_batch[spin](self.parameters.jax_parameters, det_up, det_down, e, xyz)
+                # jax.block_until_ready(newvals)
                 # for some reason JAX's mask is very slow.
-                ret = np.array(newvals)[mask,:], None
+                ret = np.array(newvals)[:nmask,:], None
                 return ret
             else:
-                allvals = []
-                for i in range(xyz.shape[1]):
-                    newvals, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz[:,i,:])
-                    allvals.append(newvals)
-                allvals = jnp.array(allvals)
-                return allvals.T[mask,:], None
+                newvals, saved = self._testvalue_batch[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
+                return np.array(newvals)[mask], saved
         else: 
             newvals, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
             return np.array(newvals)[mask], saved

@@ -120,17 +120,21 @@ def partial_basis_sum_grad(elec_coord, coords, coeff, basis_grad, param, rcut):
     return jnp.einsum("Ik,Ik,Ii->i", coeff, basis_grad_val, rij_hat)
 
 
-# vectorize basis functions
-_inner_polypade = jax.vmap(polypade, in_axes=(0, None, None), out_axes=0) # [(n,), float, float] -> (n,)
-vmapped_polypade = jax.vmap(_inner_polypade, in_axes=(None, 0, None), out_axes=1) # [(n,), (nbasis,), float] -> (n, nbasis)
-_inner_cutoffcusp = jax.vmap(cutoffcusp, in_axes=(0, None, None), out_axes=0)
-vmapped_cutoffcusp = jax.vmap(_inner_cutoffcusp, in_axes=(None, 0, None), out_axes=1)
+def vmap_basis(basis):
+    """
+    Maps basis functions (polypade or cutoffcusp) or their derivatives over their parameters
+    """
+    return jax.vmap(
+        jax.vmap(basis, in_axes=(0, None, None), out_axes=0), # [(n,), float, float] -> (n,)
+        in_axes=(None, 0, None), 
+        out_axes=1
+    ) # [(n,), (nbasis,), float] -> (n, nbasis)
 
-# for analytic gradient
-_inner_polypade_grad = jax.vmap(polypade_grad, in_axes=(0, None, None), out_axes=0) # [(n,), float, float] -> (n,)
-vmapped_polypade_grad = jax.vmap(_inner_polypade_grad, in_axes=(None, 0, None), out_axes=1) # [(n,), (nbasis,), float] -> (n, nbasis)
-_inner_cutoffcusp_grad = jax.vmap(cutoffcusp_grad, in_axes=(0, None, None), out_axes=0)
-vmapped_cutoffcusp_grad = jax.vmap(_inner_cutoffcusp_grad, in_axes=(None, 0, None), out_axes=1)
+
+polypade_vm = vmap_basis(polypade)
+cutoffcusp_vm = vmap_basis(cutoffcusp)
+polypade_grad_vm = vmap_basis(polypade_grad)
+cutoffcusp_grad_vm = vmap_basis(cutoffcusp_grad)
 
 
 def compute_bdiag_corr(mol, basis_params, parameters):
@@ -341,58 +345,53 @@ def create_jastrow_evaluator(mol, basis_params):
     """
     beta_a, beta_b, ion_cusp, rcut, gamma = basis_params
 
-    partial_sum_evals_elec = [
+    # lists of basis functions and parameters for constructing psum evaluators for a, b and cusp terms
+    basis_vm_lst = [polypade_vm, polypade_vm, cutoffcusp_vm]
+    basis_grad_vm_lst = [polypade_grad_vm, polypade_grad_vm, cutoffcusp_grad_vm]
+    basis_params_lst = [beta_a, beta_b, gamma]
+
+    # lists of partial basis sum evaluators for a, b and cusp terms
+    psum_evaluators_elec = [
             jax.vmap( # vmapping over electrons
                 partial(partial_basis_sum, basis=basis, param=param, rcut=rcut), 
                 in_axes=(0, None, None)
             )
-        for basis, param in zip([vmapped_polypade, vmapped_polypade, vmapped_cutoffcusp], [beta_a, beta_b, gamma])]
-
-    partial_sum_pgrad_evals = [
+        for basis, param in zip(basis_vm_lst, basis_params_lst)]
+    psum_evaluators = [partial(partial_basis_sum, basis=basis, param=param, rcut=rcut)
+        for basis, param in zip(basis_vm_lst, basis_params_lst)]
+    psum_grad_evaluators = [partial(partial_basis_sum_grad, basis_grad=basis, param=param, rcut=rcut)
+        for basis, param in zip(basis_grad_vm_lst, basis_params_lst)]
+    psum_hess_evaluators = [partial(jax.hessian(partial_basis_sum, argnums=0), basis=basis, param=param, rcut=rcut)
+        for basis, param in zip(basis_vm_lst, basis_params_lst)]
+    psum_pgrad_evaluators = [
             jax.vmap( # vmapping over electrons
                 partial(jax.grad(partial_basis_sum, argnums=2), basis=basis, param=param, rcut=rcut), 
                 in_axes=(0, None, None)
             )
-        for basis, param in zip([vmapped_polypade, vmapped_polypade, vmapped_cutoffcusp], [beta_a, beta_b, gamma])]
+        for basis, param in zip(basis_vm_lst, basis_params_lst)]
 
-    partial_sum_evals = [partial(partial_basis_sum, basis=basis, param=param, rcut=rcut)
-        for basis, param in zip([vmapped_polypade, vmapped_polypade, vmapped_cutoffcusp], [beta_a, beta_b, gamma])]
-    
-    partial_sum_grad_evals = [partial(jax.grad(partial_basis_sum, argnums=0), basis=basis, param=param, rcut=rcut)
-        for basis, param in zip([vmapped_polypade, vmapped_polypade, vmapped_cutoffcusp], [beta_a, beta_b, gamma])]
-
-    partial_sum_grad_evals_an = [partial(partial_basis_sum_grad, basis_grad=basis, param=param, rcut=rcut)
-        for basis, param in zip([vmapped_polypade_grad, vmapped_polypade_grad, vmapped_cutoffcusp_grad], [beta_a, beta_b, gamma])]
-
-    partial_sum_hess_evals = [partial(jax.hessian(partial_basis_sum, argnums=0), basis=basis, param=param, rcut=rcut)
-        for basis, param in zip([vmapped_polypade, vmapped_polypade, vmapped_cutoffcusp], [beta_a, beta_b, gamma])]
-
-    # vmapping over configurations
-    value_func = jax.jit(jax.vmap(
-        partial(evaluate_jastrow, mol, basis_params, partial_sum_evals_elec), 
+    # create evaluators vmapped over configurations
+    value_evaluator = jax.jit(jax.vmap(
+        partial(evaluate_jastrow, mol, basis_params, psum_evaluators_elec), 
         in_axes=(None, 0))
     )
-    testval_func = jax.jit(jax.vmap(
-        partial(evaluate_testvalue, mol, partial_sum_evals),
+    testval_evaluator = jax.jit(jax.vmap(
+        partial(evaluate_testvalue, mol, psum_evaluators),
         in_axes=((None, 0, None, None, 0)))
     )
-    grad_func = jax.jit(jax.vmap(
-        partial(evaluate_derivative, mol, partial_sum_grad_evals),
+    grad_evaluator = jax.jit(jax.vmap(
+        partial(evaluate_derivative, mol, psum_grad_evaluators),
         in_axes=(None, 0, 0, None, 0), out_axes=0)
     )
-    grad_func_an = jax.jit(jax.vmap(
-        partial(evaluate_derivative, mol, partial_sum_grad_evals_an),
+    hess_evaluator = jax.jit(jax.vmap(
+        partial(evaluate_derivative, mol, psum_hess_evaluators),
         in_axes=(None, 0, 0, None, 0), out_axes=0)
     )
-    hess_func = jax.jit(jax.vmap(
-        partial(evaluate_derivative, mol, partial_sum_hess_evals),
-        in_axes=(None, 0, 0, None, 0), out_axes=0)
-    )
-    pgrad_func = jax.jit(jax.vmap(
-        partial(evaluate_pgradient, mol, basis_params, partial_sum_pgrad_evals), 
+    pgrad_evaluator = jax.jit(jax.vmap(
+        partial(evaluate_pgradient, mol, basis_params, psum_pgrad_evaluators), 
         in_axes=(None, 0))
     )
-    return value_func, testval_func, grad_func, grad_func_an, hess_func, pgrad_func
+    return value_evaluator, testval_evaluator, grad_evaluator, hess_evaluator, pgrad_evaluator
 
 
 class _parameterMap:
@@ -446,7 +445,7 @@ class JAXJastrowSpin:
         self._mol = mol
         self._init_params(ion_cusp, na, nb, rcut, gamma, beta0_a, beta0_b)
         self._recompute, self._testvalue, self._gradient, \
-            self._gradient_an, self._hessian, self._pgradient = create_jastrow_evaluator(self._mol, self.basis_params)
+            self._hessian, self._pgradient = create_jastrow_evaluator(self._mol, self.basis_params)
 
 
     def _init_params(self, ion_cusp, na, nb, rcut, gamma, beta0_a, beta0_b):
@@ -518,6 +517,10 @@ class JAXJastrowSpin:
         self._configscurrent.move(e, epos, mask)
 
 
+    def value(self):
+        return self._logj
+
+
     def testvalue(self, e, epos, mask=None):
         _configs_old = jnp.array(self._configscurrent.configs)
         _epos = jnp.array(epos.configs)
@@ -554,11 +557,6 @@ class JAXJastrowSpin:
         return self._gradient(self.parameters.jax_parameters, configs_up, configs_dn, spin, _epos).T
 
 
-    def gradient_an(self, e):
-        configs_up, configs_dn, spin, _epos = self._split_configs(e)
-        return self._gradient_an(self.parameters.jax_parameters, configs_up, configs_dn, spin, _epos).T
-
-
     def gradient_value(self, e, epos):
         grad = self.gradient(e, epos)
         new_logj = self.testvalue(e, epos)
@@ -566,11 +564,12 @@ class JAXJastrowSpin:
         return grad, new_logj, delta_logj
 
 
-    def gradient_laplacian(self, e):
+    def gradient_laplacian(self, e, epos):
         """
         :math:`\frac{\nabla_e^2 J(\vec{R})}{J(\vec{R})} = \nabla_e^2 \log J(\vec{R}) + |\nabla_e \log J(\vec{R})|^2.`
         """
-        configs_up, configs_dn, spin, _epos = self._split_configs(e)
+        configs_up, configs_dn, spin = self._split_configs(e)
+        _epos = jnp.array(epos.configs)
         grad = self._gradient(self.parameters.jax_parameters, configs_up, configs_dn, spin, _epos).T
         lap = jnp.trace(
             self._hessian(self.parameters.jax_parameters, configs_up, configs_dn, spin, _epos), 
@@ -620,7 +619,11 @@ if __name__ == "__main__":
     # for nconfig in [10, 1000, 100000]:
     for nconfig in [2]:
         configs = pyq.initial_guess(mol['h2o'], nconfig)
+        new_configs = configs.copy()
+        new_configs.electron(7).configs += np.random.normal(0, 0.1, configs.electron(7).configs.shape)
 
+
+        # Test recompute
         jax_jastrowval = jax_jastrow.recompute(configs) 
         jax.block_until_ready(jax_jastrowval)
 
@@ -629,23 +632,20 @@ if __name__ == "__main__":
         jax.block_until_ready(jax_jastrowval)
         jax_end = time.perf_counter()
 
-        slater_start = time.perf_counter()
+        pyqmc_start = time.perf_counter()
         pyqmc_jastrowval = jastrow.recompute(configs)
-        slater_end = time.perf_counter()
+        pyqmc_end = time.perf_counter()
 
-        print("jax", jax_end-jax_start, "slater", slater_end-slater_start)
+        print("jax", jax_end-jax_start, "slater", pyqmc_end-pyqmc_start)
         print('MAD', jnp.mean(jnp.abs(pyqmc_jastrowval[1]- jax_jastrowval)))
         print("jax values", jax_jastrowval)
         print("pyqmc values", pyqmc_jastrowval[1])
 
         data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'jax', 'value': 'Jastrow'})
-        data.append({'N': nconfig, 'time': slater_end-slater_start, 'method': 'pyqmc', 'value': 'Jastrow'})
+        data.append({'N': nconfig, 'time': pyqmc_end-pyqmc_start, 'method': 'pyqmc', 'value': 'Jastrow'})
 
 
-
-        new_configs = configs.copy()
-        new_configs.electron(7).configs += np.random.normal(0, 0.1, configs.electron(7).configs.shape)
-
+        # Test testvalue
         jax_testval = jax_jastrow.testvalue(7, new_configs.electron(7))
         jax.block_until_ready(jax_testval)
 
@@ -654,17 +654,18 @@ if __name__ == "__main__":
         jax.block_until_ready(jax_testval)
         jax_end = time.perf_counter()
 
-        slater_start = time.perf_counter()
+        pyqmc_start = time.perf_counter()
         pyqmc_testval = jastrow.testvalue(7, new_configs.electron(7))[0]
-        slater_end = time.perf_counter()
+        pyqmc_end = time.perf_counter()
 
         print("jax testval", jax_testval)
         print("pyqmc testval", pyqmc_testval)
 
         data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'jax', 'value': 'Testvalue'})
-        data.append({'N': nconfig, 'time': slater_end-slater_start, 'method': 'pyqmc', 'value': 'Testvalue'})
+        data.append({'N': nconfig, 'time': pyqmc_end-pyqmc_start, 'method': 'pyqmc', 'value': 'Testvalue'})
 
 
+        # Test gradient_value
         jax_gradient, jax_new_logj, jax_delta_logj = jax_jastrow.gradient_value(7, new_configs.electron(7))
         jax.block_until_ready(jax_gradient)
 
@@ -673,61 +674,57 @@ if __name__ == "__main__":
         jax.block_until_ready(jax_gradient)
         jax_end = time.perf_counter()
 
-        # jax_gradient_an = jax_jastrow.gradient_an(7)
-        # jax.block_until_ready(jax_gradient_an)
-
-        # jax_start_an = time.perf_counter()
-        # jax_gradient_an = jax_jastrow.gradient_an(7)
-        # jax.block_until_ready(jax_gradient_an)
-        # jax_end_an = time.perf_counter()
-
-        slater_start = time.perf_counter()
+        pyqmc_start = time.perf_counter()
         pyqmc_gradient, pyqmc_new_logj = jastrow.gradient_value(7, new_configs.electron(7))[:2]
-        slater_end = time.perf_counter()
+        pyqmc_end = time.perf_counter()
 
         print("jax gradient value", jax_gradient, jax_new_logj)
         print("pyqmc gradient value", pyqmc_gradient, pyqmc_new_logj)
 
-        # data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'autodiff', 'value': 'Gradient'})
-        # data.append({'N': nconfig, 'time': jax_end_an-jax_start_an, 'method': 'analytic', 'value': 'Gradient'})
         data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'jax', 'value': 'Gradient'})
-        data.append({'N': nconfig, 'time': slater_end-slater_start, 'method': 'pyqmc', 'value': 'Gradient'})
+        data.append({'N': nconfig, 'time': pyqmc_end-pyqmc_start, 'method': 'pyqmc', 'value': 'Gradient'})
 
 
-        # jax_laplacian = jax_jastrow.gradient_laplacian(7)[1]
-        # jax.block_until_ready(jax_laplacian)
-
-        # jax_start = time.perf_counter()
-        # jax_laplacian = jax_jastrow.gradient_laplacian(7)[1]
-        # jax.block_until_ready(jax_laplacian)
-        # jax_end = time.perf_counter()
-
-        # slater_start = time.perf_counter()
-        # pyqmc_laplacian = jastrow.laplacian(7, configs.electron(7))
-        # slater_end = time.perf_counter()
-
-        # print("jax laplacian", jax_laplacian)
-        # print("pyqmc laplacian", pyqmc_laplacian)
-
-
-
-        jax_pgrad = jax_jastrow.pgradient() 
-        jax.block_until_ready(jax_pgrad)
+        # Test gradient_laplacian
+        jax_laplacian = jax_jastrow.gradient_laplacian(7, new_configs.electron(7))[1]
+        jax.block_until_ready(jax_laplacian)
 
         jax_start = time.perf_counter()
-        jax_pgrad = jax_jastrow.pgradient() 
-        jax.block_until_ready(jax_pgrad)
+        jax_laplacian = jax_jastrow.gradient_laplacian(7, new_configs.electron(7))[1]
+        jax.block_until_ready(jax_laplacian)
         jax_end = time.perf_counter()
 
         slater_start = time.perf_counter()
-        pyqmc_pgrad = jastrow.pgradient()
+        pyqmc_laplacian = jastrow.gradient_laplacian(7, new_configs.electron(7))[1]
         slater_end = time.perf_counter()
 
-        print("jax values", jax_pgrad)
-        print("pyqmc values", pyqmc_pgrad)
+        print("jax laplacian", jax_laplacian)
+        print("pyqmc laplacian", pyqmc_laplacian)
+
+        data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'jax', 'value': 'Laplacian'})
+        data.append({'N': nconfig, 'time': pyqmc_end-pyqmc_start, 'method': 'pyqmc', 'value': 'Laplacian'})
 
 
+        # Test pgradient
+        # jax_pgrad = jax_jastrow.pgradient() 
+        # jax.block_until_ready(jax_pgrad)
+
+        # jax_start = time.perf_counter()
+        # jax_pgrad = jax_jastrow.pgradient() 
+        # jax.block_until_ready(jax_pgrad)
+        # jax_end = time.perf_counter()
+
+        # pyqmc_start = time.perf_counter()
+        # pyqmc_pgrad = jastrow.pgradient()
+        # pyqmc_end = time.perf_counter()
+
+        # print("jax values", jax_pgrad)
+        # print("pyqmc values", pyqmc_pgrad)
+
+        # data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'jax', 'value': 'PGradient'})
+        # data.append({'N': nconfig, 'time': pyqmc_end-pyqmc_start, 'method': 'pyqmc', 'value': 'PGradient'})
     
+
     data = pd.DataFrame(data)
     g = sns.relplot(data=data, x='N', y='time', hue='method', col='value', kind='line')
     plt.ylim(0)

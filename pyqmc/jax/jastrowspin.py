@@ -198,7 +198,7 @@ def evaluate_jastrow(mol, basis_params, partial_sum_evaluators, parameters, coor
 
 def evaluate_testvalue(mol, partial_sum_evaluators, parameters, coords_old, e, spin, epos):
     """
-    Evaluate the test value (:math:`\log J(\vec{R}')/\log J(\vec{R})`) for a single-electron update.
+    Evaluate the test value (:math:`\log (J(\vec{R}') / J(\vec{R}))`) for a single-electron update.
 
     Args:
         mol (pyscf.gto.Mole): PySCF molecule object.
@@ -379,6 +379,13 @@ def create_jastrow_evaluator(mol, basis_params):
         partial(evaluate_testvalue, mol, psum_evaluators),
         in_axes=((None, 0, None, None, 0)))
     )
+    testval_aux_evaluator = jax.jit(jax.vmap(
+        jax.vmap(
+            partial(evaluate_testvalue, mol, psum_evaluators),
+            in_axes=((None, None, None, None, 0))
+        ),
+        in_axes=((None, 0, None, None, 0)), out_axes=0)
+    )
     grad_evaluator = jax.jit(jax.vmap(
         partial(evaluate_derivative, mol, psum_grad_evaluators),
         in_axes=(None, 0, 0, None, 0), out_axes=0)
@@ -391,7 +398,7 @@ def create_jastrow_evaluator(mol, basis_params):
         partial(evaluate_pgradient, mol, basis_params, psum_pgrad_evaluators), 
         in_axes=(None, 0))
     )
-    return value_evaluator, testval_evaluator, grad_evaluator, hess_evaluator, pgrad_evaluator
+    return value_evaluator, testval_evaluator, testval_aux_evaluator, grad_evaluator, hess_evaluator, pgrad_evaluator
 
 
 class _parameterMap:
@@ -444,7 +451,7 @@ class JAXJastrowSpin:
     def __init__(self, mol, ion_cusp=None, na=4, nb=3, rcut=None, gamma=None, beta0_a=0.2, beta0_b=0.5):
         self._mol = mol
         self._init_params(ion_cusp, na, nb, rcut, gamma, beta0_a, beta0_b)
-        self._recompute, self._testvalue, self._gradient, \
+        self._recompute, self._testvalue, self._testvalue_aux, self._gradient, \
             self._hessian, self._pgradient = create_jastrow_evaluator(self._mol, self.basis_params)
 
 
@@ -508,8 +515,7 @@ class JAXJastrowSpin:
             mask = [True] * self._configscurrent.configs.shape[0]
         jnpmask = jnp.array(mask, dtype=bool)
         if saved_values is None:
-            new_logj = self.testvalue(e, epos)
-            delta_logj = new_logj - self._logj
+            delta_logj = self.testvalue(e, epos)[1]
         else:
             delta_logj = saved_values
         delta_logj = delta_logj.at[jnp.logical_not(jnpmask)].set(0)
@@ -522,10 +528,33 @@ class JAXJastrowSpin:
 
 
     def testvalue(self, e, epos, mask=None):
-        _configs_old = jnp.array(self._configscurrent.configs)
-        _epos = jnp.array(epos.configs)
+        """
+        Compute the test value (:math:`\log (J(\vec{R}') / J(\vec{R}))`) for a single-electron update.
+        epos.configs can have shape (nconfig, 3) or (nconfig, naip, 3).
+        The second return value is delta log Jastrow, used as saved_values for updateinternals()
+        """
+        if mask is None:
+            mask = [True] * self._configscurrent.configs.shape[0]
+        jnpmask = jnp.array(mask, dtype=bool)
+        _configs_old = jnp.array(self._configscurrent.configs)[jnpmask]
+        _epos = jnp.array(epos.configs)[jnpmask]
         spin = int(e >= self._mol.nelec[0])
-        return self._testvalue(self.parameters.jax_parameters, _configs_old, e, spin, _epos)
+        if len(_epos.shape) == 2:
+            evaluator = self._testvalue
+        else:
+            evaluator = self._testvalue_aux
+        testval = evaluator(self.parameters.jax_parameters, _configs_old, e, spin, _epos)
+        return testval, jnp.log(testval)
+
+
+    def testvalue_many(self, e, epos, mask=None):
+        """
+        Compute the test values for moving electrons in e to epos.
+        """
+        testvals = []
+        for ei in e:
+            testvals.append(self.testvalue(ei, epos, mask)[0])
+        return jnp.array(testvals).T 
 
 
     def _split_configs(self, e):
@@ -559,9 +588,8 @@ class JAXJastrowSpin:
 
     def gradient_value(self, e, epos):
         grad = self.gradient(e, epos)
-        new_logj = self.testvalue(e, epos)
-        delta_logj = new_logj - self._logj
-        return grad, new_logj, delta_logj
+        testval, delta_logj = self.testvalue(e, epos)
+        return grad, testval, delta_logj
 
 
     def gradient_laplacian(self, e, epos):
@@ -606,6 +634,7 @@ if __name__ == "__main__":
     import numpy as np
 
     import pyqmc.api as pyq
+    from pyqmc.coord import OpenElectron
     mol = {}
     mf = {}
 
@@ -616,8 +645,9 @@ if __name__ == "__main__":
     jastrow, _ = pyqmc.wftools.generate_jastrow(mol['h2o'])
 
     data = []
+    verbose = True
     # for nconfig in [10, 1000, 100000]:
-    for nconfig in [2]:
+    for nconfig in [3]:
         configs = pyq.initial_guess(mol['h2o'], nconfig)
         new_configs = configs.copy()
         new_configs.electron(7).configs += np.random.normal(0, 0.1, configs.electron(7).configs.shape)
@@ -636,33 +666,64 @@ if __name__ == "__main__":
         pyqmc_jastrowval = jastrow.recompute(configs)
         pyqmc_end = time.perf_counter()
 
-        print("jax", jax_end-jax_start, "slater", pyqmc_end-pyqmc_start)
-        print('MAD', jnp.mean(jnp.abs(pyqmc_jastrowval[1]- jax_jastrowval)))
-        print("jax values", jax_jastrowval)
-        print("pyqmc values", pyqmc_jastrowval[1])
+        if verbose:
+            print("jax", jax_end-jax_start, "slater", pyqmc_end-pyqmc_start)
+            print('MAD', jnp.mean(jnp.abs(pyqmc_jastrowval[1]- jax_jastrowval)))
+            print("jax values", jax_jastrowval)
+            print("pyqmc values", pyqmc_jastrowval[1])
 
         data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'jax', 'value': 'Jastrow'})
         data.append({'N': nconfig, 'time': pyqmc_end-pyqmc_start, 'method': 'pyqmc', 'value': 'Jastrow'})
 
 
         # Test testvalue
-        jax_testval = jax_jastrow.testvalue(7, new_configs.electron(7))
+        mask = None
+        # mask = [False, True, True]
+        aux_electron7 = OpenElectron(np.tile(new_configs.configs[:, np.newaxis, 7], (1, 3, 1)), new_configs.dist)
+
+        jax_testval = jax_jastrow.testvalue(7, new_configs.electron(7), mask)[0]
+        # jax_testval = jax_jastrow.testvalue(7, aux_electron7, mask)[0]
         jax.block_until_ready(jax_testval)
 
         jax_start = time.perf_counter()
-        jax_testval = jax_jastrow.testvalue(7, new_configs.electron(7))
+        jax_testval = jax_jastrow.testvalue(7, new_configs.electron(7), mask)[0]
+        # jax_testval = jax_jastrow.testvalue(7, aux_electron7, mask)[0]
         jax.block_until_ready(jax_testval)
         jax_end = time.perf_counter()
 
         pyqmc_start = time.perf_counter()
-        pyqmc_testval = jastrow.testvalue(7, new_configs.electron(7))[0]
+        pyqmc_testval = jastrow.testvalue(7, new_configs.electron(7), mask)[0]
+        # pyqmc_testval = jastrow.testvalue(7, aux_electron7, mask)[0]
         pyqmc_end = time.perf_counter()
 
-        print("jax testval", jax_testval)
-        print("pyqmc testval", pyqmc_testval)
+        if verbose:
+            print("jax testval", jax_testval)
+            print("pyqmc testval", pyqmc_testval)
 
         data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'jax', 'value': 'Testvalue'})
         data.append({'N': nconfig, 'time': pyqmc_end-pyqmc_start, 'method': 'pyqmc', 'value': 'Testvalue'})
+
+
+        # Test testvalue_many
+        jax_testval_many = jax_jastrow.testvalue_many(np.array([2, 7]), new_configs.electron(7))
+        jax.block_until_ready(jax_testval_many)
+
+        jax_start = time.perf_counter()
+        jax_testval_many = jax_jastrow.testvalue_many(np.array([2, 7]), new_configs.electron(7))
+        jax.block_until_ready(jax_testval_many)
+        jax_end = time.perf_counter()
+
+        pyqmc_start = time.perf_counter()
+        pyqmc_testval_many = jastrow.testvalue_many(np.array([2, 7]), new_configs.electron(7))
+        pyqmc_end = time.perf_counter()
+
+        if verbose:
+            print("jax testval many", jax_testval_many)
+            print("pyqmc testval many", pyqmc_testval_many)
+
+        data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'jax', 'value': 'Testvalue many'})
+        data.append({'N': nconfig, 'time': pyqmc_end-pyqmc_start, 'method': 'pyqmc', 'value': 'Testvalue many'})
+
 
 
         # Test gradient_value
@@ -675,11 +736,12 @@ if __name__ == "__main__":
         jax_end = time.perf_counter()
 
         pyqmc_start = time.perf_counter()
-        pyqmc_gradient, pyqmc_new_logj = jastrow.gradient_value(7, new_configs.electron(7))[:2]
+        pyqmc_gradient, pyqmc_new_logj, _ = jastrow.gradient_value(7, new_configs.electron(7))
         pyqmc_end = time.perf_counter()
 
-        print("jax gradient value", jax_gradient, jax_new_logj)
-        print("pyqmc gradient value", pyqmc_gradient, pyqmc_new_logj)
+        if verbose:
+            print("jax gradient value", jax_gradient, jax_new_logj)
+            print("pyqmc gradient value", pyqmc_gradient, pyqmc_new_logj)
 
         data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'jax', 'value': 'Gradient'})
         data.append({'N': nconfig, 'time': pyqmc_end-pyqmc_start, 'method': 'pyqmc', 'value': 'Gradient'})
@@ -698,34 +760,36 @@ if __name__ == "__main__":
         pyqmc_laplacian = jastrow.gradient_laplacian(7, new_configs.electron(7))[1]
         slater_end = time.perf_counter()
 
-        print("jax laplacian", jax_laplacian)
-        print("pyqmc laplacian", pyqmc_laplacian)
+        if verbose:
+            print("jax laplacian", jax_laplacian)
+            print("pyqmc laplacian", pyqmc_laplacian)
 
         data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'jax', 'value': 'Laplacian'})
         data.append({'N': nconfig, 'time': pyqmc_end-pyqmc_start, 'method': 'pyqmc', 'value': 'Laplacian'})
 
 
         # Test pgradient
-        # jax_pgrad = jax_jastrow.pgradient() 
-        # jax.block_until_ready(jax_pgrad)
+        jax_pgrad = jax_jastrow.pgradient() 
+        jax.block_until_ready(jax_pgrad)
 
-        # jax_start = time.perf_counter()
-        # jax_pgrad = jax_jastrow.pgradient() 
-        # jax.block_until_ready(jax_pgrad)
-        # jax_end = time.perf_counter()
+        jax_start = time.perf_counter()
+        jax_pgrad = jax_jastrow.pgradient() 
+        jax.block_until_ready(jax_pgrad)
+        jax_end = time.perf_counter()
 
-        # pyqmc_start = time.perf_counter()
-        # pyqmc_pgrad = jastrow.pgradient()
-        # pyqmc_end = time.perf_counter()
+        pyqmc_start = time.perf_counter()
+        pyqmc_pgrad = jastrow.pgradient()
+        pyqmc_end = time.perf_counter()
 
-        # print("jax values", jax_pgrad)
-        # print("pyqmc values", pyqmc_pgrad)
+        if verbose:
+            print("jax values", jax_pgrad)
+            print("pyqmc values", pyqmc_pgrad)
 
-        # data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'jax', 'value': 'PGradient'})
-        # data.append({'N': nconfig, 'time': pyqmc_end-pyqmc_start, 'method': 'pyqmc', 'value': 'PGradient'})
+        data.append({'N': nconfig, 'time': jax_end-jax_start, 'method': 'jax', 'value': 'PGradient'})
+        data.append({'N': nconfig, 'time': pyqmc_end-pyqmc_start, 'method': 'pyqmc', 'value': 'PGradient'})
     
 
     data = pd.DataFrame(data)
-    g = sns.relplot(data=data, x='N', y='time', hue='method', col='value', kind='line')
+    g = sns.relplot(data=data, x='N', y='time', hue='method', col='value', kind='line', col_wrap=3)
     plt.ylim(0)
     # plt.savefig("jax_vs_pyqmc.png")

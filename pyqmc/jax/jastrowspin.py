@@ -526,7 +526,7 @@ class JAXJastrowSpin:
 
 
     def value(self):
-        return self._logj
+        return jnp.ones(len(self._logj)), self._logj
 
 
     def testvalue(self, e, epos, mask=None):

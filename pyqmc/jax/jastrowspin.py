@@ -538,14 +538,14 @@ class JAXJastrowSpin:
         if mask is None:
             mask = [True] * self._configscurrent.configs.shape[0]
         jnpmask = jnp.array(mask, dtype=bool)
-        _configs_old = jnp.array(self._configscurrent.configs)[jnpmask]
-        _epos = jnp.array(epos.configs)[jnpmask]
+        _configs_old = jnp.array(self._configscurrent.configs)
+        _epos = jnp.array(epos.configs)
         spin = int(e >= self._mol.nelec[0])
         if len(_epos.shape) == 2:
             evaluator = self._testvalue
         else:
             evaluator = self._testvalue_aux
-        testval = evaluator(self.parameters.jax_parameters, _configs_old, e, spin, _epos)
+        testval = evaluator(self.parameters.jax_parameters, _configs_old, e, spin, _epos)[jnpmask]
         return testval, jnp.log(testval)
 
 
@@ -668,8 +668,8 @@ def run_tests(benchmark=False, mad_only=True):
 
 
         # Test testvalue
-        mask = None
-        # mask = [False, True, True]
+        # mask = None
+        mask = [False, True, True]
         aux_electron7 = OpenElectron(np.tile(new_configs.configs[:, np.newaxis, 7], (1, 3, 1)), new_configs.dist)
 
         jax_testval = jax_jastrow.testvalue(7, new_configs.electron(7), mask)[0]

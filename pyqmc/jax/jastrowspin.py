@@ -617,7 +617,7 @@ class JAXJastrowSpin:
         }
 
 
-def run_tests(benchmark=False, mad_only=True):
+def run_tests(pbc=False, benchmark=False, mad_only=True):
     import time
     import pandas as pd
     import matplotlib.pyplot as plt
@@ -625,20 +625,32 @@ def run_tests(benchmark=False, mad_only=True):
     import pyscf.gto
     import pyqmc.api as pyq
     from pyqmc.coord import OpenElectron
+    import ase.build
+    import pyscf.pbc.tools.pyscf_ase as pyscf_ase
+    import pyscf.pbc.gto
 
-    mol = {}
-
-    mol['h2o'] = pyscf.gto.Mole(atom = '''O 0 0 0; H  0 2.0 0; H 0 0 2.0''', basis = 'cc-pVDZ', cart=True)
-    mol['h2o'].build()
+    if pbc:
+        cell_ase = ase.build.bulk('Si', 'diamond', a=5.431)
+        mol = pyscf.pbc.gto.Cell()
+        mol.atom = pyscf_ase.ase_atoms_to_pyscf(cell_ase)
+        mol.a = np.array(cell_ase.cell)
+        mol.basis = 'cc-pVDZ'
+        # mol.basis = f'ccecpccpvdz'
+        # mol.ecp = 'ccecp'
+        mol.exp_to_discard=0.1
+        mol.build()
+    else:
+        mol = pyscf.gto.Mole(atom = '''O 0 0 0; H  0 2.0 0; H 0 0 2.0''', basis = 'cc-pVDZ', cart=True)
+        mol.build()
     
-    jax_jastrow = JAXJastrowSpin(mol['h2o'])
-    jastrow, _ = pyqmc.wftools.generate_jastrow(mol['h2o'])
+    jax_jastrow = JAXJastrowSpin(mol)
+    jastrow, _ = pyqmc.wftools.generate_jastrow(mol)
 
     data = []
     nconfigs = [10, 1000, 100000] if benchmark else [3]
 
     for nconfig in nconfigs:
-        configs = pyq.initial_guess(mol['h2o'], nconfig)
+        configs = pyq.initial_guess(mol, nconfig)
         new_configs = configs.copy()
         new_configs.electron(7).configs += np.random.normal(0, 0.1, configs.electron(7).configs.shape)
 
@@ -810,5 +822,5 @@ if __name__ == "__main__":
         jax.config.update("jax_enable_x64", True)
     else:
         pass
-    run_tests(benchmark=False, mad_only=True)
+    run_tests(pbc=True, benchmark=False, mad_only=True)
     

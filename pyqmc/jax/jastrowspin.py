@@ -85,7 +85,23 @@ def cutoffcusp_grad(rij, gamma, rcut):
     return jnp.where(rij > rcut, 0.0, func)
 
 
-def partial_basis_sum(elec_coord, coords, coeff, basis, param, rcut):
+def minimum_image(rij_vecs, lattice_vectors):
+    """
+    Wrap displacement vectors according to the minimum-image convention.
+
+    Args:
+        rij_vecs (jax.Array): displacement vectors. (n, 3)
+        lattice_vectors (jax.Array): lattice vectors. (3, 3)
+
+    Return:
+        jax.Array: wrapped displacement vectors. (n, 3)
+    """
+    frac_vecs = rij_vecs @ jnp.linalg.inv(lattice_vectors)
+    frac_vecs -= jnp.round(frac_vecs)
+    return frac_vecs @ lattice_vectors
+
+
+def partial_basis_sum(elec_coord, coords, coeff, basis, param, rcut, wrap_vecs):
     """
     For a given electron, compute the sum over basis functions and atom coordinates (one-body) or electron coordinates (two-body).
     Given :math:`i`, compute :math:`\sum_{I,k} c_{I,k,\sigma(i)}^{en} a(r_{iI}, \beta_{k}^a)` or :math:`\sum_{j,k} c_{k,\sigma(ij)}^{ee} b(r_{ij}, \beta_{k}^b)`.
@@ -98,25 +114,27 @@ def partial_basis_sum(elec_coord, coords, coeff, basis, param, rcut):
         elec_coord (jax.Array): Electron coordinates. (3,)
         coords (jax.Array): Array of atom or electron coordinates. (n, 3)
         coeff (jax.Array): Jastrow coefficients. (n, nbasis)
-        basis (Callable[(3,), (n, 3), (nbasis,), float -> (n, nbasis)]): Vmapped basis function (polypade or cutoffcusp).
+        basis (Callable[(n), (nbasis,), float -> (n, nbasis)]): Vmapped basis function (polypade or cutoffcusp).
         param (jax.Array): The beta parameters or the cusp gamma parameter. (nbasis,)
         rcut (float): Cutoff radius.
+        wrap_vecs (Callable[(n, 3)]): Mininum image distance function (for PBC) or identity function (for OBC).
             
     Return:
         float: Sum.
     """
-    rij = jnp.linalg.norm(elec_coord - coords, axis=-1)
+    rij_vecs = wrap_vecs(elec_coord - coords)
+    rij = jnp.linalg.norm(rij_vecs, axis=-1)
     basis_val = basis(rij, param, rcut) # (n, nbasis)
     return jnp.sum(coeff * basis_val)
 
 
-def partial_basis_sum_grad(elec_coord, coords, coeff, basis_grad, param, rcut):
+def partial_basis_sum_grad(elec_coord, coords, coeff, basis_grad, param, rcut, wrap_vecs):
     """
     Analytic gradient of partial basis sum with respect to elec_coord.
     """
-    rij_vec = elec_coord - coords
-    rij = jnp.linalg.norm(rij_vec, axis=-1)
-    rij_hat = rij_vec / rij[:, jnp.newaxis]
+    rij_vecs = wrap_vecs(elec_coord - coords)
+    rij = jnp.linalg.norm(rij_vecs, axis=-1)
+    rij_hat = rij_vecs / rij[:, jnp.newaxis]
     basis_grad_val = basis_grad(rij, param, rcut) # (n, nbasis)
     return jnp.einsum("Ik,Ik,Ii->i", coeff, basis_grad_val, rij_hat)
 
@@ -346,6 +364,12 @@ def create_jastrow_evaluator(mol, basis_params):
     """
     beta_a, beta_b, ion_cusp, rcut, gamma = basis_params
 
+    # use minimum image distance function for periodic systems
+    if hasattr(mol, "lattice_vectors"):
+        wrap_vecs = lambda rij_vecs: minimum_image(rij_vecs, jnp.array(mol.lattice_vectors()))
+    else:
+        wrap_vecs = lambda rij_vecs: rij_vecs
+
     # lists of basis functions and parameters for constructing psum evaluators for a, b and cusp terms
     basis_vm_lst = [polypade_vm, polypade_vm, cutoffcusp_vm]
     basis_grad_vm_lst = [polypade_grad_vm, polypade_grad_vm, cutoffcusp_grad_vm]
@@ -354,19 +378,19 @@ def create_jastrow_evaluator(mol, basis_params):
     # lists of partial basis sum evaluators for a, b and cusp terms
     psum_evaluators_elec = [
             jax.vmap( # vmapping over electrons
-                partial(partial_basis_sum, basis=basis, param=param, rcut=rcut), 
+                partial(partial_basis_sum, basis=basis, param=param, rcut=rcut, wrap_vecs=wrap_vecs), 
                 in_axes=(0, None, None)
             )
         for basis, param in zip(basis_vm_lst, basis_params_lst)]
-    psum_evaluators = [partial(partial_basis_sum, basis=basis, param=param, rcut=rcut)
+    psum_evaluators = [partial(partial_basis_sum, basis=basis, param=param, rcut=rcut, wrap_vecs=wrap_vecs)
         for basis, param in zip(basis_vm_lst, basis_params_lst)]
-    psum_grad_evaluators = [partial(partial_basis_sum_grad, basis_grad=basis, param=param, rcut=rcut)
+    psum_grad_evaluators = [partial(partial_basis_sum_grad, basis_grad=basis, param=param, rcut=rcut, wrap_vecs=wrap_vecs)
         for basis, param in zip(basis_grad_vm_lst, basis_params_lst)]
-    psum_hess_evaluators = [partial(jax.hessian(partial_basis_sum, argnums=0), basis=basis, param=param, rcut=rcut)
+    psum_hess_evaluators = [partial(jax.hessian(partial_basis_sum, argnums=0), basis=basis, param=param, rcut=rcut, wrap_vecs=wrap_vecs)
         for basis, param in zip(basis_vm_lst, basis_params_lst)]
     psum_pgrad_evaluators = [
             jax.vmap( # vmapping over electrons
-                partial(jax.grad(partial_basis_sum, argnums=2), basis=basis, param=param, rcut=rcut), 
+                partial(jax.grad(partial_basis_sum, argnums=2), basis=basis, param=param, rcut=rcut, wrap_vecs=wrap_vecs), 
                 in_axes=(0, None, None)
             )
         for basis, param in zip(basis_vm_lst, basis_params_lst)]
@@ -624,7 +648,7 @@ def run_tests(pbc=False, benchmark=False, mad_only=True):
     import seaborn as sns
     import pyscf.gto
     import pyqmc.api as pyq
-    from pyqmc.coord import OpenElectron
+    from pyqmc.coord import OpenElectron, PeriodicElectron
     import ase.build
     import pyscf.pbc.tools.pyscf_ase as pyscf_ase
     import pyscf.pbc.gto
@@ -634,20 +658,25 @@ def run_tests(pbc=False, benchmark=False, mad_only=True):
         mol = pyscf.pbc.gto.Cell()
         mol.atom = pyscf_ase.ase_atoms_to_pyscf(cell_ase)
         mol.a = np.array(cell_ase.cell)
-        mol.basis = 'cc-pVDZ'
-        # mol.basis = f'ccecpccpvdz'
-        # mol.ecp = 'ccecp'
+        # mol.basis = 'cc-pVDZ'
+        mol.basis = f'ccecpccpvdz'
+        mol.ecp = 'ccecp'
         mol.exp_to_discard=0.1
         mol.build()
     else:
-        mol = pyscf.gto.Mole(atom = '''O 0 0 0; H  0 2.0 0; H 0 0 2.0''', basis = 'cc-pVDZ', cart=True)
+        # mol = pyscf.gto.Mole(atom = '''O 0 0 0; H  0 2.0 0; H 0 0 2.0''', basis = 'cc-pVDZ', cart=True)
+        mol = pyscf.gto.Mole(atom = '''O 0 0 0; H  0 2.0 0; H 0 0 2.0''', basis = 'ccecpccpvdz', cart=True)
+        mol.ecp = 'ccecp'
         mol.build()
     
     jax_jastrow = JAXJastrowSpin(mol)
     jastrow, _ = pyqmc.wftools.generate_jastrow(mol)
 
     data = []
-    nconfigs = [10, 1000, 100000] if benchmark else [3]
+    if pbc:
+        nconfigs = [10, 100, 1000] if benchmark else [3]
+    else:
+        nconfigs = [10, 1000, 100000] if benchmark else [3]
 
     for nconfig in nconfigs:
         configs = pyq.initial_guess(mol, nconfig)
@@ -681,8 +710,12 @@ def run_tests(pbc=False, benchmark=False, mad_only=True):
 
         # Test testvalue
         # mask = None
-        mask = [False, True, True]
-        aux_electron7 = OpenElectron(np.tile(new_configs.configs[:, np.newaxis, 7], (1, 3, 1)), new_configs.dist)
+        mask = [True] * nconfig
+        mask[0] = False
+        if pbc:
+            aux_electron7 = PeriodicElectron(np.tile(new_configs.configs[:, np.newaxis, 7], (1, 3, 1)), mol.lattice_vectors(), new_configs.dist)
+        else:
+            aux_electron7 = OpenElectron(np.tile(new_configs.configs[:, np.newaxis, 7], (1, 3, 1)), new_configs.dist)
 
         jax_testval = jax_jastrow.testvalue(7, new_configs.electron(7), mask)[0]
         # jax_testval = jax_jastrow.testvalue(7, aux_electron7, mask)[0]
@@ -799,7 +832,10 @@ def run_tests(pbc=False, benchmark=False, mad_only=True):
 
         if not benchmark:
             if mad_only:
-                print('Pgradient acoeff MAD', jnp.mean(jnp.abs(pyqmc_pgrad["acoeff"] - jax_pgrad["acoeff"])))
+                if mol.ecp == 'ccecp':
+                    print('Pgradient acoeff MAD', jnp.mean(jnp.abs(pyqmc_pgrad["acoeff"] - jax_pgrad["acoeff"][:, :, 1:, :])))
+                else:
+                    print('Pgradient acoeff MAD', jnp.mean(jnp.abs(pyqmc_pgrad["acoeff"] - jax_pgrad["acoeff"])))
                 print('Pgradient bcoeff MAD', jnp.mean(jnp.abs(pyqmc_pgrad["bcoeff"] - jax_pgrad["bcoeff"])))
             else:
                 print("jax pgradient", jax_pgrad)

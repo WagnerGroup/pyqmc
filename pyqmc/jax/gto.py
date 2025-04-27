@@ -206,6 +206,8 @@ def create_gto_evaluator(mol, nimages=1):
 
     Note that the PBC implementation only works for uncontracted basis functions for now.
     """
+    if mol.cart is False:
+        raise ValueError("Only cartesian basis functions are supported.")
     centers = mol.atom_coords()
     centers = jnp.array(centers)
     natom = mol.natm

@@ -214,13 +214,13 @@ sherman_morrison_row = jax.jit(sherman_morrison_row)
 # Generating objects
 #############################
 
-def create_wf_evaluator(mol, mf, det_tol=1e-9):
+def create_wf_evaluator(mol, mf, det_tol=1e-9, nimages=2):
     """
     Create a set of functions that can be used to evaluate the wavefunction.
 
     """
     # Basis evaluators
-    gto_1e, gto_1e_vg, gto_1e_vgl = gto.create_gto_evaluator(mol)
+    gto_1e, gto_1e_vg, gto_1e_vgl = gto.create_gto_evaluator(mol, nimages=nimages)
     gto_ne = jax.vmap(gto_1e, in_axes=0, out_axes=0)# over electrons
 
     # determinant expansion
@@ -338,10 +338,10 @@ class _parameterMap:
 
 
 class JAXSlater:
-    def __init__(self, mol, mf):
+    def __init__(self, mol, mf, nimages=2, det_tol=1e-9):
         _parameters, self.expansion, (self._recompute, self._pgradient), \
         (_testvalue_up, _testvalue_down, _grad_up, _grad_down, _lap_up, _lap_down, _batch_up, _batch_down),\
-              = create_wf_evaluator(mol, mf)
+              = create_wf_evaluator(mol, mf, det_tol=det_tol, nimages=nimages)
         self._testvalue=(_testvalue_up, _testvalue_down)
         self._testvalue_batch = (_batch_up, _batch_down)
         self._grad = (_grad_up, _grad_down)

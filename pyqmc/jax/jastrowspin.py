@@ -431,15 +431,25 @@ class _parameterMap:
     This class wraps the parameters so that we only need to transfer them to 
     the GPU if they are changed. 
     """
-    def __init__(self, jax_parameters):
+    def __init__(self, jax_parameters, has_ion_cusp):
+        self.has_ion_cusp = has_ion_cusp
         self.jax_parameters = jax_parameters
-        self.parameters= {'acoeff': np.asarray(self.jax_parameters[0]), 
-                          'bcoeff': np.asarray(self.jax_parameters[1])}
+        if self.has_ion_cusp:
+            self.parameters= {'acoeff': np.asarray(self.jax_parameters.acoeff), 
+                              'bcoeff': np.asarray(self.jax_parameters.bcoeff)}
+        else:
+            self.parameters= {'acoeff': np.asarray(self.jax_parameters.acoeff[:, 1:, :]), 
+                              'bcoeff': np.asarray(self.jax_parameters.bcoeff)}
 
     def __setitem__(self, key, item):
         self.parameters[key] = item
-        self.jax_parameters = CoefficientParameters(jnp.array(self.parameters['acoeff']),
-                                                    jnp.array(self.parameters['bcoeff']))
+        if self.has_ion_cusp:
+            self.jax_parameters = CoefficientParameters(jnp.array(self.parameters['acoeff']),
+                                                        jnp.array(self.parameters['bcoeff']))
+        else:
+            padded_acoeff = np.pad(self.parameters['acoeff'], ((0,0), (1,0), (0,0)))
+            self.jax_parameters = CoefficientParameters(jnp.array(padded_acoeff),
+                                                        jnp.array(self.parameters['bcoeff']))
 
     def __getitem__(self, key):
         return self.parameters[key]
@@ -488,18 +498,6 @@ class JAXJastrowSpin:
         we don't use func3d.PolyPadeFunction() and func3d.CutoffCuspFunction() objects anymore.
         """
         mol = self._mol
-        if ion_cusp is False:
-            ion_cusp = []
-            if not mol.has_ecp():
-                print("Warning: using neither ECP nor ion_cusp")
-        elif ion_cusp is True:
-            ion_cusp = list(mol._basis.keys())
-            if mol.has_ecp():
-                print("Warning: using both ECP and ion_cusp")
-        elif ion_cusp is None:
-            ion_cusp = [l for l in mol._basis.keys() if l not in mol._ecp.keys()]
-        else:
-            assert isinstance(ion_cusp, list)
 
         if gamma is None:
             gamma = 24
@@ -516,14 +514,16 @@ class JAXJastrowSpin:
 
         acoeff = jnp.zeros((self._mol.natm, len(beta_a)+1, 2))
         bcoeff = jnp.zeros((len(beta_b)+1, 3))
-        if len(ion_cusp) > 0:
+
+        self.has_ion_cusp = len(ion_cusp) > 0
+        if self.has_ion_cusp > 0:
             coefs = jnp.array(mol.atom_charges(), dtype=jnp.float64)
             mask = jnp.array([l[0] not in ion_cusp for l in mol._atom])
             coefs = coefs.at[mask].set(0.0)
             acoeff = acoeff.at[:, 0, :].set(coefs[:, None])
         bcoeff = bcoeff.at[0, [0, 1, 2]].set(jnp.array([-0.25, -0.50, -0.25]))
 
-        self.parameters = _parameterMap(CoefficientParameters(acoeff, bcoeff))
+        self.parameters = _parameterMap(CoefficientParameters(acoeff, bcoeff), self.has_ion_cusp)
         
 
     def recompute(self, configs):
@@ -635,10 +635,16 @@ class JAXJastrowSpin:
     def pgradient(self):
         _configs = jnp.array(self._configscurrent.configs)
         a_pgrad, b_pgrad = self._pgradient(self.parameters.jax_parameters, _configs)
-        return {
-            "acoeff": a_pgrad,
-            "bcoeff": b_pgrad,
-        }
+        if self.has_ion_cusp:
+            return {
+                "acoeff": a_pgrad,
+                "bcoeff": b_pgrad,
+            }
+        else:
+            return {
+                "acoeff": a_pgrad[:, :, 1:, :],
+                "bcoeff": b_pgrad,
+            }
 
 
 def run_tests(pbc=False, benchmark=False, mad_only=True):
@@ -832,10 +838,7 @@ def run_tests(pbc=False, benchmark=False, mad_only=True):
 
         if not benchmark:
             if mad_only:
-                if mol.ecp == 'ccecp':
-                    print('Pgradient acoeff MAD', jnp.mean(jnp.abs(pyqmc_pgrad["acoeff"] - jax_pgrad["acoeff"][:, :, 1:, :])))
-                else:
-                    print('Pgradient acoeff MAD', jnp.mean(jnp.abs(pyqmc_pgrad["acoeff"] - jax_pgrad["acoeff"])))
+                print('Pgradient acoeff MAD', jnp.mean(jnp.abs(pyqmc_pgrad["acoeff"] - jax_pgrad["acoeff"])))
                 print('Pgradient bcoeff MAD', jnp.mean(jnp.abs(pyqmc_pgrad["bcoeff"] - jax_pgrad["bcoeff"])))
             else:
                 print("jax pgradient", jax_pgrad)

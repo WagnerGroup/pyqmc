@@ -357,6 +357,12 @@ class JAXSlater:
         self._sign, self._logabs, self._dets_up, self._dets_down = self._recompute(self.parameters.jax_parameters, xyz)
         return self._sign, self._logabs
     
+    def value(self):
+        """
+        Return the value of the wavefunction at the current position
+        """
+        return self._sign, self._logabs
+    
     def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
         """
         Update the internal state of the wavefunction given that electron e has been moved to epos

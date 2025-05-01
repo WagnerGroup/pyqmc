@@ -352,6 +352,7 @@ class JAXSlater:
         self._cached_pad_ecp = 0
 
     def recompute(self, configs):        
+        self.xyz = configs.configs.copy()
         xyz = jnp.array(configs.configs)
         self._sign, self._logabs, self._dets_up, self._dets_down = self._recompute(self.parameters.jax_parameters, xyz)
         return self._sign, self._logabs
@@ -362,6 +363,9 @@ class JAXSlater:
         """
         spin = int(e >= self._nelec[0] )
         e = e - self._nelec[0]*spin
+        if mask is None:
+            mask = np.ones((configs.configs.shape[0],), dtype=bool)
+        self.xyz[mask, e, :] = epos.configs[mask]
 
         if saved_values is None:
             self.recompute(configs)
@@ -455,8 +459,8 @@ class JAXSlater:
         lap, saved = self._lap[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
         return lap[:,4].T/lap[:,0]
     
-    def pgradient(self, configs):
-        xyz = jnp.array(configs.configs)
+    def pgradient(self):
+        xyz = jnp.array(self.xyz)
         grads =  self._pgradient(self.parameters.jax_parameters, xyz)[1] # sign, log, dets_up, dets_down
         return {'det_coeff': np.array(grads[0]), 
                 'mo_coeff_alpha': np.array(grads[1]), 
@@ -589,7 +593,7 @@ def run_test():
         newval_pyqmc = slater.laplacian(electron, newcoorde)
         print("MaD error in laplacian from pyqmc", jnp.mean(jnp.abs(newval_jax-newval_pyqmc)))
 
-        newval_jax = jax_slater.pgradient(configs)
+        newval_jax = jax_slater.pgradient()
         newval_pyqmc = slater.pgradient()
         print("MaD error in pgradient from pyqmc", jnp.mean(jnp.abs(newval_jax['mo_coeff_alpha']-newval_pyqmc['mo_coeff_alpha'])))
 

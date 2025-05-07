@@ -154,8 +154,9 @@ def evaluate_vl(vl_evaluator, # list of functors [at][l]
             # vl is a dictionary where -1 is the local part
             v_l[m_atom, l] = func(at_info.r_ea[m_atom]) 
         mask[m_atom], prob[m_atom] = ecp_mask(v_l[m_atom,:], threshold)
-        #print(vl.keys())
-        P_l[m_atom,:,:], r_ea_i[m_atom,:,:] = get_P_l(at_info.r_ea[m_atom], at_info.r_ea_vec[m_atom], vl.keys(), naip)
+        #print(atom, vl.keys())
+        nl = len(vl)
+        P_l[m_atom,:,:nl], r_ea_i[m_atom,:,:] = get_P_l(at_info.r_ea[m_atom], at_info.r_ea_vec[m_atom], vl.keys(), naip)
 
     #blank = np.arange(nconf)
     return _MoveInfo(r_ea_i,

@@ -36,7 +36,7 @@ class ECPAccumulator:
         self._atomic_coordinates = mol.atom_coords()
         self._ecp = mol._ecp
         self._atom_names = [atom[0] for atom in mol._atom]
-        functors = [generate_ecp_functors(mol._ecp[at_name][1]) for at_name in self._atom_names]
+        functors = [generate_ecp_functors(mol, at_name) for at_name in self._atom_names]
         self._vl_evaluator = partial(evaluate_vl, functors, self.threshold, self.naip)
 
 
@@ -61,6 +61,8 @@ class ECPAccumulator:
             epos_rot = (configs.configs[:, e, :] - atomic_info.r_ea_vec)[:, np.newaxis] + move_info.r_ea_i
             epos = configs.make_irreducible(e, epos_rot, move_info.mask)
             mid_time = time.perf_counter()
+            if move_info.mask.sum() == 0:
+                continue
             # evaluate the wave function ratio
             ratio = wf.testvalue(e, epos, move_info.mask)[0]
             ratio_time = time.perf_counter()
@@ -133,36 +135,6 @@ class _MoveInfo(NamedTuple):
     P_l: np.ndarray # (nconf, naip, nl)
    
 
-def evaluate_vl_nonsparse(vl_evaluator, # list of functors [at][l]
-                threshold,
-                naip,
-                at_info: _AtomicInfo,
-                ):
-    maxl=max([len(vl) for vl in vl_evaluator])
-    nconf = at_info.r_ea.shape[0]
-    natom = len(vl_evaluator)
-    v_l = np.zeros((nconf, natom,maxl))
-    P_l = np.zeros((nconf, natom, naip, maxl))
-    r_ea_i = np.zeros((nconf, natom, naip, 3))
-    mask = np.zeros((nconf, natom), dtype=bool)
-    prob = np.zeros((nconf, natom))
-    for atom, vl in enumerate(vl_evaluator):
-        m_atom = at_info.assigned_atom == atom
-        for l, func in vl.items():  # -1,0,1,...
-            # a bit tricky here, we end up with the local part in the last column because
-            # vl is a dictionary where -1 is the local part
-            v_l[m_atom, atom, l] = func(at_info.r_ea[m_atom]) 
-        mask[m_atom,atom], prob[m_atom,atom] = ecp_mask(v_l[m_atom,atom,:], threshold)
-        #print(vl.keys())
-        P_l[m_atom,atom,:,:], r_ea_i[m_atom,atom,:,:] = get_P_l(at_info.r_ea[m_atom], at_info.r_ea_vec[m_atom], vl.keys(), naip)
-
-    blank = np.arange(nconf)
-    return _MoveInfo(r_ea_i[blank,at_info.assigned_atom,:,:], 
-                     prob[blank,at_info.assigned_atom], 
-                     mask[blank,at_info.assigned_atom], 
-                     v_l[blank,at_info.assigned_atom,:], 
-                     P_l[blank, at_info.assigned_atom,:,:])
-
 def evaluate_vl(vl_evaluator, # list of functors [at][l]
                 threshold,
                 naip,
@@ -217,13 +189,16 @@ def get_v_l(mol, at_name, r_ea):
     return vl.keys(), v_l
 
 
-def generate_ecp_functors(coeffs):
+def generate_ecp_functors(mol, at_name):
     """
     :parameter coeffs: `mol._ecp[atom_name][1]` (coefficients of the ECP)
     :returns: a functor v_l, with keys as the angular momenta:
       -1 stands for the local part, 0,1,2,... are the s,p,d channels, etc.
     """
     d = {}
+    if at_name not in mol._ecp:
+        return d
+    coeffs = mol._ecp[at_name][1]
     for c in coeffs:
         el = c[0]
         rn = []

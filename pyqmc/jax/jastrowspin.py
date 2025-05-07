@@ -202,14 +202,14 @@ def evaluate_jastrow(mol, basis_params, partial_sum_evaluators, parameters, coor
     b_upup = b_eval(coords_up, coords_up, jnp.tile(bcoeff[1:, 0], (nup, 1))) \
            + cusp_eval(coords_up, coords_up, jnp.tile(bcoeff[:1, 0], (nup, 1))) # (nelec,)
     b_updn = b_eval(coords_up, coords_dn, jnp.tile(bcoeff[1:, 1], (ndn, 1))) \
-           + cusp_eval(coords_up, coords_dn, jnp.tile(bcoeff[:1, 1], (nup, 1)))
+           + cusp_eval(coords_up, coords_dn, jnp.tile(bcoeff[:1, 1], (ndn, 1)))
     b_dndn = b_eval(coords_dn, coords_dn, jnp.tile(bcoeff[1:, 2], (ndn, 1))) \
-           + cusp_eval(coords_dn, coords_dn, jnp.tile(bcoeff[:1, 2], (nup, 1)))
+           + cusp_eval(coords_dn, coords_dn, jnp.tile(bcoeff[:1, 2], (ndn, 1)))
     bdiag_corr = compute_bdiag_corr(mol, basis_params, parameters)
 
     # sum the terms over electrons
-    a = jnp.sum(a_up + a_dn)
-    b = jnp.sum((b_upup + b_dndn)/2 + b_updn)
+    a = jnp.sum(a_up) + jnp.sum(a_dn)
+    b = (jnp.sum(b_upup) + jnp.sum(b_dndn))/2 + jnp.sum(b_updn)
     b -= bdiag_corr / 2
     logj = a + b
     return a, b, logj
@@ -252,11 +252,11 @@ def evaluate_testvalue(mol, partial_sum_evaluators, parameters, coords_old, e, s
     b_up = b_eval(epos, coords_up, jnp.tile(bcoeff[1:, spin+0], (nup, 1))) \
          + cusp_eval(epos, coords_up, jnp.tile(bcoeff[:1, spin+0], (nup, 1))) # (float)
     b_dn = b_eval(epos, coords_dn, jnp.tile(bcoeff[1:, spin+1], (ndn, 1))) \
-         + cusp_eval(epos, coords_dn, jnp.tile(bcoeff[:1, spin+1], (nup, 1)))
+         + cusp_eval(epos, coords_dn, jnp.tile(bcoeff[:1, spin+1], (ndn, 1)))
     b_up_old = b_eval(epos_old, coords_old_up, jnp.tile(bcoeff[1:, spin+0], (nup, 1))) \
              + cusp_eval(epos_old, coords_old_up, jnp.tile(bcoeff[:1, spin+0], (nup, 1)))
     b_dn_old = b_eval(epos_old, coords_old_dn, jnp.tile(bcoeff[1:, spin+1], (ndn, 1))) \
-             + cusp_eval(epos_old, coords_old_dn, jnp.tile(bcoeff[:1, spin+1], (nup, 1)))
+             + cusp_eval(epos_old, coords_old_dn, jnp.tile(bcoeff[:1, spin+1], (ndn, 1)))
 
     delta_a = a - a_old
     # factor of 1/2 cancelled by the double appearance (row and column) of b terms contributed by electron e
@@ -343,9 +343,9 @@ def evaluate_pgradient(mol, basis_params, partial_sum_pgrad_evaluators, paramete
     b_upup_pgrad = b_pgrad_eval(coords_up, coords_up, jnp.tile(bcoeff[1:, 0], (nup, 1))) / 2 # (nelec, nelec, nbasis, 3)
     bc_upup_pgrad = cusp_pgrad_eval(coords_up, coords_up, jnp.tile(bcoeff[:1, 0], (nup, 1))) / 2
     b_updn_pgrad = b_pgrad_eval(coords_up, coords_dn, jnp.tile(bcoeff[1:, 1], (ndn, 1)))
-    bc_updn_pgrad = cusp_pgrad_eval(coords_up, coords_dn, jnp.tile(bcoeff[:1, 1], (nup, 1)))
+    bc_updn_pgrad = cusp_pgrad_eval(coords_up, coords_dn, jnp.tile(bcoeff[:1, 1], (ndn, 1)))
     b_dndn_pgrad = b_pgrad_eval(coords_dn, coords_dn, jnp.tile(bcoeff[1:, 2], (ndn, 1))) / 2
-    bc_dndn_pgrad = cusp_pgrad_eval(coords_dn, coords_dn, jnp.tile(bcoeff[:1, 2], (nup, 1))) / 2
+    bc_dndn_pgrad = cusp_pgrad_eval(coords_dn, coords_dn, jnp.tile(bcoeff[:1, 2], (ndn, 1))) / 2
     rcut, gamma = basis_params.rcut, basis_params.gamma[0]
     diagc = rcut / (3+gamma) # gradient of the diagonal correction term
     b_pgrad = b_pgrad.at[1:, 0].set(jnp.sum(b_upup_pgrad, axis=(0, 1)) - nup/2)
@@ -659,6 +659,28 @@ def run_tests(pbc=False, benchmark=False, mad_only=True):
     import pyscf.pbc.tools.pyscf_ase as pyscf_ase
     import pyscf.pbc.gto
 
+    def generate_jax_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None, cusp_gamma = None, beta_a = 0.2, beta_b = 0.5):
+        if ion_cusp is False:
+            ion_cusp = []
+            if not mol.has_ecp():
+                print("Warning: using neither ECP nor ion_cusp")
+        elif ion_cusp is True:
+            ion_cusp = list(mol._basis.keys())
+            if mol.has_ecp():
+                print("Warning: using both ECP and ion_cusp")
+        elif ion_cusp is None:
+            ion_cusp = [l for l in mol._basis.keys() if l not in mol._ecp.keys()]
+        else:
+            assert isinstance(ion_cusp, list)
+
+        jastrow = JAXJastrowSpin(mol, ion_cusp=ion_cusp, na=na, nb=nb, rcut=rcut, gamma=cusp_gamma, beta0_a=beta_a, beta0_b=beta_b)
+        to_opt = {"acoeff": np.ones(jastrow.parameters["acoeff"].shape).astype(bool)}
+        if len(ion_cusp) > 0:
+            to_opt["acoeff"][:, 0, :] = False  # Cusp conditions
+        to_opt["bcoeff"] = np.ones(jastrow.parameters["bcoeff"].shape).astype(bool)
+        to_opt["bcoeff"][0, [0, 1, 2]] = False  # Cusp conditions
+        return jastrow, to_opt
+
     if pbc:
         cell_ase = ase.build.bulk('Si', 'diamond', a=5.431)
         mol = pyscf.pbc.gto.Cell()
@@ -666,16 +688,20 @@ def run_tests(pbc=False, benchmark=False, mad_only=True):
         mol.a = np.array(cell_ase.cell)
         # mol.basis = 'cc-pVDZ'
         mol.basis = f'ccecpccpvdz'
+        mol.spin = -1
+        mol.charge = -1
         mol.ecp = 'ccecp'
         mol.exp_to_discard=0.1
         mol.build()
     else:
         # mol = pyscf.gto.Mole(atom = '''O 0 0 0; H  0 2.0 0; H 0 0 2.0''', basis = 'cc-pVDZ', cart=True)
         mol = pyscf.gto.Mole(atom = '''O 0 0 0; H  0 2.0 0; H 0 0 2.0''', basis = 'ccecpccpvdz', cart=True)
+        mol.spin = -1
+        mol.charge = -1
         mol.ecp = 'ccecp'
         mol.build()
-    
-    jax_jastrow = JAXJastrowSpin(mol)
+
+    jax_jastrow, _ = generate_jax_jastrow(mol)
     jastrow, _ = pyqmc.wftools.generate_jastrow(mol)
 
     data = []

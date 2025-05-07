@@ -638,13 +638,7 @@ class JAXJastrowSpin:
         """
         :math:`\frac{\nabla_e^2 J(\vec{R})}{J(\vec{R})} = \nabla_e^2 \log J(\vec{R}) + |\nabla_e \log J(\vec{R})|^2.`
         """
-        configs_up, configs_dn, spin = self._split_configs(e)
-        _epos = jnp.array(epos.configs)
-        lap = jnp.trace(
-            self._hessian(self.parameters.jax_parameters, configs_up, configs_dn, spin, _epos), 
-            axis1=1, axis2=2
-        )
-        return lap
+        return self.gradient_laplacian(e, epos)[1]
     
 
     def pgradient(self):

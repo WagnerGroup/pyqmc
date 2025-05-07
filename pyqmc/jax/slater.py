@@ -74,6 +74,22 @@ def compute_determinants(mo_coeff: jnp.ndarray, # nbasis, norb
     inverses = vmap_inverse(mos, determinants)
     return SlaterState(mos, dets.sign, dets.logabsdet, inverses)
 
+def compute_values_from_determinants(expansion: DeterminantExpansion,
+                                     det_params: DeterminantParameters,
+                                     dets_up: SlaterState,
+                                     dets_down: SlaterState,):
+    
+    logdets = jnp.take(dets_up.logabsdet, expansion.mapping_up) \
+            + jnp.take(dets_down.logabsdet, expansion.mapping_down) # ndet
+    signdets = jnp.take(dets_up.sign, expansion.mapping_up) \
+             * jnp.take(dets_down.sign, expansion.mapping_down) #ndet
+    ref = jnp.max(logdets)
+    values = jnp.sum(det_params.ci_coeff *signdets* jnp.exp(logdets - ref)) # scalar
+    return jnp.sign(values), jnp.log(jnp.abs(values))+ref
+
+compute_values_from_determinants = jax.vmap(compute_values_from_determinants, in_axes = (None,None,0,0), out_axes = (0,0))
+
+
 def evaluate_expansion(gto_evaluator, #function (N,3) -> (N,nbasis)
                        expansion: DeterminantExpansion,
                        nelec: jnp.ndarray, # (2,)
@@ -395,9 +411,14 @@ class JAXSlater:
             newsigns = jnp.sign(ratio)*self._dets_down.sign
             newlogabs = self._dets_down.logabsdet + jnp.log(jnp.abs(ratio))
             inverse = jnp.where(mask[:,jnp.newaxis, jnp.newaxis, jnp.newaxis], inverse, self._dets_down.inverse)
-            newsigns = jnp.where(mask, newsigns, self._dets_down.sign)
+            newsigns = jnp.where(mask, newsigns, self._dets_down.sign)  # (nconf, ndet)
             newlogabs = jnp.where(mask, newlogabs, self._dets_down.logabsdet)
             self._dets_down = SlaterState(None, newsigns, newlogabs, inverse)
+
+        self._sign, self._logabs =  compute_values_from_determinants(self.expansion,
+                                                                    self.parameters.jax_parameters,
+                                                                    self._dets_up, 
+                                                                    self._dets_down)
 
     
 
@@ -431,7 +452,9 @@ class JAXSlater:
                 return np.array(newvals)[mask], saved
         else: 
             newvals, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
-            return np.array(newvals)[mask], saved
+            if mask is not None:
+                return np.array(newvals)[mask], saved
+            return newvals, saved
 
     def gradient(self, e, epos, mask=None):
         xyz = jnp.array(epos.configs)
@@ -474,170 +497,3 @@ class JAXSlater:
         
 
 
-    
-def test_gradient_calculation():
-    mol = pyscf.gto.Mole(atom = '''O 0 0 0; H  0 2.0 0; H 0 0 2.0''', basis = 'unc-ccecp-ccpvdz', ecp='ccecp', cart=True)
-    mol.build()
-    mf = pyscf.scf.RHF(mol).run()
-
-
-    gto_1e = gto.create_gto_evaluator(mol)
-    gto_ne = jax.vmap(gto_1e, in_axes=0, out_axes=0)# over electrons
-
-    # determinant expansion
-    _determinants = pyqmc.pyscftools.determinants_from_pyscf(mol, mf, mc=None, tol=1e-9)
-    ci_coeff, determinants, mapping = pyqmc.determinant_tools.create_packed_objects(_determinants, tol=1e-9)
-
-    ci_coeff = jnp.array(ci_coeff)
-    determinants = jnp.array(determinants)
-    mapping = jnp.array(mapping)
-    mo_coeff = mf.mo_coeff[:,:jnp.max(determinants)+1] # this only works for RHF for now..
-
-    det_params = DeterminantParameters(ci_coeff, mo_coeff, mo_coeff)
-    expansion = DeterminantExpansion( mapping[0], mapping[1], determinants[0], determinants[1])
-    nelec = tuple(mol.nelec)
-    value = partial(evaluate_expansion, gto_ne, expansion, nelec)
-    _testvalue_up = partial(testvalue_up, gto_1e, expansion)
-    _testvalue_down = partial(testvalue_down, gto_1e, expansion)
-
-    # electron gradient will be testvalue with gradient of gto_1e
-    gto_1e_grad = jax.jacobian(gto_1e)
-    grad_up = partial(testvalue_up, gto_1e_grad, expansion)
-    grad_down = partial(testvalue_down, gto_1e_grad, expansion)
-    import pyqmc.api as pyq
-    configs = pyq.initial_guess(mol, 2)
-    xyz = jnp.array(configs.configs)
-
-    signs, logabs, dets_up, dets_down = value(det_params, xyz[0])
-
-
-    # testing that we get the right gradient when xyz is not moved
-    e = 0
-    delta = 1e-5
-    xyznewpos = xyz[0,e] + jnp.array([0.0, 0.0, delta])
-    ratio, _ = _testvalue_up(det_params, dets_up, dets_down, e, xyznewpos)
-    grad, _ = grad_up(det_params, dets_up, dets_down, e, xyz[0,e])
-    print("ratio", (ratio-1)/delta, "grad", grad)
-
-    # testing that we get the right gradient when xyz is quite different
-    xyznewpos = xyz[0,e] + jnp.array([1.0, 1.0, 1.0])
-    xyznewpos_prime = xyznewpos + jnp.array([0.0, 0.0, delta])
-    ratio, _ = _testvalue_up(det_params, dets_up, dets_down, e, xyznewpos)
-    ratioprime, _ = _testvalue_up(det_params, dets_up, dets_down, e, xyznewpos_prime)
-    grad, _ = grad_up(det_params, dets_up, dets_down, e, xyznewpos)
-    print("ratio", (ratioprime - ratio)/delta, "grad", grad)
-
-
-
-
-
-
-def run_test():
-    import time
-    import pandas as pd
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    import pyqmc.testwf
-
-    import pyqmc.api as pyq
-    mol = {}
-    mf = {}
-
-    mol['h2o'] = pyscf.gto.Mole(atom = '''O 0 0 0; H  0 2.0 0; H 0 0 2.0''', basis = 'unc-ccecp-ccpvdz', ecp='ccecp', cart=True)
-    mol['h2o'].build()
-    mf['h2o'] = pyscf.scf.RHF(mol['h2o']).run()
-    
-    jax_slater = JAXSlater(mol['h2o'], mf['h2o'])
-    slater = pyq.Slater(mol['h2o'], mf['h2o'])
-
-    data = []
-    for nconfig in [ 2000, 10000]:
-        configs = pyq.initial_guess(mol['h2o'], nconfig)
-        configs_aux = pyq.initial_guess(mol['h2o'], nconfig)
-
-        wfval = jax_slater.recompute(configs) 
-        jax.block_until_ready(wfval)
-
-        jax_start = time.perf_counter()
-        wfval = jax_slater.recompute(configs) 
-        jax.block_until_ready(wfval)
-        jax_end = time.perf_counter()
-
-        slater_start = time.perf_counter()
-        values_ref = slater.recompute(configs)
-        slater_end = time.perf_counter()
-
-        print(nconfig, "recompute times: jax", jax_end-jax_start, "slater", slater_end-slater_start, "ratio", (jax_end-jax_start)/(slater_end-slater_start))
-
-        electron = 3
-        gauss = np.random.normal(1, size=(nconfig, 3))
-        newcoorde = configs.configs[:, electron, :] + gauss 
-        newcoorde = configs.make_irreducible(electron, newcoorde)
-
-        newval_jax = jax_slater.gradient(electron, newcoorde)
-        jax_start = time.perf_counter()
-        newval_jax = jax_slater.gradient(electron, newcoorde)
-        jax_end = time.perf_counter()
-        newval_pyqmc = slater.gradient(electron,newcoorde)
-        pyqmc_end = time.perf_counter()
-        print("MaD error in gradient from pyqmc", jnp.mean(jnp.abs(newval_jax-newval_pyqmc)))
-        print(nconfig, "gradient time", 'jax', jax_end-jax_start, 'pyqmc', pyqmc_end-jax_end, 'jax/pyqmc', (jax_end-jax_start)/(pyqmc_end-jax_end))
-
-
-        newval_jax, testval_jax, saved = jax_slater.gradient_value(electron, newcoorde)
-        jax_start = time.perf_counter()
-        newval_jax, testval_jax, saved = jax_slater.gradient_value(electron, newcoorde)
-        jax_end = time.perf_counter()
-        newval_pyqmc, testval_pyqmc, saved_pyqmc = slater.gradient_value(electron,newcoorde)
-        pyqmc_end = time.perf_counter()
-        print("MaD error in gradient_value gradient from pyqmc", jnp.mean(jnp.abs(newval_jax-newval_pyqmc)))
-        print("MaD error in gradient_value value from pyqmc", jnp.mean(jnp.abs(testval_jax-testval_pyqmc)))
-        print(nconfig, "gradient_value time", 'jax', jax_end-jax_start, 'pyqmc', pyqmc_end-jax_end, 'jax/pyqmc', (jax_end-jax_start)/(pyqmc_end-jax_end))
-
-
-        newval_jax = jax_slater.laplacian(electron, newcoorde)
-        newval_pyqmc = slater.laplacian(electron, newcoorde)
-        print("MaD error in laplacian from pyqmc", jnp.mean(jnp.abs(newval_jax-newval_pyqmc)))
-
-        newval_jax = jax_slater.pgradient()
-        newval_pyqmc = slater.pgradient()
-        print("MaD error in pgradient from pyqmc", jnp.mean(jnp.abs(newval_jax['mo_coeff_alpha']-newval_pyqmc['mo_coeff_alpha'])))
-
-
-
-        electron = 1
-        g, _, _ = slater.gradient_value(electron, configs.electron(electron))
-        gauss = np.random.normal(1, size=(nconfig, 3))
-        newcoorde = configs.configs[:, electron, :] + gauss + g.T * 1.0
-        newcoorde = configs.make_irreducible(electron, newcoorde)
-
-        newval_jax, saved = jax_slater.testvalue(electron, newcoorde)
-        jax_start = time.perf_counter()
-        newval_jax, saved = jax_slater.testvalue(electron, newcoorde)
-        jax_end = time.perf_counter()
-        newval_pyqmc, saved_pyqmc = slater.testvalue(electron, newcoorde)
-        pyqmc_end = time.perf_counter()
-        print("MaD error in testvalue from pyqmc", jnp.mean(jnp.abs(newval_jax-newval_pyqmc)))
-        print(nconfig, "testvalue time", 'jax', jax_end-jax_start, 'pyqmc', pyqmc_end-jax_end, 'jax/pyqmc', (jax_end-jax_start)/(pyqmc_end-jax_end))
-
-
-
-        jax_slater.updateinternals(electron, configs.electron(electron), configs, saved_values=saved)
-
-        newval, saved = jax_slater.testvalue(electron, configs.electron(electron))
-        jax_slater.updateinternals(electron, configs.electron(electron), configs, saved_values=saved)
-
-
-
-
-
-
-if __name__=="__main__":
-
-    cpu=True
-    if cpu:
-        jax.config.update('jax_platform_name', 'cpu')
-        jax.config.update("jax_enable_x64", True)
-    else:
-        pass 
-    run_test()

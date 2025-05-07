@@ -515,8 +515,11 @@ class JAXJastrowSpin:
         acoeff = jnp.zeros((self._mol.natm, len(beta_a)+1, 2))
         bcoeff = jnp.zeros((len(beta_b)+1, 3))
 
-        self.has_ion_cusp = len(ion_cusp) > 0
-        if self.has_ion_cusp > 0:
+        if ion_cusp is None:
+            self.has_ion_cusp = False
+        else:
+            self.has_ion_cusp = len(ion_cusp) > 0
+        if self.has_ion_cusp is True:
             coefs = jnp.array(mol.atom_charges(), dtype=jnp.float64)
             mask = jnp.array([l[0] not in ion_cusp for l in mol._atom])
             coefs = coefs.at[mask].set(0.0)
@@ -630,6 +633,18 @@ class JAXJastrowSpin:
             axis1=1, axis2=2
         ) + jnp.sum(grad**2, axis=0)
         return grad, lap
+    
+    def laplacian(self, e, epos):
+        """
+        :math:`\frac{\nabla_e^2 J(\vec{R})}{J(\vec{R})} = \nabla_e^2 \log J(\vec{R}) + |\nabla_e \log J(\vec{R})|^2.`
+        """
+        configs_up, configs_dn, spin = self._split_configs(e)
+        _epos = jnp.array(epos.configs)
+        lap = jnp.trace(
+            self._hessian(self.parameters.jax_parameters, configs_up, configs_dn, spin, _epos), 
+            axis1=1, axis2=2
+        )
+        return lap
     
 
     def pgradient(self):

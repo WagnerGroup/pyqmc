@@ -31,7 +31,7 @@ tests don't have to keep running pyscf.
 
 @pytest.fixture(scope="module")
 def LiH_sto3g_rhf():
-    mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="sto-3g", unit="bohr")
+    mol = gto.M(atom="Li 0. 0. 0.; H 0. 0. 1.5", basis="unc-sto-3g", unit="bohr", cart=True)
     mf = scf.RHF(mol).run()
     return mol, mf
     #mf_rohf = scf.ROHF(mol).run()

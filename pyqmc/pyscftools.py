@@ -197,7 +197,7 @@ def single_determinant_from_mf(mf, weight=1.0):
     except TypeError:
         mf = mf.to_uhf(mf)
     # When KRKS etc is not used, mo_occ is 2 dimensional.
-    if hasattr(mf, "kpts") and len(mf.mo_occ.shape) == 3:
+    if hasattr(mf, "kpts") and len(np.asarray(mf.mo_occ).shape) == 3:
         occupation = [[list(np.nonzero(k > 0.5)[0]) for k in s] for s in mf.mo_occ]
     else:
         occupation = [list(np.nonzero(s > 0.5)[0]) for s in mf.mo_occ]

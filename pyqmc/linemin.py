@@ -167,7 +167,7 @@ def line_minimization(
                 for k in grp.keys():
                     wf.parameters[k] = gpu.cp.asarray(grp[k])
             if "iteration" in hdf.keys():
-                iteration_offset = np.max(hdf["iteration"][...]) + 1
+                iteration_offset = np.max(hdf["iteration"][...])
             if "sub_iteration" in hdf.keys():
                 sub_iteration_offset = hdf["sub_iteration"][-1] + 1
             coords.load_hdf(hdf)

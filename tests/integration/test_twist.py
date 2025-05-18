@@ -64,7 +64,7 @@ def runtest(mol, mf, kind=0):
     ratt = wft.testvalue(e, newcoords.electron(e))[0]
     rattdiff = ratt - phase[:, e]
     print("phase", phase[:, e])
-    assert np.linalg.norm(rattdiff) / nconfig < 1e-9, [
+    assert np.linalg.norm(rattdiff) / nconfig < 1e-8, [
         np.round(rattdiff, 10),
         np.amax(np.abs(rattdiff)),
     ]

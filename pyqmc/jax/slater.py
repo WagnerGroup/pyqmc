@@ -230,7 +230,7 @@ sherman_morrison_row = jax.jit(sherman_morrison_row)
 # Generating objects
 #############################
 
-def create_wf_evaluator(mol, mf, det_tol=1e-9, nimages=2):
+def create_wf_evaluator(mol, mf, det_tol=1e-9, nimages=2, mc = None):
     """
     Create a set of functions that can be used to evaluate the wavefunction.
 
@@ -240,7 +240,7 @@ def create_wf_evaluator(mol, mf, det_tol=1e-9, nimages=2):
     gto_ne = jax.vmap(gto_1e, in_axes=0, out_axes=0)# over electrons
 
     # determinant expansion
-    _determinants = pyqmc.pyscftools.determinants_from_pyscf(mol, mf, mc=None, tol=det_tol)
+    _determinants = pyqmc.pyscftools.determinants_from_pyscf(mol, mf, mc=mc, tol=det_tol)
     ci_coeff, determinants, mapping = pyqmc.determinant_tools.create_packed_objects(_determinants, tol=1e-9)
 
     ci_coeff = jnp.array(ci_coeff)
@@ -354,10 +354,10 @@ class _parameterMap:
 
 
 class JAXSlater:
-    def __init__(self, mol, mf, nimages=2, det_tol=1e-9):
+    def __init__(self, mol, mf, nimages=2, det_tol=1e-9, mc = None):
         _parameters, self.expansion, (self._recompute, self._pgradient), \
         (_testvalue_up, _testvalue_down, _grad_up, _grad_down, _lap_up, _lap_down, _batch_up, _batch_down),\
-              = create_wf_evaluator(mol, mf, det_tol=det_tol, nimages=nimages)
+              = create_wf_evaluator(mol, mf, det_tol=det_tol, nimages=nimages, mc = mc)
         self._testvalue=(_testvalue_up, _testvalue_down)
         self._testvalue_batch = (_batch_up, _batch_down)
         self._grad = (_grad_up, _grad_down)
@@ -402,8 +402,9 @@ class JAXSlater:
             newsigns = jnp.sign(ratio)*self._dets_up.sign
             newlogabs = self._dets_up.logabsdet + jnp.log(jnp.abs(ratio))
             inverse = jnp.where(mask[:,jnp.newaxis, jnp.newaxis, jnp.newaxis], inverse, self._dets_up.inverse)
-            newsigns = jnp.where(mask, newsigns, self._dets_up.sign)
-            newlogabs = jnp.where(mask, newlogabs, self._dets_up.logabsdet)
+            
+            newsigns = jnp.where(mask[:,jnp.newaxis], newsigns, self._dets_up.sign)
+            newlogabs = jnp.where(mask[:,jnp.newaxis], newlogabs, self._dets_up.logabsdet)
             self._dets_up = SlaterState(None, newsigns, newlogabs, inverse)
 
         else:
@@ -411,8 +412,8 @@ class JAXSlater:
             newsigns = jnp.sign(ratio)*self._dets_down.sign
             newlogabs = self._dets_down.logabsdet + jnp.log(jnp.abs(ratio))
             inverse = jnp.where(mask[:,jnp.newaxis, jnp.newaxis, jnp.newaxis], inverse, self._dets_down.inverse)
-            newsigns = jnp.where(mask, newsigns, self._dets_down.sign)  # (nconf, ndet)
-            newlogabs = jnp.where(mask, newlogabs, self._dets_down.logabsdet)
+            newsigns = jnp.where(mask[:,jnp.newaxis], newsigns, self._dets_down.sign)  # (nconf, ndet)
+            newlogabs = jnp.where(mask[:,jnp.newaxis], newlogabs, self._dets_down.logabsdet)
             self._dets_down = SlaterState(None, newsigns, newlogabs, inverse)
 
         self._sign, self._logabs =  compute_values_from_determinants(self.expansion,

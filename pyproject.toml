@@ -1,6 +1,6 @@
 [project]
 name = "pyqmc"
-version = "0.6.1"
+version = "0.7.0"
 description = "Real-space quantum Monte Carlo"
 authors = [
     {name = "Lucas Wagner",email = "lkwagner@illinois.edu"}
@@ -9,7 +9,7 @@ license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "scipy (>=1.15.2,<2.0.0)",
+    "scipy (>=1.10.0,<2.0.0)",
     "pyscf (>=2.8.0,<3.0.0)",
     "h5py (>=3.13.0,<4.0.0)",
     "pandas (>=2.2.3,<3.0.0)"

@@ -16,119 +16,156 @@ import numpy as np
 import copy
 import scipy.spatial.transform
 import functools
+import time
+import logging
+from typing import NamedTuple
+from collections import namedtuple
+from functools import partial
 
-def ecp(mol, configs, wf, threshold, naip=None):
+class ECPAccumulator:
+    def __init__(self, mol, threshold=10, naip=6):
+        """
+        :parameter mol: PySCF molecule object
+        :parameter float threshold: threshold for accepting nonlocal moves
+        :parameter int naip: number of auxiliary integration points
+        """
+        self.threshold = threshold
+        if naip is None:
+            naip = 6
+        self.naip = naip
+        self._atomic_coordinates = mol.atom_coords()
+        self._ecp = mol._ecp
+        self._atom_names = [atom[0] for atom in mol._atom]
+        functors = [generate_ecp_functors(mol, at_name) for at_name in self._atom_names]
+        self._vl_evaluator = partial(evaluate_vl, functors, self.threshold, self.naip)
+
+
+    def __call__(self, configs, wf) -> dict:
+        """
+        :parameter configs: Configs object
+        :parameter wf: wave function object
+        :returns: dictionary ECP values
+        """
+        ecp_val = np.zeros(configs.configs.shape[0], dtype=wf.dtype)
+        # gather energies and distances
+
+        for e in range(configs.configs.shape[1]):
+            start_time = time.perf_counter()
+            atomic_info = gather_atomic(self._atomic_coordinates, configs, e)
+            #print("e, atomic_info", e, atomic_info)
+            midmidtime = time.perf_counter()
+            move_info = self._vl_evaluator(atomic_info)
+            #print("move_info", move_info)
+            # get the electronic coordinates by moving the electron to the atom and then to the integration point
+            # this gives us PBCs correctly
+            epos_rot = (configs.configs[:, e, :] - atomic_info.r_ea_vec)[:, np.newaxis] + move_info.r_ea_i
+            epos = configs.make_irreducible(e, epos_rot, move_info.mask)
+            mid_time = time.perf_counter()
+            if move_info.mask.sum() == 0:
+                continue
+            # evaluate the wave function ratio
+            ratio = wf.testvalue(e, epos, move_info.mask)[0]
+            ratio_time = time.perf_counter()
+            #print("ratio time", ratio_time - mid_time, "move_info time", mid_time - midmidtime, "atomic_info time", midmidtime - start_time)
+            # compute the ECP value
+            # n: nconf, a: aip, l: angular momentum channel
+            #print(ratio.shape, move_info.P_l.shape, move_info.v_l.shape)
+            ecp_val[move_info.mask] += np.einsum("na,nal, nl->n", ratio, move_info.P_l[move_info.mask], move_info.v_l[move_info.mask])
+            ecp_val += move_info.v_l[:, -1]  # local part
+
+        # collect which ratios to evaluate
+        # sum and return 
+        return ecp_val
+
+
+    def avg(self, configs, wf):
+        return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
+
+    def nonlocal_tmoves(self, configs, wf, e, tau):
+        atomic_info = gather_atomic(self._atomic_coordinates, configs, e)
+        move_info = self._vl_evaluator(atomic_info)
+        epos_rot = (configs.configs[:, e, :] - atomic_info.r_ea_vec)[:, np.newaxis] + move_info.r_ea_i
+        epos = configs.make_irreducible(e, epos_rot, move_info.mask)
+        # evaluate the wave function ratio
+        ratio = np.zeros((configs.configs.shape[0], self.naip))
+        ratio[move_info.mask,:] = wf.testvalue(e, epos, move_info.mask)[0]
+
+        weight = np.einsum("ik, ijk -> ij", np.exp(-tau*move_info.v_l)-1, move_info.P_l)
+
+        return {'ratio': ratio, 'weight': weight, 'configs':epos} 
+
+    def has_nonlocal_moves(self):
+        return self._ecp != {}
+
+    def keys(self):
+        return set(["ecp"])
+
+    def shapes(self):
+        return {"ecp": ()}
+    
+
+
+class _AtomicInfo(NamedTuple):
+    r_ea: np.ndarray
+    r_ea_vec: np.ndarray
+    assigned_atom: np.ndarray
+
+def gather_atomic(atomic_coordinates, configs, e):
     """
-    :returns: ECP value, summed over all the electrons and atoms.
+    :parameter atomic_coordinates: atomic coordinates
+    :parameter configs: Configs object
+    :parameter e: electron index
+    :returns: MoveInformation object
     """
-    nconf, nelec = configs.configs.shape[0:2]
-    ecp_tot = np.zeros(nconf, dtype=wf.dtype)
-    if mol._ecp != {}:
-        for e in range(nelec):
-            ecp_en = np.zeros(nconf, dtype=wf.dtype)
-            ecp_local = np.zeros(nconf)
-            for atom in mol._atom:
-                if atom[0] in mol._ecp.keys():
-                    ecp_ret = ecp_ea(mol, configs, wf, e, atom, threshold, naip)
-                    ecp_en += ecp_ret['total']
-                    ecp_local += ecp_ret['local']
-                    #print(atom, ecp_ret['ratio'])
-            ecp_tot+=ecp_en
-            #print('ecp_energy', e, ecp_en.round(4))
-            #print("ecp local", e, ecp_local)
-    return ecp_tot
-
-
-def compute_tmoves(mol, configs, wf, e, threshold, tau, naip=None):
-    """
-    For a given electron, evaluate all possible t-moves.
-
-    returns a dictionary:
-       ratio: psi(R')/psi(R) for each move
-       weight: The symmetric part of Eqn 31 in Anderson and Umrigar (i.e., ratio * weight gives the amplitude for the t-move)
-       configs: positions of the move
-    """
-    nconfig = configs.configs.shape[0]
-    if mol._ecp != {}:
-        data = [
-            ecp_ea(mol, configs, wf, e, atom, threshold, naip)
-            for atom in mol._atom
-            if atom[0] in mol._ecp.keys()
-        ]
-    else:
-        return {"ratio": np.ones((nconfig, 0)), "weight": np.zeros((nconfig, 0))}
-
-    # we want to make a data set which is a list of possible positions, the wave function
-    # ratio, and the masks for each
-    summed_data = []
-    nconfig = configs.configs.shape[0]
-    for d in data:
-        npts = d["ratio"].shape[1]
-        weight = np.zeros((nconfig, npts))
-        ratio = np.ones((nconfig, npts), dtype=d["ratio"].dtype)
-        weight[d["mask"]] = np.einsum(
-            "ik, ijk -> ij", np.exp(-tau * d["v_l"]) - 1, d["P_l"]
-        )
-        ratio[d["mask"]] = d["ratio"]
-        summed_data.append({"weight": weight, "ratio": ratio, "epos": d["epos"]})
-
-    ratio = np.concatenate([d["ratio"] for d in summed_data], axis=1)
-    weight = np.concatenate([d["weight"] for d in summed_data], axis=1)
-    configs = copy.copy(configs)
-    configs.join([d["epos"] for d in summed_data], axis=1)
-    return {"ratio": ratio, "weight": weight, "configs": configs}
-
-
-def ecp_ea(mol, configs, wf, e, atom, threshold, naip=None):
-    """
-    :returns: the ECP value between electron e and atom at, local+nonlocal.
-    TODO: update documentation
-    """
-    nconf = configs.configs.shape[0]
-    ecp_val = np.zeros(nconf, dtype=wf.dtype)
-
-    at_name, apos = atom
-    apos = np.asarray(apos)
-
-    r_ea_vec = configs.dist.dist_i(apos, configs.configs[:, e, :]).reshape((-1, 3))
+    distances = configs.dist.dist_i(atomic_coordinates[np.newaxis,:,:], configs.configs[:, e, :])
+    dist2 = np.sum(distances**2, axis=-1)
+    # Reduce to (nconf, 3) array for closest atom
+    assigned_atom = np.argmin(dist2, axis=1)
+    r_ea_vec = distances[np.arange(distances.shape[0]),assigned_atom,:]
     r_ea = np.linalg.norm(r_ea_vec, axis=-1)
+    return _AtomicInfo(r_ea, r_ea_vec, assigned_atom)
 
-    l_list, v_l = get_v_l(mol, at_name, r_ea)
-    mask, prob = ecp_mask(v_l, threshold)
-    masked_v_l = v_l[mask]
-    masked_v_l[:, :-1] /= prob[mask, np.newaxis]
 
-    # Use masked objects internally
-    r_ea = r_ea[mask]
-    r_ea_vec = r_ea_vec[mask]
-    P_l, r_ea_i = get_P_l(r_ea, r_ea_vec, l_list, naip)
+class _MoveInfo(NamedTuple):
+     # 'cheap to compute' quantities
+    r_ea_i: np.ndarray  #(nconf, naip, 3)
+    probability: np.ndarray # (nconf,)
+    mask: np.ndarray  # (nconf,)
+    v_l: np.ndarray  # (nconf, nl)
+    P_l: np.ndarray # (nconf, naip, nl)
+   
 
-    # Note: epos_rot is not just apos+r_ea_i because of the boundary;
-    # positions of the samples are relative to the electron, not atom.
-    epos_rot = np.repeat(
-        configs.configs[:, e, :][:, np.newaxis, :], P_l.shape[1], axis=1
+def evaluate_vl(vl_evaluator, # list of functors [at][l]
+                threshold,
+                naip,
+                at_info: _AtomicInfo,
+                ):
+    maxl=max([len(vl) for vl in vl_evaluator])
+    nconf = at_info.r_ea.shape[0]
+    v_l = np.zeros((nconf,maxl))
+    P_l = np.zeros((nconf, naip, maxl))
+    r_ea_i = np.zeros((nconf, naip, 3))
+    mask = np.zeros((nconf), dtype=bool)
+    prob = np.zeros((nconf))
+    for atom, vl in enumerate(vl_evaluator):
+        m_atom = at_info.assigned_atom == atom
+        for l, func in vl.items():  # -1,0,1,...
+            # a bit tricky here, we end up with the local part in the last column because
+            # vl is a dictionary where -1 is the local part
+            v_l[m_atom, l] = func(at_info.r_ea[m_atom]) 
+        mask[m_atom], prob[m_atom] = ecp_mask(v_l[m_atom,:], threshold)
+        #print(atom, vl.keys())
+        nl = len(vl)
+        P_l[m_atom,:,:nl], r_ea_i[m_atom,:,:] = get_P_l(at_info.r_ea[m_atom], at_info.r_ea_vec[m_atom], vl.keys(), naip)
+
+    #blank = np.arange(nconf)
+    return _MoveInfo(r_ea_i,
+                     prob,
+                     mask,
+                     v_l,
+                     P_l,
     )
-    epos_rot[mask] = (configs.configs[mask, e, :] - r_ea_vec)[:, np.newaxis] + r_ea_i
-    epos = configs.make_irreducible(e, epos_rot, mask)
 
-    # Avoid calling wf.testvalue() when epos.configs is empty
-    if np.any(mask):
-        ratio = wf.testvalue(e, epos, mask)[0]
-    else:
-        ratio = np.zeros(P_l.shape[:2])
-
-    # Compute local and non-local parts
-    ecp_val[mask] = np.einsum("ij,ik,ijk->i", ratio, masked_v_l, P_l)
-    ecp_val += v_l[:, -1]  # local part
-    return {
-        "total": ecp_val,
-        "v_l": masked_v_l,
-        "local": v_l[:, -1],
-        "P_l": P_l,
-        "ratio": ratio,
-        "epos": epos,
-        "mask": mask,
-    }
 
 
 def ecp_mask(v_l, threshold):
@@ -153,13 +190,16 @@ def get_v_l(mol, at_name, r_ea):
     return vl.keys(), v_l
 
 
-def generate_ecp_functors(coeffs):
+def generate_ecp_functors(mol, at_name):
     """
     :parameter coeffs: `mol._ecp[atom_name][1]` (coefficients of the ECP)
     :returns: a functor v_l, with keys as the angular momenta:
-      -1 stands for the nonlocal part, 0,1,2,... are the s,p,d channels, etc.
+      -1 stands for the local part, 0,1,2,... are the s,p,d channels, etc.
     """
     d = {}
+    if at_name not in mol._ecp:
+        return d
+    coeffs = mol._ecp[at_name][1]
     for c in coeffs:
         el = c[0]
         rn = []
@@ -232,8 +272,6 @@ def get_P_l(r_ea, r_ea_vec, l_list, naip=None):
     :returns: legendre function P_l values for each :math:`l` channel.
     :rtype: (nconf, naip, nl) array
     """
-    if naip is None:
-        naip = 6 if len(l_list) <= 2 else 12
     nconf = r_ea.shape[0]
     weights, rot_vec = get_rot(nconf, naip)
 
@@ -256,16 +294,19 @@ def get_rot(nconf, naip):
     :rtype:  ((naip,) array, (nconf, naip, 3) array)
     """
 
-    if nconf > 0:  # get around a bug(?) when there are zero configurations.
-        rot = scipy.spatial.transform.Rotation.random(nconf).as_matrix()
-    else:
-        rot = np.zeros((0, 3, 3))
+    #if nconf > 0:  # get around a bug(?) when there are zero configurations.
+        #rot = scipy.spatial.transform.Rotation.random(nconf).as_matrix()
+        #rot = np.identity(3)[np.newaxis].repeat(nconf, axis=0)
+    rot = scipy.spatial.transform.Rotation.random().as_matrix()
+    #else:
+    #    rot = np.zeros((0, 3, 3))
     quadrature_grid = generate_quadrature_grids()
 
     if naip not in quadrature_grid.keys():
-        raise ValueError(f"Possible AIPs are one of {quadrature_grid.keys()}")
+        raise ValueError(f"Possible AIPs are one of {quadrature_grid.keys()}, got {naip} instead.")
     points, weights = quadrature_grid[naip]
-    rot_vec = np.einsum("jkl,ik->jil", rot, points)
+    #rot_vec = np.einsum("jkl,ik->jil", rot, points)
+    rot_vec = np.einsum("kl, ik->il", rot, points)[np.newaxis]
     return weights, rot_vec
 
 

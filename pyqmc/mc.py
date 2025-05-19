@@ -18,7 +18,8 @@ import os
 import numpy as np
 import h5py
 import logging
-
+import pyqmc.hdftools as hdftools
+import time
 
 def initial_guess(mol, nconfig, r=1.0):
     """Generate an initial guess by distributing electrons near atoms
@@ -81,12 +82,13 @@ def limdrift(g, cutoff=1):
     """
     tot = np.linalg.norm(g, axis=1)
     mask = tot > cutoff
-    g[mask, :] = cutoff * g[mask, :] / tot[mask, np.newaxis]
+    # by using where we can avoid modifying the original array
+    # and so we have JAX compatibility
+    g = np.where(mask[:,np.newaxis], cutoff * g / tot[:, np.newaxis], g)
     return g
 
 
 def vmc_file(hdf_file, data, attr, configs):
-    import pyqmc.hdftools as hdftools
 
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
@@ -109,6 +111,7 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
 
     for _ in range(nsteps):
         acc = 0.0
+        start_move = time.perf_counter()
         for e in range(nelec):
             # Propose move
             g, _, _ = wf.gradient_value(e, configs.electron(e))
@@ -132,8 +135,10 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
             configs.move(e, newcoorde, accept)
             wf.updateinternals(e, newcoorde, configs, mask=accept, saved_values=saved)
             acc += np.mean(accept) / nelec
+        end_move = time.perf_counter()
 
         # Rolling average on step
+        start_average = time.perf_counter()
         for k, accumulator in accumulators.items():
             dat = accumulator.avg(configs, wf)
             for m, res in dat.items():
@@ -141,7 +146,10 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
                     block_avg[k + m] = res / nsteps
                 else:
                     block_avg[k + m] += res / nsteps
+        end_average = time.perf_counter()
         block_avg["acceptance"] = acc
+        block_avg['move time'] = end_move - start_move
+        block_avg['accumulator time'] = end_average - start_average
     return block_avg, configs
 
 

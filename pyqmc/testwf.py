@@ -23,7 +23,9 @@ def test_mask(wf, e, epos, mask=None, tolerance=1e-6):
         num_e = len(wf.value()[1])
         mask = np.random.randint(0, 2, num_e).astype(bool)
     ratio, _ = wf.testvalue(e, epos, mask)
-    ratio_ref = wf.testvalue(e, epos)[0][mask]
+    ratio_ref = wf.testvalue(e, epos)[0] #[mask]
+    print("testvalue with mask", ratio, ratio_ref)
+    ratio_ref = ratio_ref[mask]
     error = np.abs((ratio - ratio_ref) / np.abs(np.max(ratio)))
     assert np.all(error < tolerance)
     print("testcase for test_value() with mask passed")

@@ -19,7 +19,8 @@ import pyqmc.ewald as ewald
 import pyqmc.eval_ecp as eval_ecp
 from pyqmc.stochastic_reconfiguration import StochasticReconfiguration
 import copy
-
+import time
+import pyqmc.ecp_accumulator as ecp_accumulator
 
 def gradient_generator(mol, wf, to_opt=None, nodal_cutoff=1e-3, eps=1e-1, inverse_strategy="regularized_inverse", **ewald_kwargs):
     return StochasticReconfiguration(
@@ -34,7 +35,7 @@ def gradient_generator(mol, wf, to_opt=None, nodal_cutoff=1e-3, eps=1e-1, invers
 class EnergyAccumulator:
     """Returns local energy of each configuration in a dictionary."""
 
-    def __init__(self, mol, threshold=10, naip=None, **kwargs):
+    def __init__(self, mol, threshold=10, naip=None, use_old_ecp=False, **kwargs):
         self.mol = mol
         self.threshold = threshold
         self.naip = naip
@@ -42,10 +43,17 @@ class EnergyAccumulator:
             self.coulomb = ewald.Ewald(mol, **kwargs)
         else:
             self.coulomb = energy.OpenCoulomb(mol, **kwargs)
+        self.use_old_ecp = use_old_ecp
+        if not use_old_ecp:
+            self.ecp = ecp_accumulator.ECPAccumulator(mol, threshold, naip)
+
 
     def __call__(self, configs, wf):
         ee, ei, ii = self.coulomb.energy(configs)
-        ecp_val = eval_ecp.ecp(self.mol, configs, wf, self.threshold, self.naip)
+        if self.use_old_ecp:
+            ecp_val = eval_ecp.ecp(self.mol, configs, wf, self.threshold, self.naip)
+        else:
+            ecp_val = self.ecp(configs, wf)
         ke, grad2 = energy.kinetic(configs, wf)
         return {
             "ke": ke,
@@ -60,7 +68,10 @@ class EnergyAccumulator:
         return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
 
     def nonlocal_tmoves(self, configs, wf, e, tau):
-        return eval_ecp.compute_tmoves(self.mol, configs, wf, e, self.threshold, tau)
+        if self.use_old_ecp:
+            return eval_ecp.compute_tmoves(self.mol, configs, wf, e, self.threshold, tau)
+        else:
+            return self.ecp.nonlocal_tmoves(configs, wf, e, tau)
 
     def has_nonlocal_moves(self):
         return self.mol._ecp != {}

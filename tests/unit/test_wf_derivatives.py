@@ -26,6 +26,16 @@ from pyqmc.wftools import generate_gps_jastrow
 from pyqmc.gps2 import GPSJastrow
 import pyqmc.api as pyq
 
+import jax
+from pyqmc.jax.slater import JAXSlater
+from pyqmc.jax.jastrowspin import JAXJastrowSpin
+cpu=True
+if cpu:
+    jax.config.update('jax_platform_name', 'cpu')
+    jax.config.update("jax_enable_x64", True)
+else:
+    pass 
+
 
 def run_tests(wf, epos, epsilon):
     _, epos = pyq.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node
@@ -85,8 +95,10 @@ def test_obc_wfs(LiH_sto3g_rhf, epsilon=1e-5, nconf=11):
         ),
         Slater(mol, mf),
         GPSJastrow(mol, pyq.initial_guess(mol, 2).configs.reshape(-1, 2, 3)),
+        JAXSlater(mol, mf),
+        JAXJastrowSpin(mol),
     ]:
-        for k in wf.parameters:
+        for k in wf.parameters.keys():
             if k != "mo_coeff":
                 wf.parameters[k] = cp.asarray(np.random.rand(*wf.parameters[k].shape))
 

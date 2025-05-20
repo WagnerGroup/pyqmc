@@ -114,9 +114,12 @@ def _test_spherical_radial_funcs():
 def test_mol():
     mol = pyscf.gto.M(atom="Mn 0. 0. 0.; N 0. 0. 2.5", ecp="ccecp", basis="ccecp-ccpvtz", unit="B", spin=0)
     orbitals = gto.AtomicOrbitalEvaluator(mol)
-    orbval = lambda x: orbitals.eval_gto("GTOval_sph", (x))
-    orbgrad = lambda x: orbitals.eval_gto("GTOval_sph_deriv1", (x))
-    orblap = lambda x: orbitals.eval_gto("GTOval_sph_deriv2", (x))
+    def orbval(x):
+        return orbitals.eval_gto("GTOval_sph", (x))
+    def orbgrad(x):
+        return orbitals.eval_gto("GTOval_sph_deriv1", (x))
+    def orblap(x):
+        return orbitals.eval_gto("GTOval_sph_deriv2", (x))
 
     graderr = _gradient(orbval, orbgrad, mol)
     laperr = _laplacian(orbgrad, orblap, mol)
@@ -136,9 +139,12 @@ def test_pbc():
     mol.build()
     kpts = np.pi * np.mgrid[:2,:2,:2].reshape(3, -1).T @ np.linalg.inv(mol.lattice_vectors())
     orbitals = pbcgto.PeriodicAtomicOrbitalEvaluator(mol, eval_gto_precision=1e-5, kpts=kpts)
-    orbval = lambda x: orbitals.eval_gto("GTOval_sph", x)
-    orbgrad = lambda x: orbitals.eval_gto("GTOval_sph_deriv1", x).swapaxes(0, 1)
-    orblap = lambda x: orbitals.eval_gto("GTOval_sph_deriv2", x).swapaxes(0, 1)
+    def orbval(x):
+        return orbitals.eval_gto("GTOval_sph", x)
+    def orbgrad(x):
+        return orbitals.eval_gto("GTOval_sph_deriv1", x).swapaxes(0, 1)
+    def orblap(x):
+        return orbitals.eval_gto("GTOval_sph_deriv2", x).swapaxes(0, 1)
 
     graderr = _gradient(orbval, orbgrad, mol)
     laperr = _laplacian(orbgrad, orblap, mol)

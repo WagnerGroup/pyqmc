@@ -21,7 +21,12 @@ from pyscf import lib, gto, scf
 import pyscf.pbc
 import pyscf.pbc.dft
 import numpy as np
+import pyqmc.api as pyq
 #import pyscf.hci
+
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
 
 """ 
 In this file, we set up several pyscf objects that can be reused across the 
@@ -129,18 +134,6 @@ def H2_ccecp_casscf_s2(H2_ccecp_uhf):
     return mol, mf, mc
 
 
-@pytest.fixture(scope="module")
-def H2_ccecp_uhf():
-    r = 1.54 / 0.529177
-    mol = gto.M(
-        atom="H 0. 0. 0.; H 0. 0. %g" % r,
-        ecp="ccecp",
-        basis="ccecpccpvdz",
-        unit="bohr",
-        verbose=1,
-    )
-    mf = scf.UHF(mol).run()
-    return mol, mf
 
 @pytest.fixture(scope="module")
 def H2_casci():
@@ -207,95 +200,102 @@ def H_pbc_sto3g_kuks():
 
 @pytest.fixture(scope='module')
 def li_cubic_ccecp():
-    nk = (2,2,2)
-    L = 6.63 * 2
-    cell = pyscf.pbc.gto.Cell(
-        atom="""Li     {0}      {0}      {0}                
-                  Li     {1}      {1}      {1}""".format(
-            0.0, L / 4
-        ),
-        basis="ccecpccpvdz",
-        ecp={"Li": "ccecp"},
-        spin=0,
-        unit="bohr",
-    )
-    cell.exp_to_discard = 0.1
-    cell.build(a=np.eye(3) * L)
-    kpts = cell.make_kpts(nk)
-    mf = pyscf.pbc.scf.KRKS(cell, kpts)
-    mf.xc = "pbe"
-    #mf = mf.density_fit()
-    #mf = pyscf.pbc.dft.multigrid.multigrid(mf)
-    mf = mf.run()
+    if False:
+        nk = (2,2,2)
+        L = 6.63 * 2
+        cell = pyscf.pbc.gto.Cell(
+            atom="""Li     {0}      {0}      {0}                
+                    Li     {1}      {1}      {1}""".format(
+                0.0, L / 4
+            ),
+            basis="ccecpccpvdz",
+            ecp={"Li": "ccecp"},
+            spin=0,
+            unit="bohr",
+        )
+        cell.exp_to_discard = 0.1
+        cell.build(a=np.eye(3) * L)
+        kpts = cell.make_kpts(nk)
+        mf = pyscf.pbc.scf.KRKS(cell, kpts)
+        mf.xc = "pbe"
+        #mf = mf.density_fit()
+        #mf = pyscf.pbc.dft.multigrid.multigrid(mf)
+        mf = mf.run()
+    cell, mf = pyq.recover_pyscf(f"{THIS_DIR}/files/li_cubic_ccecp.hdf5")
     return cell, mf
 
 
 @pytest.fixture(scope='module')
 def diamond_primitive():
-    cell = pyscf.pbc.gto.Cell()
-    cell.verbose = 5
-    cell.atom=[
-        ['C', np.array([0., 0., 0.])], 
-        ['C', np.array([0.8917, 0.8917, 0.8917])]
-               ]
-    cell.a=[[0.0, 1.7834, 1.7834], 
-            [1.7834, 0.0, 1.7834], 
-            [1.7834, 1.7834, 0.0]]
-    cell.basis = 'ccecpccpvdz'
-    cell.ecp = 'ccecp'
-    cell.exp_to_discard=0.3
-    cell.build()
-    kpts = cell.make_kpts((2,2,2))
-    mf=pyscf.pbc.dft.KRKS(cell, kpts)
+    if False: 
+        cell = pyscf.pbc.gto.Cell()
+        cell.verbose = 5
+        cell.atom=[
+            ['C', np.array([0., 0., 0.])], 
+            ['C', np.array([0.8917, 0.8917, 0.8917])]
+                ]
+        cell.a=[[0.0, 1.7834, 1.7834], 
+                [1.7834, 0.0, 1.7834], 
+                [1.7834, 1.7834, 0.0]]
+        cell.basis = 'ccecpccpvdz'
+        cell.ecp = 'ccecp'
+        cell.exp_to_discard=0.3
+        cell.build()
+        kpts = cell.make_kpts((2,2,2))
+        mf=pyscf.pbc.dft.KRKS(cell, kpts)
 
-    mf.xc='lda,vwn'
+        mf.xc='lda,vwn'
 
-    mf.kernel()
+        mf.kernel()
+    cell, mf = pyq.recover_pyscf(f"{THIS_DIR}/files/diamond_primitive.hdf5")
     return cell, mf
 
 
 @pytest.fixture(scope='module')
 def h_noncubic_sto3g_triplet():
-    nk = (1,1,1)
-    L = 8
-    mol = pyscf.pbc.gto.M(
-        atom="""H     {0}      {0}      {0}                
-                  H     {1}      {1}      {1}""".format(
-            0.0, L / 4
-        ),
-        basis="sto-3g",
-        a=(np.ones((3, 3)) - np.eye(3)) * L / 2,
-        spin=2*np.prod(nk),
-        unit="bohr",
-    )
-    kpts = mol.make_kpts(nk)
-    mf = pyscf.pbc.scf.KUKS(mol, kpts)
-    mf.xc = "pbe"
-    #mf = pyscf.pbc.dft.multigrid.multigrid(mf)
-    mf = mf.run()
-    print(mf.mo_occ)
+    if False:
+        nk = (1,1,1)
+        L = 8
+        mol = pyscf.pbc.gto.M(
+            atom="""H     {0}      {0}      {0}                
+                    H     {1}      {1}      {1}""".format(
+                0.0, L / 4
+            ),
+            basis="sto-3g",
+            a=(np.ones((3, 3)) - np.eye(3)) * L / 2,
+            spin=2*np.prod(nk),
+            unit="bohr",
+        )
+        kpts = mol.make_kpts(nk)
+        mf = pyscf.pbc.scf.KUKS(mol, kpts)
+        mf.xc = "pbe"
+        #mf = pyscf.pbc.dft.multigrid.multigrid(mf)
+        mf = mf.run()
+    mol, mf = pyq.recover_pyscf(f"{THIS_DIR}/files/h_noncubic_sto3g_triplet.hdf5")
     return mol, mf
 
 
 @pytest.fixture(scope='module')
 def h_pbc_casscf():
-    L = 8
-    mol = pyscf.pbc.gto.M(
-        atom="""H     {0}      {0}      {0}                
-                  H     {1}      {1}      {1}""".format(
-            0.0, L / 4
-        ),
-        basis="ccpvdz",
-        a= np.eye(3) * L,
-        spin=0,
-        unit="bohr",
-        precision=1e-6,
-    )
-    mf = pyscf.pbc.scf.RKS(mol)
-    mf.xc = "pbe"
-    #mf = pyscf.pbc.dft.multigrid.multigrid(mf)
-    mf = mf.run()
-    print(mf.mo_occ)
+    if False:
+        L = 8
+        mol = pyscf.pbc.gto.M(
+            atom="""H     {0}      {0}      {0}                
+                    H     {1}      {1}      {1}""".format(
+                0.0, L / 4
+            ),
+            basis="ccpvdz",
+            a= np.eye(3) * L,
+            spin=0,
+            unit="bohr",
+            precision=1e-6,
+        )
+        mf = pyscf.pbc.scf.RKS(mol)
+        mf.xc = "pbe"
+        #mf = pyscf.pbc.dft.multigrid.multigrid(mf)
+        mf = mf.run()
+        print(mf.mo_occ)
+    mol, mf = pyq.recover_pyscf(f"{THIS_DIR}/files/h_pbc_casscf.hdf5")
     mc = pyscf.mcscf.CASSCF(mf, ncas=4, nelecas=(1, 1))
     mc.kernel()
     return mol, mf, mc

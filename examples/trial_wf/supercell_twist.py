@@ -14,11 +14,15 @@
 # copies or substantial portions of the Software.
 
 
+"""
+How to run at various twists in a supercell.
+"""
+
 import numpy as np
 from pyscf.pbc import gto, scf
 import pyqmc.api as pyq
 from pyqmc.supercell import get_supercell
-
+import pyqmc.twists
 
 def run_scf(nk):
     cell = gto.Cell()
@@ -43,39 +47,25 @@ def run_scf(nk):
 
 if __name__ == "__main__":
     # Run SCF
-    cell, kmf = run_scf(nk=2)
+    cell, kmf = run_scf(nk=4)
 
     # Set up wf and configs
     nconfig = 100
     S = np.eye(3) * 2  # 2x2x2 supercell
     supercell = get_supercell(cell, S)
-    wf, to_opt = pyq.generate_wf(supercell, kmf)
-    configs = pyq.initial_guess(supercell, nconfig)
 
-    # Initialize energy accumulator (and Ewald)
-    pgrad = pyq.gradient_generator(supercell, wf, to_opt=to_opt)
+    twist_info = pyqmc.twists.create_supercell_twists(supercell, kmf)
+    print("Here are the twists available in the 2x2x2 supercell:", twist_info["twists"])
+    # you access the twist by index
+    wf, to_opt = pyq.generate_wf(supercell, kmf, slater_kws = dict(twist=2))
 
-    # Optimize jastrow
-    wf, lm_df = pyq.line_minimization(
-        wf, configs, pgrad, hdf_file="pbc_he_linemin.hdf", verbose=True
-    )
 
-    # Run VMC
-    df, configs = pyq.vmc(
-        wf,
-        configs,
-        nblocks=100,
-        accumulators={"energy": pgrad.enacc},
-        hdf_file="pbc_he_vmc.hdf",
-        verbose=True,
-    )
+    S = np.eye(3) * 4  # for a 4x4x4 supercell we will only find one twist available because nk=4
+    supercell = get_supercell(cell, S)
+    twist_info = pyqmc.twists.create_supercell_twists(supercell, kmf)
+    print("Here are the twists available in the 4x4x4 supercell:", twist_info["twists"])
 
-    # Run DMC
-    pyq.rundmc(
-        wf,
-        configs,
-        nblocks=1000,
-        accumulators={"energy": pgrad.enacc},
-        hdf_file="pbc_he_dmc.hdf",
-        verbose=True,
-    )
+
+
+
+    

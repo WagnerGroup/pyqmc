@@ -12,6 +12,11 @@
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
+"""
+Here we demonstrate how to create and optimize an ensemble of wave functions,
+using CASCI to generate the initial wave functions.
+"""
+
 from pyscf import gto, scf, mcscf
 import h5py
 import pyqmc.api as pyq

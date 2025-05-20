@@ -4,7 +4,9 @@ from rich import print
 import numpy as np
 from pyqmc.geminaljastrow import GeminalJastrow
 """
-Generate a Slater + 2-body Jastrow for H2. 
+Generate a Slater + 2-body Jastrow + geminal wave function for H2. 
+
+Note that this can be used for any system, including periodic systems.
 """
 
 def run_mf():

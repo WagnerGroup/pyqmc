@@ -23,7 +23,6 @@ def test_cubic_with_ecp(li_cubic_ccecp, kind=1):
     cell, mf = li_cubic_ccecp
     runtest(cell, mf, kind=kind)
 
-
 def test_noncubic(diamond_primitive, kind=1):
     cell, mf = diamond_primitive
     runtest(cell, mf, kind=kind)

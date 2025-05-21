@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 from functools import partial
 import pyqmc.pyscftools
-from pyqmc.jax import gto
+from pyqmc.wf.jax import gto
 import pyscf.gto 
 from typing import NamedTuple
 import numpy as np

@@ -21,7 +21,7 @@ import numpy as np
 import pyscf
 import pyscf.hci
 import pyqmc.api as pyq
-from pyqmc.slater import Slater
+from pyqmc.wf.slater import Slater
 
 
 def avg(vec):

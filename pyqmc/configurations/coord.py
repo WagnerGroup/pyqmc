@@ -13,8 +13,8 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
-import pyqmc.distance as distance
-import pyqmc.pbc as pbc
+import pyqmc.configurations.distance as distance
+import pyqmc.pbc.pbc as pbc
 import copy
 
 

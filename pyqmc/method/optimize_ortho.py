@@ -14,9 +14,9 @@
 
 import numpy as np
 import h5py
-import pyqmc.linemin
+import pyqmc.method.linemin
 import pyqmc.hdftools as hdftools
-import pyqmc.mc as mc
+import pyqmc.method.mc as mc
 import os
 
 
@@ -725,7 +725,7 @@ def optimize_orthogonal(
         if verbose:
             print("|total_derivative|", np.linalg.norm(total_derivative))
         if len(xfit) > 2:
-            min_tstep = pyqmc.linemin.stable_fit(xfit, yfit)
+            min_tstep = pyqmc.method.linemin.stable_fit(xfit, yfit)
             if verbose:
                 print("chose to move", min_tstep, flush=True)
             parameters = parameters + conditioner(

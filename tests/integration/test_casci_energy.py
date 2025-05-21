@@ -21,10 +21,10 @@ os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
 import pandas as pd
 from pyscf import lib, gto, scf, mcscf
-import pyqmc.testwf as testwf
+import pyqmc.wf.testwf as testwf
 import pyqmc.api as pyq
-from pyqmc.accumulators import EnergyAccumulator
-from pyqmc.slater import Slater
+from pyqmc.observables.accumulators import EnergyAccumulator
+from pyqmc.wf.slater import Slater
 
 
 def test_casci_energy(H2_ccecp_casci_s0):

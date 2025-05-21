@@ -14,7 +14,7 @@
 
 import numpy as np
 import pyqmc
-import pyqmc.energy
+import pyqmc.observables.energy
 import pyqmc.gpu as gpu
 
 

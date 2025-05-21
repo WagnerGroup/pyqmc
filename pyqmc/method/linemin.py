@@ -14,10 +14,10 @@
 
 import numpy as np
 import pyqmc.gpu as gpu
-import pyqmc.sample_many as sm
+import pyqmc.method.sample_many as sm
 import h5py
 import os
-import pyqmc.mc
+import pyqmc.method.mc
 import copy
 import logging
 
@@ -175,7 +175,7 @@ def line_minimization(
     else:  # not restarting -- VMC warm up period
         if verbose:
             print("starting warmup")
-        _, coords = pyqmc.mc.vmc(
+        _, coords = pyqmc.method.mc.vmc(
             wf,
             coords,
             accumulators={},
@@ -212,7 +212,7 @@ def line_minimization(
             pgrad = pgrad_acc[sub_it]
             x0 = pgrad.transform.serialize_parameters(wf.parameters)
 
-            df_vmc, coords = pyqmc.mc.vmc(
+            df_vmc, coords = pyqmc.method.mc.vmc(
                 wf,
                 coords,
                 accumulators={"pgrad": pgrad},

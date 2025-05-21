@@ -13,13 +13,13 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
-import pyqmc.supercell
-import pyqmc.pbc
+import pyqmc.pbc.supercell
+import pyqmc.pbc.pbc
 
 
 def get_twist(cell, S, frac_twist):
     """Given the twist in unit of supercell reciprocal primitive lattice vectors and the supercell, return the twist in Bohr^-1"""
-    supercell = pyqmc.supercell.get_supercell(cell, S)
+    supercell = pyqmc.pbc.supercell.get_supercell(cell, S)
     frac_twist = np.mod(frac_twist + 0.5, 1.0) - 0.5
     twist = np.dot(np.linalg.inv(supercell.a), frac_twist) * 2 * np.pi
     return twist
@@ -27,7 +27,7 @@ def get_twist(cell, S, frac_twist):
 
 def get_frac_twist(cell, S, twist):
     """Given the twist in Bohr^-1 and the supercell, return the twist in supercell reciprocal primitive lattice vectors"""
-    supercell = pyqmc.supercell.get_supercell(cell, S)
+    supercell = pyqmc.pbc.supercell.get_supercell(cell, S)
     frac_twist = np.dot(supercell.a, twist) / (2 * np.pi)
     frac_twist = np.mod(frac_twist + 0.5, 1.0) - 0.5
     return frac_twist

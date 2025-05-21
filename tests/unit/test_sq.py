@@ -12,8 +12,8 @@
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
-from pyqmc.accumulators import SqAccumulator
-from pyqmc.coord import PeriodicConfigs
+from pyqmc.observables.accumulators import SqAccumulator
+from pyqmc.configurations.coord import PeriodicConfigs
 import numpy as np
 import pandas as pd
 import pyscf.pbc

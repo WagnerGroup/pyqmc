@@ -12,7 +12,7 @@
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
-import pyqmc.eval_ecp
+import pyqmc.observables.eval_ecp
 import pytest
 import numpy as np
 import scipy.stats
@@ -20,7 +20,7 @@ import scipy.stats
 
 @pytest.mark.parametrize("naip", [6, 12])
 def test_rotation_even(naip):
-    weights, rotations = pyqmc.eval_ecp.get_rot(1000, naip)
+    weights, rotations = pyqmc.observables.eval_ecp.get_rot(1000, naip)
     avg = np.mean(rotations, axis=0)
     sem = scipy.stats.sem(rotations, axis=0)
     # print(avg/sem)

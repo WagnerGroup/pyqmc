@@ -14,7 +14,7 @@
 
 import numpy as np
 import scipy.optimize
-import pyqmc.energy
+import pyqmc.observables.energy
 
 
 def optvariance(energy, wf, coords, params=None, **kwargs):
@@ -49,7 +49,7 @@ def optvariance(energy, wf, coords, params=None, **kwargs):
         for i, k in enumerate(params):
             wf.parameters[k] = x_sliced[i].reshape(wf.parameters[k].shape)
         wf.recompute(coords)
-        ke = pyqmc.energy.kinetic(coords, wf)
+        ke = pyqmc.observables.energy.kinetic(coords, wf)
         # Here we assume the ecp is fixed and only recompute
         # kinetic energy
         En = Enref["total"] - Enref["ke"] + ke

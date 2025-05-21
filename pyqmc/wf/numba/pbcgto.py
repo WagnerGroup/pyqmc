@@ -16,11 +16,11 @@
 import numpy as np
 import scipy.special
 from numba import njit
-import pyqmc.spherical_harmonics as hsh
-import pyqmc.gto as gto
+import pyqmc.wf.numba.spherical_harmonics as hsh
+import pyqmc.wf.numba.gto as gto
 import pyscf.pbc.gto.cell
-import pyqmc.orbitals as pyqorb
-import pyqmc.distance
+import pyqmc.wf.orbitals as pyqorb
+import pyqmc.configurations.distance
 
 
 """
@@ -502,7 +502,7 @@ class PeriodicAtomicOrbitalEvaluator(gto.AtomicOrbitalEvaluator):
         self.dtype =  self.phases.dtype
         self.get_wrapphase = pyqorb.get_wrapphase_complex if self.dtype == complex else pyqorb.get_wrapphase_real
 
-        self.dist = pyqmc.distance.RawDistance() # don't use minimal image
+        self.dist = pyqmc.configurations.distance.RawDistance() # don't use minimal image
         self._gto_func = dict(
             GTOval_sph=_pbc_eval_gto,
             GTOval_sph_deriv1=_pbc_eval_gto_grad,

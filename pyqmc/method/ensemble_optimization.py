@@ -13,7 +13,7 @@
 # copies or substantial portions of the Software.
 
 
-import pyqmc.sample_many
+import pyqmc.method.sample_many
 import numpy as np
 import h5py
 from pyqmc import hdftools
@@ -118,7 +118,7 @@ def optimize_ensemble(
             if i == iteration_offset:
                 if sub_iteration < sub_iteration_offset:
                     continue
-            data_weighted, data_unweighted, configs = pyqmc.sample_many.sample_overlap(
+            data_weighted, data_unweighted, configs = pyqmc.method.sample_many.sample_overlap(
                 wfs,
                 configs,
                 None,
@@ -134,7 +134,7 @@ def optimize_ensemble(
                 print("Normalization step", norm.diagonal())
             renormalize(wfs, norm.diagonal(), pivot=0)
 
-            data_weighted, data_unweighted, configs = pyqmc.sample_many.sample_overlap(
+            data_weighted, data_unweighted, configs = pyqmc.method.sample_many.sample_overlap(
                 wfs,
                 configs,
                 update,

@@ -14,12 +14,12 @@
 
 import numpy as np
 import pyqmc
-from pyqmc.coord import PeriodicConfigs
-import pyqmc.energy
+from pyqmc.configurations.coord import PeriodicConfigs
+import pyqmc.observables.energy
 import pyqmc.gpu as gpu
 from pyscf.pbc.gto.cell import Cell
 from typing import Tuple
-import pyqmc.ewald as ewald
+import pyqmc.observables.ewald as ewald
 
 
 class Ewald:

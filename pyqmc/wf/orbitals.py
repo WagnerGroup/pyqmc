@@ -16,8 +16,8 @@ import numpy as np
 import pyqmc.gpu as gpu
 import pyscf.pbc.gto.eval_gto
 import pyscf.pbc.gto.cell
-import pyqmc.distance
-import pyqmc.coord
+import pyqmc.configurations.distance
+import pyqmc.configurations.coord
 import functools
 
 """
@@ -66,8 +66,8 @@ class MoleculeOrbitalEvaluator:
         if evaluate_orbitals_with == "pyscf":
             self.eval_gto = functools.partial(mol_eval_gto, self._mol)
         elif evaluate_orbitals_with == "numba":
-            import pyqmc.gto
-            evaluator = pyqmc.gto.AtomicOrbitalEvaluator(mol)
+            import pyqmc.wf.numba.gto
+            evaluator = pyqmc.wf.numba.gto.AtomicOrbitalEvaluator(mol)
 
             self.eval_gto = evaluator.eval_gto
         else:
@@ -161,8 +161,8 @@ class PBCOrbitalEvaluatorKpoints:
         if evaluate_orbitals_with == "pyscf":
             self.eval_gto = functools.partial(cell_eval_gto, self)
         elif evaluate_orbitals_with == "numba":
-            import pyqmc.pbcgto
-            evaluator = pyqmc.pbcgto.PeriodicAtomicOrbitalEvaluator(cell.original_cell, kpts=self._kpts, eval_gto_precision=eval_gto_precision)
+            import pyqmc.wf.numba.pbcgto
+            evaluator = pyqmc.wf.numba.pbcgto.PeriodicAtomicOrbitalEvaluator(cell.original_cell, kpts=self._kpts, eval_gto_precision=eval_gto_precision)
             self.eval_gto = evaluator.eval_gto
         else:
             raise ValueError(f"{evaluate_orbitals_with} not recognized; evaluate_orbitals_with must be 'pyscf' or 'numba'")

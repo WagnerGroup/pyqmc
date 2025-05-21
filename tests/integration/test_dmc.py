@@ -28,7 +28,7 @@ import uuid
 def test():
     """Ensure that DMC obtains the exact result for a hydrogen atom"""
     from pyscf import gto, scf
-    from pyqmc.dmc import limdrift
+    from pyqmc.method.dmc import limdrift
     import pandas as pd
 
     mol = gto.M(atom="H 0. 0. 0.", basis="sto-3g", unit="bohr", spin=1)

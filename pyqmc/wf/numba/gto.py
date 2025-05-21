@@ -16,8 +16,8 @@
 import numpy as np
 import scipy.special
 from numba import njit, jit
-import pyqmc.spherical_harmonics as hsh
-import pyqmc.distance
+import pyqmc.wf.numba.spherical_harmonics as hsh
+import pyqmc.configurations.distance
 
 
 @njit(cache=True, fastmath=True)
@@ -421,7 +421,7 @@ class AtomicOrbitalEvaluator:
 
         self.dtype = float
 
-        self.dist = pyqmc.distance.RawDistance()
+        self.dist = pyqmc.configurations.distance.RawDistance()
         self.gto_func = dict(
             GTOval_sph=mol_eval_gto,
             GTOval_sph_deriv1=mol_eval_gto_grad,

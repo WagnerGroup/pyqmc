@@ -13,22 +13,22 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
-import pyqmc.testwf as testwf
+import pyqmc.wf.testwf as testwf
 from pyqmc.gpu import cp, asnumpy
-from pyqmc.slater import Slater
-from pyqmc.multiplywf import MultiplyWF
-from pyqmc.addwf import AddWF
-from pyqmc.geminaljastrow import GeminalJastrow
-from pyqmc.three_body_jastrow import ThreeBodyJastrow
+from pyqmc.wf.slater import Slater
+from pyqmc.wf.multiplywf import MultiplyWF
+from pyqmc.wf.addwf import AddWF
+from pyqmc.wf.geminaljastrow import GeminalJastrow
+from pyqmc.wf.three_body_jastrow import ThreeBodyJastrow
 from pyqmc.wftools import default_jastrow_basis
 from pyqmc.wftools import generate_jastrow
 from pyqmc.wftools import generate_gps_jastrow
-from pyqmc.gps2 import GPSJastrow
+from pyqmc.wf.gps2 import GPSJastrow
 import pyqmc.api as pyq
 
 import jax
-from pyqmc.jax.slater import JAXSlater
-from pyqmc.jax.jastrowspin import JAXJastrowSpin
+from pyqmc.wf.jax.slater import JAXSlater
+from pyqmc.wf.jax.jastrowspin import JAXJastrowSpin
 cpu=True
 if cpu:
     jax.config.update('jax_platform_name', 'cpu')

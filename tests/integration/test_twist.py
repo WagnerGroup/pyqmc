@@ -14,9 +14,9 @@
 
 import numpy as np
 import pyqmc.api as pyq
-from pyqmc.slater import Slater
-from pyqmc.pbc import enforce_pbc
-from pyqmc.coord import PeriodicConfigs
+from pyqmc.wf.slater import Slater
+from pyqmc.pbc.pbc import enforce_pbc
+from pyqmc.configurations.coord import PeriodicConfigs
 
 
 def test_cubic_with_ecp(li_cubic_ccecp, kind=1):

@@ -18,16 +18,16 @@ import numpy as np
 from pyscf.fci.addons import overlap
 import pyscf.ao2mo as ao2mo
 import pyqmc.api as pyq
-import pyqmc.accumulators
-from pyqmc.optimize_excited_states import (
+import pyqmc.observables.accumulators
+from pyqmc.method.optimize_excited_states import (
     sample_overlap_worker,
     average,
     collect_terms,
     objective_function_derivative,
     correlated_sampling,
 )
-from pyqmc.sample_many import sample_overlap
-from pyqmc.stochastic_reconfiguration import StochasticReconfigurationMultipleWF
+from pyqmc.method.sample_many import sample_overlap
+from pyqmc.observables.stochastic_reconfiguration import StochasticReconfigurationMultipleWF
 import copy
 
 
@@ -64,8 +64,8 @@ def skip_sampler(H2_casci):
     for to_opt in [to_opt1, to_opt2]:
         to_opt["det_coeff"] = np.ones_like(to_opt["det_coeff"], dtype=bool)
 
-    transform1 = pyqmc.accumulators.LinearTransform(wf1.parameters, to_opt1)
-    transform2 = pyqmc.accumulators.LinearTransform(wf2.parameters, to_opt2)
+    transform1 = pyqmc.observables.accumulators.LinearTransform(wf1.parameters, to_opt1)
+    transform2 = pyqmc.observables.accumulators.LinearTransform(wf2.parameters, to_opt2)
     configs = pyq.initial_guess(mol, 2000)
     _, configs = pyq.vmc(wf1, configs)
     energy = pyq.EnergyAccumulator(mol)
@@ -121,7 +121,7 @@ def skip_sampler(H2_casci):
         < overlap_tolerance
     )
 
-from  pyqmc.ensemble_optimization import optimize_ensemble
+from  pyqmc.method.ensemble_optimization import optimize_ensemble
 
 def test_optimizer(H2_casci):
     mol, mf, mc = H2_casci
@@ -137,8 +137,8 @@ def test_optimizer(H2_casci):
     for to_opt in [to_opt1, to_opt2]:
         to_opt["det_coeff"] = np.ones_like(to_opt["det_coeff"], dtype=bool)
 
-    transform1 = pyqmc.accumulators.LinearTransform(wf1.parameters, to_opt1)
-    transform2 = pyqmc.accumulators.LinearTransform(wf2.parameters, to_opt2)
+    transform1 = pyqmc.observables.accumulators.LinearTransform(wf1.parameters, to_opt1)
+    transform2 = pyqmc.observables.accumulators.LinearTransform(wf2.parameters, to_opt2)
     configs = pyq.initial_guess(mol, 2000)
     _, configs = pyq.vmc(wf1, configs)
     energy = pyq.EnergyAccumulator(mol)
@@ -163,8 +163,8 @@ def temp_dont_correlated_sampling(H2_casci):
     for to_opt in [to_opt1, to_opt2]:
         to_opt["det_coeff"] = np.ones_like(to_opt["det_coeff"], dtype=bool)
 
-    transform1 = pyqmc.accumulators.LinearTransform(wf1.parameters, to_opt1)
-    transform2 = pyqmc.accumulators.LinearTransform(wf2.parameters, to_opt2)
+    transform1 = pyqmc.observables.accumulators.LinearTransform(wf1.parameters, to_opt1)
+    transform2 = pyqmc.observables.accumulators.LinearTransform(wf2.parameters, to_opt2)
     configs = pyq.initial_guess(mol, 1000)
     _, configs = pyq.vmc(wf1, configs)
     energy = pyq.EnergyAccumulator(mol)

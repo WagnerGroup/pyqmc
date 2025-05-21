@@ -23,9 +23,9 @@ from numpy.linalg import solve
 
 np.random.seed(12534234)
 from pyscf import gto, scf, lo
-from pyqmc.slater import Slater
-from pyqmc.mc import initial_guess, vmc
-from pyqmc.obdm import OBDMAccumulator, normalize_obdm
+from pyqmc.wf.slater import Slater
+from pyqmc.method.mc import initial_guess, vmc
+from pyqmc.observables.obdm import OBDMAccumulator, normalize_obdm
 import pytest
 
 
@@ -72,7 +72,7 @@ def test():
 
 @pytest.mark.slow
 def test_pbc(li_cubic_ccecp):
-    from pyqmc import supercell
+    from pyqmc.pbc import supercell
     import scipy
 
     mol, mf = li_cubic_ccecp

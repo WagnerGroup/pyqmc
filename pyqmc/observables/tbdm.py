@@ -14,11 +14,11 @@
 
 """ Evaluate the TBDM for a wave function object. """
 import numpy as np
-import pyqmc.mc as mc
-import pyqmc.obdm as obdm
+import pyqmc.method.mc as mc
+import pyqmc.observables.obdm as obdm
 import pyqmc.gpu as gpu
-import pyqmc.orbitals
-import pyqmc.supercell as supercell
+import pyqmc.wf.orbitals
+import pyqmc.pbc.supercell as supercell
 import warnings
 
 
@@ -81,7 +81,7 @@ class TBDMAccumulator:
         self._warmup = warmup
 
         if kpts is None:
-            self.orbitals = pyqmc.orbitals.MoleculeOrbitalEvaluator(mol, orb_coeff)
+            self.orbitals = pyqmc.wf.orbitals.MoleculeOrbitalEvaluator(mol, orb_coeff)
             norb_up = orb_coeff[0].shape[1]
             norb_down = orb_coeff[1].shape[1]
             if hasattr(mol, "a"):
@@ -91,7 +91,7 @@ class TBDMAccumulator:
         else:
             if not hasattr(mol, "original_cell"):
                 mol = supercell.get_supercell(mol, np.eye(3))
-            self.orbitals = pyqmc.orbitals.PBCOrbitalEvaluatorKpoints(
+            self.orbitals = pyqmc.wf.orbitals.PBCOrbitalEvaluatorKpoints(
                 mol, orb_coeff, kpts, eval_gto_precision=eval_gto_precision
             )
             norb_up = np.sum([o.shape[1] for o in orb_coeff[0]])

@@ -13,19 +13,19 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
-import pyqmc.ewald
-import pyqmc.ewald2d
-from pyqmc.coord import PeriodicConfigs
-from pyqmc.supercell import get_supercell
+import pyqmc.observables.ewald
+import pyqmc.observables.ewald2d
+from pyqmc.configurations.coord import PeriodicConfigs
+from pyqmc.pbc.supercell import get_supercell
 from pyscf.pbc import gto, scf
 
 
 def get_ewald_energy(cell, S, configs):
     supercell = get_supercell(cell, S)
     if supercell.dimension == 2:
-        ewald = pyqmc.ewald2d.Ewald(supercell)
+        ewald = pyqmc.observables.ewald2d.Ewald(supercell)
     else:
-        ewald = pyqmc.ewald.Ewald(supercell)
+        ewald = pyqmc.observables.ewald.Ewald(supercell)
     configs = PeriodicConfigs(configs, supercell.lattice_vectors())
     ee, ei, ii = ewald.energy(configs)
     etot = ee + ei + ii
@@ -190,7 +190,7 @@ def compute_ewald_shifted(x, delta, L=4.0):
     cell.build(a=np.eye(3) * L)
     configs = np.full((1, 1, 3), x * L) + delta
     configs = PeriodicConfigs(configs, cell.lattice_vectors())
-    evaluator = pyqmc.ewald.Ewald(cell, ewald_gmax=25)
+    evaluator = pyqmc.observables.ewald.Ewald(cell, ewald_gmax=25)
     energy = evaluator.energy(configs)
     return np.concatenate([np.ravel(a) for a in energy])
 

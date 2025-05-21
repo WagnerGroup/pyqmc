@@ -13,9 +13,9 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
-import pyqmc.mc as mc
+import pyqmc.method.mc as mc
 import scipy.stats
-import pyqmc.linemin as linemin
+import pyqmc.method.linemin as linemin
 import pyqmc.gpu as gpu
 import os
 import h5py

@@ -14,8 +14,8 @@
 
 import numpy as np
 import pyqmc.gpu as gpu
-import pyqmc.orbitals
-import pyqmc.supercell
+import pyqmc.wf.orbitals
+import pyqmc.pbc.supercell
 
 
 class GeminalJastrow:
@@ -50,15 +50,15 @@ class GeminalJastrow:
         if orbitals is None:
             if hasattr(mol, "lattice_vectors"):
                 if not hasattr(mol, "original_cell"):
-                    mol = pyqmc.supercell.get_supercell(mol, np.eye(3))
+                    mol = pyqmc.pbc.supercell.get_supercell(mol, np.eye(3))
                 else:
                     mol = make_pbc_supercell_for_gamma_aos(mol)
                 kpts = [[0, 0, 0]]
-                self.orbitals = pyqmc.orbitals.PBCOrbitalEvaluatorKpoints(
+                self.orbitals = pyqmc.wf.orbitals.PBCOrbitalEvaluatorKpoints(
                     mol, kpts=kpts, eval_gto_precision=eval_gto_precision
                 )
             else:
-                self.orbitals = pyqmc.orbitals.MoleculeOrbitalEvaluator(mol, [0, 0])
+                self.orbitals = pyqmc.wf.orbitals.MoleculeOrbitalEvaluator(mol, [0, 0])
         else:
             self.orbitals = orbitals
         randpos = np.random.random((1, 3))
@@ -266,7 +266,7 @@ def make_pbc_supercell_for_gamma_aos(scell, S=None, **kwargs):
         S = scell.S
     scale = np.abs(int(np.round(np.linalg.det(S))))
     superlattice = np.dot(S, cell.lattice_vectors())
-    Rpts = pyqmc.supercell.get_supercell_copies(cell.lattice_vectors(), S)
+    Rpts = pyqmc.pbc.supercell.get_supercell_copies(cell.lattice_vectors(), S)
     atom = []
     for name, xyz in cell._atom:
         atom.extend([(name, xyz + R) for R in Rpts])
@@ -283,5 +283,5 @@ def make_pbc_supercell_for_gamma_aos(scell, S=None, **kwargs):
     for k, v in kwargs.items():
         newcell.__dict__[k] = v
     newcell.build()
-    newsupercell = pyqmc.supercell.get_supercell(newcell, np.eye(3))
+    newsupercell = pyqmc.pbc.supercell.get_supercell(newcell, np.eye(3))
     return newsupercell

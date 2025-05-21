@@ -13,13 +13,13 @@
 # copies or substantial portions of the Software.
 
 
-import pyqmc.sample_many
+import pyqmc.method.sample_many
 import numpy as np
 import h5py
 from pyqmc import hdftools
 import pyqmc.gpu as gpu
 import os
-from pyqmc.stochastic_reconfiguration import StochasticReconfiguration
+from pyqmc.observables.stochastic_reconfiguration import StochasticReconfiguration
 import scipy.stats
 
 
@@ -276,7 +276,7 @@ def optimize_ensemble(
 
             for sub_iteration in range(sub_iteration_offset, len(transform_list)):
                 transform = transform_list[sub_iteration]
-                data_weighted, data_unweighted, configs = pyqmc.sample_many.sample_overlap(
+                data_weighted, data_unweighted, configs = pyqmc.method.sample_many.sample_overlap(
                     wfs,
                     configs,
                     None,
@@ -293,7 +293,7 @@ def optimize_ensemble(
                     wf, configs, accumulators={'': transform.onewf()}, client=client, npartitions=npartitions, **vmc_kwargs
                 )
 
-                data_weighted, data_unweighted, configs = pyqmc.sample_many.sample_overlap(
+                data_weighted, data_unweighted, configs = pyqmc.method.sample_many.sample_overlap(
                     wfs[0: wfi + 1],
                     configs,
                     transform.allwfs(),

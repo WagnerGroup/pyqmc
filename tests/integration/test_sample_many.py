@@ -17,10 +17,10 @@
 import numpy as np
 from pyscf.fci.addons import overlap
 import pyqmc.api as pyq
-import pyqmc.accumulators
-from pyqmc.optimize_excited_states import average, collect_terms
-from pyqmc.accumulators_multiwf import EnergyAccumulatorMultipleWF
-from pyqmc.sample_many import sample_overlap
+import pyqmc.observables.accumulators
+from pyqmc.method.optimize_excited_states import average, collect_terms
+from pyqmc.observables.accumulators_multiwf import EnergyAccumulatorMultipleWF
+from pyqmc.method.sample_many import sample_overlap
 import copy
 
 
@@ -83,7 +83,7 @@ def test_correlated_sampling(H2_casci):
     for mc_ in [mc1, mc2]:
         wf, to_opt = pyq.generate_slater(mol, mf, mc=mc_, optimize_determinants=True)
         to_opt["det_coeff"] = np.ones_like(to_opt["det_coeff"], dtype=bool)
-        transform = pyqmc.accumulators.LinearTransform(wf.parameters, to_opt)
+        transform = pyqmc.observables.accumulators.LinearTransform(wf.parameters, to_opt)
         wfs.append(wf)
         transforms.append(transform)
         parms.append(transform.serialize_parameters(wf.parameters))

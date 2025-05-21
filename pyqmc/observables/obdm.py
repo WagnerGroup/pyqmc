@@ -13,12 +13,12 @@
 # copies or substantial portions of the Software.
 
 """ Evaluate the OBDM for a wave function object. """
-import pyqmc.orbitals
+import pyqmc.wf.orbitals
 import numpy as np
-import pyqmc.mc as mc
+import pyqmc.method.mc as mc
 from pyqmc.gpu import cp, asnumpy
 
-import pyqmc.supercell as supercell
+import pyqmc.pbc.supercell as supercell
 
 
 class OBDMAccumulator:
@@ -88,7 +88,7 @@ class OBDMAccumulator:
             self._electrons = np.arange(0, np.sum(mol.nelec))
 
         if kpts is None:
-            self.orbitals = pyqmc.orbitals.MoleculeOrbitalEvaluator(
+            self.orbitals = pyqmc.wf.orbitals.MoleculeOrbitalEvaluator(
                 mol, [orb_coeff, orb_coeff]
             )
             if hasattr(mol, "a"):
@@ -96,7 +96,7 @@ class OBDMAccumulator:
         else:
             if not hasattr(mol, "original_cell"):
                 mol = supercell.get_supercell(mol, np.eye(3))
-            self.orbitals = pyqmc.orbitals.PBCOrbitalEvaluatorKpoints(
+            self.orbitals = pyqmc.wf.orbitals.PBCOrbitalEvaluatorKpoints(
                 mol, [orb_coeff, orb_coeff], kpts, eval_gto_precision=eval_gto_precision
             )
 

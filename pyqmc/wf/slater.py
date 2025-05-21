@@ -14,8 +14,8 @@
 
 import numpy as np
 import pyqmc.gpu as gpu
-import pyqmc.determinant_tools as determinant_tools
-import pyqmc.orbitals
+import pyqmc.wf.determinant_tools as determinant_tools
+import pyqmc.wf.orbitals
 import pyqmc.pyscftools
 import warnings
 

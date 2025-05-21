@@ -13,7 +13,7 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
-from pyqmc.pbc import enforce_pbc
+from pyqmc.pbc.pbc import enforce_pbc
 
 
 def test_enforce_pbcs():

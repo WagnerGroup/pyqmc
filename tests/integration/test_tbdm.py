@@ -14,11 +14,11 @@
 
 import numpy as np
 from pyscf import gto, scf, lo
-from pyqmc.slater import Slater
-from pyqmc.mc import initial_guess, vmc
-from pyqmc.accumulators import EnergyAccumulator
-from pyqmc.tbdm import TBDMAccumulator, normalize_tbdm
-from pyqmc.obdm import OBDMAccumulator, normalize_obdm
+from pyqmc.wf.slater import Slater
+from pyqmc.method.mc import initial_guess, vmc
+from pyqmc.observables.accumulators import EnergyAccumulator
+from pyqmc.observables.tbdm import TBDMAccumulator, normalize_tbdm
+from pyqmc.observables.obdm import OBDMAccumulator, normalize_obdm
 
 
 ###########################################################

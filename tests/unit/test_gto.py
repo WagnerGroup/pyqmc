@@ -1,8 +1,8 @@
 import pyscf.gto
 import numpy as np
-from pyqmc.pbc import enforce_pbc
-import pyqmc.gto as gto
-import pyqmc.pbcgto as pbcgto
+from pyqmc.pbc.pbc import enforce_pbc
+import pyqmc.wf.numba.gto as gto
+import pyqmc.wf.numba.pbcgto as pbcgto
 
 def _gradient(fval, fgrad, mol=None, delta=1e-5):
     rvec = np.random.randn(500, 3) * 3

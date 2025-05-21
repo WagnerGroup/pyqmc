@@ -14,7 +14,7 @@
 
 import numpy as np
 import h5py
-from pyqmc.accumulators_multiwf import invert_list_of_dicts
+from pyqmc.observables.accumulators_multiwf import invert_list_of_dicts
 import scipy.stats
 
 

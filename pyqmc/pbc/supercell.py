@@ -78,7 +78,7 @@ def get_supercell(cell, S):
 
 
 def make_supercell_jastrow(jastrow, S):
-    from pyqmc.jastrowspin import JastrowSpin
+    from pyqmc.wf.jastrowspin import JastrowSpin
 
     scale = int(np.round(np.linalg.det(S)))
     supercell = get_supercell(jastrow._mol, S)

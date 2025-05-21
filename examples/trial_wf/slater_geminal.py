@@ -2,7 +2,7 @@ from pyscf import gto, scf
 import pyqmc.api as pyq
 from rich import print 
 import numpy as np
-from pyqmc.geminaljastrow import GeminalJastrow
+from pyqmc.wf.geminaljastrow import GeminalJastrow
 """
 Generate a Slater + 2-body Jastrow + geminal wave function for H2. 
 

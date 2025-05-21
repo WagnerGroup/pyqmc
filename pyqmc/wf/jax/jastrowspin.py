@@ -663,7 +663,7 @@ def run_tests(pbc=False, benchmark=False, mad_only=True):
     import seaborn as sns
     import pyscf.gto
     import pyqmc.api as pyq
-    from pyqmc.coord import OpenElectron, PeriodicElectron
+    from pyqmc.configurations.coord import OpenElectron, PeriodicElectron
     import ase.build
     import pyscf.pbc.tools.pyscf_ase as pyscf_ase
     import pyscf.pbc.gto

@@ -13,7 +13,7 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
-from pyqmc.multiplywf import Parameters
+from pyqmc.wf.multiplywf import Parameters
 
 
 class AddWF:

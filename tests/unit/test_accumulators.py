@@ -13,14 +13,14 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
-from pyqmc.accumulators import (
+from pyqmc.observables.accumulators import (
     EnergyAccumulator,
     LinearTransform,
     SqAccumulator,
     SymmetryAccumulator,
 )
-from pyqmc.obdm import OBDMAccumulator
-from pyqmc.tbdm import TBDMAccumulator
+from pyqmc.observables.obdm import OBDMAccumulator
+from pyqmc.observables.tbdm import TBDMAccumulator
 import pyqmc.api as pyq
 import copy
 
@@ -55,7 +55,7 @@ def test_info_functions_mol(LiH_sto3g_rhf):
 
 
 def test_info_functions_pbc(H_pbc_sto3g_krks):
-    from pyqmc.supercell import get_supercell
+    from pyqmc.pbc.supercell import get_supercell
 
     mol, mf = H_pbc_sto3g_krks
     kinds = [0, 1]

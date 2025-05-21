@@ -21,8 +21,8 @@ How to run at various twists in a supercell.
 import numpy as np
 from pyscf.pbc import gto, scf
 import pyqmc.api as pyq
-from pyqmc.supercell import get_supercell
-import pyqmc.twists
+from pyqmc.pbc.supercell import get_supercell
+import pyqmc.pbc.twists
 
 def run_scf(nk):
     cell = gto.Cell()
@@ -54,7 +54,7 @@ if __name__ == "__main__":
     S = np.eye(3) * 2  # 2x2x2 supercell
     supercell = get_supercell(cell, S)
 
-    twist_info = pyqmc.twists.create_supercell_twists(supercell, kmf)
+    twist_info = pyqmc.pbc.twists.create_supercell_twists(supercell, kmf)
     print("Here are the twists available in the 2x2x2 supercell:", twist_info["twists"])
     # you access the twist by index
     wf, to_opt = pyq.generate_wf(supercell, kmf, slater_kws = dict(twist=2))
@@ -62,7 +62,7 @@ if __name__ == "__main__":
 
     S = np.eye(3) * 4  # for a 4x4x4 supercell we will only find one twist available because nk=4
     supercell = get_supercell(cell, S)
-    twist_info = pyqmc.twists.create_supercell_twists(supercell, kmf)
+    twist_info = pyqmc.pbc.twists.create_supercell_twists(supercell, kmf)
     print("Here are the twists available in the 4x4x4 supercell:", twist_info["twists"])
 
 

@@ -41,7 +41,7 @@ class Ewald:
         self.latvec = cell.lattice_vectors()
         self.atom_coords = cell.atom_coords()[np.newaxis]
         self.atom_charges = gpu.cp.asarray(cell.atom_charges())
-        self.dist = pyqmc.distance.MinimalImageDistance(self.latvec)
+        self.dist = pyqmc.configurations.distance.MinimalImageDistance(self.latvec)
         self.cell_area = gpu.cp.linalg.det(self.latvec[:2, :2])
         self.recvec = gpu.cp.linalg.inv(self.latvec).T
         self.set_alpha(alpha_scaling)

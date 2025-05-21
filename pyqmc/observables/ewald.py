@@ -217,7 +217,7 @@ class Ewald:
         if len(self.atom_charges) == 1:
             ion_ion_real = 0
         else:
-            dist = pyqmc.distance.MinimalImageDistance(self.latvec)
+            dist = pyqmc.configurations.distance.MinimalImageDistance(self.latvec)
             ion_distances, ion_inds = dist.dist_matrix(self.atom_coords[np.newaxis])
             ion_distances = gpu.cp.asarray(ion_distances)
             rvec = ion_distances[:, :, np.newaxis, :] + self.lattice_displacements

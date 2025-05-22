@@ -28,7 +28,7 @@ def run_vmc_many(wfs, configs, energy, nreps=1, **kwargs):
 
 
 def hdf_save(hdf_file, weighted, unweighted, attr, configs):
-    import pyqmc.hdftools as hdftools
+    import pyqmc.method.hdftools as hdftools
 
     if hdf_file is not None:
         fulldata = dict(weighted=weighted, unweighted=unweighted)

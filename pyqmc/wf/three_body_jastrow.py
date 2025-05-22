@@ -13,7 +13,7 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
-import pyqmc.func3d as func3d
+import pyqmc.wf.func3d as func3d
 
 
 class ThreeBodyJastrow:

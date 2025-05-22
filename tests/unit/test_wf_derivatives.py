@@ -58,8 +58,8 @@ def run_tests(wf, epos, epsilon):
             testwf.test_wf_pgradient,
         ],
     ):
-        err = [func(wf, epos, delta) for delta in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8]]
-        assert min(err) < epsilon, f"{fname} epsilon {epsilon}"
+        err = [func(wf, epos, delta) for delta in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9]]
+        assert min(err) < epsilon, f"{fname} error {err}"
 
     for fname, func in zip(
         ["gradient_value", "gradient_laplacian"],

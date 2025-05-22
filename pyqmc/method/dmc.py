@@ -346,7 +346,7 @@ def branch(configs, weights, var_trigger_branch=0.05):
 
 
 def dmc_file(hdf_file, data, attr, configs, weights):
-    import pyqmc.hdftools as hdftools
+    import pyqmc.method.hdftools as hdftools
 
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:

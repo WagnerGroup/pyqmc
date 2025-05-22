@@ -14,7 +14,7 @@
 
 import numpy as np
 import pyqmc.gpu as gpu
-import pyqmc.func3d as func3d
+import pyqmc.wf.func3d as func3d
 
 
 class JastrowSpin:

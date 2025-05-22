@@ -18,7 +18,7 @@ import pyqmc.wf.multiplywf as multiplywf
 import pyqmc.wf.addwf as addwf
 import pyqmc.wf.jastrowspin as jastrowspin
 import pyqmc.wf.gps2 as gps2
-import pyqmc.func3d as func3d
+import pyqmc.wf.func3d as func3d
 import pyqmc.gpu as gpu
 import numpy as np
 import h5py

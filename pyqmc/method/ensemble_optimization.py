@@ -16,7 +16,7 @@
 import pyqmc.method.sample_many
 import numpy as np
 import h5py
-from pyqmc import hdftools
+from pyqmc.method import hdftools
 import pyqmc.gpu as gpu
 import os
 

@@ -16,7 +16,7 @@ import numpy as np
 import pyqmc.method.mc as mc
 import scipy.stats
 import pyqmc.method.linemin as linemin
-import pyqmc.hdftools as hdftools
+import pyqmc.method.hdftools as hdftools
 import h5py
 
 """

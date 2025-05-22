@@ -23,7 +23,7 @@ import logging
 
 
 def opt_hdf(hdf_file, data, attr, configs, parameters):
-    import pyqmc.hdftools as hdftools
+    import pyqmc.method.hdftools as hdftools
 
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:

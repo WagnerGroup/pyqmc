@@ -18,7 +18,7 @@ import os
 import numpy as np
 import h5py
 import logging
-import pyqmc.hdftools as hdftools
+import pyqmc.method.hdftools as hdftools
 import time
 
 def initial_guess(mol, nconfig, r=1.0):

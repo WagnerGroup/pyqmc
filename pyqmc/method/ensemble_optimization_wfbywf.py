@@ -267,7 +267,7 @@ def optimize_ensemble(
                 wf_start = hdf['wavefunction'][-1]
             configs.load_hdf(hdf)
     else:
-        _, configs = pyqmc.mc.vmc(wfs[0], configs, client=client, npartitions=npartitions, **vmc_kwargs)
+        _, configs = pyqmc.method.mc.vmc(wfs[0], configs, client=client, npartitions=npartitions, **vmc_kwargs)
 
     for i in range(iteration_offset, max_iterations):
         for wfi in range(wf_start, nwf):
@@ -289,7 +289,7 @@ def optimize_ensemble(
                     print("Normalization step", norm.diagonal())
                 renormalize(wfs, norm.diagonal(), pivot=0)
 
-                data_sample1, configs = pyqmc.mc.vmc(
+                data_sample1, configs = pyqmc.method.mc.vmc(
                     wf, configs, accumulators={'': transform.onewf()}, client=client, npartitions=npartitions, **vmc_kwargs
                 )
 

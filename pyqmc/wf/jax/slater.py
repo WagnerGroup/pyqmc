@@ -268,7 +268,9 @@ def create_wf_evaluator(mol, mf, det_tol=1e-9, nimages=2, mc = None):
     laplacian_down = partial(testvalue_down, gto_1e_vgl, expansion)
 
     # pgradient is derivative of value with respect to ci_coeff and mo_coeff 
-    pgradient = jax.jacobian(value, argnums=0)
+    def value_logdet(params, xyz):
+        return value(params, xyz)[1]
+    pgradient = jax.jacobian(value_logdet, argnums=0)
 
     # these are for batches in which we want to evaluate the wavefunction at multiple positions
     _testval_up_batch = jax.vmap(_testvalue_up, in_axes = (None, None, None, None, 0), out_axes = 0)
@@ -290,15 +292,21 @@ def create_wf_evaluator(mol, mf, det_tol=1e-9, nimages=2, mc = None):
                      for f in testval_funcs)
     
     
-    value_func = [value, pgradient]
-    value_func = (jax.jit(
+    value_func = [value]
+    value_func = [jax.jit(
                 jax.vmap(f, in_axes=(None, #parameters
                                              0), #xyz
                                              out_axes=(0,0,
                                                        SlaterState(0,0,0,0), 
                                                        SlaterState(0,0,0,0)))
                 )
-                for f in value_func)
+                for f in value_func]
+    value_func.append(jax.jit(
+                jax.vmap(pgradient, in_axes=(None, #parameters
+                                             0), #xyz
+                                             out_axes=0)
+                        )
+                )
 
     # The vmaps here are over configurations
     return det_params, expansion, value_func, testval_funcs
@@ -491,7 +499,7 @@ class JAXSlater:
     
     def pgradient(self):
         xyz = jnp.array(self.xyz)
-        grads =  self._pgradient(self.parameters.jax_parameters, xyz)[1] # sign, log, dets_up, dets_down
+        grads =  self._pgradient(self.parameters.jax_parameters, xyz)  #[1] # sign, log, dets_up, dets_down
         return {'det_coeff': np.array(grads[0]), 
                 'mo_coeff_alpha': np.array(grads[1]), 
                 'mo_coeff_beta': np.array(grads[2])}

@@ -27,6 +27,7 @@ import h5py
 def generate_slater(
     mol,
     mf,
+    jax=False,
     optimize_determinants=False,
     optimize_orbitals=False,
     optimize_zeros=True,
@@ -40,7 +41,11 @@ def generate_slater(
     :parameter boolean optimize_zeros: optimize coefficients that are zero in the mean-field object
     :returns: slater, to_opt
     """
-    wf = slater.Slater(mol, mf, **kwargs)
+    if jax:
+        import pyqmc.wf.jax.slater
+        wf = pyqmc.wf.jax.slater.JAXSlater(mol, mf, **kwargs)
+    else:
+        wf = slater.Slater(mol, mf, **kwargs)
     to_opt = {}
     to_opt["det_coeff"] = np.zeros_like(wf.parameters["det_coeff"], dtype=bool)
     if optimize_determinants:
@@ -88,7 +93,7 @@ def default_jastrow_basis(mol, ion_cusp=False, na=4, nb=3, rcut=None, cusp_gamma
     return abasis, bbasis
 
 
-def generate_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None, cusp_gamma = None, beta_a = 0.2, beta_b = 0.5):
+def generate_jastrow(mol, jax=False, ion_cusp=None, na=4, nb=3, rcut=None, cusp_gamma = None, beta_a = 0.2, beta_b = 0.5):
     """
     Default 2-body jastrow from QWalk,
 
@@ -108,13 +113,17 @@ def generate_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None, cusp_gamma = Non
     else:
         assert isinstance(ion_cusp, list)
 
-    abasis, bbasis = default_jastrow_basis(mol, len(ion_cusp) > 0, na, nb, rcut, cusp_gamma, beta_a, beta_b)
-    jastrow = jastrowspin.JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
-    if len(ion_cusp) > 0:
-        coefs = mol.atom_charges().copy()
-        coefs[[l[0] not in ion_cusp for l in mol._atom]] = 0.0
-        jastrow.parameters["acoeff"][:, 0, :] = gpu.cp.asarray(coefs[:, None])
-    jastrow.parameters["bcoeff"][0, [0, 1, 2]] = gpu.cp.array([-0.25, -0.50, -0.25])
+    if jax:
+        import pyqmc.wf.jax.jastrowspin
+        jastrow = pyqmc.wf.jax.jastrowspin.JAXJastrowSpin(mol, ion_cusp, na, nb, rcut, cusp_gamma, beta_a, beta_b)
+    else:
+        abasis, bbasis = default_jastrow_basis(mol, len(ion_cusp) > 0, na, nb, rcut, cusp_gamma, beta_a, beta_b)
+        jastrow = jastrowspin.JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
+        if len(ion_cusp) > 0:
+            coefs = mol.atom_charges().copy()
+            coefs[[l[0] not in ion_cusp for l in mol._atom]] = 0.0
+            jastrow.parameters["acoeff"][:, 0, :] = gpu.cp.asarray(coefs[:, None])
+        jastrow.parameters["bcoeff"][0, [0, 1, 2]] = gpu.cp.array([-0.25, -0.50, -0.25])
 
     to_opt = {"acoeff": np.ones(jastrow.parameters["acoeff"].shape).astype(bool)}
     if len(ion_cusp) > 0:
@@ -160,7 +169,7 @@ def generate_sj(mol, mf, optimize_orbitals=False, twist=0, **jastrow_kws):
 
 
 def generate_wf(
-    mol, mf, jastrow=generate_jastrow, jastrow_kws=None, slater_kws=None, mc=None
+    mol, mf, jastrow=generate_jastrow, jastrow_kws=None, slater_kws=None, mc=None, jax=False
 ):
     """
     Generate a wave function from pyscf objects.
@@ -173,7 +182,8 @@ def generate_wf(
     :param jastrow_kws: a dictionary of keyword arguments for the jastrow function, or a list of those functions.
     :param slater_kws: a dictionary of keyword arguments for the generate_slater function
     :param mc: A CAS object (optional) for multideterminant wave functions.
-
+    :param jax: a boolean flag for using JAX implementation of Slater and Jastrow objects.
+    
     :return: wf
     :rtype: A (multi) Slater-Jastrow wave function object
     :return: to_opt
@@ -189,9 +199,9 @@ def generate_wf(
         jastrow = [jastrow]
         jastrow_kws = [jastrow_kws]
 
-    wf1, to_opt1 = generate_slater(mol, mf, mc=mc, **slater_kws)
+    wf1, to_opt1 = generate_slater(mol, mf, jax=jax, mc=mc, **slater_kws)
 
-    pack = [jast(mol, **kw) for jast, kw in zip(jastrow, jastrow_kws)]
+    pack = [jast(mol, jax, **kw) for jast, kw in zip(jastrow, jastrow_kws)]
     wfs = [p[0] for p in pack]
     to_opts = [p[1] for p in pack]
     wf = multiplywf.MultiplyWF(wf1, *wfs)

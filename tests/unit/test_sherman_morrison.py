@@ -13,8 +13,8 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
-from pyqmc.slater import sherman_morrison_row
-from pyqmc.slater import sherman_morrison_ms
+from pyqmc.wf.slater import sherman_morrison_row
+from pyqmc.wf.slater import sherman_morrison_ms
 
 
 def test_sherman_morrison():

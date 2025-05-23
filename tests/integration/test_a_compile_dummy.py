@@ -20,8 +20,8 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 import numpy as np
 import pyqmc.api as pyq
-from pyqmc.accumulators import EnergyAccumulator
-from pyqmc.slater import Slater
+from pyqmc.observables.accumulators import EnergyAccumulator
+from pyqmc.wf.slater import Slater
 
 
 def test_a_compile_dummy(LiH_ccecp_rhf):

@@ -221,7 +221,7 @@ def li_cubic_ccecp():
         #mf = mf.density_fit()
         #mf = pyscf.pbc.dft.multigrid.multigrid(mf)
         mf = mf.run()
-    cell, mf = pyq.recover_pyscf(f"{THIS_DIR}/files/li_cubic_ccecp.hdf5")
+    cell, mf = pyq.recover_pyscf(f"{THIS_DIR}/files/li_cubic_ccecp.hdf5", cancel_outputs=False)
     return cell, mf
 
 
@@ -247,7 +247,7 @@ def diamond_primitive():
         mf.xc='lda,vwn'
 
         mf.kernel()
-    cell, mf = pyq.recover_pyscf(f"{THIS_DIR}/files/diamond_primitive.hdf5")
+    cell, mf = pyq.recover_pyscf(f"{THIS_DIR}/files/diamond_primitive.hdf5", cancel_outputs=False)
     return cell, mf
 
 
@@ -271,7 +271,7 @@ def h_noncubic_sto3g_triplet():
         mf.xc = "pbe"
         #mf = pyscf.pbc.dft.multigrid.multigrid(mf)
         mf = mf.run()
-    mol, mf = pyq.recover_pyscf(f"{THIS_DIR}/files/h_noncubic_sto3g_triplet.hdf5")
+    mol, mf = pyq.recover_pyscf(f"{THIS_DIR}/files/h_noncubic_sto3g_triplet.hdf5", cancel_outputs=False)
     return mol, mf
 
 
@@ -295,7 +295,7 @@ def h_pbc_casscf():
         #mf = pyscf.pbc.dft.multigrid.multigrid(mf)
         mf = mf.run()
         print(mf.mo_occ)
-    mol, mf = pyq.recover_pyscf(f"{THIS_DIR}/files/h_pbc_casscf.hdf5")
+    mol, mf = pyq.recover_pyscf(f"{THIS_DIR}/files/h_pbc_casscf.hdf5", cancel_outputs=False)
     mc = pyscf.mcscf.CASSCF(mf, ncas=4, nelecas=(1, 1))
     mc.kernel()
     return mol, mf, mc

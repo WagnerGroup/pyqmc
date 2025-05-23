@@ -12,21 +12,21 @@
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
-import pyqmc.obdm as obdm
+import pyqmc.observables.obdm as obdm
 import pyqmc.wftools as wftools
 import pyqmc.pyscftools as pyscftools
-import pyqmc.supercell as supercell
-import pyqmc.linemin as linemin
-import pyqmc.optimize_ortho as optimize_ortho
-import pyqmc.dmc as dmc
-import pyqmc.mc
+import pyqmc.pbc.supercell as supercell
+import pyqmc.method.linemin as linemin
+import pyqmc.method.optimize_ortho as optimize_ortho
+import pyqmc.method.dmc as dmc
+import pyqmc.method.mc
 import pyqmc.reblock
 import numpy as np
 import h5py
 import scipy.stats
 import pandas as pd
 import copy
-import pyqmc.accumulators
+import pyqmc.observables.accumulators
 import os
 
 
@@ -104,10 +104,10 @@ def generate_accumulators(
     if energy:
         if "energy" in acc.keys():
             raise Exception("Found energy in extra_accumulators and energy is True")
-        acc["energy"] = pyqmc.accumulators.EnergyAccumulator(mol)
+        acc["energy"] = pyqmc.observables.accumulators.EnergyAccumulator(mol)
     if rdm1:
         if hasattr(mol, "a"):
-            from pyqmc.twists import create_supercell_twists
+            from pyqmc.pbc.twists import create_supercell_twists
 
             kinds = create_supercell_twists(mol, mf)["primitive_ks"][twist]
             kpts = mf.kpts[kinds]
@@ -156,7 +156,7 @@ def VMC(
         accumulators=accumulators,
     )
 
-    pyqmc.mc.vmc(wf, configs, accumulators=acc, **vmc_kws)
+    pyqmc.method.mc.vmc(wf, configs, accumulators=acc, **vmc_kws)
 
 
 def DMC(
@@ -216,9 +216,9 @@ def initialize_qmc_objects(
     if load_parameters is not None:
         wftools.read_wf(wf, load_parameters)
 
-    configs = pyqmc.mc.initial_guess(mol, nconfig)
+    configs = pyqmc.method.mc.initial_guess(mol, nconfig)
     if opt_wf:
-        acc = pyqmc.accumulators.gradient_generator(
+        acc = pyqmc.observables.accumulators.gradient_generator(
             mol, wf, to_opt, nodal_cutoff=nodal_cutoff
         )
     else:

@@ -13,9 +13,9 @@
 # copies or substantial portions of the Software.
 
 from pyscf import gto, scf
-from pyqmc.mc import vmc, initial_guess
-from pyqmc.slater import Slater
-from pyqmc.accumulators import EnergyAccumulator
+from pyqmc.method.mc import vmc, initial_guess
+from pyqmc.wf.slater import Slater
+from pyqmc.observables.accumulators import EnergyAccumulator
 import numpy as np
 import pandas as pd
 

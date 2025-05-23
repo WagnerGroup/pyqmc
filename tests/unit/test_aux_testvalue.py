@@ -24,14 +24,14 @@ from pyqmc.api import (
     initial_guess,
 )
 from pyqmc.gpu import cp, asnumpy
-import pyqmc.testwf as testwf
+import pyqmc.wf.testwf as testwf
 import pytest
-from pyqmc.slater import Slater
-from pyqmc.multiplywf import MultiplyWF
-from pyqmc.addwf import AddWF
-from pyqmc.geminaljastrow import GeminalJastrow
+from pyqmc.wf.slater import Slater
+from pyqmc.wf.multiplywf import MultiplyWF
+from pyqmc.wf.addwf import AddWF
+from pyqmc.wf.geminaljastrow import GeminalJastrow
 from pyqmc.wftools import generate_jastrow,  default_jastrow_basis
-from pyqmc.three_body_jastrow import ThreeBodyJastrow
+from pyqmc.wf.three_body_jastrow import ThreeBodyJastrow
 
 
 def test_testvalue_aux(LiH_ccecp_rhf, epsilon=1e-5, nconf=10):

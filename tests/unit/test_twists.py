@@ -13,13 +13,13 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
-import pyqmc.twists
-import pyqmc.supercell
+import pyqmc.pbc.twists
+import pyqmc.pbc.supercell
 
 
 def run_tests(cell, mf, S, n):
-    cell = pyqmc.supercell.get_supercell(cell, S)
-    twists = pyqmc.twists.create_supercell_twists(cell, mf)
+    cell = pyqmc.pbc.supercell.get_supercell(cell, S)
+    twists = pyqmc.pbc.twists.create_supercell_twists(cell, mf)
     print(twists)
     assert (
         twists["twists"].shape[0] == n

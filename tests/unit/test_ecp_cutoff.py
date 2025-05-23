@@ -14,10 +14,10 @@
 
 import pandas as pd
 from pyscf import gto, scf, mcscf
-from pyqmc.mc import initial_guess
-from pyqmc.multiplywf import MultiplyWF
-from pyqmc.accumulators import EnergyAccumulator
-from pyqmc.slater import Slater
+from pyqmc.method.mc import initial_guess
+from pyqmc.wf.multiplywf import MultiplyWF
+from pyqmc.observables.accumulators import EnergyAccumulator
+from pyqmc.wf.slater import Slater
 from pyqmc.wftools import generate_jastrow
 import numpy as np
 import time

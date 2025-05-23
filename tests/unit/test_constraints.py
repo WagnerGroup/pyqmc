@@ -14,7 +14,7 @@
 
 import numpy as np
 import pyqmc.api as pyq
-from pyqmc.accumulators import LinearTransform
+from pyqmc.observables.accumulators import LinearTransform
 import copy
 
 

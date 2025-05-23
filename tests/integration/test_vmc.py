@@ -19,11 +19,11 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
 import pandas as pd
-from pyqmc.mc import vmc, initial_guess
+from pyqmc.method.mc import vmc, initial_guess
 from pyscf import gto, scf
 from pyqmc.reblock import reblock
-from pyqmc.slater import Slater
-from pyqmc.accumulators import EnergyAccumulator
+from pyqmc.wf.slater import Slater
+from pyqmc.observables.accumulators import EnergyAccumulator
 import pytest
 
 

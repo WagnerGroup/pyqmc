@@ -14,9 +14,11 @@
 
 import numpy as np
 import pyqmc.api as pyq
-from pyqmc import wftools, slater
-from pyqmc import optimize_ortho as oo
+from pyqmc import wftools
+from pyqmc.method import optimize_ortho as oo
 import copy
+
+from pyqmc.wf import slater
 
 
 def numerical_gradient(wfs, configs, pgrad, deltas=(1e-5,)):

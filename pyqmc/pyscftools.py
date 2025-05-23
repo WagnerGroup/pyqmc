@@ -19,10 +19,10 @@ import pyscf.fci
 import h5py
 import json
 import numpy as np
-import pyqmc.determinant_tools as determinant_tools
-import pyqmc.orbitals as orbitals
-import pyqmc.supercell as supercell
-import pyqmc.twists as twists
+import pyqmc.wf.determinant_tools as determinant_tools
+import pyqmc.wf.orbitals as orbitals
+import pyqmc.pbc.supercell as supercell
+import pyqmc.pbc.twists as twists
 
 
 def recover_pyscf(chkfile, ci_checkfile=None, cancel_outputs=True):

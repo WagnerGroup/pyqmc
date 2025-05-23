@@ -12,13 +12,13 @@
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
-from pyqmc import three_body_jastrow
-import pyqmc.slater as slater
-import pyqmc.multiplywf as multiplywf
-import pyqmc.addwf as addwf
-import pyqmc.jastrowspin as jastrowspin
-import pyqmc.gps2 as gps2
-import pyqmc.func3d as func3d
+from pyqmc.wf import three_body_jastrow
+import pyqmc.wf.slater as slater
+import pyqmc.wf.multiplywf as multiplywf
+import pyqmc.wf.addwf as addwf
+import pyqmc.wf.jastrowspin as jastrowspin
+import pyqmc.wf.gps2 as gps2
+import pyqmc.wf.func3d as func3d
 import pyqmc.gpu as gpu
 import numpy as np
 import h5py

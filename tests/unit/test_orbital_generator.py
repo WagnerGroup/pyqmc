@@ -13,15 +13,15 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
-import pyqmc.testwf as testwf
+import pyqmc.wf.testwf as testwf
 from pyqmc.gpu import cp, asnumpy
-from pyqmc.slater import Slater
-from pyqmc.multiplywf import MultiplyWF
-from pyqmc.addwf import AddWF
-from pyqmc.geminaljastrow import GeminalJastrow
+from pyqmc.wf.slater import Slater
+from pyqmc.wf.multiplywf import MultiplyWF
+from pyqmc.wf.addwf import AddWF
+from pyqmc.wf.geminaljastrow import GeminalJastrow
 from pyqmc.wftools import generate_jastrow
 import pyqmc.api as pyq
-from pyqmc.three_body_jastrow import ThreeBodyJastrow
+from pyqmc.wf.three_body_jastrow import ThreeBodyJastrow
 from pyqmc.wftools import default_jastrow_basis
 import pytest
 

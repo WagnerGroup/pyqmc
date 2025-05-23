@@ -15,7 +15,7 @@
 import numpy as np
 import pandas as pd
 import pyqmc.api as pyq
-from pyqmc.slater import Slater
+from pyqmc.wf.slater import Slater
 from pyscf.pbc import gto, scf
 from pyscf.pbc.dft.multigrid import multigrid
 from pyscf.scf.addons import remove_linear_dep_

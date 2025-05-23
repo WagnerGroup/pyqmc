@@ -20,7 +20,7 @@ using CASCI to generate the initial wave functions.
 from pyscf import gto, scf, mcscf
 import h5py
 import pyqmc.api as pyq
-import pyqmc.accumulators
+import pyqmc.observables.accumulators
 from rich import print
 import os
 import copy
@@ -69,7 +69,7 @@ def run_ensemble(
 ):
     """
     """
-    from pyqmc.ensemble_optimization_wfbywf import optimize_ensemble, StochasticReconfigurationWfbyWf
+    from pyqmc.method.ensemble_optimization_wfbywf import optimize_ensemble, StochasticReconfigurationWfbyWf
 
     mol, mf, mc = pyq.recover_pyscf(
         scf_checkfile, ci_checkfile, cancel_outputs=False
@@ -92,7 +92,7 @@ def run_ensemble(
                 if 'wf2' in k:
                     wf.parameters[k] = f['wf'][k][()]
         wfs.append(wf)
-        sr_accumulator.append([StochasticReconfigurationWfbyWf(energy, pyqmc.accumulators.LinearTransform(wf.parameters, to_opt))])
+        sr_accumulator.append([StochasticReconfigurationWfbyWf(energy, pyqmc.observables.accumulators.LinearTransform(wf.parameters, to_opt))])
                 
     configs = pyq.initial_guess(mol, nconfig)
     

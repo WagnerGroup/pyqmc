@@ -21,7 +21,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
 import pytest
-from pyqmc.distance import MinimalImageDistance
+from pyqmc.configurations.distance import MinimalImageDistance
 
 
 def test():

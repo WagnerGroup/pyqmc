@@ -11,7 +11,12 @@
 #
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
+"""
+Real-space quantum Monte Carlo (QMC) methods for electronic structure calculations.
+This package provides tools for performing variational Monte Carlo (VMC) and
+diffusion Monte Carlo (DMC) simulations, including wavefunction optimization, and excited state optimization."""
+
 
 name = "pyqmc"
 
-__version__ = "0.6.1"
+__version__ = "0.8.0"

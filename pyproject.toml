@@ -1,7 +1,6 @@
 [project]
 name = "pyqmc"
-version = "0.7.0"
-description = "Real-space quantum Monte Carlo"
+dynamic = ["version", "description"]
 authors = [
     {name = "Lucas Wagner",email = "lkwagner@illinois.edu"}
 ]
@@ -17,5 +16,5 @@ dependencies = [
 
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"

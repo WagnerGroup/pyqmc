@@ -36,8 +36,9 @@ class ECPAccumulator:
         self._atomic_coordinates = mol.atom_coords()
         self._ecp = mol._ecp
         self._atom_names = [atom[0] for atom in mol._atom]
-        functors = [generate_ecp_functors(mol, at_name) for at_name in self._atom_names]
-        self._vl_evaluator = partial(evaluate_vl, functors, self.threshold, self.naip)
+        self.functors = [generate_ecp_functors(mol, at_name) for at_name in self._atom_names]
+        self._vl_evaluator = partial(evaluate_vl, self.functors, self.threshold, self.naip)
+        print(self.functors)
 
 
     def __call__(self, configs, wf) -> dict:
@@ -50,31 +51,28 @@ class ECPAccumulator:
         # gather energies and distances
 
         for e in range(configs.configs.shape[1]):
-            start_time = time.perf_counter()
-            atomic_info = gather_atomic(self._atomic_coordinates, configs, e)
+            atomic_info, v_local = gather_atomic(self._atomic_coordinates, configs, e, self.functors)
             #print("e, atomic_info", e, atomic_info)
-            midmidtime = time.perf_counter()
             move_info = self._vl_evaluator(atomic_info)
             #print("move_info", move_info)
             # get the electronic coordinates by moving the electron to the atom and then to the integration point
             # this gives us PBCs correctly
-            epos_rot = (configs.configs[:, e, :] - atomic_info.r_ea_vec)[:, np.newaxis] + move_info.r_ea_i
+            epos_rot = (configs.configs[:, e, :] \
+                        - atomic_info.r_ea_vec)[:, np.newaxis] \
+                        + move_info.r_ea_i
             epos = configs.make_irreducible(e, epos_rot, move_info.mask)
-            mid_time = time.perf_counter()
+
+            ecp_val += v_local
+            # important to do the local sum before skipping evaluation 
             if move_info.mask.sum() == 0:
                 continue
             # evaluate the wave function ratio
             ratio = wf.testvalue(e, epos, move_info.mask)[0]
-            ratio_time = time.perf_counter()
-            #print("ratio time", ratio_time - mid_time, "move_info time", mid_time - midmidtime, "atomic_info time", midmidtime - start_time)
+
             # compute the ECP value
             # n: nconf, a: aip, l: angular momentum channel
-            #print(ratio.shape, move_info.P_l.shape, move_info.v_l.shape)
             ecp_val[move_info.mask] += np.einsum("na,nal, nl->n", ratio, move_info.P_l[move_info.mask], move_info.v_l[move_info.mask])
-            ecp_val += move_info.v_l[:, -1]  # local part
 
-        # collect which ratios to evaluate
-        # sum and return 
         return ecp_val
 
 
@@ -110,7 +108,7 @@ class _AtomicInfo(NamedTuple):
     r_ea_vec: np.ndarray
     assigned_atom: np.ndarray
 
-def gather_atomic(atomic_coordinates, configs, e):
+def gather_atomic(atomic_coordinates, configs, e, vl_evaluator):
     """
     :parameter atomic_coordinates: atomic coordinates
     :parameter configs: Configs object
@@ -119,11 +117,17 @@ def gather_atomic(atomic_coordinates, configs, e):
     """
     distances = configs.dist.dist_i(atomic_coordinates[np.newaxis,:,:], configs.configs[:, e, :])
     dist2 = np.sum(distances**2, axis=-1)
+    dist = np.sqrt(dist2)
+    v_local = np.zeros(distances.shape[0])
+    for atom, vl in enumerate(vl_evaluator):
+        if vl is None or -1 not in vl:
+            continue
+        v_local += vl[-1](dist[:, atom])  # local part
     # Reduce to (nconf, 3) array for closest atom
     assigned_atom = np.argmin(dist2, axis=1)
     r_ea_vec = distances[np.arange(distances.shape[0]),assigned_atom,:]
     r_ea = np.linalg.norm(r_ea_vec, axis=-1)
-    return _AtomicInfo(r_ea, r_ea_vec, assigned_atom)
+    return _AtomicInfo(r_ea, r_ea_vec, assigned_atom), v_local
 
 
 class _MoveInfo(NamedTuple):
@@ -157,6 +161,7 @@ def evaluate_vl(vl_evaluator, # list of functors [at][l]
         #print(atom, vl.keys())
         nl = len(vl)
         P_l[m_atom,:,:nl], r_ea_i[m_atom,:,:] = get_P_l(at_info.r_ea[m_atom], at_info.r_ea_vec[m_atom], vl.keys(), naip)
+        
 
     #blank = np.arange(nconf)
     return _MoveInfo(r_ea_i,

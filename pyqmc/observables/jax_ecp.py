@@ -24,7 +24,7 @@ from functools import partial
 from pyqmc.observables.eval_ecp import get_P_l, ecp_mask, rnExp
 
 class ECPAccumulator:
-    def __init__(self, mol, threshold=10, naip=6, stochastic_rotation=True, nselect = 6):
+    def __init__(self, mol, threshold=10, naip=6, stochastic_rotation=True, nselect_deterministic = 6, nselect_random=4):
         """
         :parameter mol: PySCF molecule object
         :parameter float threshold: threshold for accepting nonlocal moves
@@ -39,7 +39,8 @@ class ECPAccumulator:
         self._atom_names = [atom[0] for atom in mol._atom]
         self.functors = [generate_ecp_functors(mol, at_name) for at_name in self._atom_names]
         self._vl_evaluator = partial(evaluate_vl, self.functors, self.threshold, self.naip)
-        self.nselect = nselect
+        self.nselect_deterministic = nselect_deterministic
+        self.nselect_random = nselect_random
         self.stochastic_rotation = stochastic_rotation
 
 
@@ -54,7 +55,7 @@ class ECPAccumulator:
 
         for e in range(configs.configs.shape[1]):
             move_info, local_part = self._vl_evaluator(self._atomic_coordinates, configs, e, self.stochastic_rotation)
-            selected_moves = downselect_move_info(move_info, self.nselect)
+            selected_moves = downselect_move_info(move_info, self.nselect_deterministic, self.nselect_random)
 
             epos_rot = (configs.configs[:, e, :][:,np.newaxis,:] \
                         - selected_moves.r_ea_vec) \
@@ -160,7 +161,7 @@ def evaluate_vl(vl_evaluator, # list of functors [at][l]
                      v_l,
     ), local_part
 
-def downselect_move_info(move_info: _MoveInfo, nselect: int) -> _MoveInfo:
+def downselect_move_info(move_info: _MoveInfo, nselect_deterministic: int, nselect_random) -> _MoveInfo:
     """
     Downselect the move_info to nselect points.
     :parameter move_info: _MoveInfo object
@@ -168,17 +169,29 @@ def downselect_move_info(move_info: _MoveInfo, nselect: int) -> _MoveInfo:
     :returns: a new _MoveInfo object with only nselect points
     """
     nconf, npoints, nl = move_info.v_l.shape
-    if nselect >= npoints:
+    if nselect_random+nselect_deterministic >= npoints:
         return move_info  # no downselection needed
 
     normalized_probability = move_info.probability / np.sum(move_info.probability, axis=1, keepdims=True)
-    cdf = np.cumsum(normalized_probability, axis=1)
-    print('cdf', cdf)
-    r = np.random.random((nconf, nselect))
+
     # Find indices where r is less than the cumulative distribution function
-    indices = np.array([ np.searchsorted(cdf[i], r[i]) for i in range(nconf) ])
-    print("indices", indices)
-    prob_selected = nselect*np.take_along_axis(normalized_probability, indices, axis=1)
+
+    indices_deterministic = np.argsort(normalized_probability, axis=1)[:,-nselect_deterministic:]
+
+
+    for i in range(nconf):
+        normalized_probability[i,indices_deterministic[i]] = 0.0
+    normalized_probability = normalized_probability/np.sum(normalized_probability, axis=1, keepdims=True)
+    cdf = np.cumsum(normalized_probability, axis=1)
+    r = np.random.random((nconf, nselect_random))    
+    indices_random = np.array([ np.searchsorted(cdf[i], r[i]) for i in range(nconf) ])
+
+    indices = np.concatenate((indices_deterministic, indices_random), axis=1)
+
+    for i in range(nconf):
+        normalized_probability[i,indices_deterministic[i]] = 1.0/nselect_random
+    prob_selected = nselect_random*np.take_along_axis(normalized_probability, indices, axis=1)
+
     return _MoveInfo(
         r_ea_vec= np.take_along_axis(move_info.r_ea_vec, indices[:, :, np.newaxis], axis=1),
         r_ea_i=np.take_along_axis(move_info.r_ea_i, indices[:, :, np.newaxis], axis=1),

@@ -7,7 +7,7 @@ import pyqmc.api as pyq
 def evaluate_local_energy_variance(mol, wf, configs, use_old_ecp):
     # Evaluates Var(H*Psi(R)/Psi(R)) using <nconfig> different R
     eV_per_Har = 27.2114
-    enacc = pyq.EnergyAccumulator(mol, use_old_ecp=use_old_ecp , threshold = 1e8)
+    enacc = pyq.EnergyAccumulator(mol, use_old_ecp=use_old_ecp , threshold = -1)
     ens = enacc(configs, wf)
     return ens['ecp']
 

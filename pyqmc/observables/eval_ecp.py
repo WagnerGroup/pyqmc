@@ -135,9 +135,12 @@ def ecp_mask(v_l, threshold):
     """
     :returns: a mask for configurations sized nconf based on values of v_l. Also returns acceptance probabilities
     """
-    l = 2 * np.arange(v_l.shape[1] - 1) + 1
-    prob = np.dot(np.abs(v_l[:, :-1]), threshold * (2 * l + 1))
-    prob = np.minimum(1, prob)
+    if threshold > 0:
+        l = 2 * np.arange(v_l.shape[1] - 1) + 1
+        prob = np.dot(np.abs(v_l[:, :-1]), threshold * (2 * l + 1))
+        prob = np.minimum(1, prob)
+    else:
+        prob = np.ones(v_l.shape[0])
     accept = prob > np.random.random(size=prob.shape)
     return accept, prob
 

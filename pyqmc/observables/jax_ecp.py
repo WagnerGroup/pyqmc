@@ -38,7 +38,7 @@ class ECPAccumulator:
         self._atom_names = [atom[0] for atom in mol._atom]
         self.functors = [generate_ecp_functors(mol, at_name) for at_name in self._atom_names]
         self._vl_evaluator = partial(evaluate_vl, self.functors, self.threshold, self.naip)
-        self.nselect = 12
+        self.nselect = 6
         print(self.functors)
 
 
@@ -55,14 +55,14 @@ class ECPAccumulator:
             #atomic_info, v_local = gather_atomic(self._atomic_coordinates, configs, e, self.functors)
             #print("e, atomic_info", e, atomic_info)
             move_info, local_part = self._vl_evaluator(self._atomic_coordinates, configs, e)
-            selected_moves = downselect_move_info(move_info, self.nselect)
+            #selected_moves = downselect_move_info(move_info, self.nselect)
+            selected_moves = move_info
 
             epos_rot = (configs.configs[:, e, :][:,np.newaxis,:] \
                         - selected_moves.r_ea_vec) \
                         + selected_moves.r_ea_i
             epos = configs.make_irreducible(e, epos_rot)
 
-            print(move_info.v_l[:,-1])
             ecp_val += local_part # sum the local pat
             # important to do the local sum before skipping evaluation 
             if move_info.probability.sum() == 0:
@@ -177,11 +177,12 @@ def downselect_move_info(move_info, nselect) -> _MoveInfo:
     r = np.random.random((nconf, nselect))
     # Find indices where r is less than the cumulative distribution function
     indices = np.array([ np.searchsorted(cdf[i], r[i]) for i in range(nconf) ])
+    prob_selected = np.take_along_axis(normalized_probability, indices, axis=1)
     return _MoveInfo(
         r_ea_vec= np.take_along_axis(move_info.r_ea_vec, indices[:, :, np.newaxis], axis=1),
         r_ea_i=np.take_along_axis(move_info.r_ea_i, indices[:, :, np.newaxis], axis=1),
         probability=np.take_along_axis(move_info.probability, indices, axis=1),
-        v_l=np.take_along_axis(move_info.v_l, indices[:,:,np.newaxis], axis=1),
+        v_l=np.take_along_axis(move_info.v_l, indices[:,:,np.newaxis], axis=1)/prob_selected[:,:,np.newaxis], 
     )
 
 def ecp_mask(v_l, threshold):

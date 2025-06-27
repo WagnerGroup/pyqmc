@@ -224,7 +224,7 @@ def P_l(x, l):
         raise NotImplementedError(f"Legendre functions for l>4 not implemented {l}")
 
 
-def get_P_l(r_ea, r_ea_vec, l_list, naip=None):
+def get_P_l(r_ea, r_ea_vec, l_list, naip=None, stochastic=True):
     r"""The factor :math:`(2l+1)` and the quadrature weights are included.
 
     :parameter r_ea: distances of electron e and atom a
@@ -238,7 +238,7 @@ def get_P_l(r_ea, r_ea_vec, l_list, naip=None):
     if naip is None:
         naip = 6 if len(l_list) <= 2 else 12
     nconf = r_ea.shape[0]
-    weights, rot_vec = get_rot(nconf, naip)
+    weights, rot_vec = get_rot(nconf, naip, stochastic)
 
     r_ea_i = r_ea[:, np.newaxis, np.newaxis] * rot_vec  # nmask x naip x 3
     rdotR = np.einsum("ik,ijk->ij", r_ea_vec, r_ea_i)
@@ -251,7 +251,7 @@ def get_P_l(r_ea, r_ea_vec, l_list, naip=None):
     return P_l_val, r_ea_i
 
 
-def get_rot(nconf, naip, stochastic = False):
+def get_rot(nconf, naip, stochastic = True):
     """
     :parameter int nconf: number of configurations
     :parameter int naip: number of auxiliary integration points

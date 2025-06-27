@@ -251,7 +251,7 @@ def get_P_l(r_ea, r_ea_vec, l_list, naip=None):
     return P_l_val, r_ea_i
 
 
-def get_rot(nconf, naip):
+def get_rot(nconf, naip, stochastic = False):
     """
     :parameter int nconf: number of configurations
     :parameter int naip: number of auxiliary integration points
@@ -268,7 +268,10 @@ def get_rot(nconf, naip):
     if naip not in quadrature_grid.keys():
         raise ValueError(f"Possible AIPs are one of {quadrature_grid.keys()}")
     points, weights = quadrature_grid[naip]
-    rot_vec = np.einsum("jkl,ik->jil", rot, points)
+    if stochastic:
+        rot_vec = np.einsum("jkl,ik->jil", rot, points)
+    else: 
+        rot_vec = points[np.newaxis, :, :]
     return weights, rot_vec
 
 

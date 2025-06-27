@@ -52,6 +52,7 @@ def test_accelerated_PBC(diamond_primitive):
     data, configs = pyqmc.method.mc.vmc(wf, configs, nblocks=1)
     energies = {}
     for use_old_ecp in [False, True]:
+        np.random.seed(10300)
         energies[use_old_ecp] = evaluate_local_energy_variance(
             mol, wf, configs, use_old_ecp
         )

@@ -24,13 +24,12 @@ from functools import partial
 from pyqmc.observables.eval_ecp import get_P_l, ecp_mask, rnExp
 
 class ECPAccumulator:
-    def __init__(self, mol, threshold=10, naip=6, stochastic_rotation=True, nselect_deterministic = 6, nselect_random=4):
+    def __init__(self, mol, naip=6, stochastic_rotation=True, nselect_deterministic = None, nselect_random=None):
         """
         :parameter mol: PySCF molecule object
         :parameter float threshold: threshold for accepting nonlocal moves
         :parameter int naip: number of auxiliary integration points
         """
-        self.threshold = threshold
         if naip is None:
             naip = 6
         self.naip = naip
@@ -38,9 +37,16 @@ class ECPAccumulator:
         self._ecp = mol._ecp
         self._atom_names = [atom[0] for atom in mol._atom]
         self.functors = [generate_ecp_functors(mol, at_name) for at_name in self._atom_names]
-        self._vl_evaluator = partial(evaluate_vl, self.functors, self.threshold, self.naip)
-        self.nselect_deterministic = nselect_deterministic
-        self.nselect_random = nselect_random
+        self._vl_evaluator = partial(evaluate_vl, self.functors, self.naip)
+
+        if nselect_deterministic is None:
+            nselect_deterministic = naip
+        else:
+            self.nselect_deterministic = nselect_deterministic
+        if nselect_random is None:
+            self.nselect_random = self.nselect_deterministic//2
+        else:
+            self.nselect_random = nselect_random
         self.stochastic_rotation = stochastic_rotation
 
 
@@ -115,8 +121,7 @@ class _MoveInfo(NamedTuple):
    
 
 def evaluate_vl(vl_evaluator, # list of functors [at][l]
-                threshold, # a number that determines the relative probability of each move
-                naip, # number of auxiliary integration points [should make this able to be a list]
+                naip, # number of auxiliary integration points [TODO should make this able to be a list]
                 atomic_coordinates, 
                 configs, 
                 e,
@@ -149,7 +154,6 @@ def evaluate_vl(vl_evaluator, # list of functors [at][l]
 
         r_ea_i[:, atom * naip:(atom + 1) * naip, :] = r_ea_tmp
         
-        #_ , prob_tmp = ecp_mask(v_tmp, threshold)
         prob_tmp = np.sum(v_tmp[:,:-1]**2, axis=-1)
         #print(prob_tmp.shape)
         prob[:, atom*naip:(atom+1)*naip]  = prob_tmp[:, np.newaxis]  # nconf x naip

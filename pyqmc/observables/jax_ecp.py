@@ -13,15 +13,9 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
-import copy
-import scipy.spatial.transform
-import functools
-import time
-import logging
 from typing import NamedTuple
-from collections import namedtuple
 from functools import partial
-from pyqmc.observables.eval_ecp import get_P_l, ecp_mask, rnExp
+from pyqmc.observables.eval_ecp import get_P_l, rnExp
 
 class ECPAccumulator:
     def __init__(self, mol, naip=6, stochastic_rotation=True, nselect_deterministic = None, nselect_random=None):
@@ -40,7 +34,7 @@ class ECPAccumulator:
         self._vl_evaluator = partial(evaluate_vl, self.functors, self.naip)
 
         if nselect_deterministic is None:
-            nselect_deterministic = naip
+            self.nselect_deterministic = naip
         else:
             self.nselect_deterministic = nselect_deterministic
         if nselect_random is None:

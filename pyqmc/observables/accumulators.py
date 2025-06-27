@@ -45,7 +45,7 @@ class EnergyAccumulator:
             self.coulomb = energy.OpenCoulomb(mol, **kwargs)
         self.use_old_ecp = use_old_ecp
         if not use_old_ecp:
-            self.ecp = ecp_accumulator.ECPAccumulator(mol, threshold, naip)
+            self.ecp = ecp_accumulator.ECPAccumulator(mol, naip=naip)
 
 
     def __call__(self, configs, wf):

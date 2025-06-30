@@ -18,30 +18,47 @@ from functools import partial
 from pyqmc.observables.eval_ecp import get_P_l, rnExp
 
 class ECPAccumulator:
-    def __init__(self, mol, naip=6, stochastic_rotation=True, nselect_deterministic = None, nselect_random=None):
+    def __init__(self, mol, naip=None, stochastic_rotation=True, nselect_deterministic = None, nselect_random=None):
         """
         :parameter mol: PySCF molecule object
         :parameter float threshold: threshold for accepting nonlocal moves
         :parameter int naip: number of auxiliary integration points
         """
-        if naip is None:
-            naip = 6
-        self.naip = naip
         self._atomic_coordinates = mol.atom_coords()
         self._ecp = mol._ecp
         self._atom_names = [atom[0] for atom in mol._atom]
         self.functors = [generate_ecp_functors(mol, at_name) for at_name in self._atom_names]
+
+        if naip is None:
+            naip = np.zeros(len(self.functors), dtype=int)
+            for i, func in enumerate(self.functors):
+                maxL = np.max(list(func.keys()))
+                print(self._atom_names[i], maxL)
+                if maxL == -1: # only local
+                    naip[i] = 0
+                elif maxL == 0:
+                    naip[i] = 6
+                elif maxL == 1:
+                    naip[i] = 6
+                elif maxL == 2:
+                    naip[i] = 12
+        if isinstance(naip, int): # compatibility with old behavior
+            naip = naip*np.zeros(len(self.functors), dtype=int)
+        totaip = np.sum(naip)
+        self.naip = naip
+
         self._vl_evaluator = partial(evaluate_vl, self.functors, self.naip)
 
         if nselect_deterministic is None:
-            self.nselect_deterministic = naip
+            self.nselect_deterministic = np.max(naip)
         else:
             self.nselect_deterministic = nselect_deterministic
         if nselect_random is None:
-            self.nselect_random = self.nselect_deterministic//2
+            self.nselect_random = min(self.nselect_deterministic//2, totaip - self.nselect_deterministic)
         else:
             self.nselect_random = nselect_random
         self.stochastic_rotation = stochastic_rotation
+        #print('total aip', self.naip, self.nselect_deterministic, self.nselect_random)
 
 
     def __call__(self, configs, wf) -> dict:
@@ -126,7 +143,7 @@ def evaluate_vl(vl_evaluator, # list of functors [at][l]
     dist2 = np.sum(distances**2, axis=-1)
     dist = np.sqrt(dist2) #nconf, natom
     
-    npoints = naip * atomic_coordinates.shape[0]  # naip points for each atom (update this if we allow different numbers of aips)
+    npoints = np.sum(naip)
     nconf = distances.shape[0]
     v_l = np.zeros((nconf,npoints, maxl))
     r_ea_i = np.zeros((nconf, npoints, 3))
@@ -141,17 +158,21 @@ def evaluate_vl(vl_evaluator, # list of functors [at][l]
             v_tmp[:,l] = func(dist[:, atom])
         
         local_part += v_tmp[:, -1]  # accumulate the local part
-        #pl_tmp is 
-        pl_tmp, r_ea_tmp = get_P_l(dist[:,atom], distances[:,atom,:], vl.keys(), naip, stochastic)
+        
+        if naip[atom] == 0:
+            continue
 
-        v_l[:, atom * naip:(atom + 1) * naip, :] = v_tmp[:,np.newaxis,:] * pl_tmp
+        pl_tmp, r_ea_tmp = get_P_l(dist[:,atom], distances[:,atom,:], vl.keys(), naip[atom], stochastic)
 
-        r_ea_i[:, atom * naip:(atom + 1) * naip, :] = r_ea_tmp
+        beg = np.sum(naip[:atom])
+        end = np.sum(naip[:(atom+1)])
+        v_l[:, beg:end, :] = v_tmp[:,np.newaxis,:] * pl_tmp
+        r_ea_i[:, beg:end, :] = r_ea_tmp
         
         prob_tmp = np.sum(v_tmp[:,:-1]**2, axis=-1)
         #print(prob_tmp.shape)
-        prob[:, atom*naip:(atom+1)*naip]  = prob_tmp[:, np.newaxis]  # nconf x naip
-        r_ea_vec[:, atom * naip:(atom + 1) * naip, :] = distances[:, atom, :][:, np.newaxis]  # nconf x naip x 3
+        prob[:, beg:end]  = prob_tmp[:, np.newaxis]  # nconf x naip
+        r_ea_vec[:, beg:end, :] = distances[:, atom, :][:, np.newaxis]  # nconf x naip x 3
         
     return _MoveInfo(r_ea_vec, 
                      r_ea_i,
@@ -179,6 +200,7 @@ def downselect_move_info(move_info: _MoveInfo, nselect_deterministic: int, nsele
 
     for i in range(nconf):
         normalized_probability[i,indices_deterministic[i]] = 0.0
+        
     normalized_probability = normalized_probability/np.sum(normalized_probability, axis=1, keepdims=True)
     cdf = np.cumsum(normalized_probability, axis=1)
     r = np.random.random((nconf, nselect_random))    

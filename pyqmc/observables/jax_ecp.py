@@ -34,7 +34,6 @@ class ECPAccumulator:
             naip = np.zeros(len(self.functors), dtype=int)
             for i, func in enumerate(self.functors):
                 maxL = np.max(list(func.keys()))
-                print(self._atom_names[i], maxL)
                 if maxL == -1: # only local
                     naip[i] = 0
                 elif maxL == 0:
@@ -71,18 +70,14 @@ class ECPAccumulator:
         # gather energies and distances
 
         for e in range(configs.configs.shape[1]):
-            start = time.perf_counter()
             move_info, local_part = self._vl_evaluator(self._atomic_coordinates, configs, e, self.stochastic_rotation)
-            pre_downselect = time.perf_counter()
             selected_moves = downselect_move_info(move_info, self.nselect_deterministic, self.nselect_random)
-            post_downselect = time.perf_counter()
             epos_rot = (configs.configs[:, e, :][:,np.newaxis,:] \
                         - selected_moves.r_ea_vec) \
                         + selected_moves.r_ea_i
             epos = configs.make_irreducible(e, epos_rot)
 
             ecp_val += local_part # sum the local part
-            middle = time.perf_counter()
             # important to do the local sum before skipping evaluation 
             if move_info.probability.sum() == 0:
                 continue
@@ -91,8 +86,6 @@ class ECPAccumulator:
             # compute the ECP value
             # n: nconf, a: aip, l: angular momentum channel
             ecp_val += np.einsum("na,nal->n", ratio, selected_moves.v_l[:, :, :-1])  # skip the local part
-            end = time.perf_counter()
-            print("vl_evaluator", pre_downselect-start, "downselect", post_downselect-pre_downselect, "epos", middle-post_downselect, "eval", end-middle, "total", end-start)
 
         return ecp_val
 
@@ -165,16 +158,13 @@ def evaluate_vl(vl_evaluator, # list of functors [at][l]
         
         if naip[atom] == 0:
             continue
-
         pl_tmp, r_ea_tmp = get_P_l(dist[:,atom], distances[:,atom,:], vl.keys(), naip[atom], stochastic)
 
         beg = np.sum(naip[:atom])
         end = np.sum(naip[:(atom+1)])
         v_l[:, beg:end, :] = v_tmp[:,np.newaxis,:] * pl_tmp
         r_ea_i[:, beg:end, :] = r_ea_tmp
-        
         prob_tmp = np.sum(v_tmp[:,:-1]**2, axis=-1)
-        #print(prob_tmp.shape)
         prob[:, beg:end]  = prob_tmp[:, np.newaxis]  # nconf x naip
         r_ea_vec[:, beg:end, :] = distances[:, atom, :][:, np.newaxis]  # nconf x naip x 3
         
@@ -196,27 +186,26 @@ def downselect_move_info(move_info: _MoveInfo, nselect_deterministic: int, nsele
         return move_info  # no downselection needed
 
     normalized_probability = move_info.probability.copy()
-
-    # Find indices where r is less than the cumulative distribution function
+    # Find the largest terms to evaluate deterministically
     indices_deterministic = np.argsort(normalized_probability, axis=1)[:,-nselect_deterministic:]  # nconf x nselect_deterministic
     np.put_along_axis(normalized_probability, indices_deterministic, 0.0, axis=1)  # set the deterministic indices to zero
-        
+
+    # Normalize the remaining probabilities for random selection    
     prob_norm = np.sum(normalized_probability, axis=1)
     normalized_probability[prob_norm==0,:] = 1.0/(npoints-nselect_deterministic)
     prob_norm[prob_norm==0] = 1.0  
-
     normalized_probability = normalized_probability/prob_norm[:,np.newaxis]  # renormalize the random evaluation
 
+    # Select the random evaluation points
     cdf = np.cumsum(normalized_probability, axis=1)
     r = np.random.random((nconf, nselect_random))    
-    indices_random = np.array([ np.searchsorted(cdf[i], r[i]) for i in range(nconf) ])
-
+    indices_random = (r[:,np.newaxis, :] > cdf[:, :, np.newaxis]).sum(axis=1)  # nconf x npoints x nselect_random
     indices = np.concatenate((indices_deterministic, indices_random), axis=1)
 
     # the deterministic indices should not be multiplied by 1/probability
     np.put_along_axis(normalized_probability, indices_deterministic, 1.0/nselect_random, axis=1) 
-
     prob_selected = nselect_random*np.take_along_axis(normalized_probability, indices, axis=1)
+
 
     return _MoveInfo(
         r_ea_vec= np.take_along_axis(move_info.r_ea_vec, indices[:, :, np.newaxis], axis=1),

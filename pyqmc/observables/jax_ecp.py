@@ -16,6 +16,7 @@ import numpy as np
 from typing import NamedTuple
 from functools import partial
 from pyqmc.observables.eval_ecp import get_P_l, rnExp
+import time
 
 class ECPAccumulator:
     def __init__(self, mol, naip=None, stochastic_rotation=True, nselect_deterministic = None, nselect_random=None):
@@ -58,7 +59,6 @@ class ECPAccumulator:
         else:
             self.nselect_random = nselect_random
         self.stochastic_rotation = stochastic_rotation
-        #print('total aip', self.naip, self.nselect_deterministic, self.nselect_random)
 
 
     def __call__(self, configs, wf) -> dict:
@@ -71,24 +71,28 @@ class ECPAccumulator:
         # gather energies and distances
 
         for e in range(configs.configs.shape[1]):
+            start = time.perf_counter()
             move_info, local_part = self._vl_evaluator(self._atomic_coordinates, configs, e, self.stochastic_rotation)
+            pre_downselect = time.perf_counter()
             selected_moves = downselect_move_info(move_info, self.nselect_deterministic, self.nselect_random)
-
+            post_downselect = time.perf_counter()
             epos_rot = (configs.configs[:, e, :][:,np.newaxis,:] \
                         - selected_moves.r_ea_vec) \
                         + selected_moves.r_ea_i
             epos = configs.make_irreducible(e, epos_rot)
 
             ecp_val += local_part # sum the local part
+            middle = time.perf_counter()
             # important to do the local sum before skipping evaluation 
             if move_info.probability.sum() == 0:
                 continue
             # evaluate the wave function ratio
             ratio = wf.testvalue(e, epos)[0]
-
             # compute the ECP value
             # n: nconf, a: aip, l: angular momentum channel
             ecp_val += np.einsum("na,nal->n", ratio, selected_moves.v_l[:, :, :-1])  # skip the local part
+            end = time.perf_counter()
+            print("vl_evaluator", pre_downselect-start, "downselect", post_downselect-pre_downselect, "epos", middle-post_downselect, "eval", end-middle, "total", end-start)
 
         return ecp_val
 
@@ -190,27 +194,18 @@ def downselect_move_info(move_info: _MoveInfo, nselect_deterministic: int, nsele
     nconf, npoints, nl = move_info.v_l.shape
     if nselect_random+nselect_deterministic >= npoints:
         return move_info  # no downselection needed
-    
-    probability = move_info.probability.copy()
 
-    prob_norm = np.sum(move_info.probability, axis=1)
-    probability[prob_norm==0,:] = 1.0/npoints  
-    prob_norm[prob_norm==0] = 1.0  
-    normalized_probability = probability/prob_norm[:,np.newaxis]
+    normalized_probability = move_info.probability.copy()
 
     # Find indices where r is less than the cumulative distribution function
-
-    indices_deterministic = np.argsort(normalized_probability, axis=1)[:,-nselect_deterministic:]
-
-
-    for i in range(nconf):
-        normalized_probability[i,indices_deterministic[i]] = 0.0
+    indices_deterministic = np.argsort(normalized_probability, axis=1)[:,-nselect_deterministic:]  # nconf x nselect_deterministic
+    np.put_along_axis(normalized_probability, indices_deterministic, 0.0, axis=1)  # set the deterministic indices to zero
         
     prob_norm = np.sum(normalized_probability, axis=1)
     normalized_probability[prob_norm==0,:] = 1.0/(npoints-nselect_deterministic)
     prob_norm[prob_norm==0] = 1.0  
 
-    normalized_probability = normalized_probability/prob_norm[:,np.newaxis]  # renormalize the speculative evaluation
+    normalized_probability = normalized_probability/prob_norm[:,np.newaxis]  # renormalize the random evaluation
 
     cdf = np.cumsum(normalized_probability, axis=1)
     r = np.random.random((nconf, nselect_random))    
@@ -218,8 +213,9 @@ def downselect_move_info(move_info: _MoveInfo, nselect_deterministic: int, nsele
 
     indices = np.concatenate((indices_deterministic, indices_random), axis=1)
 
-    for i in range(nconf):
-        normalized_probability[i,indices_deterministic[i]] = 1.0/nselect_random
+    # the deterministic indices should not be multiplied by 1/probability
+    np.put_along_axis(normalized_probability, indices_deterministic, 1.0/nselect_random, axis=1) 
+
     prob_selected = nselect_random*np.take_along_axis(normalized_probability, indices, axis=1)
 
     return _MoveInfo(

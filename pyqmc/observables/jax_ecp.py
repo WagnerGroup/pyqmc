@@ -54,7 +54,7 @@ class ECPAccumulator:
         else:
             self.nselect_deterministic = nselect_deterministic
         if nselect_random is None:
-            self.nselect_random = min(self.nselect_deterministic//2, totaip - self.nselect_deterministic)
+            self.nselect_random = min(1, totaip - self.nselect_deterministic)
         else:
             self.nselect_random = nselect_random
         self.stochastic_rotation = stochastic_rotation
@@ -190,8 +190,13 @@ def downselect_move_info(move_info: _MoveInfo, nselect_deterministic: int, nsele
     nconf, npoints, nl = move_info.v_l.shape
     if nselect_random+nselect_deterministic >= npoints:
         return move_info  # no downselection needed
+    
+    probability = move_info.probability.copy()
 
-    normalized_probability = move_info.probability / np.sum(move_info.probability, axis=1, keepdims=True)
+    prob_norm = np.sum(move_info.probability, axis=1)
+    probability[prob_norm==0,:] = 1.0/npoints  
+    prob_norm[prob_norm==0] = 1.0  
+    normalized_probability = probability/prob_norm[:,np.newaxis]
 
     # Find indices where r is less than the cumulative distribution function
 
@@ -201,7 +206,12 @@ def downselect_move_info(move_info: _MoveInfo, nselect_deterministic: int, nsele
     for i in range(nconf):
         normalized_probability[i,indices_deterministic[i]] = 0.0
         
-    normalized_probability = normalized_probability/np.sum(normalized_probability, axis=1, keepdims=True)
+    prob_norm = np.sum(normalized_probability, axis=1)
+    normalized_probability[prob_norm==0,:] = 1.0/(npoints-nselect_deterministic)
+    prob_norm[prob_norm==0] = 1.0  
+
+    normalized_probability = normalized_probability/prob_norm[:,np.newaxis]  # renormalize the speculative evaluation
+
     cdf = np.cumsum(normalized_probability, axis=1)
     r = np.random.random((nconf, nselect_random))    
     indices_random = np.array([ np.searchsorted(cdf[i], r[i]) for i in range(nconf) ])

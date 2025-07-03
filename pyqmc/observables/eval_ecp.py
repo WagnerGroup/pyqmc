@@ -259,15 +259,14 @@ def get_rot(nconf, naip, stochastic = True):
     :rtype:  ((naip,) array, (nconf, naip, 3) array)
     """
 
-    if nconf > 0:  # get around a bug(?) when there are zero configurations.
-        rot = scipy.spatial.transform.Rotation.random().as_matrix()
-    else:
-        rot = np.zeros((0, 3, 3))
+    rot = scipy.spatial.transform.Rotation.random().as_matrix()
     quadrature_grid = generate_quadrature_grids()
 
     if naip not in quadrature_grid.keys():
         raise ValueError(f"Possible AIPs are one of {quadrature_grid.keys()}")
     points, weights = quadrature_grid[naip]
+    if nconf == 0:
+        return weights, np.zeros((0, naip, 3))
     if stochastic:
         rot_vec = np.dot(rot, points.T).T[np.newaxis, :, :]  # nconf x naip x 3
     else: 

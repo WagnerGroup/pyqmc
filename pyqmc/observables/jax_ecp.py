@@ -149,6 +149,7 @@ def evaluate_vl(vl_evaluator, # list of functors [at][l]
     local_part = np.zeros(nconf)
     for atom, vl in enumerate(vl_evaluator):
         v_tmp = np.zeros((nconf, len(vl)))  # nconf x nl
+
         for l, func in vl.items():  # -1,0,1,...
             # a bit tricky here, we end up with the local part in the last column because
             # vl is a dictionary where -1 is the local part
@@ -160,9 +161,11 @@ def evaluate_vl(vl_evaluator, # list of functors [at][l]
             continue
         pl_tmp, r_ea_tmp = get_P_l(dist[:,atom], distances[:,atom,:], vl.keys(), naip[atom], stochastic)
 
+        nl = pl_tmp.shape[-1] # number of l's for this atom
+
         beg = np.sum(naip[:atom])
         end = np.sum(naip[:(atom+1)])
-        v_l[:, beg:end, :] = v_tmp[:,np.newaxis,:] * pl_tmp
+        v_l[:, beg:end, :nl] = v_tmp[:,np.newaxis,:] * pl_tmp
         r_ea_i[:, beg:end, :] = r_ea_tmp
         prob_tmp = np.sum(v_tmp[:,:-1]**2, axis=-1)
         prob[:, beg:end]  = prob_tmp[:, np.newaxis]  # nconf x naip

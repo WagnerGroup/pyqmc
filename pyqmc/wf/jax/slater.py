@@ -235,12 +235,14 @@ def create_wf_evaluator(mol, mf, det_tol=1e-9, nimages=2, mc = None):
     Create a set of functions that can be used to evaluate the wavefunction.
 
     """
-    # Basis evaluators
+    # Basis evaluators 
     gto_1e, gto_1e_vg, gto_1e_vgl = gto.create_gto_evaluator(mol, nimages=nimages)
     gto_ne = jax.vmap(gto_1e, in_axes=0, out_axes=0)# over electrons
 
     # determinant expansion
-    _determinants = pyqmc.pyscftools.determinants_from_pyscf(mol, mf, mc=mc, tol=det_tol)
+    # Use interpret_ci because we expect this to be gamma only.
+    #_determinants = pyqmc.pyscftools.determinants_from_pyscf(mol, mf, mc=mc, tol=det_tol)
+    _determinants = pyqmc.pyscftools.interpret_ci(mc, tol=det_tol)
     ci_coeff, determinants, mapping = pyqmc.wf.determinant_tools.create_packed_objects(_determinants, tol=1e-9)
 
     ci_coeff = jnp.array(ci_coeff)
@@ -254,6 +256,7 @@ def create_wf_evaluator(mol, mf, det_tol=1e-9, nimages=2, mc = None):
                                      jnp.array(determinants[0]), 
                                      jnp.array(determinants[1]))
     nelec = tuple(mol.nelec)
+
     value = partial(evaluate_expansion, gto_ne, expansion, nelec)
     _testvalue_up = partial(testvalue_up, gto_1e, expansion)
     _testvalue_down = partial(testvalue_down, gto_1e, expansion)

@@ -260,8 +260,8 @@ def create_wf_evaluator(mol, mf, det_tol=1e-9, nimages=2, mc = None):
                                      jnp.array(determinants[1]))
     nelec = tuple(mol.nelec)
 
-    assert(expansion.determinants_up.shape[0] == nelec[0])
-    assert(expansion.determinants_down.shape[0] == nelec[1])
+    assert(expansion.determinants_up.shape[1] == nelec[0])
+    assert(expansion.determinants_down.shape[1] == nelec[1])
 
     value = partial(evaluate_expansion, gto_ne, expansion, nelec)
     _testvalue_up = partial(testvalue_up, gto_1e, expansion)

@@ -459,6 +459,9 @@ class JAXSlater:
             else:
                 newvals, saved = self._testvalue_batch[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
                 return np.array(newvals)[mask], saved
+        elif len(xyz.shape) == 3:  # for a batch of configurations where there is no mask
+            newvals, saved = self._testvalue_batch[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
+            return newvals, saved
         else: 
             newvals, saved = self._testvalue[spin](self.parameters.jax_parameters, self._dets_up, self._dets_down, e, xyz)
             if mask is not None:

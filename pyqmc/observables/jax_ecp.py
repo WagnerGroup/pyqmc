@@ -94,15 +94,16 @@ class ECPAccumulator:
         return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
 
     def nonlocal_tmoves(self, configs, wf, e, tau):
-        atomic_info = gather_atomic(self._atomic_coordinates, configs, e)
-        move_info = self._vl_evaluator(atomic_info)
-        epos_rot = (configs.configs[:, e, :] - atomic_info.r_ea_vec)[:, np.newaxis] + move_info.r_ea_i
-        epos = configs.make_irreducible(e, epos_rot, move_info.mask)
+        move_info, local_part = self._vl_evaluator(self._atomic_coordinates, configs, e, self.stochastic_rotation)
+        selected_moves = downselect_move_info(move_info, self.nselect_deterministic, self.nselect_random)
+        epos_rot = (configs.configs[:, e, :][:,np.newaxis,:] \
+                    - selected_moves.r_ea_vec) \
+                    + selected_moves.r_ea_i
+        epos = configs.make_irreducible(e, epos_rot)        
         # evaluate the wave function ratio
-        ratio = np.zeros((configs.configs.shape[0], self.naip))
-        ratio[move_info.mask,:] = wf.testvalue(e, epos, move_info.mask)[0]
+        ratio = np.asarray(wf.testvalue(e, epos)[0])
 
-        weight = np.einsum("ik, ijk -> ij", np.exp(-tau*move_info.v_l)-1, move_info.P_l)
+        weight = np.einsum("ijk, ijk -> ij", np.exp(-tau*move_info.v_l/move_info.P_l)-1, move_info.P_l)
 
         return {'ratio': ratio, 'weight': weight, 'configs':epos} 
 
@@ -126,6 +127,7 @@ class _MoveInfo(NamedTuple):
     r_ea_i: np.ndarray  #(nconf, npoints, 3) distance from the atom to the electron
     probability: np.ndarray # (nconf, npoints) probability we should evaluate this
     v_l: np.ndarray  # (nconf, npoints, nl) total weight (v(r)*P_l)
+    P_l: np.ndarray # (nconf, npoints, nl) auxiliary integration points for each atom and l
    
 
 def evaluate_vl(vl_evaluator, # list of functors [at][l]
@@ -143,6 +145,7 @@ def evaluate_vl(vl_evaluator, # list of functors [at][l]
     npoints = np.sum(naip)
     nconf = distances.shape[0]
     v_l = np.zeros((nconf,npoints, maxl))
+    p_l = np.zeros((nconf,npoints, maxl))
     r_ea_i = np.zeros((nconf, npoints, 3))
     prob = np.zeros((nconf, npoints))
     r_ea_vec  = np.zeros((nconf, npoints, 3))  # displacement from the atom to the electron
@@ -166,6 +169,7 @@ def evaluate_vl(vl_evaluator, # list of functors [at][l]
         beg = np.sum(naip[:atom])
         end = np.sum(naip[:(atom+1)])
         v_l[:, beg:end, :nl] = v_tmp[:,np.newaxis,:] * pl_tmp
+        p_l[:, beg:end, :nl] = pl_tmp  # nconf x naip x nl
         r_ea_i[:, beg:end, :] = r_ea_tmp
         prob_tmp = np.sum(v_tmp[:,:-1]**2, axis=-1)
         prob[:, beg:end]  = prob_tmp[:, np.newaxis]  # nconf x naip
@@ -175,6 +179,7 @@ def evaluate_vl(vl_evaluator, # list of functors [at][l]
                      r_ea_i,
                      prob,
                      v_l,
+                     p_l
     ), local_part
 
 def downselect_move_info(move_info: _MoveInfo, nselect_deterministic: int, nselect_random) -> _MoveInfo:
@@ -215,6 +220,7 @@ def downselect_move_info(move_info: _MoveInfo, nselect_deterministic: int, nsele
         r_ea_i=np.take_along_axis(move_info.r_ea_i, indices[:, :, np.newaxis], axis=1),
         probability=np.take_along_axis(move_info.probability, indices, axis=1),
         v_l=np.take_along_axis(move_info.v_l, indices[:,:,np.newaxis], axis=1)/prob_selected[:,:,np.newaxis], 
+        P_l=np.take_along_axis(move_info.P_l, indices[:,:,np.newaxis], axis=1)
     )
 
 

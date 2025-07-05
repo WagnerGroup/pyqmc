@@ -220,6 +220,7 @@ def downselect_move_info(move_info: _MoveInfo, nselect_deterministic: int, nsele
         r_ea_i=np.take_along_axis(move_info.r_ea_i, indices[:, :, np.newaxis], axis=1),
         probability=np.take_along_axis(move_info.probability, indices, axis=1),
         v_l=np.take_along_axis(move_info.v_l, indices[:,:,np.newaxis], axis=1)/prob_selected[:,:,np.newaxis], 
+        P_l=np.take_along_axis(move_info.P_l, indices[:,:,np.newaxis], axis=1)
     )
 
 

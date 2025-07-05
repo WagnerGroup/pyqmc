@@ -35,7 +35,7 @@ def gradient_generator(mol, wf, to_opt=None, nodal_cutoff=1e-3, eps=1e-1, invers
 class EnergyAccumulator:
     """Returns local energy of each configuration in a dictionary."""
 
-    def __init__(self, mol, threshold=10, naip=None, use_old_ecp=False, **kwargs):
+    def __init__(self, mol, threshold=10, naip=None, use_old_ecp=True, **kwargs):
         self.mol = mol
         self.threshold = threshold
         self.naip = naip

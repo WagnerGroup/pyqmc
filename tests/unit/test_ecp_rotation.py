@@ -20,7 +20,10 @@ import scipy.stats
 
 @pytest.mark.parametrize("naip", [6, 12])
 def test_rotation_even(naip):
-    weights, rotations = pyqmc.observables.eval_ecp.get_rot(1000, naip)
+    ncheck = 1000
+    rotations = np.zeros((ncheck, naip,3))
+    for i in range(ncheck):
+        _, rotations[i] = pyqmc.observables.eval_ecp.get_rot(1, naip)
     avg = np.mean(rotations, axis=0)
     sem = scipy.stats.sem(rotations, axis=0)
     # print(avg/sem)

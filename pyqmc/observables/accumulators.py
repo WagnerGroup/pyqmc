@@ -55,13 +55,14 @@ class EnergyAccumulator:
         else:
             ecp_val = self.ecp(configs, wf)
         ke, grad2 = energy.kinetic(configs, wf)
+
         return {
-            "ke": ke,
+            "ke": np.asarray(ke),
             "ee": ee,
             "ei": ei,
             "ecp": ecp_val,
             "grad2": grad2,
-            "total": ke + ee + ei + ecp_val + ii,
+            "total": np.asarray(ke + ee + ei + ecp_val + ii),
         }
 
     def avg(self, configs, wf):

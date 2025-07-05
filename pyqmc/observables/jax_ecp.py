@@ -99,11 +99,11 @@ class ECPAccumulator:
         epos_rot = (configs.configs[:, e, :][:,np.newaxis,:] \
                     - selected_moves.r_ea_vec) \
                     + selected_moves.r_ea_i
-        epos = configs.make_irreducible(e, epos_rot)        # evaluate the wave function ratio
-        ratio = np.zeros((configs.configs.shape[0], self.naip))
-        ratio[move_info.mask,:] = wf.testvalue(e, epos)[0]
+        epos = configs.make_irreducible(e, epos_rot)        
+        # evaluate the wave function ratio
+        ratio = np.asarray(wf.testvalue(e, epos)[0])
 
-        weight = np.einsum("ik, ijk -> ij", np.exp(-tau*move_info.v_l/move_info.P_l)-1, move_info.P_l)
+        weight = np.einsum("ijk, ijk -> ij", np.exp(-tau*move_info.v_l/move_info.P_l)-1, move_info.P_l)
 
         return {'ratio': ratio, 'weight': weight, 'configs':epos} 
 

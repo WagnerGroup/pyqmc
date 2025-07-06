@@ -371,10 +371,10 @@ class _parameterMap:
 
 
 class JAXSlater:
-    def __init__(self, mol, mf, nimages=2, det_tol=1e-9, mc = None):
+    def __init__(self, mol, mf, nimages=2, tol=1e-9, mc = None):
         _parameters, self.expansion, (self._recompute, self._pgradient), \
         (_testvalue_up, _testvalue_down, _grad_up, _grad_down, _lap_up, _lap_down, _batch_up, _batch_down),\
-              = create_wf_evaluator(mol, mf, det_tol=det_tol, nimages=nimages, mc = mc)
+              = create_wf_evaluator(mol, mf, det_tol=tol, nimages=nimages, mc = mc)
         self._testvalue=(_testvalue_up, _testvalue_down)
         self._testvalue_batch = (_batch_up, _batch_down)
         self._grad = (_grad_up, _grad_down)

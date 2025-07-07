@@ -20,7 +20,7 @@ import pyqmc.observables.eval_ecp as eval_ecp
 from pyqmc.observables.stochastic_reconfiguration import StochasticReconfiguration
 import copy
 import time
-import pyqmc.observables.ecp_accumulator as ecp_accumulator
+import pyqmc.observables.jax_ecp as ecp_accumulator
 
 def gradient_generator(mol, wf, to_opt=None, nodal_cutoff=1e-3, eps=1e-1, inverse_strategy="regularized_inverse", **ewald_kwargs):
     return StochasticReconfiguration(
@@ -35,7 +35,7 @@ def gradient_generator(mol, wf, to_opt=None, nodal_cutoff=1e-3, eps=1e-1, invers
 class EnergyAccumulator:
     """Returns local energy of each configuration in a dictionary."""
 
-    def __init__(self, mol, threshold=10, naip=None, use_old_ecp=False, **kwargs):
+    def __init__(self, mol, threshold=10, naip=None, use_old_ecp=True, **kwargs):
         self.mol = mol
         self.threshold = threshold
         self.naip = naip
@@ -45,7 +45,7 @@ class EnergyAccumulator:
             self.coulomb = energy.OpenCoulomb(mol, **kwargs)
         self.use_old_ecp = use_old_ecp
         if not use_old_ecp:
-            self.ecp = ecp_accumulator.ECPAccumulator(mol, threshold, naip)
+            self.ecp = ecp_accumulator.ECPAccumulator(mol, naip=naip)
 
 
     def __call__(self, configs, wf):
@@ -55,13 +55,14 @@ class EnergyAccumulator:
         else:
             ecp_val = self.ecp(configs, wf)
         ke, grad2 = energy.kinetic(configs, wf)
+
         return {
-            "ke": ke,
+            "ke": np.asarray(ke),
             "ee": ee,
             "ei": ei,
             "ecp": ecp_val,
             "grad2": grad2,
-            "total": ke + ee + ei + ecp_val + ii,
+            "total": np.asarray(ke + ee + ei + ecp_val + ii),
         }
 
     def avg(self, configs, wf):

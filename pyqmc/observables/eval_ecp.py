@@ -135,9 +135,12 @@ def ecp_mask(v_l, threshold):
     """
     :returns: a mask for configurations sized nconf based on values of v_l. Also returns acceptance probabilities
     """
-    l = 2 * np.arange(v_l.shape[1] - 1) + 1
-    prob = np.dot(np.abs(v_l[:, :-1]), threshold * (2 * l + 1))
-    prob = np.minimum(1, prob)
+    if threshold > 0:
+        l = 2 * np.arange(v_l.shape[1] - 1) + 1
+        prob = np.dot(np.abs(v_l[:, :-1]), threshold * (2 * l + 1))
+        prob = np.minimum(1, prob)
+    else:
+        prob = np.ones(v_l.shape[0])
     accept = prob > np.random.random(size=prob.shape)
     return accept, prob
 
@@ -221,7 +224,7 @@ def P_l(x, l):
         raise NotImplementedError(f"Legendre functions for l>4 not implemented {l}")
 
 
-def get_P_l(r_ea, r_ea_vec, l_list, naip=None):
+def get_P_l(r_ea, r_ea_vec, l_list, naip=None, stochastic=True):
     r"""The factor :math:`(2l+1)` and the quadrature weights are included.
 
     :parameter r_ea: distances of electron e and atom a
@@ -235,7 +238,7 @@ def get_P_l(r_ea, r_ea_vec, l_list, naip=None):
     if naip is None:
         naip = 6 if len(l_list) <= 2 else 12
     nconf = r_ea.shape[0]
-    weights, rot_vec = get_rot(nconf, naip)
+    weights, rot_vec = get_rot(nconf, naip, stochastic)
 
     r_ea_i = r_ea[:, np.newaxis, np.newaxis] * rot_vec  # nmask x naip x 3
     rdotR = np.einsum("ik,ijk->ij", r_ea_vec, r_ea_i)
@@ -248,7 +251,7 @@ def get_P_l(r_ea, r_ea_vec, l_list, naip=None):
     return P_l_val, r_ea_i
 
 
-def get_rot(nconf, naip):
+def get_rot(nconf, naip, stochastic = True):
     """
     :parameter int nconf: number of configurations
     :parameter int naip: number of auxiliary integration points
@@ -256,16 +259,18 @@ def get_rot(nconf, naip):
     :rtype:  ((naip,) array, (nconf, naip, 3) array)
     """
 
-    if nconf > 0:  # get around a bug(?) when there are zero configurations.
-        rot = scipy.spatial.transform.Rotation.random(nconf).as_matrix()
-    else:
-        rot = np.zeros((0, 3, 3))
+    rot = scipy.spatial.transform.Rotation.random().as_matrix()
     quadrature_grid = generate_quadrature_grids()
 
     if naip not in quadrature_grid.keys():
         raise ValueError(f"Possible AIPs are one of {quadrature_grid.keys()}")
     points, weights = quadrature_grid[naip]
-    rot_vec = np.einsum("jkl,ik->jil", rot, points)
+    if nconf == 0:
+        return weights, np.zeros((0, naip, 3))
+    if stochastic:
+        rot_vec = np.dot(rot, points.T).T[np.newaxis, :, :]  # nconf x naip x 3
+    else: 
+        rot_vec = points[np.newaxis, :, :]
     return weights, rot_vec
 
 

@@ -235,12 +235,17 @@ def create_wf_evaluator(mol, mf, det_tol=1e-9, nimages=2, mc = None):
     Create a set of functions that can be used to evaluate the wavefunction.
 
     """
-    # Basis evaluators
+    # Basis evaluators 
     gto_1e, gto_1e_vg, gto_1e_vgl = gto.create_gto_evaluator(mol, nimages=nimages)
     gto_ne = jax.vmap(gto_1e, in_axes=0, out_axes=0)# over electrons
 
     # determinant expansion
-    _determinants = pyqmc.pyscftools.determinants_from_pyscf(mol, mf, mc=mc, tol=det_tol)
+    # Use interpret_ci because we expect this to be gamma only.
+    #
+    if mc is not None:
+        _determinants = pyqmc.pyscftools.interpret_ci(mc, tol=det_tol)
+    else:
+        _determinants = pyqmc.pyscftools.determinants_from_pyscf(mol, mf)
     ci_coeff, determinants, mapping = pyqmc.wf.determinant_tools.create_packed_objects(_determinants, tol=det_tol)
 
     ci_coeff = jnp.array(ci_coeff)
@@ -254,6 +259,10 @@ def create_wf_evaluator(mol, mf, det_tol=1e-9, nimages=2, mc = None):
                                      jnp.array(determinants[0]), 
                                      jnp.array(determinants[1]))
     nelec = tuple(mol.nelec)
+
+    assert(expansion.determinants_up.shape[1] == nelec[0])
+    assert(expansion.determinants_down.shape[1] == nelec[1])
+
     value = partial(evaluate_expansion, gto_ne, expansion, nelec)
     _testvalue_up = partial(testvalue_up, gto_1e, expansion)
     _testvalue_down = partial(testvalue_down, gto_1e, expansion)
@@ -362,10 +371,10 @@ class _parameterMap:
 
 
 class JAXSlater:
-    def __init__(self, mol, mf, nimages=2, det_tol=1e-9, mc = None):
+    def __init__(self, mol, mf, nimages=2, tol=1e-9, mc = None):
         _parameters, self.expansion, (self._recompute, self._pgradient), \
         (_testvalue_up, _testvalue_down, _grad_up, _grad_down, _lap_up, _lap_down, _batch_up, _batch_down),\
-              = create_wf_evaluator(mol, mf, det_tol=det_tol, nimages=nimages, mc = mc)
+              = create_wf_evaluator(mol, mf, det_tol=tol, nimages=nimages, mc = mc)
         self._testvalue=(_testvalue_up, _testvalue_down)
         self._testvalue_batch = (_batch_up, _batch_down)
         self._grad = (_grad_up, _grad_down)

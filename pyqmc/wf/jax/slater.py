@@ -246,7 +246,7 @@ def create_wf_evaluator(mol, mf, det_tol=1e-9, nimages=2, mc = None):
         _determinants = pyqmc.pyscftools.interpret_ci(mc, tol=det_tol)
     else:
         _determinants = pyqmc.pyscftools.determinants_from_pyscf(mol, mf)
-    ci_coeff, determinants, mapping = pyqmc.wf.determinant_tools.create_packed_objects(_determinants, tol=1e-9)
+    ci_coeff, determinants, mapping = pyqmc.wf.determinant_tools.create_packed_objects(_determinants, tol=det_tol)
 
     ci_coeff = jnp.array(ci_coeff)
     #determinants = jnp.array(determinants)

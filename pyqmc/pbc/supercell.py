@@ -67,6 +67,7 @@ def get_supercell(cell, S):
     supercell.exp_to_discard = cell.exp_to_discard
     supercell.unit = "Bohr"
     supercell.spin = int(cell.spin * scale)
+    supercell.charge = cell.charge
     supercell.build()
     supercell.original_cell = cell
     supercell.S = S.tolist()

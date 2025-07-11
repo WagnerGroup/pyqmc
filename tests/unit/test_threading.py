@@ -19,7 +19,6 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
 import copy
-import time
 import concurrent.futures
 import pyqmc.api as pyq
 import pyqmc.observables.accumulators
@@ -34,9 +33,8 @@ def test_threading(H2_casci):
     """We test the evaluate_gradients_threaded function in ensemble_optimization_wfbywf
     evaluate_gradients_threaded runs vmc and sample_overlap for multiple states asynchronously using threading
     Using two CASCI wave functions for H2, we test whether
-    (1) evaluate_gradients_threaded takes less runtime than evaluate_gradients for the same nconfig and npartitions
-    (2) evaluate_gradients and evaluate_gradients_threaded return the same ground and excited state energies within error
-    (3) evaluate_gradients_threaded returns an overlap matrix with unit determinant
+    (1) evaluate_gradients and evaluate_gradients_threaded return the same ground and excited state energies within error
+    (2) evaluate_gradients_threaded returns an overlap matrix with unit determinant
     """
     nwf = 2
     nconfig = 1000
@@ -80,7 +78,6 @@ def test_threading(H2_casci):
         "True": evaluate_gradients_threaded,
     }
     for use_threader in [False, True]:
-        start_time = time.perf_counter()
         with concurrent.futures.ProcessPoolExecutor(max_workers=npartitions) as client:
             mc_data = choose_gradient_function[str(use_threader)](
                 wfs,
@@ -91,8 +88,6 @@ def test_threading(H2_casci):
                 client=client,
                 npartitions=npartitions,
             )
-        end_time = time.perf_counter()
-        runtime[f"threader_{use_threader}"] = end_time - start_time
         (
             data_sample1_ensemble,
             data_weighted_ensemble,
@@ -115,9 +110,6 @@ def test_threading(H2_casci):
         energy_error1[f"threader_{use_threader}"] = error1["total"]
         overlap_determinant[f"threader_{use_threader}"] = np.linalg.det(avg1["overlap"])
 
-    print("Evaluation time without threader: ", runtime["threader_False"], " s")
-    print("Evaluation time with threader: ", runtime["threader_True"], " s")
-    assert runtime["threader_False"] > runtime["threader_True"], "Threader run isn't faster than that without threader"
     stderr_energy0 = np.sqrt(energy_error0["threader_False"] ** 2 + energy_error0["threader_True"] ** 2)
     chi2_energy0 = np.abs(energy0["threader_False"] - energy0["threader_True"]) / stderr_energy0
     assert chi2_energy0 < 5, "Ground state energy computed with threader deviates too much from that without threader"

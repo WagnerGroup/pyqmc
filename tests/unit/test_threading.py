@@ -32,18 +32,19 @@ from pyqmc.method.ensemble_optimization_wfbywf import (
 def test_threading(H2_casci):
     """We test the evaluate_gradients_threaded function in ensemble_optimization_wfbywf
     evaluate_gradients_threaded runs vmc and sample_overlap for multiple states asynchronously using threading
-    Using two CASCI wave functions for H2, we test whether
+    Using two CASCI wave functions for H2 and two sub iterations per wave function, we test whether
     (1) evaluate_gradients and evaluate_gradients_threaded return the same ground and excited state energies within error
     (2) evaluate_gradients_threaded returns an overlap matrix with unit determinant
+    (3) the functions support cases of multiple sub iterations
     """
     nwf = 2
     nconfig = 1000
     npartitions = 4
+    max_sub_iterations = 2
     mol, mf, mc = H2_casci
     mcs = [copy.copy(mc) for _ in range(nwf)]
     energy = pyq.EnergyAccumulator(mol)
     wfs = []
-    to_opts = []
     updater = []
     for i in range(nwf):
         mcs[i].ci = mc.ci[i]
@@ -54,20 +55,20 @@ def test_threading(H2_casci):
             optimize_determinants=True,
         )
         wfs.append(wf)
-        to_opts.append(to_opt)
-        updater.append(
-            [
+        transform_list = [] 
+        half_batch_index = int(np.floor(0.5 * len(to_opt["det_coeff"])))
+        for sub_iteration in range(max_sub_iterations):
+            to_opt_new = copy.deepcopy(to_opt)
+            to_opt_new["det_coeff"][sub_iteration * half_batch_index : (sub_iteration + 1) * half_batch_index] = False
+            transform_list.append(
                 StochasticReconfigurationWfbyWf(
                     energy,
-                    pyqmc.observables.accumulators.LinearTransform(
-                        wfs[i].parameters, to_opts[i]
-                    ),
+                    pyqmc.observables.accumulators.LinearTransform(wf.parameters, to_opt_new),
                 )
-            ]
-        )
+            )
+        updater.append(transform_list)
     configs = pyq.initial_guess(mol, nconfig)
-    configs_ensemble = [copy.deepcopy(configs) for _ in range(nwf)]
-    runtime = {}
+    configs_ensemble = [[copy.deepcopy(configs) for _ in range(len(updater[wfi]))] for wfi in range(nwf)]
     energy0 = {}
     energy_error0 = {}
     energy1 = {}
@@ -83,8 +84,8 @@ def test_threading(H2_casci):
                 wfs,
                 configs_ensemble,
                 updater,
-                range(nwf),
-                sub_iteration=0,
+                wf_start=0,
+                sub_iteration_offset=0, 
                 client=client,
                 npartitions=npartitions,
             )
@@ -95,16 +96,16 @@ def test_threading(H2_casci):
             configs_ensemble,
         ) = mc_data
         avg0, error0 = updater[0][0].block_average(
-            data_sample1_ensemble[0],
-            data_weighted_ensemble[0],
-            data_unweighted_ensemble[0]["overlap"],
+            data_sample1_ensemble[0][0],
+            data_weighted_ensemble[0][0],
+            data_unweighted_ensemble[0][0]["overlap"],
         )
         energy0[f"threader_{use_threader}"] = avg0["total"]
         energy_error0[f"threader_{use_threader}"] = error0["total"]
         avg1, error1 = updater[1][0].block_average(
-            data_sample1_ensemble[1],
-            data_weighted_ensemble[1],
-            data_unweighted_ensemble[1]["overlap"],
+            data_sample1_ensemble[1][0],
+            data_weighted_ensemble[1][0],
+            data_unweighted_ensemble[1][0]["overlap"],
         )
         energy1[f"threader_{use_threader}"] = avg1["total"]
         energy_error1[f"threader_{use_threader}"] = error1["total"]

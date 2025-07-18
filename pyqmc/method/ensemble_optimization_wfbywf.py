@@ -21,6 +21,8 @@ import pyqmc.gpu as gpu
 import os
 from pyqmc.observables.stochastic_reconfiguration import StochasticReconfiguration
 import scipy.stats
+import copy
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 class StochasticReconfigurationWfbyWf:
@@ -223,6 +225,149 @@ def renormalize(wfs, norms, pivot=0, N=1):
             raise NotImplementedError("need wf1det_coeff or det_coeff in parameters")
 
 
+def evaluate_gradients(
+    wfs, 
+    configs_ensemble, 
+    updater, 
+    wf_start,
+    sub_iteration_offset, 
+    client=None, 
+    npartitions=1, 
+    **vmc_kwargs,
+):
+    """Evaluate parameter gradients for each state without threader
+    It loops over states and runs Monte Carlo evaluations for them in sequence
+
+    :parameter list wfs: list of optimized wave functions
+    :parameter list configs_ensemble: nested list of initial configurations indexed by state then by sub-iteration
+    :parameter list updater: nested list of StochasticReconfigurationWfbyWf accumulators indexed by state then by sub-iteration
+    :parameter int wf_start: index for the lowest state in include in Monte Carlo evaluations
+    :parameter int sub_iteration_offset: sub iteration offset for wf_start
+    :parameter client: an object with submit() functions that return futures
+    :parameter int npartitions: the number of workers to submit at a time
+    :parameter dict vmc_kwargs: a dictionary of options for the vmc method
+
+    :return dict data_sample1_ensemble: nested list of vmc outputs indexed by state then by sub-iteration
+    :return dict data_weighted_ensemble: nested list of weighted sample_overlap outputs indexed by state then by sub-iteration
+    :return dict data_unweighted_ensemble: nested list of unweighted sample_overlap outputs indexed by state then by sub-iteration
+    :return list configs_ensemble: nested list of updated configurations indexed by state then by sub-iteration
+    """
+    nwf = len(wfs)
+    sub_iteration_offsets_ensemble = [0] * nwf
+    sub_iteration_offsets_ensemble[wf_start] = sub_iteration_offset
+    data_sample1_ensemble = [[0 for _ in range(len(updater[wfi]))] for wfi in range(nwf)]
+    data_weighted_ensemble = [[0 for _ in range(len(updater[wfi]))] for wfi in range(nwf)]
+    data_unweighted_ensemble = [[0 for _ in range(len(updater[wfi]))] for wfi in range(nwf)]
+    for wfi in range(wf_start, nwf):
+        wf = wfs[wfi]
+        transform_list = updater[wfi]
+        for sub_iteration in range(sub_iteration_offsets_ensemble[wfi], len(transform_list)):
+            transform = transform_list[sub_iteration]
+            data_sample1_ensemble[wfi][sub_iteration], configs_ensemble[wfi][sub_iteration] = pyqmc.method.mc.vmc(
+                wf,
+                configs_ensemble[wfi][sub_iteration],
+                accumulators={"": transform.onewf()},
+                client=client,
+                npartitions=npartitions,
+                **vmc_kwargs,
+            )
+            (
+                data_weighted_ensemble[wfi][sub_iteration], 
+                data_unweighted_ensemble[wfi][sub_iteration], 
+                configs_ensemble[wfi][sub_iteration],
+            ) = pyqmc.method.sample_many.sample_overlap(
+                wfs[0 : wfi + 1],
+                configs_ensemble[wfi][sub_iteration],
+                transform.allwfs(),
+                client=client,
+                npartitions=npartitions,
+                **vmc_kwargs,
+            )
+    return data_sample1_ensemble, data_weighted_ensemble, data_unweighted_ensemble, configs_ensemble
+
+
+def evaluate_gradients_threaded(
+    wfs, 
+    configs_ensemble, 
+    updater,
+    wf_start,
+    sub_iteration_offset,
+    client=None, 
+    npartitions=1, 
+    **vmc_kwargs,
+):
+    """Evaluate parameter gradients for each state with threader
+    It runs Monte Carlo evaluations for all the states asynchronously and gathers the results as they complete
+    Each state's vmc evaluations get parallelized using an even share of npartitions
+
+    :parameter list wfs: list of optimized wave functions
+    :parameter list configs_ensemble: nested list of initial configurations indexed by state then by sub-iteration
+    :parameter list updater: nested list of StochasticReconfigurationWfbyWf accumulators indexed by state then by sub-iteration
+    :parameter int wf_start: index for the lowest state in include in Monte Carlo evaluations
+    :parameter int sub_iteration_offset: sub iteration offset for wf_start
+    :parameter client: an object with submit() functions that return futures
+    :parameter int npartitions: the number of workers to submit at a time
+    :parameter dict vmc_kwargs: a dictionary of options for the vmc method
+
+    :return dict data_sample1_ensemble: nested list of vmc outputs indexed by state then by sub-iteration
+    :return dict data_weighted_ensemble: nested list of weighted sample_overlap outputs indexed by state then by sub-iteration
+    :return dict data_unweighted_ensemble: nested list of unweighted sample_overlap outputs indexed by state then by sub-iteration
+    :return list configs_ensemble: nested list of updated configurations indexed by state then by sub-iteration
+    """
+    nwf = len(wfs)
+    sub_iteration_offsets_ensemble = [0] * nwf
+    sub_iteration_offsets_ensemble[wf_start] = sub_iteration_offset
+    nthreads = 2 * sum([len(updater[wfi]) - sub_iteration_offsets_ensemble[wfi] for wfi in range(wf_start, nwf)])
+    data_sample1_ensemble = [[0 for _ in range(len(updater[wfi]))] for wfi in range(nwf)]
+    data_weighted_ensemble = [[0 for _ in range(len(updater[wfi]))] for wfi in range(nwf)]
+    data_unweighted_ensemble = [[0 for _ in range(len(updater[wfi]))] for wfi in range(nwf)]
+    energy_workers = {}
+    overlap_workers = {}
+    if nthreads == 0:
+        return data_sample1_ensemble, data_weighted_ensemble, data_unweighted_ensemble, configs_ensemble
+    if npartitions // nthreads == 0:
+        print("Warning: there are more threads than worker processes", flush=True)
+        print("Each thread will be given 1 worker process", flush=True)
+    npartitions_per_thread = max(1, npartitions // nthreads)
+    with ThreadPoolExecutor(max_workers=nthreads) as threader:
+        for wfi in range(wf_start, nwf):
+            wf = wfs[wfi]
+            transform_list = updater[wfi]
+            for sub_iteration in range(sub_iteration_offsets_ensemble[wfi], len(transform_list)):
+                transform = transform_list[sub_iteration]
+                energy_workers_thread = threader.submit(
+                    pyqmc.method.mc.vmc,
+                    wf,
+                    configs_ensemble[wfi][sub_iteration],
+                    accumulators={"": transform.onewf()},
+                    client=client,
+                    npartitions=npartitions_per_thread,
+                    **vmc_kwargs,
+                )
+                overlap_workers_thread = threader.submit(
+                    pyqmc.method.sample_many.sample_overlap,
+                    wfs[0 : wfi + 1],
+                    configs_ensemble[wfi][sub_iteration],
+                    transform.allwfs(),
+                    client=client,
+                    npartitions=npartitions_per_thread,
+                    **vmc_kwargs,
+                )
+                energy_workers[energy_workers_thread] = (wfi, sub_iteration)
+                overlap_workers[overlap_workers_thread] = (wfi, sub_iteration)
+    for energy_workers_thread in as_completed(energy_workers):
+        wfi, sub_iteration = energy_workers[energy_workers_thread]
+        data_sample1_ensemble[wfi][sub_iteration], configs_ensemble[wfi][sub_iteration] = energy_workers_thread.result() 
+    for overlap_workers_thread in as_completed(overlap_workers):
+        wfi, sub_iteration = overlap_workers[overlap_workers_thread]
+        (
+            data_weighted_ensemble[wfi][sub_iteration], 
+            data_unweighted_ensemble[wfi][sub_iteration], 
+            configs_ensemble[wfi][sub_iteration],
+        ) = overlap_workers_thread.result()
+    return data_sample1_ensemble, data_weighted_ensemble, data_unweighted_ensemble, configs_ensemble
+
+
 def optimize_ensemble(
     wfs,
     configs,
@@ -234,6 +379,7 @@ def optimize_ensemble(
     npartitions=None,
     client=None,
     verbose=False,
+    use_threader=True,
     vmc_kwargs={},
 ):
     """Optimize a set of wave functions using ensemble VMC.
@@ -262,63 +408,77 @@ def optimize_ensemble(
             if "iteration" in hdf.keys():
                 iteration_offset = np.max(hdf["iteration"][...]) 
             if "sub_iteration" in hdf.keys():
-                sub_iteration_offset = hdf["sub_iteration"][-1]+1
+                sub_iteration_offset = int(hdf["sub_iteration"][-1]+1)
             if 'wavefunction' in hdf.keys():
                 wf_start = hdf['wavefunction'][-1]
             configs.load_hdf(hdf)
     else:
-        _, configs = pyqmc.method.mc.vmc(wfs[0], configs, client=client, npartitions=npartitions, **vmc_kwargs)
+        _, configs = pyqmc.method.mc.vmc(wfs[0], configs, verbose=True, client=client, npartitions=npartitions)
 
+    configs_ensemble = [[copy.deepcopy(configs) for _ in range(len(updater[wfi]))] for wfi in range(nwf)]
+    sub_iteration_offsets_ensemble = [0] * nwf
+    sub_iteration_offsets_ensemble[wf_start] = sub_iteration_offset
     for i in range(iteration_offset, max_iterations):
+        _, data_unweighted, configs = pyqmc.method.sample_many.sample_overlap(
+            wfs,
+            configs_ensemble[0][0],
+            None,
+            client=client,
+            npartitions=npartitions,
+            **vmc_kwargs,
+        )
+        norm = np.mean(data_unweighted["overlap"], axis=0)
+        if verbose:
+            print("Normalization step", norm.diagonal())
+        renormalize(wfs, norm.diagonal(), pivot=0)
+        if client is None or not use_threader:
+            data_sample1_ensemble, data_weighted_ensemble, data_unweighted_ensemble, configs_ensemble = evaluate_gradients(
+                wfs, 
+                configs_ensemble, 
+                updater,
+                wf_start,
+                sub_iteration_offset,
+                client=client, 
+                npartitions=npartitions, 
+                **vmc_kwargs,
+            )
+        else:
+            data_sample1_ensemble, data_weighted_ensemble, data_unweighted_ensemble, configs_ensemble = evaluate_gradients_threaded(
+                wfs, 
+                configs_ensemble, 
+                updater, 
+                wf_start,
+                sub_iteration_offset,
+                client=client, 
+                npartitions=npartitions, 
+                **vmc_kwargs,
+            )
         for wfi in range(wf_start, nwf):
             wf = wfs[wfi]
             transform_list = updater[wfi]
-
-            for sub_iteration in range(sub_iteration_offset, len(transform_list)):
+            for sub_iteration in range(sub_iteration_offsets_ensemble[wfi], len(transform_list)):
                 transform = transform_list[sub_iteration]
-                data_weighted, data_unweighted, configs = pyqmc.method.sample_many.sample_overlap(
-                    wfs,
-                    configs,
-                    None,
-                    client=client,
-                    npartitions=npartitions,
-                    **vmc_kwargs,
+                avg, error = transform.block_average(
+                    data_sample1_ensemble[wfi][sub_iteration], 
+                    data_weighted_ensemble[wfi][sub_iteration], 
+                    data_unweighted_ensemble[wfi][sub_iteration]["overlap"],
                 )
-                norm = np.mean(data_unweighted["overlap"], axis=0)
-                if verbose:
-                    print("Normalization step", norm.diagonal())
-                renormalize(wfs, norm.diagonal(), pivot=0)
-
-                data_sample1, configs = pyqmc.method.mc.vmc(
-                    wf, configs, accumulators={'': transform.onewf()}, client=client, npartitions=npartitions, **vmc_kwargs
-                )
-
-                data_weighted, data_unweighted, configs = pyqmc.method.sample_many.sample_overlap(
-                    wfs[0: wfi + 1],
-                    configs,
-                    transform.allwfs(),
-                    client=client,
-                    npartitions=npartitions,
-                    **vmc_kwargs,
-                )
-
-                avg, error = transform.block_average(data_sample1, data_weighted, data_unweighted["overlap"])
                 if verbose:
                     print("Iteration", i, "wf ", wfi, " sub iteration ", sub_iteration, "Energy", avg["total"], "Overlap", avg["overlap"][wfi, :])
                 dp, report = transform.delta_p([tau], avg, overlap_penalty, verbose=True)
-                x = transform.transform.serialize_parameters(wf.parameters)
+                x = transform.transform.serialize_parameters(wfs[wfi].parameters)
                 x = x + dp[0]
-                set_wf_params(wf, x, transform)
+                set_wf_params(wfs[wfi], x, transform)
 
                 save_data = {
                     f"energy{wfi}": avg["total"],
                     f"energy_error{wfi}": error["total"],
                     f"overlap{wfi}": avg["overlap"],
                     "iteration": i,
-                    'wavefunction': wfi,
+                    "wavefunction": wfi,
                     "sub_iteration": sub_iteration,
                 }
-                hdf_save(hdf_file, save_data, {"tau": tau}, wfs, configs)
+                hdf_save(hdf_file, save_data, {"tau": tau}, wfs, configs_ensemble[wfi][sub_iteration])
             sub_iteration_offset = 0
         wf_start = 0
 

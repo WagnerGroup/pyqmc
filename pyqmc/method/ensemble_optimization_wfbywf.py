@@ -236,7 +236,7 @@ def evaluate_gradients(
     **vmc_kwargs,
 ):
     """Evaluate parameter gradients for each state without threader
-    It loops over the states in wf_indices_to_opt and runs Monte Carlo evaluations for them in sequence
+    It loops over states and runs Monte Carlo evaluations for them in sequence
 
     :parameter list wfs: list of optimized wave functions
     :parameter list configs_ensemble: nested list of initial configurations indexed by state then by sub-iteration
@@ -271,7 +271,11 @@ def evaluate_gradients(
                 npartitions=npartitions,
                 **vmc_kwargs,
             )
-            data_weighted_ensemble[wfi][sub_iteration], data_unweighted_ensemble[wfi][sub_iteration], configs_ensemble[wfi][sub_iteration] = pyqmc.method.sample_many.sample_overlap(
+            (
+                data_weighted_ensemble[wfi][sub_iteration], 
+                data_unweighted_ensemble[wfi][sub_iteration], 
+                configs_ensemble[wfi][sub_iteration],
+            ) = pyqmc.method.sample_many.sample_overlap(
                 wfs[0 : wfi + 1],
                 configs_ensemble[wfi][sub_iteration],
                 transform.allwfs(),
@@ -313,13 +317,17 @@ def evaluate_gradients_threaded(
     nwf = len(wfs)
     sub_iteration_offsets_ensemble = [0] * nwf
     sub_iteration_offsets_ensemble[wf_start] = sub_iteration_offset
-    nthreads = sum([len(updater[wfi]) - sub_iteration_offsets_ensemble[wfi] for wfi in range(wf_start, nwf)])
+    nthreads = 2 * sum([len(updater[wfi]) - sub_iteration_offsets_ensemble[wfi] for wfi in range(wf_start, nwf)])
     data_sample1_ensemble = [[0 for _ in range(len(updater[wfi]))] for wfi in range(nwf)]
     data_weighted_ensemble = [[0 for _ in range(len(updater[wfi]))] for wfi in range(nwf)]
     data_unweighted_ensemble = [[0 for _ in range(len(updater[wfi]))] for wfi in range(nwf)]
-    result_to_thread = {}
+    energy_workers = {}
+    overlap_workers = {}
     if nthreads == 0:
         return data_sample1_ensemble, data_weighted_ensemble, data_unweighted_ensemble, configs_ensemble
+    if npartitions // nthreads == 0:
+        print("Warning: there are more threads than worker processes", flush=True)
+        print("Each thread will be given 1 worker process", flush=True)
     npartitions_per_thread = max(1, npartitions // nthreads)
     with ThreadPoolExecutor(max_workers=nthreads) as threader:
         for wfi in range(wf_start, nwf):
@@ -327,7 +335,7 @@ def evaluate_gradients_threaded(
             transform_list = updater[wfi]
             for sub_iteration in range(sub_iteration_offsets_ensemble[wfi], len(transform_list)):
                 transform = transform_list[sub_iteration]
-                result = threader.submit(
+                energy_workers_thread = threader.submit(
                     pyqmc.method.mc.vmc,
                     wf,
                     configs_ensemble[wfi][sub_iteration],
@@ -336,16 +344,7 @@ def evaluate_gradients_threaded(
                     npartitions=npartitions_per_thread,
                     **vmc_kwargs,
                 )
-                result_to_thread[result] = (wfi, sub_iteration)
-        for result in as_completed(result_to_thread):
-            wf_index, sub_it = result_to_thread[result]
-            data_sample1_ensemble[wf_index][sub_it], configs_ensemble[wf_index][sub_it] = result.result() 
-        result_to_thread.clear()
-        for wfi in range(wf_start, nwf):
-            transform_list = updater[wfi]
-            for sub_iteration in range(sub_iteration_offsets_ensemble[wfi], len(transform_list)):
-                transform = transform_list[sub_iteration]
-                result = threader.submit(
+                overlap_workers_thread = threader.submit(
                     pyqmc.method.sample_many.sample_overlap,
                     wfs[0 : wfi + 1],
                     configs_ensemble[wfi][sub_iteration],
@@ -354,10 +353,18 @@ def evaluate_gradients_threaded(
                     npartitions=npartitions_per_thread,
                     **vmc_kwargs,
                 )
-                result_to_thread[result] = (wfi, sub_iteration)
-            for result in as_completed(result_to_thread): 
-                wf_index, sub_it = result_to_thread[result]
-                data_weighted_ensemble[wf_index][sub_it], data_unweighted_ensemble[wf_index][sub_it], configs_ensemble[wf_index][sub_it] = result.result()
+                energy_workers[energy_workers_thread] = (wfi, sub_iteration)
+                overlap_workers[overlap_workers_thread] = (wfi, sub_iteration)
+    for energy_workers_thread in as_completed(energy_workers):
+        wfi, sub_iteration = energy_workers[energy_workers_thread]
+        data_sample1_ensemble[wfi][sub_iteration], configs_ensemble[wfi][sub_iteration] = energy_workers_thread.result() 
+    for overlap_workers_thread in as_completed(overlap_workers):
+        wfi, sub_iteration = overlap_workers[overlap_workers_thread]
+        (
+            data_weighted_ensemble[wfi][sub_iteration], 
+            data_unweighted_ensemble[wfi][sub_iteration], 
+            configs_ensemble[wfi][sub_iteration],
+        ) = overlap_workers_thread.result()
     return data_sample1_ensemble, data_weighted_ensemble, data_unweighted_ensemble, configs_ensemble
 
 

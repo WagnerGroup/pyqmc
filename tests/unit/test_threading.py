@@ -39,7 +39,7 @@ def test_threading(H2_casci):
     """
     nwf = 2
     nconfig = 1000
-    npartitions = 4
+    npartitions = 8
     max_sub_iterations = 2
     mol, mf, mc = H2_casci
     mcs = [copy.copy(mc) for _ in range(nwf)]

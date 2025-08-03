@@ -355,16 +355,17 @@ def evaluate_gradients_threaded(
                 )
                 energy_workers[energy_workers_thread] = (wfi, sub_iteration)
                 overlap_workers[overlap_workers_thread] = (wfi, sub_iteration)
-    for energy_workers_thread in as_completed(energy_workers):
-        wfi, sub_iteration = energy_workers[energy_workers_thread]
-        data_sample1_ensemble[wfi][sub_iteration], configs_ensemble[wfi][sub_iteration] = energy_workers_thread.result() 
-    for overlap_workers_thread in as_completed(overlap_workers):
-        wfi, sub_iteration = overlap_workers[overlap_workers_thread]
-        (
-            data_weighted_ensemble[wfi][sub_iteration], 
-            data_unweighted_ensemble[wfi][sub_iteration], 
-            configs_ensemble[wfi][sub_iteration],
-        ) = overlap_workers_thread.result()
+        all_workers = {**energy_workers, **overlap_workers}
+        for future in as_completed(all_workers):
+            wfi, sub_iteration = all_workers[future]
+            if future in energy_workers:
+                data_sample1_ensemble[wfi][sub_iteration], configs_ensemble[wfi][sub_iteration] = future.result()
+            else:
+                (
+                    data_weighted_ensemble[wfi][sub_iteration],
+                    data_unweighted_ensemble[wfi][sub_iteration],
+                    configs_ensemble[wfi][sub_iteration],
+                ) = future.result()
     return data_sample1_ensemble, data_weighted_ensemble, data_unweighted_ensemble, configs_ensemble
 
 

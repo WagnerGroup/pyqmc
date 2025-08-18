@@ -22,7 +22,7 @@ import copy
 import time
 import pyqmc.observables.jax_ecp as ecp_accumulator
 
-def gradient_generator(mol, wf, to_opt=None, nodal_cutoff=1e-3, eps=1e-1, inverse_strategy="regularized_inverse", **ewald_kwargs):
+def gradient_generator(mol, wf, to_opt=None, nodal_cutoff=1e-3, eps=1e-3, inverse_strategy="regularized_inverse", **ewald_kwargs):
     return StochasticReconfiguration(
         EnergyAccumulator(mol, **ewald_kwargs),
         LinearTransform(wf.parameters, to_opt),

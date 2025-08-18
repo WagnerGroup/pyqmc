@@ -218,9 +218,9 @@ def renormalize(wfs, norms, pivot=0, N=1):
             continue
         renorm = np.sqrt(norms[pivot] / norms[i] * N)
         if "wf1det_coeff" in wfs[-1].parameters.keys():
-            wf.parameters["wf1det_coeff"] *= renorm
+            wf.parameters["wf1det_coeff"] = wf.parameters["wf1det_coeff"] * renorm
         elif "det_coeff" in wfs[-1].parameters.keys():
-            wf.parameters["det_coeff"] *= renorm
+            wf.parameters["det_coeff"] = wf.parameters["det_coeff"] * renorm
         else:
             raise NotImplementedError("need wf1det_coeff or det_coeff in parameters")
 

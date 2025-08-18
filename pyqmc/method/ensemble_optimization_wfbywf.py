@@ -233,7 +233,8 @@ def evaluate_gradients(
     sub_iteration_offset, 
     client=None, 
     npartitions=1, 
-    **vmc_kwargs,
+    vmc_kwargs={},
+    overlap_kwargs={},
 ):
     """Evaluate parameter gradients for each state without threader
     It loops over states and runs Monte Carlo evaluations for them in sequence
@@ -246,6 +247,7 @@ def evaluate_gradients(
     :parameter client: an object with submit() functions that return futures
     :parameter int npartitions: the number of workers to submit at a time
     :parameter dict vmc_kwargs: a dictionary of options for the vmc method
+    :parameter dict overlap_kwargs: a dictionary of options for the sample_overlap method
 
     :return dict data_sample1_ensemble: nested list of vmc outputs indexed by state then by sub-iteration
     :return dict data_weighted_ensemble: nested list of weighted sample_overlap outputs indexed by state then by sub-iteration
@@ -267,6 +269,7 @@ def evaluate_gradients(
                 wf,
                 configs_ensemble[wfi][sub_iteration],
                 accumulators={"": transform.onewf()},
+                verbose=True,
                 client=client,
                 npartitions=npartitions,
                 **vmc_kwargs,
@@ -281,7 +284,7 @@ def evaluate_gradients(
                 transform.allwfs(),
                 client=client,
                 npartitions=npartitions,
-                **vmc_kwargs,
+                **overlap_kwargs,
             )
     return data_sample1_ensemble, data_weighted_ensemble, data_unweighted_ensemble, configs_ensemble
 
@@ -294,7 +297,8 @@ def evaluate_gradients_threaded(
     sub_iteration_offset,
     client=None, 
     npartitions=1, 
-    **vmc_kwargs,
+    vmc_kwargs={},
+    overlap_kwargs={},
 ):
     """Evaluate parameter gradients for each state with threader
     It runs Monte Carlo evaluations for all the states asynchronously and gathers the results as they complete
@@ -308,6 +312,7 @@ def evaluate_gradients_threaded(
     :parameter client: an object with submit() functions that return futures
     :parameter int npartitions: the number of workers to submit at a time
     :parameter dict vmc_kwargs: a dictionary of options for the vmc method
+    :parameter dict overlap_kwargs: a dictionary of options for the sample_overlap method
 
     :return dict data_sample1_ensemble: nested list of vmc outputs indexed by state then by sub-iteration
     :return dict data_weighted_ensemble: nested list of weighted sample_overlap outputs indexed by state then by sub-iteration
@@ -340,6 +345,7 @@ def evaluate_gradients_threaded(
                     wf,
                     configs_ensemble[wfi][sub_iteration],
                     accumulators={"": transform.onewf()},
+                    verbose=True,
                     client=client,
                     npartitions=npartitions_per_thread,
                     **vmc_kwargs,
@@ -351,7 +357,7 @@ def evaluate_gradients_threaded(
                     transform.allwfs(),
                     client=client,
                     npartitions=npartitions_per_thread,
-                    **vmc_kwargs,
+                    **overlap_kwargs,
                 )
                 energy_workers[energy_workers_thread] = (wfi, sub_iteration)
                 overlap_workers[overlap_workers_thread] = (wfi, sub_iteration)
@@ -381,7 +387,9 @@ def optimize_ensemble(
     client=None,
     verbose=False,
     use_threader=True,
+    warmup_kwargs={},
     vmc_kwargs={},
+    overlap_kwargs={},
 ):
     """Optimize a set of wave functions using ensemble VMC.
 
@@ -392,6 +400,12 @@ def optimize_ensemble(
     wfs : list of optimized wave functions
     """
 
+    if len(warmup_kwargs) == 0:
+        warmup_kwargs = dict(nblocks=1, nsteps_per_block=100)
+    if len(vmc_kwargs) == 0:
+        vmc_kwargs = dict(nblocks=10, nsteps_per_block=10)
+    if len(overlap_kwargs) == 0:
+        overlap_kwargs = dict(nblocks=10, nsteps=10)
     nwf = len(wfs)
     if overlap_penalty is None:
         overlap_penalty = np.ones((nwf, nwf)) * 0.5
@@ -414,7 +428,14 @@ def optimize_ensemble(
                 wf_start = hdf['wavefunction'][-1]
             configs.load_hdf(hdf)
     else:
-        _, configs = pyqmc.method.mc.vmc(wfs[0], configs, verbose=True, client=client, npartitions=npartitions)
+        _, configs = pyqmc.method.mc.vmc(
+            wfs[0], 
+            configs, 
+            verbose=True,
+            client=client, 
+            npartitions=npartitions, 
+            **warmup_kwargs,
+        )
 
     configs_ensemble = [[copy.deepcopy(configs) for _ in range(len(updater[wfi]))] for wfi in range(nwf)]
     sub_iteration_offsets_ensemble = [0] * nwf
@@ -426,7 +447,7 @@ def optimize_ensemble(
             None,
             client=client,
             npartitions=npartitions,
-            **vmc_kwargs,
+            **overlap_kwargs,
         )
         norm = np.mean(data_unweighted["overlap"], axis=0)
         if verbose:
@@ -441,7 +462,8 @@ def optimize_ensemble(
                 sub_iteration_offset,
                 client=client, 
                 npartitions=npartitions, 
-                **vmc_kwargs,
+                vmc_kwargs=vmc_kwargs,
+                overlap_kwargs=overlap_kwargs,
             )
         else:
             data_sample1_ensemble, data_weighted_ensemble, data_unweighted_ensemble, configs_ensemble = evaluate_gradients_threaded(
@@ -452,7 +474,8 @@ def optimize_ensemble(
                 sub_iteration_offset,
                 client=client, 
                 npartitions=npartitions, 
-                **vmc_kwargs,
+                vmc_kwargs=vmc_kwargs,
+                overlap_kwargs=overlap_kwargs,
             )
         for wfi in range(wf_start, nwf):
             wf = wfs[wfi]

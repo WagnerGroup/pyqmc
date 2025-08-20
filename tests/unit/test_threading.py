@@ -84,8 +84,6 @@ def test_threading(H2_casci):
                 wfs,
                 configs_ensemble,
                 updater,
-                wf_start=0,
-                sub_iteration_offset=0, 
                 client=client,
                 npartitions=npartitions,
             )

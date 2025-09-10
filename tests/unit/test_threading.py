@@ -55,20 +55,29 @@ def test_threading(H2_casci):
             optimize_determinants=True,
         )
         wfs.append(wf)
-        transform_list = [] 
+        transform_list = []
         half_batch_index = int(np.floor(0.5 * len(to_opt["det_coeff"])))
         for sub_iteration in range(max_sub_iterations):
             to_opt_new = copy.deepcopy(to_opt)
-            to_opt_new["det_coeff"][sub_iteration * half_batch_index : (sub_iteration + 1) * half_batch_index] = False
+            to_opt_new["det_coeff"][
+                sub_iteration
+                * half_batch_index : (sub_iteration + 1)
+                * half_batch_index
+            ] = False
             transform_list.append(
                 StochasticReconfigurationWfbyWf(
                     energy,
-                    pyqmc.observables.accumulators.LinearTransform(wf.parameters, to_opt_new),
+                    pyqmc.observables.accumulators.LinearTransform(
+                        wf.parameters, to_opt_new
+                    ),
                 )
             )
         updater.append(transform_list)
     configs = pyq.initial_guess(mol, nconfig)
-    configs_ensemble = [[copy.deepcopy(configs) for _ in range(len(updater[wfi]))] for wfi in range(nwf)]
+    configs_ensemble = [
+        [[copy.deepcopy(configs) for _ in range(2)] for _ in range(len(updater[wfi]))]
+        for wfi in range(nwf)
+    ]
     energy0 = {}
     energy_error0 = {}
     energy1 = {}

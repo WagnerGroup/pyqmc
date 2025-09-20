@@ -56,7 +56,7 @@ def extend_hdf(f, data):
 
 def compute_weights(wfs):
     """
-    computes psi_i psi_j / rho for all i,j and for each configuration.
+    computes psi_i* psi_j / rho for all i,j and for each configuration.
     Returns:
       weights[wfi, wfj, config]
     """
@@ -90,6 +90,7 @@ def sample_overlap_worker(wfs, configs, tstep, nsteps, nblocks, energy):
     weighted = []
     unweighted = []
     for block in range(nblocks):
+        print("-", end="", flush=True)
         w, u, _ = sample_overlap_block(wfs, configs, tstep, nsteps, energy)
         weighted.append(w)
         unweighted.append(u)
@@ -116,6 +117,7 @@ def sample_overlap_block(wfs, configs, tstep, nsteps, energy):
             gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconf, 3))
             newcoorde = configs.configs[:, e, :] + gauss + grad * tstep
             newcoorde = configs.make_irreducible(e, newcoorde)
+            #print(configs.wrap)
 
             # Compute reverse move
             grads, vals, saved_values = list(

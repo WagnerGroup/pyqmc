@@ -150,7 +150,7 @@ class PBCOrbitalEvaluatorKpoints:
                 sum(map(gpu.cp.iscomplexobj, self.parameters.values()))
             )
         else:
-            iscomplex = False
+            iscomplex = False #Is this right??
 
         self.mo_dtype = complex if iscomplex else float
         self.get_wrapphase = get_wrapphase_complex if iscomplex else get_wrapphase_real

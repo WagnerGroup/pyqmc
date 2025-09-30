@@ -251,7 +251,7 @@ def create_wf_evaluator(mol, mf, det_tol=1e-9, nimages=2, mc = None):
     ci_coeff = jnp.array(ci_coeff)
     #determinants = jnp.array(determinants)
     mapping = jnp.array(mapping)
-    if mc is not None and hasattr(mc, "mo_coeff"):
+    if hasattr(mc, "mo_coeff"):
         _mo_coeff = mc.mo_coeff
     else:
         _mo_coeff = mf.mo_coeff

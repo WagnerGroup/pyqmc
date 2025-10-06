@@ -251,8 +251,12 @@ def create_wf_evaluator(mol, mf, det_tol=1e-9, nimages=2, mc = None):
     ci_coeff = jnp.array(ci_coeff)
     #determinants = jnp.array(determinants)
     mapping = jnp.array(mapping)
-    mo_coeff_up = mf.mo_coeff[:,:np.max(determinants[0])+1] 
-    mo_coeff_down = mf.mo_coeff[:,:np.max(determinants[1])+1] 
+    if hasattr(mc, "mo_coeff"):
+        _mo_coeff = mc.mo_coeff
+    else:
+        _mo_coeff = mf.mo_coeff
+    mo_coeff_up = _mo_coeff[:,:np.max(determinants[0])+1] 
+    mo_coeff_down = _mo_coeff[:,:np.max(determinants[1])+1] 
 
     det_params = DeterminantParameters(ci_coeff, mo_coeff_up, mo_coeff_down)
     expansion = DeterminantExpansion( mapping[0], mapping[1], 

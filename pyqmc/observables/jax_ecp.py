@@ -103,7 +103,14 @@ class ECPAccumulator:
         # evaluate the wave function ratio
         ratio = np.asarray(wf.testvalue(e, epos)[0])
 
-        weight = np.einsum("ijk, ijk -> ij", np.exp(-tau*move_info.v_l/move_info.P_l)-1, move_info.P_l)
+        expweight = np.zeros_like(selected_moves.P_l)
+        mask = np.abs(selected_moves.P_l>0)
+
+        expweight[mask] =  np.exp(-tau*selected_moves.v_l[mask]/selected_moves.P_l[mask])-1
+
+        weight = np.einsum("ijk, ijk -> ij", 
+                           expweight,
+                             selected_moves.P_l)
 
         return {'ratio': ratio, 'weight': weight, 'configs':epos} 
 

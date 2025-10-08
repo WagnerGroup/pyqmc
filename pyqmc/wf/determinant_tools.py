@@ -56,7 +56,7 @@ def create_packed_objects(deters, tol=0):
     detwt = []
     map_dets = [[], []]
     occup = [[], []]
-    for x in deters:
+    for x in deters: # x is (weight, [occupation string up, occupation string down])
         if np.abs(x[0]) > tol:
             detwt.append(x[0])
             spin_occ = x[1]

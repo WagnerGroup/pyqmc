@@ -89,7 +89,7 @@ class ECPAccumulator:
         ratio[move_info.mask,:] = wf.testvalue(e, epos, move_info.mask)[0]
 
         weight = np.einsum("ik, ijk -> ij", np.exp(-tau*move_info.v_l)-1, move_info.P_l)
-
+        print(ratio.shape, weight.shape)
         return {'ratio': ratio, 'weight': weight, 'configs':epos} 
 
     def has_nonlocal_moves(self):

@@ -22,6 +22,8 @@ import os
 from pyqmc.observables.stochastic_reconfiguration import StochasticReconfiguration
 import scipy.stats
 import copy
+import time
+import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
@@ -150,14 +152,12 @@ class StochasticReconfigurationWfbyWf:
         overlap_cost = 0.0
         for i in range(wfi):
             overlap_cost += overlap_penalty[wfi, i] * data["overlap"][wfi, i]
-        if verbose:
-            print("Overlap cost", overlap_cost)
 
         Sij = np.real(data["dpidpj"])
         invSij = np.linalg.inv(Sij + self.eps * np.eye(Sij.shape[0]))
 
         ovlp = 0.0
-        print('dp overlap', data["dp_overlap"].shape)
+        #print('dp overlap', data["dp_overlap"].shape)
 
         for i in range(wfi):
             ovlp += (
@@ -166,7 +166,7 @@ class StochasticReconfigurationWfbyWf:
                 * overlap_penalty[wfi, i]
                 * data["overlap"][wfi, i]
             )
-        print("dp_energy", data["dp_energy"])
+        #print("dp_energy", data["dp_energy"])
         pgrad = data["dp_energy"] + ovlp
 
         v = np.einsum("ij,j->i", invSij, pgrad)
@@ -174,11 +174,9 @@ class StochasticReconfigurationWfbyWf:
         report = {
             "pgrad": np.linalg.norm(pgrad),
             "SRdot": np.dot(pgrad, v) / (np.linalg.norm(v) * np.linalg.norm(pgrad)),
+            'overlap gradient norm': np.linalg.norm(ovlp),
+            'Gradient norm': np.linalg.norm(pgrad),
         }
-        if verbose:
-            print("overlap gradient norm", np.linalg.norm(ovlp))
-            print("Gradient norm: ", np.linalg.norm(pgrad))
-            print("Dot product between gradient and SR step: ", report["SRdot"])
         return dp, report
 
 
@@ -292,6 +290,7 @@ def evaluate_gradients_threaded(
     npartitions=1, 
     vmc_kwargs={},
     overlap_kwargs={},
+    verbose=True,
 ):
     """Evaluate parameter gradients for each state with threader
     It runs Monte Carlo evaluations for all the states asynchronously and gathers the results as they complete
@@ -323,8 +322,10 @@ def evaluate_gradients_threaded(
         print("Warning: there are more threads than worker processes", flush=True)
         print("Each thread will be given 1 worker process", flush=True)
     npartitions_per_thread = max(1, int(npartitions // nthreads))
+    print("npartitions_per_thread:", npartitions_per_thread, "nthreads", nthreads, "npartitions", npartitions, flush=True)
+    start_time = time.perf_counter()
     with ThreadPoolExecutor(max_workers=nthreads) as threader:
-        for wfi in range(nwf):
+        for wfi, wf in enumerate(wfs):
             wf = wfs[wfi]
             transform_list = updater[wfi]
             for sub_iteration in range(len(transform_list)):
@@ -351,16 +352,23 @@ def evaluate_gradients_threaded(
                 energy_workers[energy_workers_thread] = (wfi, sub_iteration)
                 overlap_workers[overlap_workers_thread] = (wfi, sub_iteration)
         all_workers = {**energy_workers, **overlap_workers}
+        middle_time = time.perf_counter()
+        times = []
         for future in as_completed(all_workers):
             wfi, sub_iteration = all_workers[future]
             if future in energy_workers:
+                times.append( {'time': time.perf_counter() - middle_time, 'type':'energy', 'wfi':wfi, 'sub_iteration':sub_iteration} )
                 data_sample1_ensemble[wfi][sub_iteration], configs_ensemble[wfi][sub_iteration][0] = future.result()
-            else:
+            else: #overlap worker
+                times.append( {'time': time.perf_counter() - middle_time, 'type':'overlap', 'wfi':wfi, 'sub_iteration':sub_iteration} )
                 (
                     data_weighted_ensemble[wfi][sub_iteration],
                     data_unweighted_ensemble[wfi][sub_iteration],
                     configs_ensemble[wfi][sub_iteration][1],
                 ) = future.result()
+    if verbose:
+        print("time to submit", middle_time-start_time, flush=True)
+        print(pd.DataFrame(times))
     return data_sample1_ensemble, data_weighted_ensemble, data_unweighted_ensemble, configs_ensemble
 
 
@@ -395,6 +403,8 @@ def optimize_ensemble(
         vmc_kwargs = dict(nblocks=10, nsteps_per_block=10)
     if len(overlap_kwargs) == 0:
         overlap_kwargs = dict(nblocks=10, nsteps=10)
+    if client is None:
+        use_threader = False
     nwf = len(wfs)
     if overlap_penalty is None:
         overlap_penalty = np.ones((nwf, nwf)) * 0.5
@@ -437,7 +447,7 @@ def optimize_ensemble(
         if verbose:
             print("Normalization step", norm.diagonal())
         renormalize(wfs, norm.diagonal(), pivot=0)
-        if client is None or not use_threader:
+        if not use_threader:
             data_sample1_ensemble, data_weighted_ensemble, data_unweighted_ensemble, configs_ensemble = evaluate_gradients(
                 wfs, 
                 configs_ensemble, 
@@ -457,10 +467,9 @@ def optimize_ensemble(
                 vmc_kwargs=vmc_kwargs,
                 overlap_kwargs=overlap_kwargs,
             )
-        for wfi in range(nwf):
-            wf = wfs[wfi]
+        for wfi, wf in enumerate(wfs):
             transform_list = updater[wfi]
-            for sub_iteration in range(len(transform_list)):
+            for sub_iteration, transform in enumerate(transform_list):
                 transform = transform_list[sub_iteration]
                 avg, error = transform.block_average(
                     data_sample1_ensemble[wfi][sub_iteration], 

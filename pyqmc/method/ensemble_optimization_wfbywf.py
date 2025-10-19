@@ -142,7 +142,6 @@ class StochasticReconfigurationWfbyWf:
         an accumulator with a name, you'll need to remove that name from the keys.
         That is, the keys should be equal to the ones returned by keys().
 
-
         Compute the change in parameters given the data from a stochastic reconfiguration step.
         Return the change in parameters, and data that we may want to use for diagnostics.
         """
@@ -157,7 +156,6 @@ class StochasticReconfigurationWfbyWf:
         invSij = np.linalg.inv(Sij + self.eps * np.eye(Sij.shape[0]))
 
         ovlp = 0.0
-        #print('dp overlap', data["dp_overlap"].shape)
 
         for i in range(wfi):
             ovlp += (
@@ -281,6 +279,47 @@ def evaluate_gradients(
             )
     return data_sample1_ensemble, data_weighted_ensemble, data_unweighted_ensemble, configs_ensemble
 
+def round_to_fixed_sum(x: np.ndarray, target_sum: int) -> np.ndarray:
+    """
+    Approximate an array of floats with integers such that:
+      - The integer array sums to `target_sum`
+      - The result is as close as possible to the original array
+
+    Parameters
+    ----------
+    x : np.ndarray
+        Input array of floats.
+    target_sum : int
+        Desired sum of the integer approximation.
+
+    Returns
+    -------
+    np.ndarray
+        Integer array with the same shape as x.
+    """
+    # Floor all elements first
+    x = np.asarray(x)
+    x = x*target_sum/np.sum(x)
+    y = np.floor(x).astype(int)
+
+    # Compute how many units we still need to add
+    diff = target_sum - np.sum(y)
+
+    if diff < 0 or diff > len(x):
+        raise ValueError("Target sum is not achievable with integer rounding.")
+
+    # Compute fractional parts
+    frac = x - y
+
+    # Get indices of the largest fractional parts
+    idx = np.argsort(frac)[::-1]
+
+    # Add 1 to the top `diff` indices
+    y[idx[:diff]] += 1
+
+    return y
+
+
 
 def evaluate_gradients_threaded(
     wfs, 
@@ -291,6 +330,7 @@ def evaluate_gradients_threaded(
     vmc_kwargs={},
     overlap_kwargs={},
     verbose=True,
+    overlap_thread_weight=None,
 ):
     """Evaluate parameter gradients for each state with threader
     It runs Monte Carlo evaluations for all the states asynchronously and gathers the results as they complete
@@ -318,15 +358,42 @@ def evaluate_gradients_threaded(
     overlap_workers = {}
     if nthreads == 0:
         return data_sample1_ensemble, data_weighted_ensemble, data_unweighted_ensemble, configs_ensemble
-    if npartitions // nthreads == 0:
-        print("Warning: there are more threads than worker processes", flush=True)
-        print("Each thread will be given 1 worker process", flush=True)
-    npartitions_per_thread = max(1, int(npartitions // nthreads))
-    print("npartitions_per_thread:", npartitions_per_thread, "nthreads", nthreads, "npartitions", npartitions, flush=True)
+
+    #if npartitions // nthreads == 0:
+    #    print("Warning: there are more threads than worker processes", flush=True)
+    #    print("Each thread will be given 1 worker process", flush=True)
+    #npartitions_per_thread = max(1, int(npartitions // nthreads))
+
+    weights = np.zeros(nthreads)
+    threadcount=0
+    # Energy
+    for transform in updater:
+        for trans in transform:
+            weights[threadcount] = 1.0
+            threadcount += 1
+    # overlap: the estimate is that the energy costs about the same
+    # as sampling one wave function. So we add nwf/2.0 to the weight
+    # because we are sampling wfi+1 wave functions
+    for wfi, transform in enumerate(updater):
+        if wfi == 0:
+            threadcount+=1
+            continue
+        if overlap_thread_weight is None:
+            for trans in transform:
+                weights[threadcount] = (1+wfi)/2.0
+                threadcount += 1
+        else:
+            for trans in transform:
+                weights[threadcount] = overlap_thread_weight[wfi]
+                threadcount += 1
+
+    npartitions_by_thread = round_to_fixed_sum(weights, npartitions)
+
+    print("nthreads", nthreads, "npartitions", npartitions_by_thread, flush=True)
     start_time = time.perf_counter()
+    threadcount = 0
     with ThreadPoolExecutor(max_workers=nthreads) as threader:
         for wfi, wf in enumerate(wfs):
-            wf = wfs[wfi]
             transform_list = updater[wfi]
             for sub_iteration in range(len(transform_list)):
                 transform = transform_list[sub_iteration]
@@ -337,21 +404,31 @@ def evaluate_gradients_threaded(
                     accumulators={"": transform.onewf()},
                     verbose=True,
                     client=client,
-                    npartitions=npartitions_per_thread,
+                    npartitions=npartitions_by_thread[threadcount],
                     **vmc_kwargs,
                 )
+                energy_workers[energy_workers_thread] = (wfi, sub_iteration)
+                threadcount += 1
+        for wfi, wf in enumerate(wfs):
+            print("wfi", wfi, threadcount, npartitions_by_thread[threadcount], flush=True)
+            if wfi==0:
+                threadcount+=1
+                continue
+            transform_list = updater[wfi]
+            for sub_iteration in range(len(transform_list)):
                 overlap_workers_thread = threader.submit(
                     pyqmc.method.sample_many.sample_overlap,
                     wfs[0 : wfi + 1],
                     configs_ensemble[wfi][sub_iteration][1],
                     transform.allwfs(),
                     client=client,
-                    npartitions=npartitions_per_thread,
+                    npartitions=npartitions_by_thread[threadcount],
                     **overlap_kwargs,
                 )
-                energy_workers[energy_workers_thread] = (wfi, sub_iteration)
                 overlap_workers[overlap_workers_thread] = (wfi, sub_iteration)
+                threadcount += 1
         all_workers = {**energy_workers, **overlap_workers}
+
         middle_time = time.perf_counter()
         times = []
         for future in as_completed(all_workers):
@@ -359,13 +436,19 @@ def evaluate_gradients_threaded(
             if future in energy_workers:
                 times.append( {'time': time.perf_counter() - middle_time, 'type':'energy', 'wfi':wfi, 'sub_iteration':sub_iteration} )
                 data_sample1_ensemble[wfi][sub_iteration], configs_ensemble[wfi][sub_iteration][0] = future.result()
-            else: #overlap worker
+            elif future in overlap_workers: #overlap worker
                 times.append( {'time': time.perf_counter() - middle_time, 'type':'overlap', 'wfi':wfi, 'sub_iteration':sub_iteration} )
                 (
                     data_weighted_ensemble[wfi][sub_iteration],
                     data_unweighted_ensemble[wfi][sub_iteration],
                     configs_ensemble[wfi][sub_iteration][1],
                 ) = future.result()
+            else:
+                raise ValueError("Received unknown future")
+    # we know for sure that the overlap for wf1 is just 1
+    for sub_iteration in range(len(updater[wfi])):
+        data_unweighted_ensemble[0][sub_iteration] = {'overlap':np.ones((10,1,1))}
+        data_weighted_ensemble[0][sub_iteration] = {'overlap':np.ones((10,1,1))}
     if verbose:
         print("time to submit", middle_time-start_time, flush=True)
         print(pd.DataFrame(times))

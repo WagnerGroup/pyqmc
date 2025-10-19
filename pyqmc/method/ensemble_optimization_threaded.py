@@ -197,16 +197,16 @@ def optimize_ensemble(
     configs,
     updater,
     hdf_file,
+    client,
     tau=1,
     max_iterations=100,
     overlap_penalty=None,
     npartitions=None,
-    client=None,
-    verbose=False,
-    use_threader=True,
-    warmup_kwargs={},
-    vmc_kwargs={},
-    overlap_kwargs={},
+    verbose=True,
+    overlap_thread_weight = None,
+    warmup_kwargs=None,
+    vmc_kwargs=None,
+    overlap_kwargs=None,
 ):
     """Optimize a set of wave functions using ensemble VMC.
 
@@ -217,14 +217,12 @@ def optimize_ensemble(
     wfs : list of optimized wave functions
     """
 
-    if len(warmup_kwargs) == 0:
+    if warmup_kwargs is None or len(warmup_kwargs) == 0:
         warmup_kwargs = dict(nblocks=1, nsteps_per_block=100)
-    if len(vmc_kwargs) == 0:
+    if vmc_kwargs is None or len(vmc_kwargs) == 0:
         vmc_kwargs = dict(nblocks=10, nsteps_per_block=10)
-    if len(overlap_kwargs) == 0:
+    if overlap_kwargs is None or len(overlap_kwargs) == 0:
         overlap_kwargs = dict(nblocks=10, nsteps=10)
-    if client is None:
-        use_threader = False
     nwf = len(wfs)
     if overlap_penalty is None:
         overlap_penalty = np.ones((nwf, nwf)) * 0.5

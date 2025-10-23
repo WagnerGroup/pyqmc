@@ -93,7 +93,7 @@ def default_jastrow_basis(mol, ion_cusp=False, na=4, nb=3, rcut=None, cusp_gamma
     return abasis, bbasis
 
 
-def generate_jastrow(mol, jax=False, ion_cusp=None, na=4, nb=3, rcut=None, cusp_gamma = None, beta_a = 0.2, beta_b = 0.5):
+def generate_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None, cusp_gamma = None, beta_a = 0.2, beta_b = 0.5,jax=False):
     """
     Default 2-body jastrow from QWalk,
 
@@ -133,8 +133,11 @@ def generate_jastrow(mol, jax=False, ion_cusp=None, na=4, nb=3, rcut=None, cusp_
     return jastrow, to_opt
 
 
-def generate_jastrow3(mol, na=4, nb=3, rcut=None):
+def generate_jastrow3(mol, na=4, nb=3, rcut=None, jax=False):
+    if jax is True:
+        raise NotImplementedError("JAX 3-body Jastrow not yet implemented")
     abasis, bbasis = default_jastrow_basis(mol, False, na, nb, rcut)
+    print('na', na)
     wf = three_body_jastrow.ThreeBodyJastrow(mol, abasis, bbasis)
     to_opt = {"ccoeff": np.ones(wf.parameters["ccoeff"].shape).astype(bool)}
     return wf, to_opt
@@ -201,7 +204,7 @@ def generate_wf(
 
     wf1, to_opt1 = generate_slater(mol, mf, jax=jax, mc=mc, **slater_kws)
 
-    pack = [jast(mol, jax, **kw) for jast, kw in zip(jastrow, jastrow_kws)]
+    pack = [jast(mol, **kw, jax=jax) for jast, kw in zip(jastrow, jastrow_kws)]
     wfs = [p[0] for p in pack]
     to_opts = [p[1] for p in pack]
     wf = multiplywf.MultiplyWF(wf1, *wfs)

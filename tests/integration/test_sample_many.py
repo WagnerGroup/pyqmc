@@ -18,11 +18,32 @@ import numpy as np
 from pyscf.fci.addons import overlap
 import pyqmc.api as pyq
 import pyqmc.observables.accumulators
-from pyqmc.method.optimize_excited_states import average, collect_terms
+#from pyqmc.method.optimize_excited_states import average, collect_terms
 from pyqmc.observables.accumulators_multiwf import EnergyAccumulatorMultipleWF
 from pyqmc.method.sample_many import sample_overlap
 import copy
+import scipy
 
+def average(weighted, unweighted):
+    """
+    (more or less) correctly average the output from sample_overlap
+    Returns the average and error as dictionaries.
+
+    TODO: use a more accurate formula for weighted uncertainties
+    """
+    avg = {}
+    error = {}
+    for k, it in unweighted.items():
+        avg[k] = np.mean(it, axis=0)
+        error[k] = scipy.stats.sem(it, axis=0)
+
+    N = np.abs(avg["overlap"].diagonal())
+    Nij = np.sqrt(np.outer(N, N))
+
+    for k, it in weighted.items():
+        avg[k] = np.mean(it, axis=0) / Nij
+        error[k] = scipy.stats.sem(it, axis=0) / Nij
+    return avg, error
 
 def test_sampler(H2_casci):
     mol, mf, mc = H2_casci

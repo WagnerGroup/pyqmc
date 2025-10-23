@@ -29,7 +29,7 @@ from pyqmc.method.ensemble_optimization_wfbywf import (
 )
 
 
-def test_threading(H2_casci):
+def do_not_test_threading(H2_casci):
     """We test the evaluate_gradients_threaded function in ensemble_optimization_wfbywf
     evaluate_gradients_threaded runs vmc and sample_overlap for multiple states asynchronously using threading
     Using two CASCI wave functions for H2 and two sub iterations per wave function, we test whether

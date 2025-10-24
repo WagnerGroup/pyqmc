@@ -17,7 +17,6 @@ import pyqmc.wftools as wftools
 import pyqmc.pyscftools as pyscftools
 import pyqmc.pbc.supercell as supercell
 import pyqmc.method.linemin as linemin
-import pyqmc.method.optimize_ortho as optimize_ortho
 import pyqmc.method.dmc as dmc
 import pyqmc.method.mc
 import pyqmc.reblock
@@ -25,7 +24,6 @@ import numpy as np
 import h5py
 import scipy.stats
 import pandas as pd
-import copy
 import pyqmc.observables.accumulators
 import os
 
@@ -33,7 +31,6 @@ import os
 def OPTIMIZE(
     dft_checkfile,
     output,
-    anchors=None,
     nconfig=1000,
     ci_checkfile=None,
     load_parameters=None,
@@ -51,10 +48,7 @@ def OPTIMIZE(
                 output
             )
         )
-    if target_root is None and anchors is not None:
-        target_root = len(anchors)
-    else:
-        target_root = 0
+    target_root = 0
 
     wf, configs, acc = initialize_qmc_objects(
         dft_checkfile,
@@ -68,25 +62,7 @@ def OPTIMIZE(
         target_root=target_root,
         nodal_cutoff=nodal_cutoff,
     )
-    if anchors is None:
-        linemin.line_minimization(wf, configs, acc, **linemin_kws)
-    else:
-        wfs = []
-        for i, a in enumerate(anchors):
-            wfs.append(
-                initialize_qmc_objects(
-                    dft_checkfile,
-                    ci_checkfile=ci_checkfile,
-                    load_parameters=a,
-                    S=S,
-                    jastrow_kws=jastrow_kws,
-                    slater_kws=slater_kws,
-                    target_root=i,
-                )[0]
-            )
-        # wfs = [wftools.read_wf(copy.deepcopy(wf), a) for a in anchors]
-        wfs.append(wf)
-        optimize_ortho.optimize_orthogonal(wfs, configs, acc, **linemin_kws)
+    linemin.line_minimization(wf, configs, acc, **linemin_kws)
 
 
 def generate_accumulators(

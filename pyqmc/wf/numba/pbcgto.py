@@ -469,7 +469,7 @@ def _single_atom_lap(
 
     rvec_L = np.zeros(3)
     spherical = np.zeros((4, (max_l + 1) ** 2))
-    nbas = np.sum(basis_ls_a * 2 + 1)
+    #nbas = np.sum(basis_ls_a * 2 + 1)
     rad = np.zeros(5)
     for e, v in enumerate(rvec):
         for j, L in enumerate(Ls_a):

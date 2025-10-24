@@ -1,9 +1,7 @@
 import pyqmc.api as pyq
 import h5py
 import time
-import sys
 import os
-import itertools
 import pyscf.pbc.tools.k2gamma as k2gamma
 from pyqmc.observables.eval_ecp import ecp
 from pyqmc.observables.jax_ecp import ECPAccumulator

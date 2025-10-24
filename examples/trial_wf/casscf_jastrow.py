@@ -12,12 +12,9 @@
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
-from pyscf import mcscf, fci, lib
-from pyscf import gto, scf, tools
+from pyscf import mcscf, gto, scf
 import pyqmc.api as pyq
-import os
 import h5py
-
 
 def run_scf(scf_checkfile):
     mol = gto.M(atom="H 0. 0. 0.; H 0. 0. 2.", basis=f"ccecpccpvdz", unit="bohr")
@@ -25,7 +22,6 @@ def run_scf(scf_checkfile):
     mf.chkfile = scf_checkfile
     dm = mf.init_guess_by_atom()
     mf.kernel(dm)
-
 
 def run_casscf(scf_checkfile, ci_checkfile):
     cell, mf = pyq.recover_pyscf(scf_checkfile, cancel_outputs=False)
@@ -37,7 +33,6 @@ def run_casscf(scf_checkfile, ci_checkfile):
         f["mcscf/nelecas"] = list(mc.nelecas)
         f["mcscf/ci"] = mc.ci
     return mc
-
 
 def run_casci(scf_checkfile, ci_checkfile):
     cell, mf = pyq.recover_pyscf(scf_checkfile, cancel_outputs=False)
@@ -52,7 +47,6 @@ def run_casci(scf_checkfile, ci_checkfile):
         f["ci/ci"] = mc.ci
         f["ci/mo_coeff"] = mc.mo_coeff
     return mc
-
 
 def make_wf_object(scf_checkfile, ci_checkfile, eps=1e-3, nconfig=1000):
     mol, mf, mc = pyq.recover_pyscf(scf_checkfile, ci_checkfile=ci_checkfile)
@@ -70,7 +64,6 @@ def make_wf_object(scf_checkfile, ci_checkfile, eps=1e-3, nconfig=1000):
     gradient = pyq.gradient_generator(mol, wf, to_opt, eps=eps)
     coords = pyq.initial_guess(mol, nconfig=nconfig)
     return wf, gradient, coords
-
 
 if __name__ == "__main__":
     scf_checkfile = f"{__file__}.scf.hdf5"

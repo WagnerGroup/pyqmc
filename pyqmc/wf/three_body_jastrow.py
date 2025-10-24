@@ -344,7 +344,7 @@ class ThreeBodyJastrow:
         r"""Args:
         e: array of electron indexes to move
 
-        epos: Openconfigs Object with with proposed configuration for electrons
+        epos: configs Object with proposed configuration for electrons
 
         compute the ratio :
 
@@ -376,8 +376,11 @@ class ThreeBodyJastrow:
 
         .. math::     
 
-            \frac{\partial U}{\partial r_{ed}} = \sum_{Iklm\sigma_2}  c_{klmI \sigma(e)\sigma_{2}} & \sum_{j\in \sigma_2 ,e<j} \frac{\partial a_k(r_{Ie})}{\partial r_{ed}} a_l(r_{Ij}) b_m(r_{ej}) + a_k(r_{Ie})a_l(r_{Ij}) \frac{\partial b_m(r_{ej})}{\partial r_{ed}} \\
-                                                                                                   & + \sum_{i\in \sigma_2 , e>i} a_k(r_{Ii}) \frac{\partial a_l(r_{Ie})}{\partial r_{ed}} b_m(r_{ei})+ a_k(r_{Ii})a_l(r_{Ie})\frac{\partial b_m(r_{ie})}{\partial r_{ed}}
+            \frac{\partial U}{\partial r_{ed}} = \sum_{Iklm\sigma_2}  c_{klmI \sigma(e)\sigma_{2}}
+            & \sum_{j\in \sigma_2 ,e<j} \frac{\partial a_k(r_{Ie})}{\partial r_{ed}} a_l(r_{Ij}) b_m(r_{ej})
+            + a_k(r_{Ie})a_l(r_{Ij}) \frac{\partial b_m(r_{ej})}{\partial r_{ed}} \\
+            & + \sum_{i\in \sigma_2 , e>i} a_k(r_{Ii}) \frac{\partial a_l(r_{Ie})}{\partial r_{ed}} b_m(r_{ei})+
+            a_k(r_{Ii})a_l(r_{Ie})\frac{\partial b_m(r_{ie})}{\partial r_{ed}}
             
         Args:
 

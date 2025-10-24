@@ -81,7 +81,6 @@ class ThreeBodyJastrow:
         """
         self._configscurrent = configs.copy()
         nconf, nelec = configs.configs.shape[:2]
-        na = len(self.a_basis)
 
         # electron-ion distances
         di = np.zeros((nelec, nconf, self._mol.natm, 3))
@@ -218,7 +217,7 @@ class ThreeBodyJastrow:
             \text{ae}_{nIk} = a_k(r_{eI})
 
         """
-        na, nb = len(self.a_basis), len(self.b_basis)
+        #na, nb = len(self.a_basis), len(self.b_basis)
         nup = self._mol.nelec[0]
         sep = nup - int(e < nup)
         edown = int(e >= self._mol.nelec[0])
@@ -287,7 +286,6 @@ class ThreeBodyJastrow:
 
         """
 
-        na, nb = len(self.a_basis), len(self.b_basis)
         nup = self._mol.nelec[0]
 
         de = configs.dist.dist_i(configs.configs, epos)
@@ -391,8 +389,6 @@ class ThreeBodyJastrow:
         """
 
         configs = self._configscurrent
-        na, nb = len(self.a_basis), len(self.b_basis)
-        nconf = configs.configs.shape[0]
         nup = int(self._mol.nelec[0])
         not_e = np.arange(self._nelec) != e
 
@@ -458,8 +454,6 @@ class ThreeBodyJastrow:
         """
 
         configs = self._configscurrent
-        na, nb = len(self.a_basis), len(self.b_basis)
-        nconf = configs.configs.shape[0]
         nup = self._mol.nelec[0]
         not_e = np.arange(self._nelec) != e
         edown = int(e >= nup)
@@ -544,8 +538,6 @@ class ThreeBodyJastrow:
     def gradient_laplacian(self, e, epos):
         r"""computes gradient and laplacian, so we can reuse evaluations of the basis and its derivative."""
         configs = self._configscurrent
-        na, nb = len(self.a_basis), len(self.b_basis)
-        nconf = configs.configs.shape[0]
         nup = int(self._mol.nelec[0])
         not_e = np.arange(self._nelec) != e
 

@@ -110,9 +110,15 @@ class JastrowSpin:
 
     def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
         r"""Update a and b sums.
-        _avalues is the array for current configurations :math:`A_{Iks} = \sum_s a_{k}(r_{Is})` where :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums.
-        _bvalues is the array for current configurations :math:`B_{ls} = \sum_s b_{l}(r_{s})` where :math:`s` indexes over :math:`\uparrow\uparrow` (:math:`\alpha_1 < \alpha_2`), :math:`\uparrow\downarrow` (:math:`\alpha, \beta`), and :math:`\downarrow\downarrow` (:math:`\beta_1 < \beta_2`)  sums.
-        The update for _avalues and _b_values from moving one electron only requires computing the new sum for that electron. The sums for the electron in the current configuration are stored in _a_partial and _b_partial
+        _avalues is the array for current configurations
+        :math:`A_{Iks} = \sum_s a_{k}(r_{Is})`
+        where :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums.
+        _bvalues is the array for current configurations :math:`B_{ls} = \sum_s b_{l}(r_{s})`
+        where :math:`s` indexes over :math:`\uparrow\uparrow` (:math:`\alpha_1 < \alpha_2`),
+        :math:`\uparrow\downarrow` (:math:`\alpha, \beta`), and :math:`\downarrow\downarrow` (:math:`\beta_1 < \beta_2`)
+        sums.
+        The update for _avalues and _b_values from moving one electron only requires computing the new sum for
+        that electron. The sums for the electron in the current configuration are stored in _a_partial and _b_partial
         """
         if mask is None:
             mask = [True] * self._configscurrent.configs.shape[0]
@@ -155,13 +161,15 @@ class JastrowSpin:
     def _b_update(self, e, epos, mask):
         r"""
           Calculate b (e-e) partial sums for electron e
-        _b_partial_e is the array :math:`B^p_{ils} = \sum_s b_l(r^i_{es}`, with e fixed; :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums, not including electron e.
+        _b_partial_e is the array :math:`B^p_{ils} = \sum_s b_l(r^i_{es}`, with e fixed; :math:`s` indexes over
+        :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums, not including electron e.
           :math:`i` is the configuration index.
         :parameter int e: fixed electron index
         :parameter epos: positions (nconfig,[ naip,] 3) for electron e
         :type epos: Electron object
         :parameter ndarray mask: boolean array-like to select the configs to evaluate.
-        :return b_partial_e: partial electron-electron sum for electron e. Only returns values for configs where mask==True.
+        :return b_partial_e: partial electron-electron sum for electron e. Only returns values for configs
+        where mask==True.
         :rtype b_partial_e: ndarray (sum(mask),[ naip,] 3)
         """
         nup = self._mol.nelec[0]

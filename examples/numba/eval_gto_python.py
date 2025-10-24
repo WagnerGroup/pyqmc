@@ -3,7 +3,9 @@ import pyscf
 import scipy.stats
 import numpy as np
 
-mol = pyscf.gto.M(atom="H 0. 0. 0.; Cl 0. 0. 2.", basis="ccecp-ccpvtz", ecp="ccecp", unit="bohr")
+mol = pyscf.gto.M(
+    atom="H 0. 0. 0.; Cl 0. 0. 2.", basis="ccecp-ccpvtz", ecp="ccecp", unit="bohr"
+)
 mf = pyscf.scf.RHF(mol)
 mf.run()
 enacc = pyq.EnergyAccumulator(mol)

@@ -49,8 +49,12 @@ class ThreeBodyJastrow:
         b_basis : list of func3d objects that comprise the electron-electron basis
 
         """
-        self.a_basis = func3d.CutoffFunc3dEvaluator(a_basis, a_basis[0].parameters["rcut"])
-        self.b_basis = func3d.CutoffFunc3dEvaluator(b_basis, b_basis[0].parameters["rcut"])
+        self.a_basis = func3d.CutoffFunc3dEvaluator(
+            a_basis, a_basis[0].parameters["rcut"]
+        )
+        self.b_basis = func3d.CutoffFunc3dEvaluator(
+            b_basis, b_basis[0].parameters["rcut"]
+        )
         self.parameters = {}
         self._nelec = np.sum(mol.nelec)
         self._mol = mol
@@ -101,47 +105,47 @@ class ThreeBodyJastrow:
         return self.value()
 
     def single_e_partial_sum(self, configs, e, epos, a_values):
-            nconf, nelec = configs.configs.shape[:2]
-            arange_e = np.arange(nelec)
-            nup = self._mol.nelec[0]
-            sep = nup - int(e < nup)
-            edown = int(e >= self._mol.nelec[0])
-            not_e = arange_e != e
-            upsel = np.where(not_e * (arange_e < nup))
-            downsel = np.where(not_e * (arange_e >= nup))
+        nconf, nelec = configs.configs.shape[:2]
+        arange_e = np.arange(nelec)
+        nup = self._mol.nelec[0]
+        sep = nup - int(e < nup)
+        edown = int(e >= self._mol.nelec[0])
+        not_e = arange_e != e
+        upsel = np.where(not_e * (arange_e < nup))
+        downsel = np.where(not_e * (arange_e >= nup))
 
-            if len(epos.shape) == 2:
-                de = configs.dist.dist_i(configs.configs[:, not_e], epos)
-                di_e = configs.dist.dist_i(self._mol.atom_coords(), epos)
-            else:
-                de = configs.dist.pairwise(configs.configs[:, not_e], epos)
-                di_e = configs.dist.pairwise(self._mol.atom_coords()[np.newaxis], epos)
-                de = np.moveaxis(de, 2, 0)
-                di_e = np.moveaxis(di_e, 2, 0)
+        if len(epos.shape) == 2:
+            de = configs.dist.dist_i(configs.configs[:, not_e], epos)
+            di_e = configs.dist.dist_i(self._mol.atom_coords(), epos)
+        else:
+            de = configs.dist.pairwise(configs.configs[:, not_e], epos)
+            di_e = configs.dist.pairwise(self._mol.atom_coords()[np.newaxis], epos)
+            de = np.moveaxis(de, 2, 0)
+            di_e = np.moveaxis(di_e, 2, 0)
 
-            re = np.linalg.norm(de, axis=-1)
-            ri_e = np.linalg.norm(di_e, axis=-1)
+        re = np.linalg.norm(de, axis=-1)
+        ri_e = np.linalg.norm(di_e, axis=-1)
 
-            ae = self.a_basis.value(di_e, ri_e)
-            b_values = self.b_basis.value(de, re)
+        ae = self.a_basis.value(di_e, ri_e)
+        b_values = self.b_basis.value(de, re)
 
-            P_i = np.einsum(
-                "...nIk,j...nIl,...njm,Iklm->...n",
-                ae,
-                a_values[upsel],
-                b_values[..., :sep, :],
-                self.C[..., edown],
-                optimize="greedy",
-            )
-            P_i += np.einsum(
-                "...nIk,j...nIl,...njm,Iklm->...n",
-                ae,
-                a_values[downsel],
-                b_values[..., sep:, :],
-                self.C[..., edown + 1],
-                optimize="greedy",
-            )
-            return P_i, ae
+        P_i = np.einsum(
+            "...nIk,j...nIl,...njm,Iklm->...n",
+            ae,
+            a_values[upsel],
+            b_values[..., :sep, :],
+            self.C[..., edown],
+            optimize="greedy",
+        )
+        P_i += np.einsum(
+            "...nIk,j...nIl,...njm,Iklm->...n",
+            ae,
+            a_values[downsel],
+            b_values[..., sep:, :],
+            self.C[..., edown + 1],
+            optimize="greedy",
+        )
+        return P_i, ae
 
     def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
         r"""
@@ -333,7 +337,10 @@ class ThreeBodyJastrow:
 
         val = np.exp(e_partial_new_sum - self.P_i[e, mask])
         # if val is dim 2 naux,nconf, val.T flips it, else it leaves it be. for a 1d array, A : A = A.T
-        return val.T, None#(e_partial_new, a_e) # it's faster not to save e_partial_new
+        return (
+            val.T,
+            None,
+        )  # (e_partial_new, a_e) # it's faster not to save e_partial_new
 
     def testvalue_many(self, e, epos, mask=None):
         r"""Args:
@@ -472,7 +479,7 @@ class ThreeBodyJastrow:
         a_gradients, a_e = self.a_basis.gradient_value(di_e, ri_e)
 
         # set values of b basis evaluations needed
-        #b_gradvals = np.zeros((nconf, self._nelec - 1, nb, 4))
+        # b_gradvals = np.zeros((nconf, self._nelec - 1, nb, 4))
         b_gradients, b_values = self.b_basis.gradient_value(de, re)
 
         e_partial_new = np.zeros((self._nelec - 1, *epos.configs.shape[-2::-1]))
@@ -528,7 +535,11 @@ class ThreeBodyJastrow:
             optimize="greedy",
         )
 
-        return grad, val, None#(e_partial_new, a_e) # it's faster not to save e_partial_new
+        return (
+            grad,
+            val,
+            None,
+        )  # (e_partial_new, a_e) # it's faster not to save e_partial_new
 
     def gradient_laplacian(self, e, epos):
         r"""computes gradient and laplacian, so we can reuse evaluations of the basis and its derivative."""
@@ -694,7 +705,13 @@ class ThreeBodyJastrow:
 
         t = 0
         for i in range(nup):
-            c_ders[..., 0] += np.einsum("nIk,jnIl,njm->nIklm", a[i], a[i+1:nup], bvalues[:, t:t+nup-i-1], **kw)
+            c_ders[..., 0] += np.einsum(
+                "nIk,jnIl,njm->nIklm",
+                a[i],
+                a[i + 1 : nup],
+                bvalues[:, t : t + nup - i - 1],
+                **kw,
+            )
             t += nup - i - 1
 
         # down down
@@ -703,14 +720,24 @@ class ThreeBodyJastrow:
         bvalues = self.b_basis.value(d_all, r_all)
         t = 0
         for i in range(nup, nelec):
-            c_ders[..., 2] += np.einsum("nIk,jnIl,njm->nIklm", a[i], a[i+1:nelec], bvalues[:, t:t+nelec-i-1], **kw)
+            c_ders[..., 2] += np.einsum(
+                "nIk,jnIl,njm->nIklm",
+                a[i],
+                a[i + 1 : nelec],
+                bvalues[:, t : t + nelec - i - 1],
+                **kw,
+            )
             t += nelec - i - 1
 
         # up down
-        d_all = configs.dist.pairwise(configs.configs[:, :nup], configs.configs[:, nup:])
+        d_all = configs.dist.pairwise(
+            configs.configs[:, :nup], configs.configs[:, nup:]
+        )
         r_all = np.linalg.norm(d_all, axis=-1)
         bvalues = self.b_basis.value(d_all, r_all)
-        c_ders[..., 1] += np.einsum("inIk,jnIl,nijm->nIklm", a[:nup], a[nup:], bvalues, **kw)
+        c_ders[..., 1] += np.einsum(
+            "inIk,jnIl,nijm->nIklm", a[:nup], a[nup:], bvalues, **kw
+        )
 
         c_ders += c_ders.swapaxes(2, 3)
 

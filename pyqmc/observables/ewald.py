@@ -378,11 +378,11 @@ def select_big(gpoints, cellvolume, alpha):
 
 
 def generate_positive_gpoints(gmax, recvec):
-    gXpos = gpu.cp.mgrid[1:gmax + 1, -gmax:gmax + 1, -gmax:gmax + 1].reshape(
+    gXpos = gpu.cp.mgrid[1 : gmax + 1, -gmax : gmax + 1, -gmax : gmax + 1].reshape(
         3, -1
     )
-    gX0Ypos = gpu.cp.mgrid[0:1, 1:gmax + 1, -gmax:gmax + 1].reshape(3, -1)
-    gX0Y0Zpos = gpu.cp.mgrid[0:1, 0:1, 1:gmax + 1].reshape(3, -1)
+    gX0Ypos = gpu.cp.mgrid[0:1, 1 : gmax + 1, -gmax : gmax + 1].reshape(3, -1)
+    gX0Y0Zpos = gpu.cp.mgrid[0:1, 0:1, 1 : gmax + 1].reshape(3, -1)
     gpts = gpu.cp.concatenate([gXpos, gX0Ypos, gX0Y0Zpos], axis=1)
     gpoints = gpu.cp.einsum("ji,jk->ik", gpts, gpu.cp.asarray(recvec) * 2 * np.pi)
     return gpoints

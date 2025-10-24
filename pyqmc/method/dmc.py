@@ -286,7 +286,12 @@ def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **k
     configs.join(allresults[1])
     weights = np.concatenate(allresults[2])
     confweight = np.array([len(c.configs) for c in config], dtype=float)
-    weight = np.array([w["weight"] for w in allresults[0]]) * confweight*npartitions/np.sum(confweight)
+    weight = (
+        np.array([w["weight"] for w in allresults[0]])
+        * confweight
+        * npartitions
+        / np.sum(confweight)
+    )
     weight_avg = weight / np.sum(weight)
     block_avg = {
         k: np.sum(
@@ -313,13 +318,13 @@ def branch(configs, weights, var_trigger_branch=0.05):
     """
     if np.var(weights) < var_trigger_branch:
         return (
-        configs,
-        weights,
-        {
-            "max branches": 0,
-            "Number of walkers killed": 0,
-        },
-    )
+            configs,
+            weights,
+            {
+                "max branches": 0,
+                "Number of walkers killed": 0,
+            },
+        )
 
     nconfig = configs.configs.shape[0]
     if np.any(weights > 2.0):

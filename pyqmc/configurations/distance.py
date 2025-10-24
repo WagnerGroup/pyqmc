@@ -26,9 +26,9 @@ class RawDistance:
         # a ([m,] n, 3)
         # b (m, 3)
         # returns shape (m, n, 3)
-        assert (
-            len(b.shape) <= 2
-        ), f"dist_i argument b has {len(b.shape)} dimensions -- can have max 2"
+        assert len(b.shape) <= 2, (
+            f"dist_i argument b has {len(b.shape)} dimensions -- can have max 2"
+        )
         return b[:, np.newaxis, :] - a
 
     def dist_matrix(self, configs):
@@ -67,9 +67,9 @@ class RawDistance:
         """
         m1, n1 = config1.shape[:2]
         m2, n2 = config2.shape[:2]
-        assert (
-            m1 == m2 or m1 == 1 or m2 == 1
-        ), f"can't broadcast first axis {m1} and {m2}"
+        assert m1 == m2 or m1 == 1 or m2 == 1, (
+            f"can't broadcast first axis {m1} and {m2}"
+        )
         if n1 == 0 or n2 == 0:
             return np.zeros((config1.shape[0], 0, 3))
         vs = config2[:, np.newaxis, :] - config1[:, :, np.newaxis]
@@ -122,9 +122,9 @@ class MinimalImageDistance(RawDistance):
         # a ([m,] n, 3)
         # b (m, 3)
         # returns shape (m, n, 3)
-        assert (
-            len(b.shape) <= 2
-        ), f"dist_i argument b has {len(b.shape)} dimensions -- can have max 2"
+        assert len(b.shape) <= 2, (
+            f"dist_i argument b has {len(b.shape)} dimensions -- can have max 2"
+        )
         return self._minimal_dist(b[:, np.newaxis, :] - a)
 
     def pairwise(self, a, b):

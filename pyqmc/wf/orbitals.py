@@ -61,17 +61,20 @@ class MoleculeOrbitalEvaluator:
         iscomplex = bool(sum(map(gpu.cp.iscomplexobj, self.parameters.values())))
 
         self._mol = mol
-        self.ao_dtype = float # evaluator.dtype
+        self.ao_dtype = float  # evaluator.dtype
         self.mo_dtype = complex if iscomplex else self.ao_dtype
         if evaluate_orbitals_with == "pyscf":
             self.eval_gto = functools.partial(mol_eval_gto, self._mol)
         elif evaluate_orbitals_with == "numba":
             import pyqmc.wf.numba.gto
+
             evaluator = pyqmc.wf.numba.gto.AtomicOrbitalEvaluator(mol)
 
             self.eval_gto = evaluator.eval_gto
         else:
-            raise ValueError(f"{evaluate_orbitals_with} not recognized; evaluate_orbitals_with must be 'pyscf' or 'numba'")
+            raise ValueError(
+                f"{evaluate_orbitals_with} not recognized; evaluate_orbitals_with must be 'pyscf' or 'numba'"
+            )
 
     def nmo(self):
         return [
@@ -95,7 +98,6 @@ class MoleculeOrbitalEvaluator:
     def pgradient(self, ao, spin):
         nelec = [self.parameters[self.parm_names[spin]].shape[1]]
         return (gpu.cp.array(nelec), ao)
-
 
 
 def cell_eval_gto(orb_evaluator, evalstr, primcoords):
@@ -122,7 +124,14 @@ class PBCOrbitalEvaluatorKpoints:
 
     """
 
-    def __init__(self, cell, mo_coeff=None, kpts=None, eval_gto_precision=None, evaluate_orbitals_with="pyscf"):
+    def __init__(
+        self,
+        cell,
+        mo_coeff=None,
+        kpts=None,
+        eval_gto_precision=None,
+        evaluate_orbitals_with="pyscf",
+    ):
         """
         :parameter cell: PyQMC supercell object (from get_supercell)
         :parameter mo_coeff: (2, nk, nao, nelec) array. MO coefficients for all kpts of primitive cell. If None, this object can't evaluate mos(), but can still evaluate aos().
@@ -133,7 +142,9 @@ class PBCOrbitalEvaluatorKpoints:
         self.S = cell.S
         self.Lprim = self._cell.lattice_vectors()
 
-        self._kpts = np.zeros((1, 3)) if kpts is None else np.asarray(kpts).reshape((-1, 3))
+        self._kpts = (
+            np.zeros((1, 3)) if kpts is None else np.asarray(kpts).reshape((-1, 3))
+        )
         self.isgamma = np.abs(self._kpts).sum() < 1e-9
 
         eval_gto_precision = 1e-2 if eval_gto_precision is None else eval_gto_precision
@@ -146,11 +157,9 @@ class PBCOrbitalEvaluatorKpoints:
                 "mo_coeff_alpha": gpu.cp.asarray(np.concatenate(mo_coeff[0], axis=1)),
                 "mo_coeff_beta": gpu.cp.asarray(np.concatenate(mo_coeff[1], axis=1)),
             }
-            iscomplex = bool(
-                sum(map(gpu.cp.iscomplexobj, self.parameters.values()))
-            )
+            iscomplex = bool(sum(map(gpu.cp.iscomplexobj, self.parameters.values())))
         else:
-            iscomplex = False #Is this right??
+            iscomplex = False  # Is this right??
 
         self.mo_dtype = complex if iscomplex else float
         self.get_wrapphase = get_wrapphase_complex if iscomplex else get_wrapphase_real
@@ -162,10 +171,17 @@ class PBCOrbitalEvaluatorKpoints:
             self.eval_gto = functools.partial(cell_eval_gto, self)
         elif evaluate_orbitals_with == "numba":
             import pyqmc.wf.numba.pbcgto
-            evaluator = pyqmc.wf.numba.pbcgto.PeriodicAtomicOrbitalEvaluator(cell.original_cell, kpts=self._kpts, eval_gto_precision=eval_gto_precision)
+
+            evaluator = pyqmc.wf.numba.pbcgto.PeriodicAtomicOrbitalEvaluator(
+                cell.original_cell,
+                kpts=self._kpts,
+                eval_gto_precision=eval_gto_precision,
+            )
             self.eval_gto = evaluator.eval_gto
         else:
-            raise ValueError(f"{evaluate_orbitals_with} not recognized; evaluate_orbitals_with must be 'pyscf' or 'numba'")
+            raise ValueError(
+                f"{evaluate_orbitals_with} not recognized; evaluate_orbitals_with must be 'pyscf' or 'numba'"
+            )
 
     def nmo(self):
         return [

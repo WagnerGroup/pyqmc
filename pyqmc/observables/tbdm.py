@@ -12,7 +12,8 @@
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
-""" Evaluate the TBDM for a wave function object. """
+"""Evaluate the TBDM for a wave function object."""
+
 import numpy as np
 import pyqmc.method.mc as mc
 import pyqmc.observables.obdm as obdm

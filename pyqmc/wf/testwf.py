@@ -23,7 +23,7 @@ def test_mask(wf, e, epos, mask=None, tolerance=1e-6):
         num_e = len(wf.value()[1])
         mask = np.random.randint(0, 2, num_e).astype(bool)
     ratio, _ = wf.testvalue(e, epos, mask)
-    ratio_ref = wf.testvalue(e, epos)[0] #[mask]
+    ratio_ref = wf.testvalue(e, epos)[0]  # [mask]
     print("testvalue with mask", ratio, ratio_ref)
     ratio_ref = ratio_ref[mask]
     error = np.abs((ratio - ratio_ref) / np.abs(np.max(ratio)))
@@ -296,7 +296,7 @@ def test_wf_gradient_laplacian(wf, configs):
 def compare_nested_saved_vals(saved1, saved2):
     if saved1 is None:
         assert saved2 is None
-        return 0.
+        return 0.0
     if hasattr(saved1, "shape"):
         return np.amax(np.abs(saved1 - saved2))
     else:

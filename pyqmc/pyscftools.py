@@ -98,7 +98,14 @@ def recover_pyscf(chkfile, ci_checkfile=None, cancel_outputs=True):
 
 
 def orbital_evaluator_from_pyscf(
-    mol, mf, mc=None, twist=0, determinants=None, tol=None, eval_gto_precision=None, evaluate_orbitals_with="pyscf",
+    mol,
+    mf,
+    mc=None,
+    twist=0,
+    determinants=None,
+    tol=None,
+    eval_gto_precision=None,
+    evaluate_orbitals_with="pyscf",
 ):
     """
     mol: A Mole object
@@ -168,7 +175,9 @@ def orbital_evaluator_from_pyscf(
         max_orb = [[f_max_orb(s) for s in det] for wt, det in determinants]
         max_orb = np.amax(max_orb, axis=0)
         mo_coeff = [_mo_coeff[spin][:, 0 : max_orb[spin]] for spin in [0, 1]]
-        evaluator = orbitals.MoleculeOrbitalEvaluator(mol, mo_coeff, evaluate_orbitals_with)
+        evaluator = orbitals.MoleculeOrbitalEvaluator(
+            mol, mo_coeff, evaluate_orbitals_with
+        )
 
     detcoeff, occup, det_map = determinant_tools.create_packed_objects(
         determinants, tol=tol

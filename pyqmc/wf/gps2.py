@@ -112,7 +112,7 @@ class GPSJastrow:
         new_e_ne, _ = self._compute_e_ne(d)
         d = np.moveaxis(d, 3, 0)
         dif2 = np.sum(self.e_cs, axis=2) - self.e_cs[:, :, e, :]
-        # can simplify last 2 lines by switching axis order of summ, 
+        # can simplify last 2 lines by switching axis order of summ,
         # #so this fits into 1 einsum. but that will make stuff less readable, so will do
         # later
         final = np.sum(new_e_ne * d * dif2[:, :, ::-1], axis=-1)
@@ -142,14 +142,12 @@ class GPSJastrow:
     def pgradient(self):
         configs = self._configscurrent
         A = (self.e_cs - np.sum(self.e_cs, axis=2, keepdims=True))[:, :, :, ::-1]
-        alphader = np.einsum('csi,csi->cs', self.e_cs[:, :, :, 0], -A[:, :, :, 0])
+        alphader = np.einsum("csi,csi->cs", self.e_cs[:, :, :, 0], -A[:, :, :, 0])
 
         Xsup = self.parameters["Xsupport"][np.newaxis]
         d_cs = np.zeros((self.nconfig, self.n_support, self.nelec, 2, 3))
-        d_cs[:, :, :, 0, :] = configs.dist.pairwise(Xsup[:, :, 0, :],
-                                                    configs.configs)
-        d_cs[:, :, :, 1, :] = configs.dist.pairwise(Xsup[:, :, 1, :],
-                                                    configs.configs)
+        d_cs[:, :, :, 0, :] = configs.dist.pairwise(Xsup[:, :, 0, :], configs.configs)
+        d_cs[:, :, :, 1, :] = configs.dist.pairwise(Xsup[:, :, 1, :], configs.configs)
         r2 = np.sum(d_cs**2, axis=-1)
 
         fder = np.einsum(

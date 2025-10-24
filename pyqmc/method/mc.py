@@ -21,6 +21,7 @@ import logging
 import pyqmc.method.hdftools as hdftools
 import time
 
+
 def initial_guess(mol, nconfig, r=1.0):
     """Generate an initial guess by distributing electrons near atoms
     proportional to their charge.
@@ -46,21 +47,21 @@ def initial_guess(mol, nconfig, r=1.0):
         neach = np.array(
             np.floor(mol.nelec[s] * wts), dtype=int
         )  # integer number of elec on each atom
-        #nleft = (
+        # nleft = (
         #    mol.nelec[s] * wts - neach
-        #)  # fraction of electron unassigned on each atom
+        # )  # fraction of electron unassigned on each atom
         nassigned = np.sum(neach)  # number of electrons assigned
         totleft = int(mol.nelec[s] - nassigned)  # number of electrons not yet assigned
         ind0 = s * mol.nelec[0]
-        epos[:, ind0:ind0 + nassigned, :] = np.repeat(
+        epos[:, ind0 : ind0 + nassigned, :] = np.repeat(
             mol.atom_coords(), neach, axis=0
         )  # assign core electrons
         if totleft > 0:
-            #bins = np.cumsum(nleft) / totleft
+            # bins = np.cumsum(nleft) / totleft
             inds = np.argpartition(
                 np.random.random((nconfig, len(wts))), totleft, axis=1
             )[:, :totleft]
-            epos[:, ind0 + nassigned:ind0 + mol.nelec[s], :] = mol.atom_coords()[
+            epos[:, ind0 + nassigned : ind0 + mol.nelec[s], :] = mol.atom_coords()[
                 inds
             ]  # assign remaining electrons
 
@@ -84,12 +85,11 @@ def limdrift(g, cutoff=1):
     mask = tot > cutoff
     # by using where we can avoid modifying the original array
     # and so we have JAX compatibility
-    g = np.where(mask[:,np.newaxis], cutoff * g / tot[:, np.newaxis], g)
+    g = np.where(mask[:, np.newaxis], cutoff * g / tot[:, np.newaxis], g)
     return g
 
 
 def vmc_file(hdf_file, data, attr, configs):
-
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
             if "configs" not in hdf.keys():
@@ -148,8 +148,8 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
                     block_avg[k + m] += res / nsteps
         end_average = time.perf_counter()
         block_avg["acceptance"] = acc
-        block_avg['move time'] = end_move - start_move
-        block_avg['accumulator time'] = end_average - start_average
+        block_avg["move time"] = end_move - start_move
+        block_avg["accumulator time"] = end_average - start_average
     return block_avg, configs
 
 

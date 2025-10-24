@@ -12,7 +12,8 @@
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
-""" Evaluate the OBDM for a wave function object. """
+"""Evaluate the OBDM for a wave function object."""
+
 import pyqmc.wf.orbitals
 import numpy as np
 import pyqmc.method.mc as mc
@@ -105,7 +106,7 @@ class OBDMAccumulator:
         self._tstep = tstep
         self.nelec = len(self._electrons)
         self._nsweeps = nsweeps
-        self._nstep = nsweeps 
+        self._nstep = nsweeps
         self._warmup = warmup
         self._naux = naux
         self._warmed_up = False

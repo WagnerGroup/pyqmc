@@ -110,13 +110,21 @@ def _cartesian_gto_grad(
     ctr_xyz = ctr_xyz_first[:, jnp.newaxis, :] + images  # (N, nimages, 3)
     ctr_r = jnp.linalg.norm(ctr_xyz, axis=-1)  # (N,nimages, 1)
     # value
-    xyz_ijk: jax.Array = jnp.prod(ctr_xyz**ijk[:,jnp.newaxis,:], axis=-1)  # (N, nimages)
-    gauss: jax.Array = jnp.exp(-expts[:,jnp.newaxis,:] * ctr_r[:,:, jnp.newaxis] ** 2)  # (N,nimages, M)
-    value: jax.Array = coeffs[:,jnp.newaxis,:] * gauss * xyz_ijk[:,:,jnp.newaxis] # sum over images (N,M)
+    xyz_ijk: jax.Array = jnp.prod(
+        ctr_xyz ** ijk[:, jnp.newaxis, :], axis=-1
+    )  # (N, nimages)
+    gauss: jax.Array = jnp.exp(
+        -expts[:, jnp.newaxis, :] * ctr_r[:, :, jnp.newaxis] ** 2
+    )  # (N,nimages, M)
+    value: jax.Array = (
+        coeffs[:, jnp.newaxis, :] * gauss * xyz_ijk[:, :, jnp.newaxis]
+    )  # sum over images (N,M)
 
     # Gradient dimensions are basis, image, coeff, xyz
-    grad: jax.Array = value[:, :, :, jnp.newaxis] * (ijk[:, jnp.newaxis, jnp.newaxis, :] / ctr_xyz[:, :, jnp.newaxis, :]\
-        - 2 * expts[:, jnp.newaxis, :, jnp.newaxis] * ctr_xyz[:, :, jnp.newaxis, :])
+    grad: jax.Array = value[:, :, :, jnp.newaxis] * (
+        ijk[:, jnp.newaxis, jnp.newaxis, :] / ctr_xyz[:, :, jnp.newaxis, :]
+        - 2 * expts[:, jnp.newaxis, :, jnp.newaxis] * ctr_xyz[:, :, jnp.newaxis, :]
+    )
     value = jnp.sum(value, axis=1)  # (N,M)
     grad = jnp.sum(grad, axis=1)  # (N,M,3)
     return jnp.concatenate(
@@ -163,18 +171,26 @@ def _cartesian_gto_vgl(
     ctr_xyz = ctr_xyz_first[:, jnp.newaxis, :] + images  # (N, nimages, 3)
     ctr_r = jnp.linalg.norm(ctr_xyz, axis=-1)  # (N,nimages, 1)
     # value
-    xyz_ijk: jax.Array = jnp.prod(ctr_xyz**ijk[:,jnp.newaxis,:], axis=-1)  # (N, nimages)
-    gauss: jax.Array = jnp.exp(-expts[:,jnp.newaxis,:] * ctr_r[:,:, jnp.newaxis] ** 2)  # (N,nimages, M)
-    value: jax.Array = coeffs[:,jnp.newaxis,:] * gauss * xyz_ijk[:,:,jnp.newaxis] #  (N, images, M)
+    xyz_ijk: jax.Array = jnp.prod(
+        ctr_xyz ** ijk[:, jnp.newaxis, :], axis=-1
+    )  # (N, nimages)
+    gauss: jax.Array = jnp.exp(
+        -expts[:, jnp.newaxis, :] * ctr_r[:, :, jnp.newaxis] ** 2
+    )  # (N,nimages, M)
+    value: jax.Array = (
+        coeffs[:, jnp.newaxis, :] * gauss * xyz_ijk[:, :, jnp.newaxis]
+    )  #  (N, images, M)
 
     # Gradient dimensions are basis, image, coeff, xyz
-    gpart: jax.Array = ijk[:, jnp.newaxis, jnp.newaxis, :] / ctr_xyz[:, :, jnp.newaxis, :]\
+    gpart: jax.Array = (
+        ijk[:, jnp.newaxis, jnp.newaxis, :] / ctr_xyz[:, :, jnp.newaxis, :]
         - 2 * expts[:, jnp.newaxis, :, jnp.newaxis] * ctr_xyz[:, :, jnp.newaxis, :]
+    )
 
     grad: jax.Array = value[:, :, :, jnp.newaxis] * gpart  # (N,3)
     lap_part = (
         gpart**2
-        - ijk[:, jnp.newaxis, jnp.newaxis, :] / ctr_xyz[:,:, jnp.newaxis, :] ** 2
+        - ijk[:, jnp.newaxis, jnp.newaxis, :] / ctr_xyz[:, :, jnp.newaxis, :] ** 2
         - 2 * expts[:, jnp.newaxis, :, jnp.newaxis]
     )
     laplacian: jax.Array = value * jnp.sum(
@@ -201,7 +217,7 @@ def create_gto_evaluator(mol, nimages=1):
         nimages: number of images to evaluate the basis functions at (relevant for PBC)
     Returns:
         evaluator: function that evaluates the basis functions
-        gradient: function that evaluates the gradient of the basis functions 
+        gradient: function that evaluates the gradient of the basis functions
         vgl: function that evaluates the value, gradient and laplacian of the basis functions
 
     Note that the PBC implementation only works for uncontracted basis functions for now.
@@ -252,12 +268,14 @@ def create_gto_evaluator(mol, nimages=1):
     coeffs = jnp.array(coeffs)
     if hasattr(mol, "lattice_vectors"):
         if expts.shape[1] > 1:
-          raise ValueError("Only unc basis is supported for PBC systems, at least for now. unc is faster with current implementation anyway.")
+            raise ValueError(
+                "Only unc basis is supported for PBC systems, at least for now. unc is faster with current implementation anyway."
+            )
 
         nlat = []
-        for i, j, k in itertools.product(range(-nimages, nimages+1), repeat=3):
+        for i, j, k in itertools.product(range(-nimages, nimages + 1), repeat=3):
             nlat.append([i, j, k])
-        images = jnp.array(nlat)@jnp.array(mol.lattice_vectors()) 
+        images = jnp.array(nlat) @ jnp.array(mol.lattice_vectors())
     else:
         images = jnp.array([[0, 0, 0]])
 
@@ -359,7 +377,8 @@ def test_laplacian():
     end = time.perf_counter()
     analytic_grad_time = end - start
     print(
-        "gradient squared err", jnp.mean(jnp.linalg.norm(res_grad - analytic_res[:, :, 1:]))
+        "gradient squared err",
+        jnp.mean(jnp.linalg.norm(res_grad - analytic_res[:, :, 1:])),
     )
     print("Time taken for analytic gradient: ", end - start)
 
@@ -398,7 +417,8 @@ def test_laplacian():
     )
 
     print(
-        "gradient squared err (from laplacian)", jnp.mean(jnp.linalg.norm(res_grad - analytic_res[:, :, 1:4]))
+        "gradient squared err (from laplacian)",
+        jnp.mean(jnp.linalg.norm(res_grad - analytic_res[:, :, 1:4])),
     )
 
     print(
@@ -411,6 +431,7 @@ def test_pbc():
     Test the periodic boundary conditions
     """
     import pyqmc.api as pyq
+
     cpu = True
     if cpu:
         jax.config.update("jax_platform_name", "cpu")
@@ -419,6 +440,7 @@ def test_pbc():
         pass
     import time
     import pyscf.pbc.gto
+
     cell = pyscf.pbc.gto.Cell()
 
     cell.verbose = 0
@@ -450,9 +472,8 @@ def test_pbc():
     nconfig = 100
     coords = pyq.initial_guess(cell, nconfig)
     xyz = coords.configs[:, 0, :]
-    #coords = np.array([[0.0, 0.0, 0.0]])
-    #coords = np.array([[0.8917, 0.8917, 0.8917]])
-
+    # coords = np.array([[0.0, 0.0, 0.0]])
+    # coords = np.array([[0.8917, 0.8917, 0.8917]])
 
     jax_val = evaluator_val(jnp.array(xyz))
     jax.block_until_ready(jax_val)
@@ -461,14 +482,13 @@ def test_pbc():
     jax_val = evaluator_val(jnp.array(xyz))
     jax.block_until_ready(jax_val)
     jax_end = time.perf_counter()
-    print('jax values time', jax_end-jax_start)
+    print("jax values time", jax_end - jax_start)
 
     pyscf_start = time.perf_counter()
     pyscf_val = cell.eval_gto("PBCGTOval_cart", xyz)
     pyscf_end = time.perf_counter()
-    print('pyscf values time', pyscf_end-pyscf_start)
-    print("MAD", jnp.mean(jnp.abs(jax_val-pyscf_val)))
-
+    print("pyscf values time", pyscf_end - pyscf_start)
+    print("MAD", jnp.mean(jnp.abs(jax_val - pyscf_val)))
 
     jax_grad = gradient(jnp.array(xyz))
     jax.block_until_ready(jax_grad)
@@ -477,8 +497,7 @@ def test_pbc():
     jax_grad = gradient(jnp.array(xyz))
     jax.block_until_ready(jax_grad)
     jax_end = time.perf_counter()
-    print('jax gradient time', jax_end-jax_start)
-
+    print("jax gradient time", jax_end - jax_start)
 
     ad_grad = ad_gradient(jnp.array(xyz))
     jax.block_until_ready(ad_grad)
@@ -487,20 +506,20 @@ def test_pbc():
     ad_grad = ad_gradient(jnp.array(xyz))
     jax.block_until_ready(ad_grad)
     jax_end = time.perf_counter()
-    print('jax AD gradient time', jax_end-jax_start)
-
+    print("jax AD gradient time", jax_end - jax_start)
 
     pyscf_start = time.perf_counter()
     pyscf_grad = cell.eval_gto("PBCGTOval_cart_deriv1", xyz)
     pyscf_end = time.perf_counter()
     pyscf_grad = pyscf_grad.transpose(1, 2, 0)
-    print(pyscf_grad.shape, jax_grad.shape)  
-    print('pyscf gradient time', pyscf_end-pyscf_start)
-    print("MAD pyscf vs analytic", jnp.mean(jnp.abs(jax_grad[:,:,1:]-pyscf_grad[:,:,1:])))
-    print("MAD AD vs analytic", jnp.mean(jnp.abs(jax_grad[:,:,1:]-ad_grad)))
-    print("MAD AD vs pyscf", jnp.mean(jnp.abs(pyscf_grad[:,:,1:]-ad_grad)))
-
-
+    print(pyscf_grad.shape, jax_grad.shape)
+    print("pyscf gradient time", pyscf_end - pyscf_start)
+    print(
+        "MAD pyscf vs analytic",
+        jnp.mean(jnp.abs(jax_grad[:, :, 1:] - pyscf_grad[:, :, 1:])),
+    )
+    print("MAD AD vs analytic", jnp.mean(jnp.abs(jax_grad[:, :, 1:] - ad_grad)))
+    print("MAD AD vs pyscf", jnp.mean(jnp.abs(pyscf_grad[:, :, 1:] - ad_grad)))
 
     jax_vgl = vgl(jnp.array(xyz))
     jax.block_until_ready(jax_vgl)
@@ -509,9 +528,7 @@ def test_pbc():
     jax_vgl = vgl(jnp.array(xyz))
     jax.block_until_ready(jax_vgl)
     jax_end = time.perf_counter()
-    print('jax vgl time', jax_end-jax_start)
-
-
+    print("jax vgl time", jax_end - jax_start)
 
     ad_lap = ad_laplacian(jnp.array(xyz))
     jax.block_until_ready(ad_lap)
@@ -520,21 +537,26 @@ def test_pbc():
     ad_lap = ad_laplacian(jnp.array(xyz))
     jax.block_until_ready(ad_lap)
     jax_end = time.perf_counter()
-    print('jax AD laplacian time', jax_end-jax_start)
+    print("jax AD laplacian time", jax_end - jax_start)
     ad_lap = jnp.trace(ad_lap, axis1=2, axis2=3)
-
 
     pyscf_start = time.perf_counter()
     pyscf_vgl = cell.eval_gto("PBCGTOval_cart_deriv2", xyz)
     pyscf_end = time.perf_counter()
     pyscf_vgl = pyscf_vgl.transpose(1, 2, 0)
-    print(pyscf_grad.shape, jax_grad.shape)  
-    print('pyscf vgl time', pyscf_end-pyscf_start)
-    print("MAD vgl gradient pyscf vs analytic", jnp.mean(jnp.abs(jax_vgl[:,:,1:4]-pyscf_grad[:,:,1:4])))
-    pyscf_lap = pyscf_vgl[:, :, 4]+pyscf_vgl[:,:,7]+pyscf_vgl[:,:,9]
-    print("MAD vgl laplacian pyscf vs analytic", jnp.mean(jnp.abs(jax_vgl[:,:,4]-pyscf_lap)))
-    print("MAD AD vs analytic", jnp.mean(jnp.abs(jax_vgl[:,:,4]-ad_lap)))
-    print("MAD AD vs pyscf", jnp.mean(jnp.abs(pyscf_lap-ad_lap)))
+    print(pyscf_grad.shape, jax_grad.shape)
+    print("pyscf vgl time", pyscf_end - pyscf_start)
+    print(
+        "MAD vgl gradient pyscf vs analytic",
+        jnp.mean(jnp.abs(jax_vgl[:, :, 1:4] - pyscf_grad[:, :, 1:4])),
+    )
+    pyscf_lap = pyscf_vgl[:, :, 4] + pyscf_vgl[:, :, 7] + pyscf_vgl[:, :, 9]
+    print(
+        "MAD vgl laplacian pyscf vs analytic",
+        jnp.mean(jnp.abs(jax_vgl[:, :, 4] - pyscf_lap)),
+    )
+    print("MAD AD vs analytic", jnp.mean(jnp.abs(jax_vgl[:, :, 4] - ad_lap)))
+    print("MAD AD vs pyscf", jnp.mean(jnp.abs(pyscf_lap - ad_lap)))
 
 
 if __name__ == "__main__":

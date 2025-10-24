@@ -79,7 +79,9 @@ class GeminalJastrow:
         self.gcoeff = gpu.cp.zeros((aos.shape[-1], aos.shape[-1]))
         triu_inds = gpu.cp.triu_indices(aos.shape[-1])
         if len(triu_inds[0]) != len(self.parameters["gcoeff"]):
-            raise ValueError("Wrong number of parameters. Maybe the parameters are from an incompatible version.")
+            raise ValueError(
+                "Wrong number of parameters. Maybe the parameters are from an incompatible version."
+            )
         self.gcoeff[triu_inds] = self.parameters["gcoeff"]
         self.gcoeff = self.gcoeff + self.gcoeff.T
 
@@ -145,7 +147,7 @@ class GeminalJastrow:
             "mn, ...cn, cim -> ...c",
             self.gcoeff,
             ao_e,
-            ao[:, e + 1:,:],
+            ao[:, e + 1 :, :],
             optimize=self.optimize,
         )
         return curr_val
@@ -179,9 +181,9 @@ class GeminalJastrow:
         .. math:: \nabla_e^2 e^{J_G(\mathbf{R})} / e^{J_G(\mathbf{R})} = \nabla_e^2 J_G + |\nabla_e J_G|^2
         """
         ao = self.orbitals.aos("GTOval_sph_deriv2", epos)[0][1:]
-        #ao = gpu.cp.concatenate(
+        # ao = gpu.cp.concatenate(
         #    [ao[1:4, ...], ao[[4, 7, 9], ...].sum(axis=0, keepdims=True)], axis=0
-        #)
+        # )
         deriv = self._compute_value(ao, self.ao_val, e)
         grad = deriv[:3]
         lap3 = gpu.cp.einsum("dc,dc->c", grad, grad)
@@ -230,7 +232,7 @@ class GeminalJastrow:
             "mn, c...n, cim -> c...",
             self.gcoeff,
             new_ao_val,
-            masked_ao_val[:, e + 1:, :],
+            masked_ao_val[:, e + 1 :, :],
             optimize=self.optimize,
         )
         return gpu.asnumpy(gpu.cp.exp((new_val.T - curr_val).T)), new_ao_val
@@ -245,16 +247,14 @@ class GeminalJastrow:
         if mask is None:
             mask = [True] * self.ao_val.shape[0]
         aos = self.orbitals.aos("GTOval_sph", epos, mask=mask)[0]
-        new_ao_val = aos.reshape(
-            len(aos), *epos.configs.shape[1:-1], aos.shape[-1]
-        )
+        new_ao_val = aos.reshape(len(aos), *epos.configs.shape[1:-1], aos.shape[-1])
         masked_ao_val = self.ao_val[mask]
 
         out = np.zeros((len(e_), aos.shape[0]))
         for i, e in enumerate(e_):
             curr_val = self._compute_value(masked_ao_val[:, e], masked_ao_val, e)
             new_val = self._compute_value(new_ao_val, masked_ao_val, e)
-            out[i] =  gpu.asnumpy(gpu.cp.exp((new_val.T - curr_val).T))
+            out[i] = gpu.asnumpy(gpu.cp.exp((new_val.T - curr_val).T))
         return out.T
 
 

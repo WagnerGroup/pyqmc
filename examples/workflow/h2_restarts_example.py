@@ -1,14 +1,14 @@
 # MIT License
-# 
+#
 # Copyright (c) 2019-2024 The PyQMC Developers
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
@@ -38,9 +38,9 @@ def run_restarts(ntimes=5):
         pyqmc.recipes.OPTIMIZE(
             chkfile,
             f"h2_opt{i}.hdf",
-            load_parameters=f"h2_opt{i-1}.hdf" if i > 0 else None,
+            load_parameters=f"h2_opt{i - 1}.hdf" if i > 0 else None,
             slater_kws=dict(optimize_orbitals=True, optimize_zeros=False),
-            max_iterations=2 * (i+1),
+            max_iterations=2 * (i + 1),
             **common_args,
         )
     for i in range(ntimes):
@@ -48,20 +48,20 @@ def run_restarts(ntimes=5):
         pyqmc.recipes.VMC(
             chkfile,
             f"h2_vmc{i}.hdf",
-            load_parameters=f"h2_opt{ntimes-1}.hdf",
-            restart_from=f"h2_vmc{i-1}.hdf" if i > 0 else None,
+            load_parameters=f"h2_opt{ntimes - 1}.hdf",
+            restart_from=f"h2_vmc{i - 1}.hdf" if i > 0 else None,
             **common_args,
-            nblocks=2 * (i+1),
+            nblocks=2 * (i + 1),
         )
     for i in range(ntimes):
         print(i)
         pyqmc.recipes.DMC(
             chkfile,
             f"h2_dmc{i}.hdf",
-            load_parameters=f"h2_opt{ntimes-1}.hdf",
-            restart_from=f"h2_dmc{i-1}.hdf" if i > 0 else None,
+            load_parameters=f"h2_opt{ntimes - 1}.hdf",
+            restart_from=f"h2_dmc{i - 1}.hdf" if i > 0 else None,
             **common_args,
-            nblocks=10 * (i+1),
+            nblocks=10 * (i + 1),
         )
 
 

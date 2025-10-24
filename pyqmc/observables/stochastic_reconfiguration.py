@@ -26,7 +26,7 @@ def nodal_regularization(grad2, nodal_cutoff=1e-3):
     f = a * r ** 2 + b * r ** 4 + c * r ** 6
 
     This uses the method from
-    Shivesh Pathak and Lucas K. Wagner. 
+    Shivesh Pathak and Lucas K. Wagner.
     “A Light Weight Regularization for Wave Function
     Parameter Gradients in Quantum Monte Carlo.”
     AIP Advances 10, no. 8 (August 6, 2020): 085213.
@@ -47,12 +47,19 @@ def nodal_regularization(grad2, nodal_cutoff=1e-3):
 
 class StochasticReconfiguration:
     """
-    This class works as an accumulator, but has an extra method 
+    This class works as an accumulator, but has an extra method
     that computes the change in parameters
     given the averages given by avg() and __call__.
     """
 
-    def __init__(self, enacc, transform, nodal_cutoff=1e-3, eps=1e-1, inverse_strategy="pseudo_inverse"):
+    def __init__(
+        self,
+        enacc,
+        transform,
+        nodal_cutoff=1e-3,
+        eps=1e-1,
+        inverse_strategy="pseudo_inverse",
+    ):
         """
         eps here is the regularization for SR.
         """
@@ -98,7 +105,9 @@ class StochasticReconfiguration:
 
         d = {k: np.average(it, weights=weights, axis=0) for k, it in den.items()}
         if self.transform.nparams > 0:
-            d["dpH"] = np.einsum("i,ij->j", energy, weights[:, np.newaxis] * dp_regularized)
+            d["dpH"] = np.einsum(
+                "i,ij->j", energy, weights[:, np.newaxis] * dp_regularized
+            )
             d["dppsi"] = np.average(dp_regularized, weights=weights, axis=0)
             d["dpidpj"] = np.einsum(
                 "ij,ik->jk", dp, weights[:, np.newaxis] * dp_regularized, optimize=True
@@ -145,7 +154,9 @@ class StochasticReconfiguration:
         elif self.inverse_strategy == "regularized_inverse":
             invSij = np.linalg.inv(Sij + self.eps * np.eye(Sij.shape[0]))
         else:
-            raise ValueError("Invalid inverse strategy. Valid options are pseudo_inverse and regularized_inverse.")
+            raise ValueError(
+                "Invalid inverse strategy. Valid options are pseudo_inverse and regularized_inverse."
+            )
         v = np.einsum("ij,j->i", invSij, pgrad)
         dp = [-step * v for step in steps]
         report = {
@@ -196,7 +207,6 @@ class StochasticReconfigurationMultipleWF:
         nconfig = weights.shape[-1]
         for wfi, dp in enumerate(dppsi):
             if self.transforms[wfi].nparams == 0:
-
                 continue
             d[("dp", wfi)] = (
                 np.einsum("cp,jc->pj", dp, weights[wfi, :, :], optimize=True) / nconfig
@@ -251,7 +261,6 @@ class StochasticReconfigurationMultipleWF:
             avg[k] = np.mean(it, axis=0) / Nij
             error[k] = scipy.stats.sem(it, axis=0) / Nij
 
-        
         nwf = weights.shape[1]
         for k in ["dp", "dpH"]:
             for w in range(nwf):

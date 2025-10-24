@@ -21,30 +21,31 @@ to any variational parameters the funtion has.
 
 """
 
+
 @gpu.fuse()
 def polypadevalue(r, beta, rcut):
     z = r / rcut
-    p = ((3*z - 8) * z + 6) * z**2
+    p = ((3 * z - 8) * z + 6) * z**2
     return (1 - p) / (1 + beta * p)
 
 
 @gpu.fuse()
 def polypadegradvalue(r, beta, rcut):
-    z1 = r/rcut - 1
+    z1 = r / rcut - 1
     p = (3 * z1 + 4) * z1**2 * z1 + 1
     obp = 1 / (1 + beta * p)
-    grad_rvec = (z1 * obp)**2 * (-(1 + beta) * 12 / rcut**2) 
+    grad_rvec = (z1 * obp) ** 2 * (-(1 + beta) * 12 / rcut**2)
     value = (1 - p) * obp
     return grad_rvec, value
 
 
 def polypadegradlap(r, beta, rcut):
-    z1 = r/rcut - 1
+    z1 = r / rcut - 1
     z12 = z1 * z1
     p = (3 * z12 + 4 * z1) * z12 + 1
     obp = 1 / (1 + beta * p)
     grad_rvec = -(1 + beta) * 12 / rcut**2 * obp**2 * z12
-    lap = grad_rvec * (5 + 2 / z1 - 24 * beta * (z1 + 1)**2 * z12 * obp)
+    lap = grad_rvec * (5 + 2 / z1 - 24 * beta * (z1 + 1) ** 2 * z12 * obp)
     return grad_rvec, lap
 
 
@@ -90,7 +91,7 @@ class PolyPadeFunction:
         :returns: parameter gradient {'rcut': :math:`\frac{\partial b}{\partial r_{\rm cut}}`, 'beta': :math:`\frac{\partial b}{\partial \beta}`}
         :rtype: dictionary
         """
-        #mask = r >= self.parameters["rcut"]
+        # mask = r >= self.parameters["rcut"]
         z = r / self.parameters["rcut"]
         z1 = z - 1
         z12 = z1 * z1
@@ -102,8 +103,8 @@ class PolyPadeFunction:
         dbdp = -(1 + beta) * obp * obp
         derivrcut = dbdp * dpdz * (-z / self.parameters["rcut"])
         derivbeta = -p * (1 - p) * obp * obp
-        #derivrcut[mask] = 0.0
-        #derivbeta[mask] = 0.0
+        # derivrcut[mask] = 0.0
+        # derivbeta[mask] = 0.0
         pderiv = {"rcut": derivrcut, "beta": derivbeta}
         return pderiv
 
@@ -180,7 +181,6 @@ class CutoffCuspFunction:
         lap = -c * 2 * temp
         return grad, np.squeeze(lap, axis=-1)
 
-
     def pgradient(self, rvec, r):
         r"""
 
@@ -191,7 +191,7 @@ class CutoffCuspFunction:
         """
         rcut = self.parameters["rcut"]
         gamma = self.parameters["gamma"]
-        #mask = r > rcut
+        # mask = r > rcut
         y = r / rcut
         y1 = y - 1
 
@@ -203,8 +203,8 @@ class CutoffCuspFunction:
 
         dfdrcut = y * a * ogb * ogb + val
         dfdgamma = ((b * ogb) ** 2 - 1 / (3 + gamma) ** 2) * rcut
-        #dfdrcut[mask] = 0.0
-        #dfdgamma[mask] = 0.0
+        # dfdrcut[mask] = 0.0
+        # dfdgamma[mask] = 0.0
         func = {"rcut": dfdrcut, "gamma": dfdgamma}
 
         return func
@@ -285,7 +285,6 @@ def test_func3d_pgradient(bf, delta=1e-5):
     return maxerror
 
 
-
 class CutoffFunc3dEvaluator:
     def __init__(self, basis_functions, rcut):
         for b in basis_functions:
@@ -298,7 +297,7 @@ class CutoffFunc3dEvaluator:
         return self.nbas
 
     def value(self, d, r):
-        #r = np.linalg.norm(d)
+        # r = np.linalg.norm(d)
         select = r < self.rcut
         out = gpu.cp.zeros((self.nbas, *r.shape))
         rselect = r[select]
@@ -315,7 +314,7 @@ class CutoffFunc3dEvaluator:
         dselect = d[select]
         rselect = r[select]
         gradsel = gpu.cp.zeros((*rselect.shape, self.nbas, 3))
-        scalsel = gpu.cp.zeros((*rselect.shape, self.nbas)) # lap or val
+        scalsel = gpu.cp.zeros((*rselect.shape, self.nbas))  # lap or val
         for l, f in enumerate(funcs):
             gradsel[..., l, :], scalsel[..., l] = f(dselect, rselect)
         grad = gpu.cp.zeros((*r.shape, self.nbas, 3))
@@ -332,7 +331,7 @@ class CutoffFunc3dEvaluator:
         funcs = [b.gradient_laplacian for b in self.basis_functions]
         g, l = self._grad_x(d, r, funcs)
         return g, l[..., np.newaxis]
-    
+
     def gradient(self, d, r):
         return self.gradient_value(d, r)[0]
 

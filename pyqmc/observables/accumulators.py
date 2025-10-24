@@ -22,7 +22,16 @@ import copy
 import time
 import pyqmc.observables.jax_ecp as ecp_accumulator
 
-def gradient_generator(mol, wf, to_opt=None, nodal_cutoff=1e-3, eps=1e-3, inverse_strategy="regularized_inverse", **ewald_kwargs):
+
+def gradient_generator(
+    mol,
+    wf,
+    to_opt=None,
+    nodal_cutoff=1e-3,
+    eps=1e-3,
+    inverse_strategy="regularized_inverse",
+    **ewald_kwargs,
+):
     return StochasticReconfiguration(
         EnergyAccumulator(mol, **ewald_kwargs),
         LinearTransform(wf.parameters, to_opt),
@@ -47,7 +56,6 @@ class EnergyAccumulator:
         if not use_old_ecp:
             self.ecp = ecp_accumulator.ECPAccumulator(mol, naip=naip)
 
-
     def __call__(self, configs, wf):
         ee, ei, ii = self.coulomb.energy(configs)
         if self.use_old_ecp:
@@ -70,7 +78,9 @@ class EnergyAccumulator:
 
     def nonlocal_tmoves(self, configs, wf, e, tau):
         if self.use_old_ecp:
-            return eval_ecp.compute_tmoves(self.mol, configs, wf, e, self.threshold, tau)
+            return eval_ecp.compute_tmoves(
+                self.mol, configs, wf, e, self.threshold, tau
+            )
         else:
             return self.ecp.nonlocal_tmoves(configs, wf, e, tau)
 
@@ -112,8 +122,11 @@ class LinearTransform:
         self.nimag = {k: to_opt[k].sum() if c else 0 for k, c in self.complex.items()}
         if any(self.nimag.values()):
             self.complex_inds = np.concatenate(
-             [np.ones(to_opt[k].sum(), dtype=bool) * c for k, c in self.complex.items()]
-          )
+                [
+                    np.ones(to_opt[k].sum(), dtype=bool) * c
+                    for k, c in self.complex.items()
+                ]
+            )
         else:
             self.complex_inds = np.asarray([], dtype=bool)
         self.nparams = np.sum([v.sum() for v in self.to_opt.values()])
@@ -132,7 +145,7 @@ class LinearTransform:
         grads = []
         for k, opt in self.to_opt.items():
             mask = ~np.repeat(opt[np.newaxis, :], pgrad[k].shape[0], axis=0)
-            #print(k, "mask", mask.shape, pgrad[k].shape, self.to_opt[k].shape)
+            # print(k, "mask", mask.shape, pgrad[k].shape, self.to_opt[k].shape)
             mask_grads = np.ma.array(pgrad[k], mask=mask).reshape(pgrad[k].shape[0], -1)
             grads.append(np.ma.compress_cols(mask_grads))
         if len(grads) == 0:

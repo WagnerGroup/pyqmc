@@ -117,7 +117,7 @@ def sample_overlap_block(wfs, configs, tstep, nsteps, energy):
             gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconf, 3))
             newcoorde = configs.configs[:, e, :] + gauss + grad * tstep
             newcoorde = configs.make_irreducible(e, newcoorde)
-            #print(configs.wrap)
+            # print(configs.wrap)
 
             # Compute reverse move
             grads, vals, saved_values = list(

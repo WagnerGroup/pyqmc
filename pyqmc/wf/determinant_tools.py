@@ -29,9 +29,10 @@ def binary_to_occ(S, ncore):
 
 
 def reformat_binary_dets(deters, ncore=0, tol=0):
-    #f = lambda x: (binary_to_occ(x[1], ncore)[0], binary_to_occ(x[2], ncore)[0])
+    # f = lambda x: (binary_to_occ(x[1], ncore)[0], binary_to_occ(x[2], ncore)[0])
     def f(x):
         return (binary_to_occ(x[1], ncore)[0], binary_to_occ(x[2], ncore)[0])
+
     return [(x[0], f(x)) for x in deters if np.abs(x[0]) > tol]
 
 
@@ -56,7 +57,7 @@ def create_packed_objects(deters, tol=0):
     detwt = []
     map_dets = [[], []]
     occup = [[], []]
-    for x in deters: # x is (weight, [occupation string up, occupation string down])
+    for x in deters:  # x is (weight, [occupation string up, occupation string down])
         if np.abs(x[0]) > tol:
             detwt.append(x[0])
             spin_occ = x[1]

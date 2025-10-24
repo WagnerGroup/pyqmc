@@ -12,8 +12,11 @@ def timevmc(wf, enacc, nconfig):
     t1 = time.perf_counter()
     return t1 - t0
 
+
 def check_timing(eval_orbs_with, mol, mf, seed=1, nreps=10, nconfig=10):
-    wf, _ = pyq.generate_wf(mol, mf, slater_kws=dict(evaluate_orbitals_with=eval_orbs_with))
+    wf, _ = pyq.generate_wf(
+        mol, mf, slater_kws=dict(evaluate_orbitals_with=eval_orbs_with)
+    )
     print(wf.wf_factors[0].orbitals.eval_gto)
     np.random.seed(seed)
     configs = pyq.initial_guess(mol, nconfig)
@@ -26,9 +29,11 @@ def check_timing(eval_orbs_with, mol, mf, seed=1, nreps=10, nconfig=10):
         time_array[n] = timevmc(wf, enacc, nconfig)
     return time_array
 
-if __name__ == "__main__":
 
-    mol = pyscf.gto.M(atom="H 0. 0. 0.; Cl 0. 0. 2.", basis="ccecp-ccpvtz", ecp="ccecp", unit="bohr")
+if __name__ == "__main__":
+    mol = pyscf.gto.M(
+        atom="H 0. 0. 0.; Cl 0. 0. 2.", basis="ccecp-ccpvtz", ecp="ccecp", unit="bohr"
+    )
     mf = pyscf.scf.RHF(mol)
     mf.run()
 

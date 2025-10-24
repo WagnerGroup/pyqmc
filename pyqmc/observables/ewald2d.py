@@ -298,7 +298,7 @@ class Ewald:
         w2 = (
             1
             / (self.alpha * gpu.cp.sqrt(gpu.cp.pi))
-            * gpu.cp.exp(-self.alpha**2 * z**2)
+            * gpu.cp.exp(-(self.alpha**2) * z**2)
         )
         w = -gpu.cp.pi / self.cell_area * (w1 + w2)
         return w

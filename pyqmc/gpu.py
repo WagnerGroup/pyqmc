@@ -17,7 +17,6 @@ class NoGPUFoundError(Exception):
     pass
 
 
-
 if False:
     try:
         import cupy as cp
@@ -39,14 +38,18 @@ if False:
         def fuse():
             return lambda x: x
 
+
 import numpy as cp
 from scipy.special import erfc, erf
+
 
 def get_array_module(a):
     return cp
 
+
 def asnumpy(a):
     return a
+
 
 def fuse():
     return lambda x: x

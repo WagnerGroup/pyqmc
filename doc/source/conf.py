@@ -12,14 +12,15 @@
 #
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../../'))
+
+sys.path.insert(0, os.path.abspath("../../"))
 
 
 # -- Project information -----------------------------------------------------
 
-project = 'pyQMC'
-copyright = '2023, pyQMC authors'
-author = 'pyQMC authors'
+project = "pyQMC"
+copyright = "2023, pyQMC authors"
+author = "pyQMC authors"
 
 
 # -- General configuration ---------------------------------------------------
@@ -27,48 +28,63 @@ author = 'pyQMC authors'
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = [    'sphinx.ext.autodoc',
-    'sphinx.ext.mathjax',
-    'sphinx.ext.viewcode',
-    'recommonmark',
-    'nbsphinx',
+extensions = [
+    "sphinx.ext.autodoc",
+    "sphinx.ext.mathjax",
+    "sphinx.ext.viewcode",
+    "recommonmark",
+    "nbsphinx",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = []
 
-master_doc = 'index'
+master_doc = "index"
 
 # -- Options for HTML output -------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-#extensions.append("faculty_sphinx_theme")
-#html_theme = "faculty-sphinx-theme"
+# extensions.append("faculty_sphinx_theme")
+# html_theme = "faculty-sphinx-theme"
 
-html_theme = 'sphinxdoc'
+html_theme = "sphinxdoc"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+html_static_path = ["_static"]
 
 
+# import mock
 
-#import mock
- 
-autodoc_mock_imports = ['numpy', 'scipy', 'matplotlib', 
-                'matplotlib.pyplot', 'scipy.optimize',
-                'scipy.linalg','scipy.spatial.transform', 
-                'scipy.special',
-                'scipy.stats', 'pyscf', 'pyscf.gto', 'pyscf.fci',
-                'pyscf.pbc','pyscf.pbc.gto', 'pyscf.pbc.gto.eval_gto','pyscf.lib','h5py',
-                'numpy', 'numpy.linalg', 'numpy']
-#for mod_name in MOCK_MODULES:
+autodoc_mock_imports = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "matplotlib.pyplot",
+    "scipy.optimize",
+    "scipy.linalg",
+    "scipy.spatial.transform",
+    "scipy.special",
+    "scipy.stats",
+    "pyscf",
+    "pyscf.gto",
+    "pyscf.fci",
+    "pyscf.pbc",
+    "pyscf.pbc.gto",
+    "pyscf.pbc.gto.eval_gto",
+    "pyscf.lib",
+    "h5py",
+    "numpy",
+    "numpy.linalg",
+    "numpy",
+]
+# for mod_name in MOCK_MODULES:
 #    sys.modules[mod_name] = mock.Mock()

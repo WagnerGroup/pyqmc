@@ -218,15 +218,15 @@ def test_reblocking():
         std_err = scipy.stats.sem(reblock_by2(test_data, reblocks, c))
         std_err_err = std_err / np.sqrt(2 * (2 ** (n - reblocks) - 1))
 
-        assert np.isclose(
-            row["mean"], np.mean(test_data[c]), 1e-10, 1e-12
-        ), "Means are not equal"
-        assert np.isclose(
-            row["standard error"], std_err, 1e-10, 1e-12
-        ), "Standard errors are not equal"
-        assert np.isclose(
-            row["standard error error"], std_err_err, 1e-10, 1e-12
-        ), "Standard error errors are not equal"
+        assert np.isclose(row["mean"], np.mean(test_data[c]), 1e-10, 1e-12), (
+            "Means are not equal"
+        )
+        assert np.isclose(row["standard error"], std_err, 1e-10, 1e-12), (
+            "Standard errors are not equal"
+        )
+        assert np.isclose(row["standard error error"], std_err_err, 1e-10, 1e-12), (
+            "Standard error errors are not equal"
+        )
 
     statlist = ["mean", "sem", lambda x: x.sem() / np.sqrt(2 * (len(x) - 1))]
     rb1 = reblock(test_data, len(test_data) // 4).agg(statlist).T

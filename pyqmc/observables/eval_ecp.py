@@ -17,6 +17,7 @@ import copy
 import scipy.spatial.transform
 import functools
 
+
 def ecp(mol, configs, wf, threshold, naip=None):
     """
     :returns: ECP value, summed over all the electrons and atoms.
@@ -30,12 +31,12 @@ def ecp(mol, configs, wf, threshold, naip=None):
             for atom in mol._atom:
                 if atom[0] in mol._ecp.keys():
                     ecp_ret = ecp_ea(mol, configs, wf, e, atom, threshold, naip)
-                    ecp_en += ecp_ret['total']
-                    ecp_local += ecp_ret['local']
-                    #print(atom, ecp_ret['ratio'])
-            ecp_tot+=ecp_en
-            #print('ecp_energy', e, ecp_en.round(4))
-            #print("ecp local", e, ecp_local)
+                    ecp_en += ecp_ret["total"]
+                    ecp_local += ecp_ret["local"]
+                    # print(atom, ecp_ret['ratio'])
+            ecp_tot += ecp_en
+            # print('ecp_energy', e, ecp_en.round(4))
+            # print("ecp local", e, ecp_local)
     return ecp_tot
 
 
@@ -251,7 +252,7 @@ def get_P_l(r_ea, r_ea_vec, l_list, naip=None, stochastic=True):
     return P_l_val, r_ea_i
 
 
-def get_rot(nconf, naip, stochastic = True):
+def get_rot(nconf, naip, stochastic=True):
     """
     :parameter int nconf: number of configurations
     :parameter int naip: number of auxiliary integration points
@@ -269,7 +270,7 @@ def get_rot(nconf, naip, stochastic = True):
         return weights, np.zeros((0, naip, 3))
     if stochastic:
         rot_vec = np.dot(rot, points.T).T[np.newaxis, :, :]  # nconf x naip x 3
-    else: 
+    else:
         rot_vec = points[np.newaxis, :, :]
     return weights, rot_vec
 

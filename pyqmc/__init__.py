@@ -16,7 +16,6 @@ Real-space quantum Monte Carlo (QMC) methods for electronic structure calculatio
 This package provides tools for performing variational Monte Carlo (VMC) and
 diffusion Monte Carlo (DMC) simulations, including wavefunction optimization, and excited state optimization."""
 
-
 name = "pyqmc"
 
 __version__ = "0.8.0"

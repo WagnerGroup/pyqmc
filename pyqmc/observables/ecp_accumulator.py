@@ -22,6 +22,7 @@ from typing import NamedTuple
 from collections import namedtuple
 from functools import partial
 
+
 class ECPAccumulator:
     def __init__(self, mol, threshold=10, naip=6):
         """
@@ -36,10 +37,13 @@ class ECPAccumulator:
         self._atomic_coordinates = mol.atom_coords()
         self._ecp = mol._ecp
         self._atom_names = [atom[0] for atom in mol._atom]
-        self.functors = [generate_ecp_functors(mol, at_name) for at_name in self._atom_names]
-        self._vl_evaluator = partial(evaluate_vl, self.functors, self.threshold, self.naip)
+        self.functors = [
+            generate_ecp_functors(mol, at_name) for at_name in self._atom_names
+        ]
+        self._vl_evaluator = partial(
+            evaluate_vl, self.functors, self.threshold, self.naip
+        )
         print(self.functors)
-
 
     def __call__(self, configs, wf) -> dict:
         """
@@ -51,19 +55,21 @@ class ECPAccumulator:
         # gather energies and distances
 
         for e in range(configs.configs.shape[1]):
-            atomic_info, v_local = gather_atomic(self._atomic_coordinates, configs, e, self.functors)
-            #print("e, atomic_info", e, atomic_info)
+            atomic_info, v_local = gather_atomic(
+                self._atomic_coordinates, configs, e, self.functors
+            )
+            # print("e, atomic_info", e, atomic_info)
             move_info = self._vl_evaluator(atomic_info)
-            #print("move_info", move_info)
+            # print("move_info", move_info)
             # get the electronic coordinates by moving the electron to the atom and then to the integration point
             # this gives us PBCs correctly
-            epos_rot = (configs.configs[:, e, :] \
-                        - atomic_info.r_ea_vec)[:, np.newaxis] \
-                        + move_info.r_ea_i
+            epos_rot = (configs.configs[:, e, :] - atomic_info.r_ea_vec)[
+                :, np.newaxis
+            ] + move_info.r_ea_i
             epos = configs.make_irreducible(e, epos_rot, move_info.mask)
 
             ecp_val += v_local
-            # important to do the local sum before skipping evaluation 
+            # important to do the local sum before skipping evaluation
             if move_info.mask.sum() == 0:
                 continue
             # evaluate the wave function ratio
@@ -71,10 +77,14 @@ class ECPAccumulator:
 
             # compute the ECP value
             # n: nconf, a: aip, l: angular momentum channel
-            ecp_val[move_info.mask] += np.einsum("na,nal, nl->n", ratio, move_info.P_l[move_info.mask], move_info.v_l[move_info.mask])
+            ecp_val[move_info.mask] += np.einsum(
+                "na,nal, nl->n",
+                ratio,
+                move_info.P_l[move_info.mask],
+                move_info.v_l[move_info.mask],
+            )
 
         return ecp_val
-
 
     def avg(self, configs, wf):
         return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
@@ -82,15 +92,19 @@ class ECPAccumulator:
     def nonlocal_tmoves(self, configs, wf, e, tau):
         atomic_info = gather_atomic(self._atomic_coordinates, configs, e)
         move_info = self._vl_evaluator(atomic_info)
-        epos_rot = (configs.configs[:, e, :] - atomic_info.r_ea_vec)[:, np.newaxis] + move_info.r_ea_i
+        epos_rot = (configs.configs[:, e, :] - atomic_info.r_ea_vec)[
+            :, np.newaxis
+        ] + move_info.r_ea_i
         epos = configs.make_irreducible(e, epos_rot, move_info.mask)
         # evaluate the wave function ratio
         ratio = np.zeros((configs.configs.shape[0], self.naip))
-        ratio[move_info.mask,:] = wf.testvalue(e, epos, move_info.mask)[0]
+        ratio[move_info.mask, :] = wf.testvalue(e, epos, move_info.mask)[0]
 
-        weight = np.einsum("ik, ijk -> ij", np.exp(-tau*move_info.v_l)-1, move_info.P_l)
+        weight = np.einsum(
+            "ik, ijk -> ij", np.exp(-tau * move_info.v_l) - 1, move_info.P_l
+        )
         print(ratio.shape, weight.shape)
-        return {'ratio': ratio, 'weight': weight, 'configs':epos} 
+        return {"ratio": ratio, "weight": weight, "configs": epos}
 
     def has_nonlocal_moves(self):
         return self._ecp != {}
@@ -100,13 +114,13 @@ class ECPAccumulator:
 
     def shapes(self):
         return {"ecp": ()}
-    
 
 
 class _AtomicInfo(NamedTuple):
     r_ea: np.ndarray
     r_ea_vec: np.ndarray
     assigned_atom: np.ndarray
+
 
 def gather_atomic(atomic_coordinates, configs, e, vl_evaluator):
     """
@@ -115,7 +129,9 @@ def gather_atomic(atomic_coordinates, configs, e, vl_evaluator):
     :parameter e: electron index
     :returns: MoveInformation object
     """
-    distances = configs.dist.dist_i(atomic_coordinates[np.newaxis,:,:], configs.configs[:, e, :])
+    distances = configs.dist.dist_i(
+        atomic_coordinates[np.newaxis, :, :], configs.configs[:, e, :]
+    )
     dist2 = np.sum(distances**2, axis=-1)
     dist = np.sqrt(dist2)
     v_local = np.zeros(distances.shape[0])
@@ -125,28 +141,29 @@ def gather_atomic(atomic_coordinates, configs, e, vl_evaluator):
         v_local += vl[-1](dist[:, atom])  # local part
     # Reduce to (nconf, 3) array for closest atom
     assigned_atom = np.argmin(dist2, axis=1)
-    r_ea_vec = distances[np.arange(distances.shape[0]),assigned_atom,:]
+    r_ea_vec = distances[np.arange(distances.shape[0]), assigned_atom, :]
     r_ea = np.linalg.norm(r_ea_vec, axis=-1)
     return _AtomicInfo(r_ea, r_ea_vec, assigned_atom), v_local
 
 
 class _MoveInfo(NamedTuple):
-     # 'cheap to compute' quantities
-    r_ea_i: np.ndarray  #(nconf, naip, 3)
-    probability: np.ndarray # (nconf,)
+    # 'cheap to compute' quantities
+    r_ea_i: np.ndarray  # (nconf, naip, 3)
+    probability: np.ndarray  # (nconf,)
     mask: np.ndarray  # (nconf,)
     v_l: np.ndarray  # (nconf, nl)
-    P_l: np.ndarray # (nconf, naip, nl)
-   
+    P_l: np.ndarray  # (nconf, naip, nl)
 
-def evaluate_vl(vl_evaluator, # list of functors [at][l]
-                threshold,
-                naip,
-                at_info: _AtomicInfo,
-                ):
-    maxl=max([len(vl) for vl in vl_evaluator])
+
+def evaluate_vl(
+    vl_evaluator,  # list of functors [at][l]
+    threshold,
+    naip,
+    at_info: _AtomicInfo,
+):
+    maxl = max([len(vl) for vl in vl_evaluator])
     nconf = at_info.r_ea.shape[0]
-    v_l = np.zeros((nconf,maxl))
+    v_l = np.zeros((nconf, maxl))
     P_l = np.zeros((nconf, naip, maxl))
     r_ea_i = np.zeros((nconf, naip, 3))
     mask = np.zeros((nconf), dtype=bool)
@@ -156,21 +173,22 @@ def evaluate_vl(vl_evaluator, # list of functors [at][l]
         for l, func in vl.items():  # -1,0,1,...
             # a bit tricky here, we end up with the local part in the last column because
             # vl is a dictionary where -1 is the local part
-            v_l[m_atom, l] = func(at_info.r_ea[m_atom]) 
-        mask[m_atom], prob[m_atom] = ecp_mask(v_l[m_atom,:], threshold)
-        #print(atom, vl.keys())
+            v_l[m_atom, l] = func(at_info.r_ea[m_atom])
+        mask[m_atom], prob[m_atom] = ecp_mask(v_l[m_atom, :], threshold)
+        # print(atom, vl.keys())
         nl = len(vl)
-        P_l[m_atom,:,:nl], r_ea_i[m_atom,:,:] = get_P_l(at_info.r_ea[m_atom], at_info.r_ea_vec[m_atom], vl.keys(), naip)
-        
+        P_l[m_atom, :, :nl], r_ea_i[m_atom, :, :] = get_P_l(
+            at_info.r_ea[m_atom], at_info.r_ea_vec[m_atom], vl.keys(), naip
+        )
 
-    #blank = np.arange(nconf)
-    return _MoveInfo(r_ea_i,
-                     prob,
-                     mask,
-                     v_l,
-                     P_l,
+    # blank = np.arange(nconf)
+    return _MoveInfo(
+        r_ea_i,
+        prob,
+        mask,
+        v_l,
+        P_l,
     )
-
 
 
 def ecp_mask(v_l, threshold):
@@ -299,18 +317,20 @@ def get_rot(nconf, naip):
     :rtype:  ((naip,) array, (nconf, naip, 3) array)
     """
 
-    #if nconf > 0:  # get around a bug(?) when there are zero configurations.
-        #rot = scipy.spatial.transform.Rotation.random(nconf).as_matrix()
-        #rot = np.identity(3)[np.newaxis].repeat(nconf, axis=0)
+    # if nconf > 0:  # get around a bug(?) when there are zero configurations.
+    # rot = scipy.spatial.transform.Rotation.random(nconf).as_matrix()
+    # rot = np.identity(3)[np.newaxis].repeat(nconf, axis=0)
     rot = scipy.spatial.transform.Rotation.random().as_matrix()
-    #else:
+    # else:
     #    rot = np.zeros((0, 3, 3))
     quadrature_grid = generate_quadrature_grids()
 
     if naip not in quadrature_grid.keys():
-        raise ValueError(f"Possible AIPs are one of {quadrature_grid.keys()}, got {naip} instead.")
+        raise ValueError(
+            f"Possible AIPs are one of {quadrature_grid.keys()}, got {naip} instead."
+        )
     points, weights = quadrature_grid[naip]
-    #rot_vec = np.einsum("jkl,ik->jil", rot, points)
+    # rot_vec = np.einsum("jkl,ik->jil", rot, points)
     rot_vec = np.einsum("kl, ik->il", rot, points)[np.newaxis]
     return weights, rot_vec
 

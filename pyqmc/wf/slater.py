@@ -239,10 +239,10 @@ class Slater:
             compute = np.isfinite(self._dets[s][1])
             if is_zero > 0:
                 warnings.warn(
-                    f"A wave function is zero. Found this proportion: {is_zero/nconf}"
+                    f"A wave function is zero. Found this proportion: {is_zero / nconf}"
                 )
                 # print(configs.configs[])
-                print(f"zero {is_zero/np.prod(compute.shape)}")
+                print(f"zero {is_zero / np.prod(compute.shape)}")
             self._inverse.append(gpu.cp.zeros(mo_vals.shape, dtype=mo_vals.dtype))
             for d in range(compute.shape[1]):
                 self._inverse[s][compute[:, d], d, :, :] = gpu.cp.linalg.inv(

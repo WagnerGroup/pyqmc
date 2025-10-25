@@ -43,6 +43,7 @@ def generate_slater(
     """
     if jax:
         import pyqmc.wf.jax.slater
+
         wf = pyqmc.wf.jax.slater.JAXSlater(mol, mf, **kwargs)
     else:
         wf = slater.Slater(mol, mf, **kwargs)
@@ -72,7 +73,9 @@ def expand_beta_qwalk(beta0, n):
     return beta
 
 
-def default_jastrow_basis(mol, ion_cusp=False, na=4, nb=3, rcut=None, cusp_gamma = None, beta_a=0.2, beta_b = 0.5):
+def default_jastrow_basis(
+    mol, ion_cusp=False, na=4, nb=3, rcut=None, cusp_gamma=None, beta_a=0.2, beta_b=0.5
+):
     if cusp_gamma is None:
         cusp_gamma = 24
     if rcut is None:
@@ -93,7 +96,17 @@ def default_jastrow_basis(mol, ion_cusp=False, na=4, nb=3, rcut=None, cusp_gamma
     return abasis, bbasis
 
 
-def generate_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None, cusp_gamma = None, beta_a = 0.2, beta_b = 0.5,jax=False):
+def generate_jastrow(
+    mol,
+    ion_cusp=None,
+    na=4,
+    nb=3,
+    rcut=None,
+    cusp_gamma=None,
+    beta_a=0.2,
+    beta_b=0.5,
+    jax=False,
+):
     """
     Default 2-body jastrow from QWalk,
 
@@ -115,9 +128,14 @@ def generate_jastrow(mol, ion_cusp=None, na=4, nb=3, rcut=None, cusp_gamma = Non
 
     if jax:
         import pyqmc.wf.jax.jastrowspin
-        jastrow = pyqmc.wf.jax.jastrowspin.JAXJastrowSpin(mol, ion_cusp, na, nb, rcut, cusp_gamma, beta_a, beta_b)
+
+        jastrow = pyqmc.wf.jax.jastrowspin.JAXJastrowSpin(
+            mol, ion_cusp, na, nb, rcut, cusp_gamma, beta_a, beta_b
+        )
     else:
-        abasis, bbasis = default_jastrow_basis(mol, len(ion_cusp) > 0, na, nb, rcut, cusp_gamma, beta_a, beta_b)
+        abasis, bbasis = default_jastrow_basis(
+            mol, len(ion_cusp) > 0, na, nb, rcut, cusp_gamma, beta_a, beta_b
+        )
         jastrow = jastrowspin.JastrowSpin(mol, a_basis=abasis, b_basis=bbasis)
         if len(ion_cusp) > 0:
             coefs = mol.atom_charges().copy()
@@ -137,7 +155,7 @@ def generate_jastrow3(mol, na=4, nb=3, rcut=None, jax=False):
     if jax is True:
         raise NotImplementedError("JAX 3-body Jastrow not yet implemented")
     abasis, bbasis = default_jastrow_basis(mol, False, na, nb, rcut)
-    print('na', na)
+    print("na", na)
     wf = three_body_jastrow.ThreeBodyJastrow(mol, abasis, bbasis)
     to_opt = {"ccoeff": np.ones(wf.parameters["ccoeff"].shape).astype(bool)}
     return wf, to_opt
@@ -147,15 +165,17 @@ def generate_gps_jastrow(mol, Xsupport=None, optimize_Xsupport=True):
     if Xsupport is None:
         r = 2
         Xsupport = np.array(
-            [[[0, 0, 0], [0, 0, r]], 
-             [[0, 0, r], [0, 0, 0]],
-             [[0,0,0],[0,0,0]],
-             [[0,0,r],[0,0,r]]]
+            [
+                [[0, 0, 0], [0, 0, r]],
+                [[0, 0, r], [0, 0, 0]],
+                [[0, 0, 0], [0, 0, 0]],
+                [[0, 0, r], [0, 0, r]],
+            ]
         )
     wf = gps2.GPSJastrow(mol, Xsupport)
     to_opt = {}
     to_opt["alpha"] = np.ones(wf.parameters["alpha"].shape).astype(bool)
-    to_opt["f"] =  np.ones(wf.parameters["f"].shape).astype(bool)
+    to_opt["f"] = np.ones(wf.parameters["f"].shape).astype(bool)
     if optimize_Xsupport:
         to_opt["Xsupport"] = np.ones(wf.parameters["Xsupport"].shape).astype(bool)
     return wf, to_opt
@@ -172,7 +192,13 @@ def generate_sj(mol, mf, optimize_orbitals=False, twist=0, **jastrow_kws):
 
 
 def generate_wf(
-    mol, mf, jastrow=generate_jastrow, jastrow_kws=None, slater_kws=None, mc=None, jax=False
+    mol,
+    mf,
+    jastrow=generate_jastrow,
+    jastrow_kws=None,
+    slater_kws=None,
+    mc=None,
+    jax=False,
 ):
     """
     Generate a wave function from pyscf objects.
@@ -186,7 +212,7 @@ def generate_wf(
     :param slater_kws: a dictionary of keyword arguments for the generate_slater function
     :param mc: A CAS object (optional) for multideterminant wave functions.
     :param jax: a boolean flag for using JAX implementation of Slater and Jastrow objects.
-    
+
     :return: wf
     :rtype: A (multi) Slater-Jastrow wave function object
     :return: to_opt
@@ -210,7 +236,7 @@ def generate_wf(
     wf = multiplywf.MultiplyWF(wf1, *wfs)
     to_opt = {"wf1" + k: v for k, v in to_opt1.items()}
     for i, to_opt2 in enumerate(to_opts):
-        to_opt.update({f"wf{i+2}" + k: v for k, v in to_opt2.items()})
+        to_opt.update({f"wf{i + 2}" + k: v for k, v in to_opt2.items()})
     return wf, to_opt
 
 

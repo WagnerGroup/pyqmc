@@ -30,8 +30,7 @@ class StochasticReconfigurationWfbyWf:
     """
 
     def __init__(self, enacc, transform, eps=1e-3):
-        """
-        """
+        """ """
         self.enacc = enacc
         self.transform = transform
         self.eps = eps
@@ -95,9 +94,9 @@ class StochasticReconfigurationWfbyWf:
 
         avg["overlap"] = weight_avg
 
-        for k in ['total', 'dppsi', 'dpH', "dpidpj"]:
+        for k in ["total", "dppsi", "dpH", "dpidpj"]:
             it = data_sample1[k]
-            avg[k] = np.mean(it, axis=0) 
+            avg[k] = np.mean(it, axis=0)
             error[k] = scipy.stats.sem(it, axis=0)
         return avg, error
 
@@ -115,14 +114,11 @@ class StochasticReconfigurationWfbyWf:
 
         # overlap gradient
         fac = np.ones((nwf, nwf)) + np.identity(nwf)
-        wfi = nwf-1
+        wfi = nwf - 1
         ret["norm"] = N
         ret["overlap"] = avg["overlap"] / Nij
         ret["dp_norm"] = 2.0 * np.real(avg["wtdp"][:, wfi, wfi])
-        norm_part = (
-            np.einsum("i,p->pi", avg["overlap"][wfi, :], ret["dp_norm"])
-            / N
-        )
+        norm_part = np.einsum("i,p->pi", avg["overlap"][wfi, :], ret["dp_norm"]) / N
         ret["dp_overlap"] = (
             fac[wfi] * (avg["wtdp"][:, wfi, :] - 0.5 * norm_part) / Nij[wfi]
         )
@@ -155,7 +151,7 @@ class StochasticReconfigurationWfbyWf:
         invSij = np.linalg.inv(Sij + self.eps * np.eye(Sij.shape[0]))
 
         ovlp = 0.0
-        print('dp overlap', data["dp_overlap"].shape)
+        print("dp overlap", data["dp_overlap"].shape)
 
         for i in range(wfi):
             ovlp += (
@@ -190,7 +186,7 @@ def hdf_save(hdf_file, data, attr, wfs, configs):
                         hdf[f"wf/{wfi}/" + k] = it.copy()
 
             hdftools.append_hdf(hdf, data)
-            if 'configs' not in hdf.keys():
+            if "configs" not in hdf.keys():
                 configs.initialize_hdf(hdf)
             configs.to_hdf(hdf)
             for wfi, wf in enumerate(wfs):
@@ -260,14 +256,16 @@ def optimize_ensemble(
                     for k in grp.keys():
                         wf.parameters[k] = gpu.cp.asarray(grp[k])
             if "iteration" in hdf.keys():
-                iteration_offset = np.max(hdf["iteration"][...]) 
+                iteration_offset = np.max(hdf["iteration"][...])
             if "sub_iteration" in hdf.keys():
-                sub_iteration_offset = hdf["sub_iteration"][-1]+1
-            if 'wavefunction' in hdf.keys():
-                wf_start = hdf['wavefunction'][-1]
+                sub_iteration_offset = hdf["sub_iteration"][-1] + 1
+            if "wavefunction" in hdf.keys():
+                wf_start = hdf["wavefunction"][-1]
             configs.load_hdf(hdf)
     else:
-        _, configs = pyqmc.method.mc.vmc(wfs[0], configs, client=client, npartitions=npartitions, **vmc_kwargs)
+        _, configs = pyqmc.method.mc.vmc(
+            wfs[0], configs, client=client, npartitions=npartitions, **vmc_kwargs
+        )
 
     for i in range(iteration_offset, max_iterations):
         for wfi in range(wf_start, nwf):
@@ -276,13 +274,15 @@ def optimize_ensemble(
 
             for sub_iteration in range(sub_iteration_offset, len(transform_list)):
                 transform = transform_list[sub_iteration]
-                data_weighted, data_unweighted, configs = pyqmc.method.sample_many.sample_overlap(
-                    wfs,
-                    configs,
-                    None,
-                    client=client,
-                    npartitions=npartitions,
-                    **vmc_kwargs,
+                data_weighted, data_unweighted, configs = (
+                    pyqmc.method.sample_many.sample_overlap(
+                        wfs,
+                        configs,
+                        None,
+                        client=client,
+                        npartitions=npartitions,
+                        **vmc_kwargs,
+                    )
                 )
                 norm = np.mean(data_unweighted["overlap"], axis=0)
                 if verbose:
@@ -290,22 +290,44 @@ def optimize_ensemble(
                 renormalize(wfs, norm.diagonal(), pivot=0)
 
                 data_sample1, configs = pyqmc.method.mc.vmc(
-                    wf, configs, accumulators={'': transform.onewf()}, client=client, npartitions=npartitions, **vmc_kwargs
-                )
-
-                data_weighted, data_unweighted, configs = pyqmc.method.sample_many.sample_overlap(
-                    wfs[0: wfi + 1],
+                    wf,
                     configs,
-                    transform.allwfs(),
+                    accumulators={"": transform.onewf()},
                     client=client,
                     npartitions=npartitions,
                     **vmc_kwargs,
                 )
 
-                avg, error = transform.block_average(data_sample1, data_weighted, data_unweighted["overlap"])
+                data_weighted, data_unweighted, configs = (
+                    pyqmc.method.sample_many.sample_overlap(
+                        wfs[0 : wfi + 1],
+                        configs,
+                        transform.allwfs(),
+                        client=client,
+                        npartitions=npartitions,
+                        **vmc_kwargs,
+                    )
+                )
+
+                avg, error = transform.block_average(
+                    data_sample1, data_weighted, data_unweighted["overlap"]
+                )
                 if verbose:
-                    print("Iteration", i, "wf ", wfi, " sub iteration ", sub_iteration, "Energy", avg["total"], "Overlap", avg["overlap"][wfi, :])
-                dp, report = transform.delta_p([tau], avg, overlap_penalty, verbose=True)
+                    print(
+                        "Iteration",
+                        i,
+                        "wf ",
+                        wfi,
+                        " sub iteration ",
+                        sub_iteration,
+                        "Energy",
+                        avg["total"],
+                        "Overlap",
+                        avg["overlap"][wfi, :],
+                    )
+                dp, report = transform.delta_p(
+                    [tau], avg, overlap_penalty, verbose=True
+                )
                 x = transform.transform.serialize_parameters(wf.parameters)
                 x = x + dp[0]
                 set_wf_params(wf, x, transform)
@@ -315,7 +337,7 @@ def optimize_ensemble(
                     f"energy_error{wfi}": error["total"],
                     f"overlap{wfi}": avg["overlap"],
                     "iteration": i,
-                    'wavefunction': wfi,
+                    "wavefunction": wfi,
                     "sub_iteration": sub_iteration,
                 }
                 hdf_save(hdf_file, save_data, {"tau": tau}, wfs, configs)

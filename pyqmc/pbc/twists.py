@@ -50,8 +50,8 @@ def create_supercell_twists(supercell, mf, tol=12):
     kpts = mf.kpts
     super_reciprocal_vectors = supercell.reciprocal_vectors()
     frac = kpts @ np.linalg.inv(super_reciprocal_vectors)
-    frac = np.around(frac, tol) % 1 
-    #frac = np.where(frac > 0.5, frac - 1, frac)  # map to -0.5, 0.5
+    frac = np.around(frac, tol) % 1
+    # frac = np.where(frac > 0.5, frac - 1, frac)  # map to -0.5, 0.5
     super_kpts = frac @ super_reciprocal_vectors
 
     twists, indices, counts = np.unique(

@@ -39,8 +39,12 @@ class JastrowSpin:
         b_basis : list of func3d objects that comprise the electron-electron basis
 
         """
-        self.a_basis = func3d.CutoffFunc3dEvaluator(a_basis, a_basis[0].parameters["rcut"])
-        self.b_basis = func3d.CutoffFunc3dEvaluator(b_basis, b_basis[0].parameters["rcut"])
+        self.a_basis = func3d.CutoffFunc3dEvaluator(
+            a_basis, a_basis[0].parameters["rcut"]
+        )
+        self.b_basis = func3d.CutoffFunc3dEvaluator(
+            b_basis, b_basis[0].parameters["rcut"]
+        )
         self.parameters = {}
         self._nelec = np.sum(mol.nelec)
         self._mol = mol
@@ -106,9 +110,15 @@ class JastrowSpin:
 
     def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
         r"""Update a and b sums.
-        _avalues is the array for current configurations :math:`A_{Iks} = \sum_s a_{k}(r_{Is})` where :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums.
-        _bvalues is the array for current configurations :math:`B_{ls} = \sum_s b_{l}(r_{s})` where :math:`s` indexes over :math:`\uparrow\uparrow` (:math:`\alpha_1 < \alpha_2`), :math:`\uparrow\downarrow` (:math:`\alpha, \beta`), and :math:`\downarrow\downarrow` (:math:`\beta_1 < \beta_2`)  sums.
-        The update for _avalues and _b_values from moving one electron only requires computing the new sum for that electron. The sums for the electron in the current configuration are stored in _a_partial and _b_partial
+        _avalues is the array for current configurations
+        :math:`A_{Iks} = \sum_s a_{k}(r_{Is})`
+        where :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums.
+        _bvalues is the array for current configurations :math:`B_{ls} = \sum_s b_{l}(r_{s})`
+        where :math:`s` indexes over :math:`\uparrow\uparrow` (:math:`\alpha_1 < \alpha_2`),
+        :math:`\uparrow\downarrow` (:math:`\alpha, \beta`), and :math:`\downarrow\downarrow` (:math:`\beta_1 < \beta_2`)
+        sums.
+        The update for _avalues and _b_values from moving one electron only requires computing the new sum for
+        that electron. The sums for the electron in the current configuration are stored in _a_partial and _b_partial
         """
         if mask is None:
             mask = [True] * self._configscurrent.configs.shape[0]
@@ -151,13 +161,15 @@ class JastrowSpin:
     def _b_update(self, e, epos, mask):
         r"""
           Calculate b (e-e) partial sums for electron e
-        _b_partial_e is the array :math:`B^p_{ils} = \sum_s b_l(r^i_{es}`, with e fixed; :math:`s` indexes over :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums, not including electron e.
+        _b_partial_e is the array :math:`B^p_{ils} = \sum_s b_l(r^i_{es}`, with e fixed; :math:`s` indexes over
+        :math:`\uparrow` (:math:`\alpha`) and :math:`\downarrow` (:math:`\beta`) sums, not including electron e.
           :math:`i` is the configuration index.
         :parameter int e: fixed electron index
         :parameter epos: positions (nconfig,[ naip,] 3) for electron e
         :type epos: Electron object
         :parameter ndarray mask: boolean array-like to select the configs to evaluate.
-        :return b_partial_e: partial electron-electron sum for electron e. Only returns values for configs where mask==True.
+        :return b_partial_e: partial electron-electron sum for electron e. Only returns values for configs
+        where mask==True.
         :rtype b_partial_e: ndarray (sum(mask),[ naip,] 3)
         """
         nup = self._mol.nelec[0]
@@ -266,12 +278,16 @@ class JastrowSpin:
         eup = int(e < nup)
         edown = int(e >= nup)
 
-        bgrad = self.b_basis.gradient(dnew, rnew) # (configs, electrons, basis, xyz)
+        bgrad = self.b_basis.gradient(dnew, rnew)  # (configs, electrons, basis, xyz)
         bcoeff = self.parameters["bcoeff"]
-        grad += gpu.cp.einsum("b,cbx->xc", bcoeff[:, edown], bgrad[:, :nup-eup].sum(axis=1))
-        grad += gpu.cp.einsum("b,cbx->xc", bcoeff[:, 1+edown], bgrad[:, nup-eup:].sum(axis=1))
+        grad += gpu.cp.einsum(
+            "b,cbx->xc", bcoeff[:, edown], bgrad[:, : nup - eup].sum(axis=1)
+        )
+        grad += gpu.cp.einsum(
+            "b,cbx->xc", bcoeff[:, 1 + edown], bgrad[:, nup - eup :].sum(axis=1)
+        )
 
-        agrad = self.a_basis.gradient(dinew, rinew) # (configs, atoms, basis, xyz)
+        agrad = self.a_basis.gradient(dinew, rinew)  # (configs, atoms, basis, xyz)
         acoeff = self.parameters["acoeff"][:, :, edown]
         grad += gpu.cp.einsum("ab,cabx->xc", acoeff, agrad)
 
@@ -298,10 +314,16 @@ class JastrowSpin:
         edown = int(e >= nup)
 
         b_partial_e = gpu.cp.zeros((*rnew.shape[:-1], *self._b_partial.shape[2:]))
-        bgrad, bval = self.b_basis.gradient_value(dnew, rnew) # (configs, electrons, basis, xyz)
+        bgrad, bval = self.b_basis.gradient_value(
+            dnew, rnew
+        )  # (configs, electrons, basis, xyz)
         bcoeff = self.parameters["bcoeff"]
-        grad += gpu.cp.einsum("b,cbx->xc", bcoeff[:, edown], bgrad[:, :nup-eup].sum(axis=1))
-        grad += gpu.cp.einsum("b,cbx->xc", bcoeff[:, 1+edown], bgrad[:, nup-eup:].sum(axis=1))
+        grad += gpu.cp.einsum(
+            "b,cbx->xc", bcoeff[:, edown], bgrad[:, : nup - eup].sum(axis=1)
+        )
+        grad += gpu.cp.einsum(
+            "b,cbx->xc", bcoeff[:, 1 + edown], bgrad[:, nup - eup :].sum(axis=1)
+        )
         b_partial_e[..., 0] = bval[..., : nup - eup, :].sum(axis=-2)
         b_partial_e[..., 1] = bval[..., nup - eup :, :].sum(axis=-2)
 
@@ -339,16 +361,26 @@ class JastrowSpin:
         # a-value component
         agrad, alap = self.a_basis.gradient_laplacian(dinew, rinew)
         acoeff = self.parameters["acoeff"][:, :, edown]
-        grad += gpu.cp.einsum("ab,cabx->xc", acoeff, agrad) # config, atom, basis, xyz
+        grad += gpu.cp.einsum("ab,cabx->xc", acoeff, agrad)  # config, atom, basis, xyz
         lap += gpu.cp.einsum("ab,cabx->c", acoeff, alap)
-        
+
         # b-value component
-        bgrad, blap = self.b_basis.gradient_laplacian(dnew, rnew) # (configs, electrons, basis, xyz)
+        bgrad, blap = self.b_basis.gradient_laplacian(
+            dnew, rnew
+        )  # (configs, electrons, basis, xyz)
         bcoeff = self.parameters["bcoeff"]
-        grad += gpu.cp.einsum("b,cbx->xc", bcoeff[:, edown], bgrad[:, :nup-eup].sum(axis=1)) 
-        grad += gpu.cp.einsum("b,cbx->xc", bcoeff[:, 1+edown], bgrad[:, nup-eup:].sum(axis=1))
-        lap += gpu.cp.einsum("b,cbx->c", bcoeff[:, edown], blap[:, :nup-eup].sum(axis=1)) 
-        lap += gpu.cp.einsum("b,cbx->c", bcoeff[:, 1+edown], blap[:, nup-eup:].sum(axis=1))
+        grad += gpu.cp.einsum(
+            "b,cbx->xc", bcoeff[:, edown], bgrad[:, : nup - eup].sum(axis=1)
+        )
+        grad += gpu.cp.einsum(
+            "b,cbx->xc", bcoeff[:, 1 + edown], bgrad[:, nup - eup :].sum(axis=1)
+        )
+        lap += gpu.cp.einsum(
+            "b,cbx->c", bcoeff[:, edown], blap[:, : nup - eup].sum(axis=1)
+        )
+        lap += gpu.cp.einsum(
+            "b,cbx->c", bcoeff[:, 1 + edown], blap[:, nup - eup :].sum(axis=1)
+        )
 
         return gpu.asnumpy(grad), gpu.asnumpy(lap + gpu.cp.sum(grad**2, axis=0))
 

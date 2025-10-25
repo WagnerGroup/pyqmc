@@ -1,32 +1,32 @@
 """
-    adapted from
-    https://github.com/lab-cosmo/sphericart/blob/main/sphericart/include/macros.hpp
-    https://doi.org/10.1063/5.0156307
-    Filippo Bigi  Guillaume Fraux  Nicholas J. Browning Michele Ceriotti 
-    J. Chem. Phys. 159, 064802 (2023)
+ adapted from
+ https://github.com/lab-cosmo/sphericart/blob/main/sphericart/include/macros.hpp
+ https://doi.org/10.1063/5.0156307
+ Filippo Bigi  Guillaume Fraux  Nicholas J. Browning Michele Ceriotti
+ J. Chem. Phys. 159, 064802 (2023)
 
-    Hard-coded expressions for low-l Cartesian spherical harmonics and their
-   derivatives.
+ Hard-coded expressions for low-l Cartesian spherical harmonics and their
+derivatives.
 
-    These are implemented as macros to be included anywhere at compile time.
-   They assume values are computed for one point at a time, that the
-   spherical harmonics are stored in a contiguous section that "flattens" the
-   (l,m) dimensions, e.g. [ (0,0), (1,-1), (1,0), (1,1), (2,-2), ...]
+ These are implemented as macros to be included anywhere at compile time.
+They assume values are computed for one point at a time, that the
+spherical harmonics are stored in a contiguous section that "flattens" the
+(l,m) dimensions, e.g. [ (0,0), (1,-1), (1,0), (1,1), (2,-2), ...]
 
-    Functions get pointers to the beginning of the storage space for the
-   current sample, x,y, and, l>1, x^2, y^2 and z^2, can be reused.
+ Functions get pointers to the beginning of the storage space for the
+current sample, x,y, and, l>1, x^2, y^2 and z^2, can be reused.
 
-    Each macro computes one l, macros should be called in order as the
-   higher l reuse calculations at lower angular momentum. The expressions here
-   are derived with computer assisted algebra by attempting all possible
-   polynomial decompositions and selecting that with the smallest number of
-   operations. One should call COMPUTE_SPH_L* or COMPUTE_SPH_DERIVATIVE_L*
-   depending on whether only Ylm are needed or if one also want to evbaluate
-   Cartesian derivatives
+ Each macro computes one l, macros should be called in order as the
+higher l reuse calculations at lower angular momentum. The expressions here
+are derived with computer assisted algebra by attempting all possible
+polynomial decompositions and selecting that with the smallest number of
+operations. One should call COMPUTE_SPH_L* or COMPUTE_SPH_DERIVATIVE_L*
+depending on whether only Ylm are needed or if one also want to evbaluate
+Cartesian derivatives
 
-    Every macro takes an agument  that is an indexing function, can
-   be used to map the consecutive indices of the Ylm to a different memory
-   layout (self is e.g. used to optimize threads in CUDA code)
+ Every macro takes an agument  that is an indexing function, can
+be used to map the consecutive indices of the Ylm to a different memory
+layout (self is e.g. used to optimize threads in CUDA code)
 """
 
 from numba import njit
@@ -55,14 +55,24 @@ def COMPUTE_SPH_DERIVATIVE_L0(
 
 
 @njit(fastmath=True, cache=True)
-def COMPUTE_SPH_L1( x, y, z, sph_i,):
+def COMPUTE_SPH_L1(
+    x,
+    y,
+    z,
+    sph_i,
+):
     sph_i[(1)] = (0.48860251190292) * x
     sph_i[(2)] = (0.48860251190292) * y
     sph_i[(3)] = (0.48860251190292) * z
 
 
 @njit(fastmath=True, cache=True)
-def COMPUTE_SPH_DERIVATIVE_L1( sph_i, dx_sph_i, dy_sph_i, dz_sph_i,):
+def COMPUTE_SPH_DERIVATIVE_L1(
+    sph_i,
+    dx_sph_i,
+    dy_sph_i,
+    dz_sph_i,
+):
     dx_sph_i[(1)] = 0.48860251190292
     dx_sph_i[(2)] = 0.0
     dx_sph_i[(3)] = 0.0
@@ -75,7 +85,15 @@ def COMPUTE_SPH_DERIVATIVE_L1( sph_i, dx_sph_i, dy_sph_i, dz_sph_i,):
 
 
 @njit(fastmath=True, cache=True)
-def COMPUTE_SPH_L2( x, y, z, x2, y2, z2, sph_i,):
+def COMPUTE_SPH_L2(
+    x,
+    y,
+    z,
+    x2,
+    y2,
+    z2,
+    sph_i,
+):
     sph_i[(4)] = 1.0925484305920792 * x * y
     sph_i[(7)] = 1.0925484305920792 * x * z
     sph_i[(5)] = 1.0925484305920792 * y * z
@@ -85,7 +103,16 @@ def COMPUTE_SPH_L2( x, y, z, x2, y2, z2, sph_i,):
 
 @njit(fastmath=True, cache=True)
 def COMPUTE_SPH_DERIVATIVE_L2(
-    x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
+    x,
+    y,
+    z,
+    x2,
+    y2,
+    z2,
+    sph_i,
+    dx_sph_i,
+    dy_sph_i,
+    dz_sph_i,
 ):
     dx_sph_i[(4)] = (1.0925484305920792) * y
     dx_sph_i[(5)] = 0.0
@@ -107,7 +134,15 @@ def COMPUTE_SPH_DERIVATIVE_L2(
 
 
 @njit(fastmath=True, cache=True)
-def COMPUTE_SPH_L3( x, y, z, x2, y2, z2, sph_i,):
+def COMPUTE_SPH_L3(
+    x,
+    y,
+    z,
+    x2,
+    y2,
+    z2,
+    sph_i,
+):
     sph_i[(9)] = -(0.59004358992664) * y * (y2 - 3 * x2)
     sph_i[(10)] = (2.64575131106459) * z * sph_i[(4)]
     tmp = -(0.457045799464466) * (x2 + y2 - 4 * z2)
@@ -120,19 +155,32 @@ def COMPUTE_SPH_L3( x, y, z, x2, y2, z2, sph_i,):
 
 @njit(fastmath=True, cache=True)
 def COMPUTE_SPH_DERIVATIVE_L3(
-    x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
+    x,
+    y,
+    z,
+    x2,
+    y2,
+    z2,
+    sph_i,
+    dx_sph_i,
+    dy_sph_i,
+    dz_sph_i,
 ):
     dx_sph_i[(9)] = (3.24037034920393) * sph_i[(4)]
     dx_sph_i[(10)] = (2.64575131106459) * sph_i[(5)]
     dx_sph_i[(11)] = -(0.83666002653408) * sph_i[(4)]
     dx_sph_i[(12)] = -(2.04939015319192) * sph_i[(7)]
-    dx_sph_i[(13)] = (0.8366600265340735) * (-sph_i[(8)] + (3.464101615137758) * sph_i[(6)])
+    dx_sph_i[(13)] = (0.8366600265340735) * (
+        -sph_i[(8)] + (3.464101615137758) * sph_i[(6)]
+    )
     dx_sph_i[(14)] = (2.64575131106459) * sph_i[(7)]
     dx_sph_i[(15)] = (3.24037034920393) * sph_i[(8)]
 
     dy_sph_i[(9)] = dx_sph_i[(15)]
     dy_sph_i[(10)] = dx_sph_i[(14)]
-    dy_sph_i[(11)] = (0.8366600265340735) * (sph_i[(8)] + (3.464101615137758) * sph_i[(6)])
+    dy_sph_i[(11)] = (0.8366600265340735) * (
+        sph_i[(8)] + (3.464101615137758) * sph_i[(6)]
+    )
     dy_sph_i[(12)] = -(2.04939015319192) * sph_i[(5)]
     dy_sph_i[(13)] = -(0.83666002653408) * sph_i[(4)]
     dy_sph_i[(14)] = -dx_sph_i[(10)]
@@ -148,7 +196,15 @@ def COMPUTE_SPH_DERIVATIVE_L3(
 
 
 @njit(fastmath=True, cache=True)
-def COMPUTE_SPH_L4( x, y, z, x2, y2, z2, sph_i,):
+def COMPUTE_SPH_L4(
+    x,
+    y,
+    z,
+    x2,
+    y2,
+    z2,
+    sph_i,
+):
     sph_i[(16)] = (4.194391357527674) * sph_i[(4)] * sph_i[(8)]
     sph_i[(17)] = 3 * z * sph_i[(9)]
     tmp = -(0.866025403784439) * (x2 + y2 - 6 * z2)
@@ -166,14 +222,23 @@ def COMPUTE_SPH_L4( x, y, z, x2, y2, z2, sph_i,):
 
 @njit(fastmath=True, cache=True)
 def COMPUTE_SPH_DERIVATIVE_L4(
-    x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
+    x,
+    y,
+    z,
+    x2,
+    y2,
+    z2,
+    sph_i,
+    dx_sph_i,
+    dy_sph_i,
+    dz_sph_i,
 ):
     dx_sph_i[(16)] = (4.242640687119285) * sph_i[(9)]
     dx_sph_i[(17)] = (3.674234614174767) * sph_i[(10)]
     dx_sph_i[(18)] = (1.892349391515120) * y * (y2 + (4.755992757127213) * sph_i[(6)])
     dx_sph_i[(19)] = -(1.388730149658827) * sph_i[(10)]
     dx_sph_i[(20)] = -(2.777460299317654) * sph_i[(13)]
-    dx_sph_i[(21)] = 2.676186174229157 * z * (z2 - 2.25 * x2 - .75 * y2)
+    dx_sph_i[(21)] = 2.676186174229157 * z * (z2 - 2.25 * x2 - 0.75 * y2)
     dx_sph_i[(22)] = -(1.892349391515120) * x * (x2 - 3 * z2)
     dx_sph_i[(23)] = (3.674234614174767) * sph_i[(14)]
     dx_sph_i[(24)] = (4.242640687119285) * sph_i[(15)]
@@ -202,7 +267,15 @@ def COMPUTE_SPH_DERIVATIVE_L4(
 
 
 @njit(fastmath=True, cache=True)
-def COMPUTE_SPH_L5( x, y, z, x2, y2, z2, sph_i,):
+def COMPUTE_SPH_L5(
+    x,
+    y,
+    z,
+    x2,
+    y2,
+    z2,
+    sph_i,
+):
     sph_i[(25)] = (
         (13.12764113680340)
         * y
@@ -228,7 +301,16 @@ def COMPUTE_SPH_L5( x, y, z, x2, y2, z2, sph_i,):
 
 @njit(fastmath=True, cache=True)
 def COMPUTE_SPH_DERIVATIVE_L5(
-    x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
+    x,
+    y,
+    z,
+    x2,
+    y2,
+    z2,
+    sph_i,
+    dx_sph_i,
+    dy_sph_i,
+    dz_sph_i,
 ):
     dx_sph_i[(25)] = (5.244044240850758) * sph_i[(16)]
     dx_sph_i[(26)] = (4.690415759823430) * sph_i[(17)]
@@ -295,7 +377,15 @@ def COMPUTE_SPH_DERIVATIVE_L5(
 
 
 @njit(fastmath=True, cache=True)
-def COMPUTE_SPH_L6( x, y, z, x2, y2, z2, sph_i,):
+def COMPUTE_SPH_L6(
+    x,
+    y,
+    z,
+    x2,
+    y2,
+    z2,
+    sph_i,
+):
     sph_i[(36)] = (3.924637560539857) * sph_i[(9)] * sph_i[(15)]
     tmp = (3.605551275463989) * z
     sph_i[(37)] = tmp * sph_i[(25)]
@@ -327,7 +417,16 @@ def COMPUTE_SPH_L6( x, y, z, x2, y2, z2, sph_i,):
 
 @njit(fastmath=True, cache=True)
 def COMPUTE_SPH_DERIVATIVE_L6(
-    x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
+    x,
+    y,
+    z,
+    x2,
+    y2,
+    z2,
+    sph_i,
+    dx_sph_i,
+    dy_sph_i,
+    dz_sph_i,
 ):
     dx_sph_i[(36)] = (6.244997998398398) * sph_i[(25)]
     dy_sph_i[(48)] = -dx_sph_i[(36)]
@@ -427,191 +526,687 @@ given value. Macro version. This uses if  to decide at compile time
 which macro(s) should be called
 """
 
-@njit(fastmath=True, cache=True)
-def SPH0(x, y, z, x2, y2, z2, sph_i,):
-    COMPUTE_SPH_L0( sph_i,)
 
 @njit(fastmath=True, cache=True)
-def SPH1(x, y, z, x2, y2, z2, sph_i,):
-    COMPUTE_SPH_L0( sph_i,)
-    COMPUTE_SPH_L1( x, y, z, sph_i,)
+def SPH0(
+    x,
+    y,
+    z,
+    x2,
+    y2,
+    z2,
+    sph_i,
+):
+    COMPUTE_SPH_L0(
+        sph_i,
+    )
+
 
 @njit(fastmath=True, cache=True)
-def SPH2(x, y, z, x2, y2, z2, sph_i,):
-    COMPUTE_SPH_L0( sph_i,)
-    COMPUTE_SPH_L1( x, y, z, sph_i,)
-    COMPUTE_SPH_L2( x, y, z, x2, y2, z2, sph_i,)
+def SPH1(
+    x,
+    y,
+    z,
+    x2,
+    y2,
+    z2,
+    sph_i,
+):
+    COMPUTE_SPH_L0(
+        sph_i,
+    )
+    COMPUTE_SPH_L1(
+        x,
+        y,
+        z,
+        sph_i,
+    )
+
 
 @njit(fastmath=True, cache=True)
-def SPH3(x, y, z, x2, y2, z2, sph_i,):
-    COMPUTE_SPH_L0( sph_i,)
-    COMPUTE_SPH_L1( x, y, z, sph_i,)
-    COMPUTE_SPH_L2( x, y, z, x2, y2, z2, sph_i,)
-    COMPUTE_SPH_L3( x, y, z, x2, y2, z2, sph_i,)
+def SPH2(
+    x,
+    y,
+    z,
+    x2,
+    y2,
+    z2,
+    sph_i,
+):
+    COMPUTE_SPH_L0(
+        sph_i,
+    )
+    COMPUTE_SPH_L1(
+        x,
+        y,
+        z,
+        sph_i,
+    )
+    COMPUTE_SPH_L2(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+
 
 @njit(fastmath=True, cache=True)
-def SPH4(x, y, z, x2, y2, z2, sph_i,):
-    COMPUTE_SPH_L0( sph_i,)
-    COMPUTE_SPH_L1( x, y, z, sph_i,)
-    COMPUTE_SPH_L2( x, y, z, x2, y2, z2, sph_i,)
-    COMPUTE_SPH_L3( x, y, z, x2, y2, z2, sph_i,)
-    COMPUTE_SPH_L4( x, y, z, x2, y2, z2, sph_i,)
+def SPH3(
+    x,
+    y,
+    z,
+    x2,
+    y2,
+    z2,
+    sph_i,
+):
+    COMPUTE_SPH_L0(
+        sph_i,
+    )
+    COMPUTE_SPH_L1(
+        x,
+        y,
+        z,
+        sph_i,
+    )
+    COMPUTE_SPH_L2(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+    COMPUTE_SPH_L3(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+
 
 @njit(fastmath=True, cache=True)
-def SPH5(x, y, z, x2, y2, z2, sph_i,):
-    COMPUTE_SPH_L0( sph_i,)
-    COMPUTE_SPH_L1( x, y, z, sph_i,)
-    COMPUTE_SPH_L2( x, y, z, x2, y2, z2, sph_i,)
-    COMPUTE_SPH_L3( x, y, z, x2, y2, z2, sph_i,)
-    COMPUTE_SPH_L4( x, y, z, x2, y2, z2, sph_i,)
-    COMPUTE_SPH_L5( x, y, z, x2, y2, z2, sph_i,)
+def SPH4(
+    x,
+    y,
+    z,
+    x2,
+    y2,
+    z2,
+    sph_i,
+):
+    COMPUTE_SPH_L0(
+        sph_i,
+    )
+    COMPUTE_SPH_L1(
+        x,
+        y,
+        z,
+        sph_i,
+    )
+    COMPUTE_SPH_L2(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+    COMPUTE_SPH_L3(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+    COMPUTE_SPH_L4(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+
 
 @njit(fastmath=True, cache=True)
-def SPH6(x, y, z, x2, y2, z2, sph_i,):
-    COMPUTE_SPH_L0( sph_i,)
-    COMPUTE_SPH_L1( x, y, z, sph_i,)
-    COMPUTE_SPH_L2( x, y, z, x2, y2, z2, sph_i,)
-    COMPUTE_SPH_L3( x, y, z, x2, y2, z2, sph_i,)
-    COMPUTE_SPH_L4( x, y, z, x2, y2, z2, sph_i,)
-    COMPUTE_SPH_L5( x, y, z, x2, y2, z2, sph_i,)
-    COMPUTE_SPH_L6( x, y, z, x2, y2, z2, sph_i,)
+def SPH5(
+    x,
+    y,
+    z,
+    x2,
+    y2,
+    z2,
+    sph_i,
+):
+    COMPUTE_SPH_L0(
+        sph_i,
+    )
+    COMPUTE_SPH_L1(
+        x,
+        y,
+        z,
+        sph_i,
+    )
+    COMPUTE_SPH_L2(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+    COMPUTE_SPH_L3(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+    COMPUTE_SPH_L4(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+    COMPUTE_SPH_L5(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+
+
+@njit(fastmath=True, cache=True)
+def SPH6(
+    x,
+    y,
+    z,
+    x2,
+    y2,
+    z2,
+    sph_i,
+):
+    COMPUTE_SPH_L0(
+        sph_i,
+    )
+    COMPUTE_SPH_L1(
+        x,
+        y,
+        z,
+        sph_i,
+    )
+    COMPUTE_SPH_L2(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+    COMPUTE_SPH_L3(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+    COMPUTE_SPH_L4(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+    COMPUTE_SPH_L5(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+    COMPUTE_SPH_L6(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+
 
 @njit(fastmath=True, cache=True)
 def SPH0_GRAD(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz):
-    SPH0( x, y, z, x2, y2, z2, sph_i,)
-    COMPUTE_SPH_DERIVATIVE_L0( sph_i, dsdx, dsdy, dsdz)
+    SPH0(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+    COMPUTE_SPH_DERIVATIVE_L0(sph_i, dsdx, dsdy, dsdz)
+
 
 @njit(fastmath=True, cache=True)
 def SPH1_GRAD(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz):
-    SPH1( x, y, z, x2, y2, z2, sph_i,)
-    COMPUTE_SPH_DERIVATIVE_L0( sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L1( sph_i, dsdx, dsdy, dsdz)
+    SPH1(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+    COMPUTE_SPH_DERIVATIVE_L0(sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L1(sph_i, dsdx, dsdy, dsdz)
+
 
 @njit(fastmath=True, cache=True)
 def SPH2_GRAD(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz):
-    SPH2( x, y, z, x2, y2, z2, sph_i,)
-    COMPUTE_SPH_DERIVATIVE_L0( sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L1( sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L2( x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
+    SPH2(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+    COMPUTE_SPH_DERIVATIVE_L0(sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L1(sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L2(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
+
 
 @njit(fastmath=True, cache=True)
 def SPH3_GRAD(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz):
-    SPH3( x, y, z, x2, y2, z2, sph_i,)
-    COMPUTE_SPH_DERIVATIVE_L0( sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L1( sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L2( x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L3( x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
+    SPH3(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+    COMPUTE_SPH_DERIVATIVE_L0(sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L1(sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L2(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L3(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
+
 
 @njit(fastmath=True, cache=True)
 def SPH4_GRAD(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz):
-    SPH4( x, y, z, x2, y2, z2, sph_i,)
-    COMPUTE_SPH_DERIVATIVE_L0( sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L1( sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L2( x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L3( x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L4( x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
+    SPH4(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+    COMPUTE_SPH_DERIVATIVE_L0(sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L1(sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L2(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L3(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L4(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
+
 
 @njit(fastmath=True, cache=True)
 def SPH5_GRAD(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz):
-    SPH5( x, y, z, x2, y2, z2, sph_i,)
-    COMPUTE_SPH_DERIVATIVE_L0( sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L1( sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L2( x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L3( x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L4( x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L5( x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
+    SPH5(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+    COMPUTE_SPH_DERIVATIVE_L0(sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L1(sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L2(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L3(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L4(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L5(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
+
 
 @njit(fastmath=True, cache=True)
 def SPH6_GRAD(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz):
-    SPH6( x, y, z, x2, y2, z2, sph_i,)
-    COMPUTE_SPH_DERIVATIVE_L0( sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L1( sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L2( x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L3( x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L4( x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L5( x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
-    COMPUTE_SPH_DERIVATIVE_L6( x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
+    SPH6(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+    COMPUTE_SPH_DERIVATIVE_L0(sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L1(sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L2(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L3(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L4(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L5(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
+    COMPUTE_SPH_DERIVATIVE_L6(x, y, z, x2, y2, z2, sph_i, dsdx, dsdy, dsdz)
 
 
 @njit(fastmath=True, cache=True)
-def HARDCODED_SPH_MACRO( HARDCODED_LMAX, x, y, z, x2, y2, z2, sph_i,):
-    assert HARDCODED_LMAX <= SPHERICART_LMAX_HARDCODED, "Computing hardcoded sph beyond what is currently implemented."
+def HARDCODED_SPH_MACRO(
+    HARDCODED_LMAX,
+    x,
+    y,
+    z,
+    x2,
+    y2,
+    z2,
+    sph_i,
+):
+    assert HARDCODED_LMAX <= SPHERICART_LMAX_HARDCODED, (
+        "Computing hardcoded sph beyond what is currently implemented."
+    )
 
-    if HARDCODED_LMAX == 0: SPH0(x, y, z, x2, y2, z2, sph_i)
-    elif HARDCODED_LMAX == 1: SPH1(x, y, z, x2, y2, z2, sph_i)
-    elif HARDCODED_LMAX == 2: SPH2(x, y, z, x2, y2, z2, sph_i)
-    elif HARDCODED_LMAX == 3: SPH3(x, y, z, x2, y2, z2, sph_i)
-    elif HARDCODED_LMAX == 4: SPH4(x, y, z, x2, y2, z2, sph_i)
-    elif HARDCODED_LMAX == 5: SPH5(x, y, z, x2, y2, z2, sph_i)
-    else: SPH6(x, y, z, x2, y2, z2, sph_i)
+    if HARDCODED_LMAX == 0:
+        SPH0(x, y, z, x2, y2, z2, sph_i)
+    elif HARDCODED_LMAX == 1:
+        SPH1(x, y, z, x2, y2, z2, sph_i)
+    elif HARDCODED_LMAX == 2:
+        SPH2(x, y, z, x2, y2, z2, sph_i)
+    elif HARDCODED_LMAX == 3:
+        SPH3(x, y, z, x2, y2, z2, sph_i)
+    elif HARDCODED_LMAX == 4:
+        SPH4(x, y, z, x2, y2, z2, sph_i)
+    elif HARDCODED_LMAX == 5:
+        SPH5(x, y, z, x2, y2, z2, sph_i)
+    else:
+        SPH6(x, y, z, x2, y2, z2, sph_i)
     return
-    COMPUTE_SPH_L0( sph_i,)
-    #if (HARDCODED_LMAX > 0):
-    COMPUTE_SPH_L1( x, y, z, sph_i,)
-    #if (HARDCODED_LMAX > 1):
-    COMPUTE_SPH_L2( x, y, z, x2, y2, z2, sph_i,)
-    if (HARDCODED_LMAX ==3):
-        COMPUTE_SPH_L3( x, y, z, x2, y2, z2, sph_i,)
-    elif (HARDCODED_LMAX ==4):
-        COMPUTE_SPH_L3( x, y, z, x2, y2, z2, sph_i,)
-        COMPUTE_SPH_L4( x, y, z, x2, y2, z2, sph_i,)
-    elif (HARDCODED_LMAX ==5):
-        COMPUTE_SPH_L3( x, y, z, x2, y2, z2, sph_i,)
-        COMPUTE_SPH_L4( x, y, z, x2, y2, z2, sph_i,)
-        COMPUTE_SPH_L5( x, y, z, x2, y2, z2, sph_i,)
-    elif (HARDCODED_LMAX ==6):
-        COMPUTE_SPH_L3( x, y, z, x2, y2, z2, sph_i,)
-        COMPUTE_SPH_L4( x, y, z, x2, y2, z2, sph_i,)
-        COMPUTE_SPH_L5( x, y, z, x2, y2, z2, sph_i,)
-        COMPUTE_SPH_L6( x, y, z, x2, y2, z2, sph_i,)
+    COMPUTE_SPH_L0(
+        sph_i,
+    )
+    # if (HARDCODED_LMAX > 0):
+    COMPUTE_SPH_L1(
+        x,
+        y,
+        z,
+        sph_i,
+    )
+    # if (HARDCODED_LMAX > 1):
+    COMPUTE_SPH_L2(
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+    )
+    if HARDCODED_LMAX == 3:
+        COMPUTE_SPH_L3(
+            x,
+            y,
+            z,
+            x2,
+            y2,
+            z2,
+            sph_i,
+        )
+    elif HARDCODED_LMAX == 4:
+        COMPUTE_SPH_L3(
+            x,
+            y,
+            z,
+            x2,
+            y2,
+            z2,
+            sph_i,
+        )
+        COMPUTE_SPH_L4(
+            x,
+            y,
+            z,
+            x2,
+            y2,
+            z2,
+            sph_i,
+        )
+    elif HARDCODED_LMAX == 5:
+        COMPUTE_SPH_L3(
+            x,
+            y,
+            z,
+            x2,
+            y2,
+            z2,
+            sph_i,
+        )
+        COMPUTE_SPH_L4(
+            x,
+            y,
+            z,
+            x2,
+            y2,
+            z2,
+            sph_i,
+        )
+        COMPUTE_SPH_L5(
+            x,
+            y,
+            z,
+            x2,
+            y2,
+            z2,
+            sph_i,
+        )
+    elif HARDCODED_LMAX == 6:
+        COMPUTE_SPH_L3(
+            x,
+            y,
+            z,
+            x2,
+            y2,
+            z2,
+            sph_i,
+        )
+        COMPUTE_SPH_L4(
+            x,
+            y,
+            z,
+            x2,
+            y2,
+            z2,
+            sph_i,
+        )
+        COMPUTE_SPH_L5(
+            x,
+            y,
+            z,
+            x2,
+            y2,
+            z2,
+            sph_i,
+        )
+        COMPUTE_SPH_L6(
+            x,
+            y,
+            z,
+            x2,
+            y2,
+            z2,
+            sph_i,
+        )
 
 
 @njit(fastmath=True, cache=True)
 def HARDCODED_SPH_DERIVATIVE_MACRO(
-    HARDCODED_LMAX, x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
+    HARDCODED_LMAX,
+    x,
+    y,
+    z,
+    x2,
+    y2,
+    z2,
+    sph_i,
+    dx_sph_i,
+    dy_sph_i,
+    dz_sph_i,
 ):
-    if HARDCODED_LMAX == 0: SPH0_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)
-    elif HARDCODED_LMAX == 1: SPH1_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)
-    elif HARDCODED_LMAX == 2: SPH2_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)
-    elif HARDCODED_LMAX == 3: SPH3_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)
-    elif HARDCODED_LMAX == 4: SPH4_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)
-    elif HARDCODED_LMAX == 5: SPH5_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)
-    else: SPH6_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)
+    if HARDCODED_LMAX == 0:
+        SPH0_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)
+    elif HARDCODED_LMAX == 1:
+        SPH1_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)
+    elif HARDCODED_LMAX == 2:
+        SPH2_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)
+    elif HARDCODED_LMAX == 3:
+        SPH3_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)
+    elif HARDCODED_LMAX == 4:
+        SPH4_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)
+    elif HARDCODED_LMAX == 5:
+        SPH5_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)
+    else:
+        SPH6_GRAD(x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i)
     return
-        
 
     COMPUTE_SPH_DERIVATIVE_L0(
-        sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
+        sph_i,
+        dx_sph_i,
+        dy_sph_i,
+        dz_sph_i,
     )
     COMPUTE_SPH_DERIVATIVE_L1(
-        sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
+        sph_i,
+        dx_sph_i,
+        dy_sph_i,
+        dz_sph_i,
     )
     COMPUTE_SPH_DERIVATIVE_L2(
-        x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
+        x,
+        y,
+        z,
+        x2,
+        y2,
+        z2,
+        sph_i,
+        dx_sph_i,
+        dy_sph_i,
+        dz_sph_i,
     )
-    if (HARDCODED_LMAX == 3):
+    if HARDCODED_LMAX == 3:
         COMPUTE_SPH_DERIVATIVE_L3(
-            x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
+            x,
+            y,
+            z,
+            x2,
+            y2,
+            z2,
+            sph_i,
+            dx_sph_i,
+            dy_sph_i,
+            dz_sph_i,
         )
-    if (HARDCODED_LMAX == 4):
+    if HARDCODED_LMAX == 4:
         COMPUTE_SPH_DERIVATIVE_L4(
-            x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
+            x,
+            y,
+            z,
+            x2,
+            y2,
+            z2,
+            sph_i,
+            dx_sph_i,
+            dy_sph_i,
+            dz_sph_i,
         )
-    if (HARDCODED_LMAX == 5):
+    if HARDCODED_LMAX == 5:
         COMPUTE_SPH_DERIVATIVE_L5(
-            x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
+            x,
+            y,
+            z,
+            x2,
+            y2,
+            z2,
+            sph_i,
+            dx_sph_i,
+            dy_sph_i,
+            dz_sph_i,
         )
-    if (HARDCODED_LMAX == 6):
+    if HARDCODED_LMAX == 6:
         COMPUTE_SPH_DERIVATIVE_L3(
-            x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
+            x,
+            y,
+            z,
+            x2,
+            y2,
+            z2,
+            sph_i,
+            dx_sph_i,
+            dy_sph_i,
+            dz_sph_i,
         )
         COMPUTE_SPH_DERIVATIVE_L4(
-            x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
+            x,
+            y,
+            z,
+            x2,
+            y2,
+            z2,
+            sph_i,
+            dx_sph_i,
+            dy_sph_i,
+            dz_sph_i,
         )
         COMPUTE_SPH_DERIVATIVE_L5(
-            x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
+            x,
+            y,
+            z,
+            x2,
+            y2,
+            z2,
+            sph_i,
+            dx_sph_i,
+            dy_sph_i,
+            dz_sph_i,
         )
         COMPUTE_SPH_DERIVATIVE_L6(
-            x, y, z, x2, y2, z2, sph_i, dx_sph_i, dy_sph_i, dz_sph_i,
+            x,
+            y,
+            z,
+            x2,
+            y2,
+            z2,
+            sph_i,
+            dx_sph_i,
+            dy_sph_i,
+            dz_sph_i,
         )
-

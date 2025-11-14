@@ -409,18 +409,6 @@ class Slater:
         values[~np.isfinite(values)] = 1.0
         return derivatives, values, (aograd[:, 0], mograd[0])
 
-    def laplacian(self, e, epos):
-        """Compute the laplacian Psi/ Psi."""
-        s = int(e >= self._nelec[0])
-        ao = self.orbitals.aos(self._gtoval_deriv2, epos)
-        ao_val = ao[:, 0, :, :]
-        ao_lap = ao[:, 4, :, :]
-        mos = gpu.cp.stack(
-            [self.orbitals.mos(x, s)[..., self._det_occup[s]] for x in [ao_val, ao_lap]]
-        )
-        ratios = self._testrowderiv(e, mos)
-        return gpu.asnumpy(ratios[1] / ratios[0])
-
     def gradient_laplacian(self, e, epos):
         s = int(e >= self._nelec[0])
         ao = self.orbitals.aos(self._gtoval_deriv2, epos)

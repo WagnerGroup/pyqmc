@@ -128,9 +128,6 @@ class MultiplyWF:
                 cross_term += np.sum(grads[i] * grads[j], axis=0)
         return np.sum(grads, axis=0), np.sum(laps, axis=0) + cross_term * 2
 
-    def laplacian(self, e, epos):
-        return self.gradient_laplacian(e, epos)[1]
-
     def pgradient(self):
         return Parameters([wf.pgradient() for wf in self.wf_factors])
 

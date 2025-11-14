@@ -186,13 +186,6 @@ class AddWF:
         ratio = self.ratio(e, epos)
         return np.einsum("ijk,ik->jk", grads, ratio), np.einsum("ij,ij->j", laps, ratio)
 
-    def laplacian(self, e, epos):
-        """
-        Compute the laplacian of psi over psi
-        """
-        laps = [wf.laplacian(e, epos) for wf in self.wf_components]
-        return np.einsum("ij,ij->j", laps, self.ratio(e, epos))
-
     def pgradient(self):
         """
         Compute the gradient of the parameters

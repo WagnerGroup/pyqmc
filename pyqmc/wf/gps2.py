@@ -135,9 +135,6 @@ class GPSJastrow:
         lap += np.sum(grad**2, axis=0)
         return grad, lap
 
-    def laplacian(self, e, epos):
-        return self.gradient_laplacian(e, epos)[1]
-
     # configs shape nconfig,nelec,3
     def pgradient(self):
         configs = self._configscurrent

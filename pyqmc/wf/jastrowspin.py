@@ -384,9 +384,6 @@ class JastrowSpin:
 
         return gpu.asnumpy(grad), gpu.asnumpy(lap + gpu.cp.sum(grad**2, axis=0))
 
-    def laplacian(self, e, epos):
-        return self.gradient_laplacian(e, epos)[1]
-
     def testvalue(self, e, epos, mask=None):
         r"""
         Compute the ratio :math:`\Psi_{\rm new}/\Psi_{\rm old}` for moving electron e to epos.

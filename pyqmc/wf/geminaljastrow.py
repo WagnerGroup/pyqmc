@@ -169,8 +169,6 @@ class GeminalJastrow:
         grad = self._compute_value(ao[1:], self.ao_val, e)
         return gpu.asnumpy(grad)
 
-    def laplacian(self, e, epos):
-        return self.gradient_laplacian(e, epos)[1]
 
     def gradient_laplacian(self, e, epos):
         r"""

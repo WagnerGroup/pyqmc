@@ -54,7 +54,6 @@ def run_tests(wf, epos, epsilon):
         ["gradient", "laplacian", "pgradient"],
         [
             testwf.test_wf_gradient,
-            testwf.test_wf_laplacian,
             testwf.test_wf_pgradient,
         ],
     ):

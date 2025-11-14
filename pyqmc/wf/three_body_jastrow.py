@@ -654,26 +654,6 @@ class ThreeBodyJastrow:
         )
         return grad, lap + np.sum(grad**2, axis=0)
 
-    def laplacian(self, e, epos):
-        r"""We compute the laplacian for U with electron e moved to epos, with respect to e as
-
-        .. math::  \frac{1}{J} \nabla^2_e J = \nabla^2_e U + (\nabla_e.U)^2
-
-        with 
-
-        .. math:: 
-        
-            \nabla^2_e U = \sum_d \sum_{Iklm\sigma_2} c_{klmI \sigma(e)\sigma_{2}} \sum_{j\in \sigma_2 j \neq e} \frac{\partial^2 a_k(r_{Ie})}{\partial r_{ed}^2} a_l(r_{Ij}) b_m(r_{ej}) + & 2\frac{\partial a_k(r_{Ie})}{\partial r_{ed}} a_l(r_{Ij}) \frac{\partial b_m(r_{ej})}{\partial r_{ed}} \\
-                                                                                                                                                                                          + & a_k(r_{Ie}) a_l(r_{Ij}) \frac{\partial^2 b_m(r_{ej})}{\partial r^2_{ed}}
-
-        Args:
-            e: fixed electron index
-            epos: configs object for electron e
-
-        :returns: gradient with respect to electron e with shape [3,nconfigs]
-        """
-        return self.gradient_laplacian(e, epos)[1]
-
     def pgradient(self):
         r"""
         computes the parameter gradients, given by

@@ -111,6 +111,10 @@ class OBDMAccumulator:
         self._naux = naux
         self._warmed_up = False
         self._mol = mol
+        if mol.cart:
+            self._gtoval = "GTOval_cart"
+        else:
+            self._gtoval = "GTOval_sph"
         self.norb = self.orbitals.parameters["mo_coeff_alpha"].shape[-1]
 
     def warm_up(self, naux):
@@ -188,7 +192,7 @@ class OBDMAccumulator:
         return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
 
     def evaluate_orbitals(self, configs):
-        ao = self.orbitals.aos("GTOval_sph", configs)
+        ao = self.orbitals.aos(self._gtoval, configs)
         return self.orbitals.mos(ao, spin=0)
 
     def keys(self):
@@ -213,7 +217,11 @@ def sample_onebody(configs, orbitals, spin, nsamples=1, tstep=0.5):
         allorbs = nsamples list of (naux, 1, norb)
     """
     n = configs.configs.shape[0]
-    ao = orbitals.aos("GTOval_sph", configs)
+    if orbitals._mol.cart:
+        _gtoval = "GTOval_cart"
+    else:
+        _gtoval = "GTOval_sph"
+    ao = orbitals.aos(_gtoval, configs)
     borb = orbitals.mos(ao, spin=spin)
     fsum = (cp.abs(borb) ** 2).sum(axis=1)
 
@@ -223,7 +231,7 @@ def sample_onebody(configs, orbitals, spin, nsamples=1, tstep=0.5):
     for s in range(nsamples):
         shift = np.sqrt(tstep) * np.random.randn(*configs.configs.shape)
         newconfigs = configs.make_irreducible(0, (configs.configs + shift)[:, 0])
-        ao = orbitals.aos("GTOval_sph", newconfigs)
+        ao = orbitals.aos(_gtoval, newconfigs)
         borbnew = orbitals.mos(ao, spin=spin)
         fsumnew = (cp.abs(borbnew) ** 2).sum(axis=1)
         accept = asnumpy(fsumnew / fsum) > np.random.rand(n)

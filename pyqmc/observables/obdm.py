@@ -216,11 +216,16 @@ def sample_onebody(configs, orbitals, spin, nsamples=1, tstep=0.5):
         allconfigs nsamples list of (naux, 1, 3) configs
         allorbs = nsamples list of (naux, 1, norb)
     """
-    n = configs.configs.shape[0]
-    if orbitals._mol.cart:
+    if type(orbitals) == pyqmc.wf.orbitals.MoleculeOrbitalEvaluator:
+        cart = orbitals._mol.cart
+    elif type(orbitals) == pyqmc.wf.orbitals.PBCOrbitalEvaluatorKpoints:
+        cart = orbitals._cell.cart
+    if cart:
         _gtoval = "GTOval_cart"
     else:
         _gtoval = "GTOval_sph"
+
+    n = configs.configs.shape[0]
     ao = orbitals.aos(_gtoval, configs)
     borb = orbitals.mos(ao, spin=spin)
     fsum = (cp.abs(borb) ** 2).sum(axis=1)

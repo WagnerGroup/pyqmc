@@ -125,6 +125,7 @@ class OBDMAccumulator:
             self._extra_config,
             self.orbitals,
             spin=0,
+            gtoval=self._gtoval,
             nsamples=self._warmup,
             tstep=self._tstep,
         )
@@ -150,6 +151,7 @@ class OBDMAccumulator:
             self._extra_config,
             self.orbitals,
             spin=0,
+            gtoval=self._gtoval,
             nsamples=self._nsweeps,
             tstep=self._tstep,
         )
@@ -208,7 +210,7 @@ class OBDMAccumulator:
         }
 
 
-def sample_onebody(configs, orbitals, spin, nsamples=1, tstep=0.5):
+def sample_onebody(configs, orbitals, spin, gtoval, nsamples=1, tstep=0.5):
     r"""
     For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i \phi_i(r)^2`.
     Returns:
@@ -216,17 +218,8 @@ def sample_onebody(configs, orbitals, spin, nsamples=1, tstep=0.5):
         allconfigs nsamples list of (naux, 1, 3) configs
         allorbs = nsamples list of (naux, 1, norb)
     """
-    if type(orbitals) == pyqmc.wf.orbitals.MoleculeOrbitalEvaluator:
-        cart = orbitals._mol.cart
-    elif type(orbitals) == pyqmc.wf.orbitals.PBCOrbitalEvaluatorKpoints:
-        cart = orbitals._cell.cart
-    if cart:
-        _gtoval = "GTOval_cart"
-    else:
-        _gtoval = "GTOval_sph"
-
     n = configs.configs.shape[0]
-    ao = orbitals.aos(_gtoval, configs)
+    ao = orbitals.aos(gtoval, configs)
     borb = orbitals.mos(ao, spin=spin)
     fsum = (cp.abs(borb) ** 2).sum(axis=1)
 
@@ -236,7 +229,7 @@ def sample_onebody(configs, orbitals, spin, nsamples=1, tstep=0.5):
     for s in range(nsamples):
         shift = np.sqrt(tstep) * np.random.randn(*configs.configs.shape)
         newconfigs = configs.make_irreducible(0, (configs.configs + shift)[:, 0])
-        ao = orbitals.aos(_gtoval, newconfigs)
+        ao = orbitals.aos(gtoval, newconfigs)
         borbnew = orbitals.mos(ao, spin=spin)
         fsumnew = (cp.abs(borbnew) ** 2).sum(axis=1)
         accept = asnumpy(fsumnew / fsum) > np.random.rand(n)

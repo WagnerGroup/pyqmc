@@ -80,6 +80,10 @@ class TBDMAccumulator:
         self._spin = spin
         self._naux = naux
         self._warmup = warmup
+        if mol.cart:
+            self._gtoval = "GTOval_cart"
+        else:
+            self._gtoval = "GTOval_sph"
 
         if kpts is None:
             self.orbitals = pyqmc.wf.orbitals.MoleculeOrbitalEvaluator(mol, orb_coeff)
@@ -126,7 +130,7 @@ class TBDMAccumulator:
             self._aux_configs[spin].reshape((-1, 1, 3))
             self._aux_configs[spin].resample(range(naux))
             _, self._aux_configs[spin], _ = obdm.sample_onebody(
-                self._aux_configs[spin], self.orbitals, 0, nsamples=self._warmup
+                self._aux_configs[spin], self.orbitals, 0, self._gtoval, nsamples=self._warmup
             )
             self._aux_configs[spin] = self._aux_configs[spin][-1]
 
@@ -155,6 +159,7 @@ class TBDMAccumulator:
                 self._aux_configs[spin],
                 self.orbitals,
                 spin,
+                self._gtoval,
                 self._nsweeps,
                 tstep=self._tstep,
             )

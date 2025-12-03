@@ -203,7 +203,6 @@ class OBDMAccumulator:
             "norm": (norb,),
         }
 
-
 def sample_onebody(configs, orbitals, spin, nsamples=1, tstep=0.5):
     r"""
     For a set of orbitals defined by orb_coeff, return samples from :math:`f(r) = \sum_i \phi_i(r)^2`.

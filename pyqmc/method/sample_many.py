@@ -206,7 +206,8 @@ def sample_overlap(
     """ """
     if os.path.isfile(hdf_file):
         with h5py.File(hdf_file, "r") as f:
-            with h5py.File(continue_from, "r") as hdf:
+            with h5py.File(hdf_file, "r") as hdf:
+                print("Restarting")
                 if "configs" in hdf.keys():
                     configs.load_hdf(hdf)
 

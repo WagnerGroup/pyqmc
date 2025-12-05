@@ -17,7 +17,7 @@ import pyqmc.method.mc as mc
 import scipy.stats
 #import pyqmc.method.linemin as linemin
 #import pyqmc.gpu as gpu
-#import os
+import os
 import h5py
 import pyqmc.method.hdftools as hdftools
 
@@ -204,34 +204,13 @@ def sample_overlap(
     npartitions=None,
 ):
     """ """
+    if os.path.isfile(hdf_file):
+        with h5py.File(hdf_file, "r") as f:
+            with h5py.File(continue_from, "r") as hdf:
+                if "configs" in hdf.keys():
+                    configs.load_hdf(hdf)
 
     return sample_overlap_run(wfs, configs, tstep, nsteps, nblocks, energy, hdf_file, client, npartitions)
-
-    if client is None:  # otherwise running in parallel
-        w, u, _ = sample_overlap_single(wfs, configs, tstep, nsteps, nblocks, energy, hdf_file)
-        return w, u, configs
-
-    if npartitions is None:
-        npartitions = sum(client.nthreads().values())
-
-    coord = configs.split(npartitions)
-    runs = [
-        client.submit(sample_overlap_worker, wfs, conf, tstep, nsteps, nblocks, energy)
-        for conf in coord
-    ]
-    allresults = list(zip(*[r.result() for r in runs]))
-    configs.join(allresults[2])
-    confweight = np.array([len(c.configs) for c in coord], dtype=float)
-    weighted = {}
-    for k, it in invert_list_of_dicts(allresults[0]).items():
-        weighted[k] = np.average(it, weights=confweight, axis=0)
-    unweighted = {}
-    for k, it in invert_list_of_dicts(allresults[1]).items():
-        unweighted[k] = np.average(it, weights=confweight, axis=0)
-
-    hdf_save(hdf_file, weighted, unweighted, dict(tstep=tstep), configs)
-    return weighted, unweighted, configs
-
 
 def normalize(weighted, unweighted):
     """

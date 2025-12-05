@@ -35,6 +35,13 @@ def setup_hdf(f, data, attr):
 
 
 def append_hdf(f, data):
+    """
+    Add data from one block to the HDF file.
+
+    f should be an h5py file object
+    data should be a dictionary of numpy arrays that represent one block.
+
+    """
     for k, it in data.items():
         if k not in f.keys():
             itnp = np.array(it)

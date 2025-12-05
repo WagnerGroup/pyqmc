@@ -15,20 +15,16 @@
 import numpy as np
 import pyqmc.method.mc as mc
 import scipy.stats
-import pyqmc.method.linemin as linemin
-import pyqmc.gpu as gpu
+#import pyqmc.method.linemin as linemin
+#import pyqmc.gpu as gpu
 import os
 import h5py
+import pyqmc.method.hdftools as hdftools
 
 
-def run_vmc_many(wfs, configs, energy, nreps=1, **kwargs):
-    # data gets saved at the end of each rep
-    for i in range(nreps):
-        sample_overlap(wfs, configs, energy, **kwargs)
 
 
 def hdf_save(hdf_file, weighted, unweighted, attr, configs):
-    import pyqmc.method.hdftools as hdftools
 
     if hdf_file is not None:
         fulldata = dict(weighted=weighted, unweighted=unweighted)
@@ -39,19 +35,8 @@ def hdf_save(hdf_file, weighted, unweighted, attr, configs):
                 for label, data in fulldata.items():
                     hdf.create_group(label)
             for label, data in fulldata.items():
-                extend_hdf(hdf[label], data)
+                hdftools.append_hdf(hdf[label], data)
             configs.to_hdf(hdf)
-
-
-def extend_hdf(f, data):
-    for k, it in data.items():
-        if k not in f.keys():
-            f.create_dataset(
-                k, (0, *it.shape[1:]), maxshape=(None, *it.shape[1:]), dtype=it.dtype
-            )
-        n = it.shape[0]
-        f[k].resize((f[k].shape[0] + n), axis=0)
-        f[k][-n:] = it
 
 
 def compute_weights(wfs):
@@ -82,18 +67,23 @@ def invert_list_of_dicts(A, asarray=True):
         return {k: [a[k] for a in A] for k in A[0].keys()}
 
 
-def sample_overlap_worker(wfs, configs, tstep, nsteps, nblocks, energy):
-    r"""Run nstep Metropolis steps to sample a distribution proportional to
-    :math:`\sum_i |\Psi_i|^2`, where :math:`\Psi_i` = wfs[i]
+def sample_overlap_run(wfs, configs, tstep, nsteps, nblocks, energy,
+                          hdf_file=None, client=None, npartitions=None):
+    """
+    Use a single core to sample over blocks
     """
     nconf, nelec, _ = configs.configs.shape
     weighted = []
     unweighted = []
     for block in range(nblocks):
         print("-", end="", flush=True)
-        w, u, _ = sample_overlap_block(wfs, configs, tstep, nsteps, energy)
+        if client is None:
+            w, u, configs = sample_overlap_worker(wfs, configs, tstep, nsteps, energy)
+        else:
+            w, u, configs = sample_overlap_client(wfs, configs, tstep, nsteps, energy, client, npartitions)
         weighted.append(w)
         unweighted.append(u)
+        hdf_save(hdf_file, w, u, dict(tstep=tstep), configs)
 
     # here we modify the data so that weighted and unweighted are dictionaries of arrays
     # Access as weighted[quantity][block, ...]
@@ -101,8 +91,46 @@ def sample_overlap_worker(wfs, configs, tstep, nsteps, nblocks, energy):
     unweighted = invert_list_of_dicts(unweighted)
     return weighted, unweighted, configs
 
+def sample_overlap_client(wfs, configs, tstep, nsteps, energy, client, npartitions):
+    """
+    Sample nblocks, saving every block.
+    wfs: list of wave functions
+    configs: pyqmc.config.Config
+    tstep: float
+    nsteps: int
+    energy: Accumulator object
+    client: futures client
+    npartitions: number of jobs to submit to the client.
+    """
+    config = configs.split(npartitions)
+    runs = [
+        client.submit(sample_overlap_worker, wfs, conf, tstep, nsteps, energy)
+        for conf in config
+    ]
+    allresults = list(zip(*[r.result() for r in runs])) #weighted, unweighted, configs
+    configs.join(allresults[2])
+    confweight = np.array([len(c.configs) for c in config], dtype=float)
+    confweight /= np.mean(confweight) * npartitions
+    weighted_block = {}
+    for k in allresults[0][0].keys():
+        weighted_block[k] = np.sum(
+            [res[k] * w for res, w in zip(allresults[0], confweight)], axis=0
+        )
+    unweighted_block = {}
+    for k in allresults[1][0].keys():
+        unweighted_block[k] = np.sum(
+            [res[k] * w for res, w in zip(allresults[1], confweight)], axis=0
+        )
 
-def sample_overlap_block(wfs, configs, tstep, nsteps, energy):
+
+    return weighted_block, unweighted_block, configs
+
+
+
+def sample_overlap_worker(wfs, configs, tstep, nsteps, energy):
+    r"""Run nstep Metropolis steps to sample a distribution proportional to
+    :math:`\sum_i |\Psi_i|^2`, where :math:`\Psi_i` = wfs[i]
+    """
     for wf in wfs:
         wf.recompute(configs)
     weighted_block = {}
@@ -176,32 +204,14 @@ def sample_overlap(
     npartitions=None,
 ):
     """ """
-    if client is None:  # otherwise running in parallel
-        w, u, _ = sample_overlap_worker(wfs, configs, tstep, nsteps, nblocks, energy)
-        hdf_save(hdf_file, w, u, dict(tstep=tstep), configs)
-        return w, u, configs
+    if hdf_file is not None and os.path.isfile(hdf_file):
+        with h5py.File(hdf_file, "r") as f:
+            with h5py.File(hdf_file, "r") as hdf:
+                print("Restarting")
+                if "configs" in hdf.keys():
+                    configs.load_hdf(hdf)
 
-    if npartitions is None:
-        npartitions = sum(client.nthreads().values())
-
-    coord = configs.split(npartitions)
-    runs = [
-        client.submit(sample_overlap_worker, wfs, conf, tstep, nsteps, nblocks, energy)
-        for conf in coord
-    ]
-    allresults = list(zip(*[r.result() for r in runs]))
-    configs.join(allresults[2])
-    confweight = np.array([len(c.configs) for c in coord], dtype=float)
-    weighted = {}
-    for k, it in invert_list_of_dicts(allresults[0]).items():
-        weighted[k] = np.average(it, weights=confweight, axis=0)
-    unweighted = {}
-    for k, it in invert_list_of_dicts(allresults[1]).items():
-        unweighted[k] = np.average(it, weights=confweight, axis=0)
-
-    hdf_save(hdf_file, weighted, unweighted, dict(tstep=tstep), configs)
-    return weighted, unweighted, configs
-
+    return sample_overlap_run(wfs, configs, tstep, nsteps, nblocks, energy, hdf_file, client, npartitions)
 
 def normalize(weighted, unweighted):
     """

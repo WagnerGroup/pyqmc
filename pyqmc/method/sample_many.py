@@ -204,7 +204,7 @@ def sample_overlap(
     npartitions=None,
 ):
     """ """
-    if os.path.isfile(hdf_file):
+    if hdf_file is not None and os.path.isfile(hdf_file):
         with h5py.File(hdf_file, "r") as f:
             with h5py.File(hdf_file, "r") as hdf:
                 print("Restarting")

@@ -304,7 +304,41 @@ def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **k
     return block_avg, configs, weights
 
 
-def branch(configs, weights, var_trigger_branch=0.05):
+def branch_trigger_variance(configs, weights, var_trigger_branch=0.05):
+    """
+    Perform branching on a set of walkers using the 'stochastic comb'
+    This is triggered
+
+    Walkers are resampled with probability proportional to the weights, and the new weights are all set to be equal to the average weight.
+
+    :parameter configs: (nconfig,nelec,3) walker coordinates
+    :parameter weights: (nconfig,) walker weights
+    :parameter var_trigger_branch: variance at which to perform branching.
+    :returns: resampled walker configurations and weights all equal to average weight
+
+    """
+    if np.var(weights) < var_trigger_branch:
+        return branch(configs, weights)
+
+
+def branch_trigger_maxweight(configs, weights, trigger_size=2.0):
+    """
+    Perform branching on a set of walkers using the 'stochastic comb'
+    This is triggered
+
+    Walkers are resampled with probability proportional to the weights, and the new weights are all set to be equal to the average weight.
+
+    :parameter configs: (nconfig,nelec,3) walker coordinates
+    :parameter weights: (nconfig,) walker weights
+    :parameter var_trigger_branch: variance at which to perform branching.
+    :returns: resampled walker configurations and weights all equal to average weight
+
+    """
+    if np.max(weights) < trigger_size:
+        return branch(configs, weights)
+
+
+def branch(configs, weights):
     """
     Perform branching on a set of walkers using the 'stochastic comb'
 
@@ -316,15 +350,6 @@ def branch(configs, weights, var_trigger_branch=0.05):
     :returns: resampled walker configurations and weights all equal to average weight
 
     """
-    if np.var(weights) < var_trigger_branch:
-        return (
-            configs,
-            weights,
-            {
-                "max branches": 0,
-                "Number of walkers killed": 0,
-            },
-        )
 
     nconfig = configs.configs.shape[0]
     if np.any(weights > 2.0):
@@ -405,6 +430,7 @@ def rundmc(
     branchtime=None,
     stepoffset=None,
     nsteps=None,
+    branch_trigger = 2.0
 ):
     """
     Run DMC
@@ -428,6 +454,7 @@ def rundmc(
     :parameter int vmc_warmup: If starting a run, how many VMC warmup blocks to run
     :parameter int branchcut_start: Used in computing weights. Recommended for "experts only".
     :parameter float feedback: Feedback strength for controlling normalization. Recommended for "experts only".
+    :parameter float branch_trigger: At what point do we trigger a branching event.
     :returns: (df,coords,weights)
       df: A list of dictionaries nblocks long that contains all results from the accumulators.
 
@@ -554,7 +581,7 @@ def rundmc(
         df_["weight_std"] = np.std(weights)
         df_["nsteps_per_block"] = nsteps_per_block
 
-        configs, weights, branch_info = branch(configs, weights)
+        configs, weights, branch_info = branch_trigger_maxweight(configs, weights, branch_trigger)
         df_.update(branch_info)
         df.append(df_)
         dmc_file(hdf_file, df_, {}, configs, weights)

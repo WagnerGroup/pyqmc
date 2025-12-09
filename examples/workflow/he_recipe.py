@@ -11,11 +11,11 @@
 #
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
+import pyscf
+import pyqmc
+import pyqmc.recipes
 
 if __name__ == "__main__":
-    import pyscf
-    import pyqmc
-    import pyqmc.recipes
 
     mol = pyscf.gto.M(
         atom="He 0. 0. 0.", basis="ccECP_cc-pVDZ", ecp="ccecp", unit="bohr"
@@ -28,7 +28,7 @@ if __name__ == "__main__":
     slater_kws = {"optimize_orbitals": True}
 
     pyqmc.recipes.OPTIMIZE(
-        "he_dft.hdf5", "he_sj.hdf5", jastrow_kws=jastrow_kws, slater_kws=slater_kws
+        "he_dft.hdf5", "he_sj.hdf5", jastrow_kws=jastrow_kws, slater_kws=slater_kws, verbose=True
     )
 
     pyqmc.recipes.VMC(
@@ -48,5 +48,6 @@ if __name__ == "__main__":
         accumulators={"rdm1": True},
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
+        verbose = True,
         **{"nblocks": 4000, "tstep": 0.02},
     )

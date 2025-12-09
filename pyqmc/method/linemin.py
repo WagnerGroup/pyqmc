@@ -253,7 +253,7 @@ def line_minimization(
 
             # Correlated sampling line minimization.
             steps = np.linspace(-steprange / (npts - 2), steprange, npts)
-            dps, update_report = pgrad.delta_p(steps, data, verbose=verbose)
+            dps, update_report = pgrad.delta_p(steps, data, verbose=False)
             step_data.update(update_report)
             params = [x0 + dp for dp in dps]
 
@@ -283,11 +283,11 @@ def line_minimization(
             step_data["correlated_energy_std"] = en_std
 
             if verbose:
-                print("energies from correlated sampling", en)
+                #print("energies from correlated sampling", en)
                 print("Chose to move", est_min, "from", steps[0], "to", steps[-1])
-                print("weight variance", np.var(w, axis=1))
-                print("avg weights", np.mean(correlated_data["weight"], axis=1))
-                print("energy standard deviation", en_std)
+                #print("weight variance", np.var(w, axis=1))
+                #print("avg weights", np.mean(correlated_data["weight"], axis=1))
+                #print("energy standard deviation", en_std)
 
             set_wf_params(wf, x0, pgrad)
             opt_hdf(hdf_file, step_data, attr, coords, wf.parameters)

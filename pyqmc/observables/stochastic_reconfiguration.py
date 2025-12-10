@@ -59,6 +59,7 @@ class StochasticReconfiguration:
         nodal_cutoff=1e-3,
         eps=1e-1,
         inverse_strategy="pseudo_inverse",
+        verbose = False
     ):
         """
         eps here is the regularization for SR.
@@ -68,6 +69,7 @@ class StochasticReconfiguration:
         self.nodal_cutoff = nodal_cutoff
         self.eps = eps
         self.inverse_strategy = inverse_strategy
+        self.verbose = verbose
 
     def __call__(self, configs, wf):
         pgrad = wf.pgradient()
@@ -164,7 +166,7 @@ class StochasticReconfiguration:
             "SRdot": np.dot(pgrad, v) / (np.linalg.norm(v) * np.linalg.norm(pgrad)),
         }
 
-        if verbose:
+        if verbose or self.verbose:
             eigvals = np.linalg.eigvals(Sij)
             print("eigenvalues of Sij", eigvals)
             print("Gradient norm: ", np.linalg.norm(pgrad))

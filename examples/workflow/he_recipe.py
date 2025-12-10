@@ -28,7 +28,12 @@ if __name__ == "__main__":
     slater_kws = {"optimize_orbitals": True}
 
     pyqmc.recipes.OPTIMIZE(
-        "he_dft.hdf5", "he_sj.hdf5", jastrow_kws=jastrow_kws, slater_kws=slater_kws, verbose=True
+        "he_dft.hdf5", "he_sj.hdf5",
+        jastrow_kws=jastrow_kws,
+        slater_kws=slater_kws,
+        verbose=True,
+        correlated_sampling = False,
+        steprange=0.01
     )
 
     pyqmc.recipes.VMC(

@@ -117,6 +117,7 @@ def line_minimization(
     hdf_file=None,
     client=None,
     npartitions=None,
+    correlated_sampling = True,
 ):
     """Optimizes energy by determining gradients with stochastic reconfiguration
         and minimizing the energy along gradient directions using correlated sampling.
@@ -252,42 +253,14 @@ def line_minimization(
             step_data["nconfig"] = coords.configs.shape[0]
 
             # Correlated sampling line minimization.
-            steps = np.linspace(-steprange / (npts - 2), steprange, npts)
-            dps, update_report = pgrad.delta_p(steps, data, verbose=False)
-            step_data.update(update_report)
-            params = [x0 + dp for dp in dps]
-
-            correlated_data = correlated_compute(
-                wf,
-                coords,
-                params,
-                pgrad,
-                client=client,
-                npartitions=npartitions,
-                ref_wfs=correlated_reference_wfs,
-            )
-
-            w = correlated_data["weight"].copy()
-            w = w / np.mean(w, axis=1, keepdims=True)
-            en = np.real(np.mean(correlated_data["total"] * w, axis=1))
-            en_std = np.std(correlated_data["total"], axis=1)
-            yfit = en + stderr_weight * en_std
-            est_min = find_minimum(steps, yfit)
-
-            x0 = pgrad.delta_p([est_min], data, verbose=False)[0][0] + x0
-
-            step_data["tau"] = steps
-            step_data["yfit"] = yfit
-            step_data["est_min"] = est_min
-            step_data["correlated_energy"] = en
-            step_data["correlated_energy_std"] = en_std
-
-            if verbose:
-                #print("energies from correlated sampling", en)
-                print("Chose to move", est_min, "from", steps[0], "to", steps[-1])
-                #print("weight variance", np.var(w, axis=1))
-                #print("avg weights", np.mean(correlated_data["weight"], axis=1))
-                #print("energy standard deviation", en_std)
+            if correlated_sampling:
+                x0, min_data = correlated_sampling_minimum(steprange, npts, stderr_weight, correlated_reference_wfs,
+                                                       pgrad, wf, data, x0, coords, client, npartitions)
+                step_data.update(min_data)
+                if verbose:
+                    print("Moved", step_data['est_min'])
+            else:
+                x0, min_data = sr_step(steprange, pgrad, data, x0)
 
             set_wf_params(wf, x0, pgrad)
             opt_hdf(hdf_file, step_data, attr, coords, wf.parameters)
@@ -295,6 +268,72 @@ def line_minimization(
 
         sub_iteration_offset = 0
     return wf, df
+
+
+def sr_step(steprange,
+            pgrad,
+            data, x0):
+    """
+    steprange: timestep
+    pgrad: Gradient object
+    data: data from the VMC gradient calculations
+    x0: current parameters
+    """
+    xs, update_report = pgrad.delta_p([steprange], data, verbose=False)
+    #print(xs[0], update_report)
+    return xs[0]+x0, update_report
+
+
+
+def correlated_sampling_minimum(steprange, npts, stderr_weight, correlated_reference_wfs, #these are linemin parameters
+                                pgrad, wf,
+                                data, x0, coords, # data from this calculation
+                                client, npartitions): #parallel execution
+    """
+    steprange: how far to go out
+    npts: how many samples
+    stderr_weight: how much to weight the standard deviation
+    correlated_reference_wfs: which wave functions to sample for the correlated sampling
+    pgrad: Gradient object
+    wf: Wavefunction object
+    data: data from the VMC gradient calculations
+    x0: current parameters
+    coords: current coordinates
+
+    """
+
+    steps = np.linspace(-steprange / (npts - 2), steprange, npts)
+    dps, update_report = pgrad.delta_p(steps, data, verbose=False)
+    params = [x0 + dp for dp in dps]
+
+    correlated_data = correlated_compute(
+        wf,
+        coords,
+        params,
+        pgrad,
+        client=client,
+        npartitions=npartitions,
+        ref_wfs=correlated_reference_wfs,
+    )
+
+    w = correlated_data["weight"].copy()
+    w = w / np.mean(w, axis=1, keepdims=True)
+    en = np.real(np.mean(correlated_data["total"] * w, axis=1))
+    en_std = np.std(correlated_data["total"], axis=1)
+    yfit = en + stderr_weight * en_std
+    est_min = find_minimum(steps, yfit)
+
+    x0 = pgrad.delta_p([est_min], data, verbose=False)[0][0] + x0
+
+    update_report["tau"] = steps
+    update_report["yfit"] = yfit
+    update_report["est_min"] = est_min
+    update_report["correlated_energy"] = en
+    update_report["correlated_energy_std"] = en_std
+
+    return  x0, update_report
+
+
 
 
 def correlated_compute(

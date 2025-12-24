@@ -11,11 +11,14 @@
 #
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-
 import pyscf
 import pyscf.pbc
 import pyscf.mcscf
 import pyscf.fci
+try:
+    import pyscf.hci
+except ImportError:
+    pass
 import h5py
 import json
 import numpy as np
@@ -23,7 +26,6 @@ import pyqmc.wf.determinant_tools as determinant_tools
 import pyqmc.wf.orbitals as orbitals
 import pyqmc.pbc.supercell as supercell
 import pyqmc.pbc.twists as twists
-
 
 def recover_pyscf(chkfile, ci_checkfile=None, cancel_outputs=True):
     """Generate pyscf objects from a pyscf checkfile, in a way that is easy to use for pyqmc. The chkfile should be saved by setting mf.chkfile in a pyscf SCF object.

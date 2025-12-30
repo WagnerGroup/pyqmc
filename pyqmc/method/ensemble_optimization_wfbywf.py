@@ -151,7 +151,7 @@ class StochasticReconfigurationWfbyWf:
         invSij = np.linalg.inv(Sij + self.eps * np.eye(Sij.shape[0]))
 
         ovlp = 0.0
-        print("dp overlap", data["dp_overlap"].shape)
+        #print("dp overlap", data["dp_overlap"].shape)
 
         for i in range(wfi):
             ovlp += (
@@ -160,7 +160,7 @@ class StochasticReconfigurationWfbyWf:
                 * overlap_penalty[wfi, i]
                 * data["overlap"][wfi, i]
             )
-        print("dp_energy", data["dp_energy"])
+        #print("dp_energy", data["dp_energy"])
         pgrad = data["dp_energy"] + ovlp
 
         v = np.einsum("ij,j->i", invSij, pgrad)

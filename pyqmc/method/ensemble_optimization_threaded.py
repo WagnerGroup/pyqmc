@@ -65,6 +65,7 @@ def round_to_fixed_sum(x: np.ndarray, target_sum: int) -> np.ndarray:
     # Get indices of the largest fractional parts
     idx = np.argsort(frac)[::-1]
     y[idx[:diff]] += 1
+    y[y<1 ] = 1
 
     return y
 

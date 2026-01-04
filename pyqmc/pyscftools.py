@@ -86,8 +86,11 @@ def recover_pyscf(chkfile, ci_checkfile=None, cancel_outputs=True):
             casdict = pyscf.lib.chkfile.load(ci_checkfile, "mcscf")
         with h5py.File(ci_checkfile, "r") as f:
             hci = "ci/_strs" in f.keys()
+            sci = "ci/_strs__from_list__" in f.keys()
         if hci:
             mc = pyscf.hci.SCI(mol)
+        elif sci:
+            mc = pyscf.fci.SCI(mol)
         else:
             if len(casdict["mo_coeff"].shape) == 3:
                 mc = pyscf.mcscf.UCASCI(mol, casdict["ncas"], casdict["nelecas"])
@@ -257,7 +260,9 @@ def interpret_ci(mc, tol):
     """
     ncore = mc.ncore if hasattr(mc, "ncore") else 0
     # find multi slater determinant occupation
-    if hasattr(mc, "_strs"):  # if this is a HCI object, it will have _strs
+    if type(mc) is pyscf.fci.SCI:
+        deters = deters_from_sci(mc)
+    elif hasattr(mc, "_strs"):  # if this is a HCI object, it will have _strs
         deters = deters_from_hci(mc, tol)
     else:
         deters = pyscf.fci.addons.large_ci(mc.ci, mc.ncas, mc.nelecas, tol=-1)
@@ -275,3 +280,18 @@ def deters_from_hci(mc, tol):
         s2 = "".join(str(bin(p)).replace("0b", "") for p in s[nstrs:])
         deters.append((c, s1, s2))
     return deters
+
+
+def deters_from_sci(mc, tol=-1):
+    """
+    For a fci.SCI object, the _strs is formatted differently than in HCI.
+    """
+    deters = mc.large_ci(mc.ci, mc.norb, mc.nelec, tol=tol)
+    dets_return = []
+    for det in deters:
+        dets_return.append(
+            (det[0],
+             det[1].replace("0b", ""),
+             det[2].replace("0b", ""))
+        )
+    return dets_return

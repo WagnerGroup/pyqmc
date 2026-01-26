@@ -336,6 +336,7 @@ def branch_trigger_maxweight(configs, weights, trigger_size=2.0):
     """
     if np.max(weights) < trigger_size:
         return branch(configs, weights)
+    return configs, weights, {"max branches": 1, "Number of walkers killed": 0}
 
 
 def branch(configs, weights):

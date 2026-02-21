@@ -563,7 +563,7 @@ def rundmc(
         df_["weight_std"] = np.std(weights)
         df_["nsteps_per_block"] = nsteps_per_block
 
-        configs, weights, branch_info = branch(configs, weights, branch_trigger)
+        configs, weights, branch_info = branch(configs, weights)
         df_.update(branch_info)
         df.append(df_)
         dmc_file(hdf_file, df_, {}, configs, weights)

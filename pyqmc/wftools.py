@@ -110,7 +110,7 @@ def generate_jastrow(
     """
     Default 2-body jastrow from QWalk,
 
-    :parameter boolean ion_cusp: add an extra term to satisfy electron-ion cusp.
+    :parameter boolean ion_cusp: add an extra term to satisfy electron-ion cusp. If True, add cusp for all ions. If False, add no cusps. If None, add cusps for all ions that do not have ECPs. If a list, add cusps for the ions marked True in the list.
     :returns: jastrow, to_opt
     """
     if ion_cusp is False:
@@ -118,11 +118,12 @@ def generate_jastrow(
         if not mol.has_ecp():
             print("Warning: using neither ECP nor ion_cusp")
     elif ion_cusp is True:
-        ion_cusp = list(mol._basis.keys())
+        ion_cusp = [True] * len(mol._atom)
         if mol.has_ecp():
             print("Warning: using both ECP and ion_cusp")
     elif ion_cusp is None:
-        ion_cusp = [l for l in mol._basis.keys() if l not in mol._ecp.keys()]
+        charges = mol.atom_charges()
+        ion_cusp = [mol.atom_symbol(l) for l in range(len(mol._atom)) if mol.atom_symbol(l) not in mol._ecp.keys() and charges[l] > 0]
     else:
         assert isinstance(ion_cusp, list)
 

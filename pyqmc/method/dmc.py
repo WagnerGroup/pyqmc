@@ -416,7 +416,7 @@ def rundmc(
     weights=None,
     tstep=0.01,
     nblocks=200,
-    nsteps_per_block=5,
+    nsteps_per_block=None,
     blockoffset=0,
     accumulators=None,
     verbose=False,
@@ -428,10 +428,6 @@ def rundmc(
     vmc_warmup=10,
     branchcut_start=10,
     feedback=1.0,
-    branchtime=None,
-    stepoffset=None,
-    nsteps=None,
-    branch_trigger = 2.0
 ):
     """
     Run DMC
@@ -447,15 +443,14 @@ def rundmc(
     :parameter int blockoffset: If continuing a run, what to start the block numbering at. The calculation will stop when the block number reaches nblocks.
     :parameter accumulators: A dictionary of functor objects that take in (coords,wf) and return a dictionary of quantities to be averaged. np.mean(quantity,axis=0) should give the average over configurations. If none, a default energy accumulator will be used.
     :parameter boolean verbose: Print out step information
-    :parameter str hdf_file: Hdf_file to store vmc output.
-    :parameter str continue_from: Hdf_file to continue vmc calculation from.
+    :parameter str hdf_file: HDF_file to store dmc output.
+    :parameter str continue_from: HDF_file to continue dmc calculation from.
     :parameter client: an object with submit() functions that return futures
     :parameter int npartitions: the number of workers to submit at a time
     :parameter ekey: tuple of strings; energy is needed for DMC weights. Access total energy by accumulators[ekey[0]](configs, wf)[ekey[1]
     :parameter int vmc_warmup: If starting a run, how many VMC warmup blocks to run
     :parameter int branchcut_start: Used in computing weights. Recommended for "experts only".
     :parameter float feedback: Feedback strength for controlling normalization. Recommended for "experts only".
-    :parameter float branch_trigger: At what point do we trigger a branching event.
     :returns: (df,coords,weights)
       df: A list of dictionaries nblocks long that contains all results from the accumulators.
 
@@ -464,23 +459,9 @@ def rundmc(
       weights: The final weights from this calculation
     :rtype: list of dictionaries, pyqmc.coord.Configs, ndarray
     """
-    # Deprecated backwards compatibility
-    if branchtime is not None:
-        logging.warning(
-            "rundmc kwarg `branchtime` is deprecated. Use `nsteps_per_block` instead. Overriding `nsteps_per_block` if given."
-        )
-        nsteps_per_block = branchtime
-    if nsteps is not None:
-        logging.warning(
-            "rundmc kwarg `nsteps` is deprecated. Use `nblocks` and `nsteps_per_block` instead. Overriding nblocks if given."
-        )
-        nblocks = nsteps // nsteps_per_block
-    if stepoffset is not None:
-        logging.warning(
-            "rundmc kwarg `stepoffset` is deprecated. Use `blockoffset` and `nsteps_per_block` instead. Overriding blockoffset if given."
-        )
-        blockoffset = stepoffset // nsteps_per_block
 
+    if nsteps_per_block is None:
+        nsteps_per_block = max(1, int(0.1 / tstep)) # default to branching every 0.1 time units, which is a common choice in DMC
     # Don't continue onto a file that's already there.
     if continue_from is not None and hdf_file is not None and os.path.isfile(hdf_file):
         raise RuntimeError(
@@ -582,7 +563,7 @@ def rundmc(
         df_["weight_std"] = np.std(weights)
         df_["nsteps_per_block"] = nsteps_per_block
 
-        configs, weights, branch_info = branch_trigger_maxweight(configs, weights, branch_trigger)
+        configs, weights, branch_info = branch(configs, weights, branch_trigger)
         df_.update(branch_info)
         df.append(df_)
         dmc_file(hdf_file, df_, {}, configs, weights)

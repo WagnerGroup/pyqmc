@@ -10,7 +10,8 @@ Full documentation is available at [pyqmc.readthedocs.io](https://pyqmc.readthed
 ## Features
 
 - **Variational Monte Carlo (VMC)** and **Diffusion Monte Carlo (DMC)**
-- **Wavefunction optimization** via line minimization and stochastic reconfiguration
+- **Wavefunction optimization** via stochastic reconfiguration
+- **Ensemble wave function optimization** for excited state computation
 - **Trial wavefunctions**: Slater-Jastrow, multi-determinant (CASSCF/selected CI), geminal, and three-body Jastrow
 - **Observables**: energy, one- and two-body density matrices, extensible to your problem.
 - **Periodic boundary conditions** with twist averaging and supercell support

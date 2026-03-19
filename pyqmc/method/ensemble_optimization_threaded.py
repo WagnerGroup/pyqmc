@@ -320,6 +320,7 @@ def optimize_ensemble(
             npartitions=npartitions,
             vmc_kwargs=vmc_kwargs,
             overlap_kwargs=overlap_kwargs,
+            overlap_thread_weight=overlap_thread_weight,
         )
         for wfi, wf in enumerate(wfs):
             transform_list = updater[wfi]

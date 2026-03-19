@@ -176,6 +176,7 @@ def evaluate_gradients_threaded(
             )
             transform_list = updater[wfi]
             for sub_iteration in range(len(transform_list)):
+                transform = transform_list[sub_iteration]
                 overlap_workers_thread = threader.submit(
                     pyqmc.method.sample_many.sample_overlap,
                     wfs[0 : wfi + 1],

@@ -131,7 +131,8 @@ def orbital_evaluator_from_pyscf(
     """
 
     periodic = hasattr(mol, "a")
-    f_max_orb = lambda a: int(np.max(a, initial=0)) + 1 if len(a) > 0 else 0
+    def f_max_orb(a):
+        return int(np.max(a, initial=0)) + 1 if len(a) > 0 else 0
 
     if periodic:
         mf = pyscf.pbc.scf.addons.convert_to_khf(mf)

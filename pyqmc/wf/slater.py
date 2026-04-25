@@ -164,10 +164,17 @@ class Slater:
         evaluate_orbitals_with="pyscf",
     ):
         """
-        determinants should be a list of tuples, for example
+        For molecules, determinants should be a list of tuples, for example
         [ (1.0, [0,1],[0,1]),
           (-0.2, [0,2],[0,2]) ]
         would be a two-determinant wave function with a doubles excitation in the second one.
+
+        For solids, each spin gets an extra k-point index. So for example,
+        [ (1.0, [[0,1]],[[0,1]]),
+          (-0.2, [[0,2]],[[0,2]]) ]
+        for a gammma-point only calculation.
+
+               
 
         determinants overrides any information in mc, if passed.
         """
@@ -231,6 +238,7 @@ class Slater:
             end = self._nelec[0] + self._nelec[1] * s
             mo = self.orbitals.mos(self._aovals[:, :, begin:end, :], s)
             mo_vals = gpu.cp.swapaxes(mo[:, :, self._det_occup[s]], 1, 2)
+            assert mo_vals.shape[-2] == mo_vals.shape[-1], f"disagreement between number of electrons and number of orbitals: {mo_vals.shape[-2]} electrons and {mo_vals.shape[-1]} orbitals"
             self._dets.append(
                 gpu.cp.asarray(np.linalg.slogdet(mo_vals))
             )  # Spin, (sign, val), nconf, [ndet_up, ndet_dn]

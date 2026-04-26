@@ -21,6 +21,7 @@ from pyqmc.observables.stochastic_reconfiguration import StochasticReconfigurati
 import copy
 import time
 import pyqmc.observables.jax_ecp as ecp_accumulator
+from pyqmc.pbc.pbc import enforce_pbc
 
 
 def gradient_generator(

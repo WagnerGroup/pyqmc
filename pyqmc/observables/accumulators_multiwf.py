@@ -29,9 +29,10 @@ def invert_list_of_dicts(A, asarray=True):
 class EnergyAccumulatorMultipleWF:
     """ """
 
-    def __init__(self, enacc):
+    def __init__(self, enacc, offset=0):
         """ """
         self.enacc = enacc
+        self._offset = offset
 
     def avg(self, configs, wfs: list, weights: np.ndarray):
         """
@@ -45,8 +46,40 @@ class EnergyAccumulatorMultipleWF:
         weighted_dat = {}
         nconfig = configs.configs.shape[0]
         for k, en in energies.items():
-            weighted_dat[k] = np.einsum("jc,ijc->ij", en, weights) / nconfig
+            weighted_dat[k] = np.einsum("jc,ijc->ij", en-self._offset, weights) / nconfig
+        weighted_dat['offset'] = self._offset
+        return weighted_dat
 
+    def keys(self):
+        return self.enacc.keys()
+
+    def shapes(self):
+        """
+        Note that the shapes here do not include the number of wave functions.
+        """
+        return self.enacc.shapes()
+    
+
+class AdaptSingleAccumulator:
+    """ """
+
+    def __init__(self, acc):
+        """ """
+        self.acc = acc
+
+    def avg(self, configs, wfs: list, weights: np.ndarray):
+        """
+        weights: [nwf, nwf, configs]
+        wfs: [nwf]
+        configs: PeriodicConfigs or OpenConfigs object
+        Returns: {key: [nwf, nwf]}
+
+        """
+        quantities = invert_list_of_dicts([self.acc(configs, wf) for wf in wfs])
+        weighted_dat = {}
+        nconfig = configs.configs.shape[0]
+        for k, en in quantities.items():
+            weighted_dat[k] = np.einsum("jc,ijc->ij", en, weights) / nconfig
         return weighted_dat
 
     def keys(self):

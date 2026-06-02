@@ -18,4 +18,4 @@ diffusion Monte Carlo (DMC) simulations, including wavefunction optimization, an
 
 name = "pyqmc"
 
-__version__ = "0.8.0"
+__version__ = "0.8.1"

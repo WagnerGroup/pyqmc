@@ -190,8 +190,9 @@ def sample_overlap_worker(wfs, configs, tstep, nsteps, energy):
 def rolling_average(block, data, nsteps):
     for k, it in data.items():
         if k not in block:
-            block[k] = np.zeros((*it.shape,), dtype=it.dtype)
-        block[k] += it / nsteps
+            block[k] = it / nsteps
+        else:
+            block[k] += it / nsteps
 
 
 def sample_overlap(

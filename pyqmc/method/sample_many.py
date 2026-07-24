@@ -134,7 +134,7 @@ def sample_overlap_worker(wfs, configs, tstep, nsteps, energy):
     for wf in wfs:
         wf.recompute(configs)
     weighted_block = {}
-    unweighted_block = {"acceptance": 0.0}
+    unweighted_block = {}
     nconf, nelec = configs.configs.shape[:2]
 
     for n in range(nsteps):

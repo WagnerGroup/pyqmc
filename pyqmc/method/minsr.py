@@ -129,6 +129,55 @@ def real_design_matrix(dppsi, eloc):
     return A, b
 
 
+def sr_solve(A, b, g=None, eps=1e-2, inverse_strategy="regularized_inverse"):
+    """Apply the regularized SR inverse using only the (nrows, nrows) kernel.
+
+    Returns :math:`(A^T A + \\epsilon I)^{-1} (A^T b + g)`, where A and b come
+    from :func:`real_design_matrix`, so that :math:`S = A^T A` is the SR overlap
+    matrix and :math:`A^T b` is the energy gradient. S is never formed.
+
+    The :math:`A^T b` part uses the push-through identity. The optional `g` is a
+    gradient contribution that does not come from the sampled rows -- the
+    overlap penalty in ensemble optimization is one -- and generally has a
+    component outside the row space of A, so it needs the Woodbury identity
+
+    .. math:: (A^T A + \\epsilon I)^{-1} = (I - A^T (A A^T + \\epsilon I)^{-1} A)/\\epsilon
+
+    Note that the component of `g` orthogonal to every sampled row comes back
+    divided by eps. That is what SR itself does with the null space of S, not an
+    artifact of working in sample space, but it does mean a small eps amplifies
+    any part of the penalty gradient the samples cannot resolve.
+
+    :parameter A: (nrows, nparameters) real design matrix
+    :parameter b: (nrows,) real right hand side
+    :parameter g: (nparameters,) additional gradient, or None
+    :parameter float eps: regularization
+    :parameter str inverse_strategy: 'regularized_inverse' or 'pseudo_inverse'
+    :returns: (nparameters,) solution vector
+    """
+    kernel = A @ A.T
+    rhs = b[:, np.newaxis] if g is None else np.stack([b, A @ g], axis=1)
+
+    if inverse_strategy == "regularized_inverse":
+        y = np.linalg.solve(kernel + eps * np.eye(kernel.shape[0]), rhs)
+    elif inverse_strategy == "pseudo_inverse":
+        if g is not None:
+            raise ValueError(
+                "pseudo_inverse cannot be applied to a gradient outside the row space "
+                "of the samples; use regularized_inverse."
+            )
+        y = np.linalg.pinv(kernel, rcond=eps) @ rhs
+    else:
+        raise ValueError(
+            "Invalid inverse strategy. Valid options are pseudo_inverse and regularized_inverse."
+        )
+
+    v = A.T @ y[:, 0]
+    if g is not None:
+        v = v + (g - A.T @ y[:, 1]) / eps
+    return v
+
+
 def minsr_update(
     dppsi,
     eloc,
@@ -160,18 +209,8 @@ def minsr_update(
         return zero, {"pgrad": 0.0, "SRdot": 0.0, "step_norm": 0.0, "clipped": False}
 
     A, b = real_design_matrix(dppsi, eloc)
-    kernel = A @ A.T
-
-    if inverse_strategy == "regularized_inverse":
-        y = np.linalg.solve(kernel + eps * np.eye(kernel.shape[0]), b)
-    elif inverse_strategy == "pseudo_inverse":
-        y = np.linalg.pinv(kernel, rcond=eps) @ b
-    else:
-        raise ValueError(
-            "Invalid inverse strategy. Valid options are pseudo_inverse and regularized_inverse."
-        )
-
-    v = 2 * (A.T @ y)  # (S + eps)^-1 f, with f = 2 A^T b
+    # (S + eps)^-1 f, with f = 2 A^T b
+    v = 2 * sr_solve(A, b, eps=eps, inverse_strategy=inverse_strategy)
     pgrad = 2 * (A.T @ b)  # the bare energy gradient, for diagnostics
     dp = -tstep * v
 
@@ -187,7 +226,7 @@ def minsr_update(
     report["clipped"] = max_norm is not None and norm > max_norm
 
     if verbose:
-        print("Kernel size", kernel.shape[0], "number of parameters", A.shape[1])
+        print("Kernel size", A.shape[0], "number of parameters", A.shape[1])
         print("Gradient norm:", report["pgrad"])
         print("Dot product between gradient and minSR step:", report["SRdot"])
         print("Step norm:", report["step_norm"])

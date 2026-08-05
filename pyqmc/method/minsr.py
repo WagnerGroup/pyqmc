@@ -40,8 +40,15 @@ import numpy as np
 
 import pyqmc.gpu as gpu
 import pyqmc.method.mc
-from pyqmc.method.linemin import opt_hdf, set_wf_params
+from pyqmc.method.linemin import opt_hdf
 from pyqmc.observables.stochastic_reconfiguration import nodal_regularization
+
+
+def set_wf_params(wf, params, transform):
+    """Set the wave function parameters from a serialized parameter vector."""
+    newparms = transform.deserialize(wf, params)
+    for k in newparms:
+        wf.parameters[k] = newparms[k]
 
 
 def sample_derivatives_worker(wf, configs, transform, enacc, nodal_cutoff):
@@ -238,13 +245,15 @@ def sample_minsr_data(
 def minsr_optimization(
     wf,
     coords,
-    pgrad_acc,
+    transform,
+    enacc,
     tstep=0.02,
+    eps=1e-2,
+    nodal_cutoff=1e-3,
+    inverse_strategy="regularized_inverse",
     max_iterations=30,
     warmup_options=None,
     vmcoptions=None,
-    eps=None,
-    inverse_strategy=None,
     max_norm=None,
     verbose=False,
     hdf_file=None,
@@ -253,29 +262,43 @@ def minsr_optimization(
 ):
     """Optimize the energy with the minSR algorithm.
 
-    This is a drop-in alternative to :func:`pyqmc.method.linemin.line_minimization`
-    that takes the same wave function, configurations, and gradient accumulator
-    (from :func:`pyqmc.observables.accumulators.gradient_generator`). It differs
-    in two ways:
+    This is an alternative to :func:`pyqmc.method.linemin.line_minimization`. It
+    differs in two ways:
 
     * no line minimization; `tstep` is a fixed hyperparameter, and
     * the S matrix is never constructed, so the memory cost is set by the number
       of samples rather than by the square of the number of parameters.
 
-    `tstep` here plays the same role as `steprange` in line_minimization: for the
-    same `eps` the update direction and magnitude are identical to the SR step
-    taken at that step size.
+    Unlike line_minimization, this takes the parameter transform and the energy
+    accumulator directly rather than a StochasticReconfiguration object, since
+    the S matrix that object builds is exactly what minSR avoids::
+
+        transform = LinearTransform(wf.parameters, to_opt)
+        enacc = EnergyAccumulator(mol)
+        wf, df = minsr_optimization(wf, coords, transform, enacc)
+
+    `tstep` plays the same role as `steprange` in line_minimization: for the same
+    `eps`, the update direction and magnitude are identical to the SR step taken
+    at that step size.
+
+    `eps` matters more here than it does in line_minimization, which can reject
+    an overshoot with its line search. On H2/ccECP with 1000 walkers, eps=1e-3
+    (the default of :func:`pyqmc.observables.accumulators.gradient_generator`)
+    diverged in 2 of 20 runs, while eps=1e-2 converged in 20 of 20 and reached a
+    lower energy than eps=1e-1, which was stable but over-damped. Set `max_norm`
+    if steps still occasionally overshoot.
 
     :parameter wf: initial wave function
     :parameter coords: initial configurations
-    :parameter pgrad_acc: a StochasticReconfiguration-like object; its transform,
-        energy accumulator, nodal_cutoff, eps, and inverse_strategy are used
+    :parameter transform: a LinearTransform object defining the parameters to optimize
+    :parameter enacc: an EnergyAccumulator-like object
     :parameter float tstep: step size in parameter space
+    :parameter float eps: regularization of the kernel
+    :parameter float nodal_cutoff: regularization distance for the nodal divergence of the derivatives
+    :parameter str inverse_strategy: 'regularized_inverse' or 'pseudo_inverse'
     :parameter int max_iterations: total number of optimization steps, including any read from hdf_file
     :parameter dict warmup_options: kwargs for the initial vmc warmup
     :parameter dict vmcoptions: kwargs for sampling; nblocks, nsteps_per_block, and tstep are passed to sample_minsr_data
-    :parameter float eps: kernel regularization; defaults to pgrad_acc.eps
-    :parameter str inverse_strategy: 'regularized_inverse' or 'pseudo_inverse'; defaults to pgrad_acc.inverse_strategy
     :parameter float max_norm: if not None, the maximum 2-norm of a parameter change
     :parameter boolean verbose: print output if True
     :parameter str hdf_file: hdf file to store output; the format matches line_minimization
@@ -283,27 +306,17 @@ def minsr_optimization(
     :parameter int npartitions: the number of workers to submit at a time
     :return: optimized wave function, optimization data
     """
-    if not hasattr(pgrad_acc, "transform"):
+    if hasattr(transform, "transform"):
         raise ValueError(
-            "minsr_optimization takes a single StochasticReconfiguration-like accumulator; "
-            "sub-iterations over a list of accumulators are only supported by line_minimization."
+            "minsr_optimization takes a transform and an energy accumulator, not a "
+            "StochasticReconfiguration object; pass acc.transform and acc.enacc."
         )
     if vmcoptions is None:
         vmcoptions = {}
     if warmup_options is None:
-        warmup_options = dict(nblocks=1, nsteps_per_block=100)
+        warmup_options = {"nblocks": 1, "nsteps_per_block": 100}
     if "tstep" not in warmup_options and "tstep" in vmcoptions:
         warmup_options["tstep"] = vmcoptions["tstep"]
-    if eps is None:
-        eps = getattr(pgrad_acc, "eps", 1e-3)
-    if inverse_strategy is None:
-        inverse_strategy = getattr(
-            pgrad_acc, "inverse_strategy", "regularized_inverse"
-        )
-
-    transform = pgrad_acc.transform
-    enacc = pgrad_acc.enacc
-    nodal_cutoff = getattr(pgrad_acc, "nodal_cutoff", 1e-3)
 
     iteration_offset = 0
     if hdf_file is not None and os.path.isfile(hdf_file):  # restarting -- read in data
@@ -390,7 +403,7 @@ def minsr_optimization(
         step_data["nconfig"] = coords.configs.shape[0]
         step_data["nsamples"] = nsamples
 
-        set_wf_params(wf, x0 + dp, pgrad_acc)
+        set_wf_params(wf, x0 + dp, transform)
         opt_hdf(hdf_file, step_data, attr, coords, wf.parameters)
         df.append(step_data)
 

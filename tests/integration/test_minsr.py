@@ -21,7 +21,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pyqmc.api import generate_wf, initial_guess, gradient_generator, minsr_optimization
+from pyqmc.api import (
+    EnergyAccumulator,
+    generate_wf,
+    gradient_generator,
+    initial_guess,
+    minsr_optimization,
+)
+from pyqmc.observables.accumulators import LinearTransform
 
 
 @pytest.mark.slow
@@ -31,12 +38,14 @@ def test_minsr(H2_ccecp_uhf):
     mol, mf = H2_ccecp_uhf
     mol.output, mol.stdout = None, None
 
+    np.random.seed(0)
     wf, to_opt = generate_wf(mol, mf)
     nconf = 1000
     wf, df = minsr_optimization(
         wf,
         initial_guess(mol, nconf),
-        gradient_generator(mol, wf, to_opt),
+        LinearTransform(wf.parameters, to_opt),
+        EnergyAccumulator(mol),
         tstep=0.1,
         max_iterations=20,
         verbose=True,
@@ -44,8 +53,9 @@ def test_minsr(H2_ccecp_uhf):
 
     df = pd.DataFrame(df)
     mfen = mf.energy_tot()
-    enfinal = df["energy"].values[-1]
-    assert mfen > enfinal
+    # the last iteration is one noisy estimate, so average the tail
+    enfinal = df["energy"].values[-5:].mean()
+    assert mfen > enfinal, (mfen, enfinal)
 
 
 @pytest.mark.slow
@@ -67,6 +77,7 @@ def test_minsr_matches_sr_step(H2_ccecp_uhf):
     tstep = 0.1
 
     dp_minsr, _ = minsr_update(dppsi, eloc, tstep, eps=pgrad.eps)
+    # pgrad is only built here to compare against; minsr itself never needs one
     sr_averages = {
         "total": np.mean(eloc),
         "dppsi": np.mean(dppsi, axis=0),

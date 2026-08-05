@@ -71,7 +71,16 @@ def OPTIMIZE(
     if optimizer == "linemin":
         linemin.line_minimization(wf, configs, acc, **linemin_kws)
     elif optimizer == "minsr":
-        minsr.minsr_optimization(wf, configs, acc, **linemin_kws)
+        # minsr works directly with the transform and the energy accumulator; the
+        # S matrix that acc would build is exactly what it avoids.
+        minsr.minsr_optimization(
+            wf,
+            configs,
+            acc.transform,
+            acc.enacc,
+            nodal_cutoff=nodal_cutoff,
+            **linemin_kws,
+        )
     else:
         raise ValueError(f"Unknown optimizer {optimizer}; use 'linemin' or 'minsr'.")
 

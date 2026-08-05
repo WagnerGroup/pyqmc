@@ -155,6 +155,10 @@ def minsr_update(
     :parameter boolean verbose: print diagnostics
     :returns: (dp, report) the parameter change and a dictionary of diagnostics
     """
+    if dppsi.shape[1] == 0:  # nothing to optimize in this transform
+        zero = np.zeros(0)
+        return zero, {"pgrad": 0.0, "SRdot": 0.0, "step_norm": 0.0, "clipped": False}
+
     A, b = real_design_matrix(dppsi, eloc)
     kernel = A @ A.T
 
@@ -277,6 +281,13 @@ def minsr_optimization(
         enacc = EnergyAccumulator(mol)
         wf, df = minsr_optimization(wf, coords, transform, enacc)
 
+    `transform` may also be a list of transforms, in which case each iteration
+    runs one sub-iteration per transform, optimizing that subset of the
+    parameters while holding the rest fixed. Each sub-iteration draws its own
+    samples, so this trades wall time for a smaller stored derivative matrix.
+    It is less useful here than in line_minimization, since minSR's memory is
+    already set by the sample count rather than by nparameters squared.
+
     `tstep` plays the same role as `steprange` in line_minimization: for the same
     `eps`, the update direction and magnitude are identical to the SR step taken
     at that step size.
@@ -290,7 +301,8 @@ def minsr_optimization(
 
     :parameter wf: initial wave function
     :parameter coords: initial configurations
-    :parameter transform: a LinearTransform object defining the parameters to optimize
+    :parameter transform: a LinearTransform object defining the parameters to optimize,
+        or a list of them to optimize in alternating sub-iterations
     :parameter enacc: an EnergyAccumulator-like object
     :parameter float tstep: step size in parameter space
     :parameter float eps: regularization of the kernel
@@ -306,11 +318,13 @@ def minsr_optimization(
     :parameter int npartitions: the number of workers to submit at a time
     :return: optimized wave function, optimization data
     """
-    if hasattr(transform, "transform"):
-        raise ValueError(
-            "minsr_optimization takes a transform and an energy accumulator, not a "
-            "StochasticReconfiguration object; pass acc.transform and acc.enacc."
-        )
+    transforms = list(transform) if isinstance(transform, (list, tuple)) else [transform]
+    for t in transforms:
+        if hasattr(t, "transform"):
+            raise ValueError(
+                "minsr_optimization takes a transform and an energy accumulator, not a "
+                "StochasticReconfiguration object; pass acc.transform and acc.enacc."
+            )
     if vmcoptions is None:
         vmcoptions = {}
     if warmup_options is None:
@@ -319,14 +333,18 @@ def minsr_optimization(
         warmup_options["tstep"] = vmcoptions["tstep"]
 
     iteration_offset = 0
+    sub_iteration_offset = 0
     if hdf_file is not None and os.path.isfile(hdf_file):  # restarting -- read in data
         with h5py.File(hdf_file, "r") as hdf:
-            if "wf" in hdf.keys():
+            if "wf" in hdf:
                 grp = hdf["wf"]
-                for k in grp.keys():
+                for k in grp:
                     wf.parameters[k] = gpu.cp.asarray(grp[k])
-            if "iteration" in hdf.keys():
-                iteration_offset = np.max(hdf["iteration"][...]) + 1
+            if "iteration" in hdf:
+                # resume at the sub-iteration after the last one recorded
+                iteration_offset = np.max(hdf["iteration"][...])
+            if "sub_iteration" in hdf:
+                sub_iteration_offset = hdf["sub_iteration"][-1] + 1
             coords.load_hdf(hdf)
     else:  # not restarting -- VMC warm up period
         if verbose:
@@ -357,54 +375,64 @@ def minsr_optimization(
 
     df = []
     for it in range(iteration_offset, max_iterations):
-        if verbose:
-            print("#############################\nStarting iteration", it)
-        x0 = transform.serialize_parameters(wf.parameters)
+        for sub_it in range(sub_iteration_offset, len(transforms)):
+            if verbose:
+                print(
+                    "#############################\nStarting iteration",
+                    it,
+                    "sub iteration",
+                    sub_it,
+                )
+            sub_transform = transforms[sub_it]
+            x0 = sub_transform.serialize_parameters(wf.parameters)
 
-        data, coords = sample_minsr_data(
-            wf,
-            coords,
-            transform,
-            enacc,
-            nodal_cutoff,
-            client=client,
-            npartitions=npartitions,
-            **vmcoptions,
-        )
-        if np.isnan(data["total"]).any():
-            raise ValueError(
-                "NaN in optimization. Try reducing the step size or increasing eps."
+            data, coords = sample_minsr_data(
+                wf,
+                coords,
+                sub_transform,
+                enacc,
+                nodal_cutoff,
+                client=client,
+                npartitions=npartitions,
+                **vmcoptions,
+            )
+            if np.isnan(data["total"]).any():
+                raise ValueError(
+                    "NaN in optimization. Try reducing the step size or increasing eps."
+                )
+
+            energy = np.mean(data["total"]).real
+            nsamples = data["total"].shape[0]
+            if len(data["block_energy"]) > 1:
+                block_energy = data["block_energy"].real
+                energy_error = np.std(block_energy) / np.sqrt(len(block_energy))
+            else:
+                energy_error = np.std(data["total"].real) / np.sqrt(nsamples)
+            if verbose:
+                print("Current energy", energy, energy_error)
+
+            dp, report = minsr_update(
+                data["dppsi"],
+                data["total"],
+                tstep,
+                eps=eps,
+                inverse_strategy=inverse_strategy,
+                max_norm=max_norm,
+                verbose=verbose,
             )
 
-        energy = np.mean(data["total"]).real
-        nsamples = data["total"].shape[0]
-        if len(data["block_energy"]) > 1:
-            block_energy = data["block_energy"].real
-            energy_error = np.std(block_energy) / np.sqrt(len(block_energy))
-        else:
-            energy_error = np.std(data["total"].real) / np.sqrt(nsamples)
-        if verbose:
-            print("Current energy", energy, energy_error)
+            step_data = dict(report)
+            step_data["energy"] = energy
+            step_data["energy_error"] = energy_error
+            step_data["iteration"] = it
+            step_data["sub_iteration"] = sub_it
+            step_data["nconfig"] = coords.configs.shape[0]
+            step_data["nsamples"] = nsamples
 
-        dp, report = minsr_update(
-            data["dppsi"],
-            data["total"],
-            tstep,
-            eps=eps,
-            inverse_strategy=inverse_strategy,
-            max_norm=max_norm,
-            verbose=verbose,
-        )
+            set_wf_params(wf, x0 + dp, sub_transform)
+            opt_hdf(hdf_file, step_data, attr, coords, wf.parameters)
+            df.append(step_data)
 
-        step_data = dict(report)
-        step_data["energy"] = energy
-        step_data["energy_error"] = energy_error
-        step_data["iteration"] = it
-        step_data["nconfig"] = coords.configs.shape[0]
-        step_data["nsamples"] = nsamples
-
-        set_wf_params(wf, x0 + dp, transform)
-        opt_hdf(hdf_file, step_data, attr, coords, wf.parameters)
-        df.append(step_data)
+        sub_iteration_offset = 0
 
     return wf, df

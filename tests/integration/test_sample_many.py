@@ -61,7 +61,7 @@ def test_sampler(H2_casci):
     _, configs = pyq.vmc(wf1, configs)
     energy = EnergyAccumulatorMultipleWF(pyq.EnergyAccumulator(mol))
     data_weighted, data_unweighted, configs = sample_overlap(
-        [wf1, wf2], configs, energy, nsteps=40, nblocks=20
+        [wf1, wf2], configs, energy, nsteps_per_block=40, nblocks=20
     )
     avg, error = average(data_weighted, data_unweighted)
     print(avg, error)
@@ -113,7 +113,7 @@ def test_correlated_sampling(H2_casci):
     _, configs = pyq.vmc(wfs[0], configs)
     energy = EnergyAccumulatorMultipleWF(pyq.EnergyAccumulator(mol))
     data_weighted, data_unweighted, configs = sample_overlap(
-        wfs, configs, energy, nsteps=10, nblocks=10
+        wfs, configs, energy, nsteps_per_block=10, nblocks=10
     )
 
     sample_parameters = []

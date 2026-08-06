@@ -1,13 +1,12 @@
 import pyqmc.api as pyq
 import copy
 import pyqmc.observables.accumulators
-from concurrent.futures import ProcessPoolExecutor
 
 
 def test_transform_consistent_with_wf(H2_casci):
     """Test that evaluate_gradient_threaded works when given states with different numbers of determinants"""
-    from pyqmc.method.ensemble_optimization_wfbywf import StochasticReconfigurationWfbyWf
-    from pyqmc.method.ensemble_optimization_threaded import evaluate_gradients_threaded
+    from pyqmc.method.ensemble_optimization import StochasticReconfigurationWfbyWf
+    from pyqmc.method.ensemble_optimization import evaluate_gradients_threaded
     mol, mf, mc = H2_casci
     mcs = [copy.copy(mc) for i in range(2)]
     for i in range(2):
@@ -31,19 +30,16 @@ def test_transform_consistent_with_wf(H2_casci):
             ]
         )
     configs = pyq.initial_guess(mol, 1)
-    configs_ensemble = [
-    [[copy.deepcopy(configs) for _ in range(2)] for _ in range(len(sr_accumulator[wfi]))]
-    for wfi in range(2)
-]   
+    gradient_configs = [
+        [
+            {
+                "energy": copy.deepcopy(configs),
+                "overlap": copy.deepcopy(configs),
+            }
+            for _ in range(len(sr_accumulator[wfi]))
+        ]
+        for wfi in range(2)
+    ]
     for i,wf in enumerate(wfs):
         print(f"For wf{i} {len(wf.parameters['det_coeff']) = }")
-    with ProcessPoolExecutor() as executor:
-        _, data_unweighted, configs = pyqmc.method.sample_many.sample_overlap(
-                wfs,
-                configs_ensemble[0][0][0],
-                None,
-                client=executor,
-                npartitions=1
-        )
-        evaluate_gradients_threaded(wfs, configs_ensemble, sr_accumulator, client=executor)
-    
+    evaluate_gradients_threaded(wfs, gradient_configs, sr_accumulator, client=None)

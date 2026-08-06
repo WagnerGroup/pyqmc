@@ -25,8 +25,10 @@ from rich import print
 import os
 import copy
 from concurrent.futures import ProcessPoolExecutor
-from pyqmc.method.ensemble_optimization_wfbywf import StochasticReconfigurationWfbyWf
-from pyqmc.method.ensemble_optimization_threaded import optimize_ensemble
+from pyqmc.method.ensemble_optimization import (
+    StochasticReconfigurationWfbyWf,
+    optimize_ensemble,
+)
 
 
 def run_scf(atoms, scf_checkfile):

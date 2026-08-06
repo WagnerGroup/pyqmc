@@ -138,6 +138,7 @@ def sample_overlap_worker(wfs, configs, tstep, nsteps, energy):
     nconf, nelec = configs.configs.shape[:2]
 
     for n in range(nsteps):
+        acc = 0.0
         for e in range(nelec):  # a sweep
             # Propose move
             grads = [np.real(wf.gradient(e, configs.electron(e)).T) for wf in wfs]
@@ -164,7 +165,6 @@ def sample_overlap_worker(wfs, configs, tstep, nsteps, energy):
 
             ratio = t_prob * np.sum(wf_ratios * weights, axis=0) / weights.sum(axis=0)
             accept = ratio > np.random.rand(nconf)
-            # block_avg["acceptance"][n] += accept.mean() / nelec
 
             # Update wave function
             configs.move(e, newcoorde, accept)
@@ -172,10 +172,12 @@ def sample_overlap_worker(wfs, configs, tstep, nsteps, energy):
                 wf.updateinternals(
                     e, newcoorde, configs, mask=accept, saved_values=saved
                 )
+            acc += np.mean(accept) / nelec
 
         weights = compute_weights(wfs)
         unweighted_dat = {}
         unweighted_dat["overlap"] = np.mean(weights, axis=-1)
+        unweighted_dat["acceptance"] = acc
         rolling_average(unweighted_block, unweighted_dat, nsteps)
         # Collect rolling average
         if energy is not None:
@@ -188,8 +190,9 @@ def sample_overlap_worker(wfs, configs, tstep, nsteps, energy):
 def rolling_average(block, data, nsteps):
     for k, it in data.items():
         if k not in block:
-            block[k] = np.zeros((*it.shape,), dtype=it.dtype)
-        block[k] += it / nsteps
+            block[k] = it / nsteps
+        else:
+            block[k] += it / nsteps
 
 
 def sample_overlap(

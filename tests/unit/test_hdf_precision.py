@@ -25,8 +25,8 @@ import pytest
 from pyqmc.configurations.coord import OpenConfigs, PeriodicConfigs
 
 
-def make_configs(rng, periodic, nconfig=6):
-    coords = rng.normal(size=(nconfig, 3, 3))
+def make_configs(rng, periodic, nconfig=6, offset=0.0):
+    coords = rng.normal(size=(nconfig, 3, 3)) + offset
     if periodic:
         return PeriodicConfigs(coords, np.eye(3) * 4.0)
     return OpenConfigs(coords)
@@ -99,3 +99,30 @@ def test_dmc_weights_stored_in_double_precision(tmp_path):
     with h5py.File(hdf_file, "r") as hdf:
         assert hdf["weights"].dtype == weights.dtype == np.float64
         assert np.array_equal(hdf["weights"][()], weights)
+
+
+def test_precision_loss_grows_with_distance_from_origin(tmp_path):
+    """Single precision is relative, so the rounding error grows with the
+    magnitude of the coordinates. In a large supercell, walkers sit far from the
+    origin and float32 would resolve them only to ~1e-5 bohr; double precision
+    stores them exactly wherever they are.
+    """
+    rng = np.random.default_rng(seed=4)
+    for offset in [0.0, 1000.0]:
+        configs = make_configs(rng, periodic=False, offset=offset)
+        hdf_file = str(tmp_path / f"offset{offset}.hdf5")
+        with h5py.File(hdf_file, "a") as hdf:
+            configs.initialize_hdf(hdf)
+            configs.to_hdf(hdf)
+        loaded = make_configs(rng, periodic=False, offset=offset)
+        with h5py.File(hdf_file, "r") as hdf:
+            loaded.load_hdf(hdf)
+        assert np.array_equal(loaded.configs, configs.configs), offset
+
+        # what the same walkers would have cost in single precision
+        rounded = configs.configs.astype(np.float32).astype(np.float64)
+        shift = np.abs(rounded - configs.configs).max()
+        if offset == 0.0:
+            assert shift < 1e-6
+        else:
+            assert shift > 1e-5  # 1000 bohr out, float32 loses ~1e-5 bohr

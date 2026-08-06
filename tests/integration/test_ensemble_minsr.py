@@ -24,7 +24,11 @@ import numpy as np
 import pytest
 
 import pyqmc.api as pyq
-from pyqmc.method.ensemble_minsr import MinSRWfbyWf, optimize_ensemble
+from pyqmc.method.ensemble_minsr import (
+    MinSRWfbyWf,
+    load_configs_ensemble,
+    optimize_ensemble,
+)
 from pyqmc.observables.accumulators import LinearTransform
 
 
@@ -71,6 +75,7 @@ def test_ensemble_minsr(H2_casci, tmp_path):
     with h5py.File(hdf_file, "r") as hdf:
         keys = set(hdf.keys())
         assert {"energy0", "energy1", "overlap0", "overlap1", "iteration"} <= keys
+        assert hdf.attrs["tau"] == 0.1
         assert list(hdf["wavefunction"][()]) == [0, 1] * 3
         assert list(hdf["iteration"][()]) == [0, 0, 1, 1, 2, 2]
         # energy{i} is only written on the rows belonging to state i, so it has
@@ -88,11 +93,34 @@ def test_ensemble_minsr(H2_casci, tmp_path):
         norm = np.sqrt(np.abs(overlap1[-1][0, 0] * overlap1[-1][1, 1]))
         assert np.abs(overlap1[-1][1, 0]) / norm < 0.5
 
-    # restarting continues from the recorded iteration
+    # every walker population is stored, not just one of them
+    with h5py.File(hdf_file, "r") as hdf:
+        stored = {
+            (wfi, thread): hdf[f"configs_ensemble/{wfi}/0/{thread}/configs"][()]
+            for wfi in range(2)
+            for thread in range(2)
+        }
+    assert len(stored) == 4
+    for key, other in [((0, 0), (0, 1)), ((0, 0), (1, 0))]:
+        assert not np.allclose(stored[key], stored[other]), (key, other)
+
+    # restarting continues from the recorded iteration, with those populations
     wfs2, updater2 = make_ensemble(mol, mf, mc, nstates=2)
+    fresh = pyq.initial_guess(mol, 200)
+    loaded = [
+        [[copy.deepcopy(fresh) for _ in range(2)] for _ in range(1)] for _ in range(2)
+    ]
+    with h5py.File(hdf_file, "r") as hdf:
+        load_configs_ensemble(hdf, loaded)
+    for wfi in range(2):
+        for thread in range(2):
+            assert np.allclose(
+                loaded[wfi][0][thread].configs, stored[(wfi, thread)], rtol=1e-6
+            )
+
     optimize_ensemble(
         wfs2,
-        pyq.initial_guess(mol, 200),
+        fresh,
         updater2,
         hdf_file=hdf_file,
         tau=0.1,
@@ -104,6 +132,10 @@ def test_ensemble_minsr(H2_casci, tmp_path):
     )
     with h5py.File(hdf_file, "r") as hdf:
         assert list(hdf["iteration"][()]) == [0, 0, 1, 1, 2, 2, 3, 3]
+        # the restart moved the walkers on from where they were saved
+        assert not np.allclose(
+            hdf["configs_ensemble/1/0/1/configs"][()], stored[(1, 1)]
+        )
 
 
 @pytest.mark.slow

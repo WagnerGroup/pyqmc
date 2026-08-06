@@ -35,6 +35,7 @@ inverse to both using only the (nsamples, nsamples) kernel, so the
 """
 
 import copy
+import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -45,15 +46,95 @@ import pandas as pd
 import scipy.stats
 
 import pyqmc.gpu as gpu
+import pyqmc.method.hdftools as hdftools
 import pyqmc.method.mc
 import pyqmc.method.sample_many
 from pyqmc.method.ensemble_optimization_threaded import round_to_fixed_sum
-from pyqmc.method.ensemble_optimization_wfbywf import (
-    hdf_save,
-    renormalize,
-    set_wf_params,
-)
+from pyqmc.method.ensemble_optimization_wfbywf import renormalize, set_wf_params
 from pyqmc.method.minsr import real_design_matrix, sample_minsr_data, sr_solve
+
+
+def configs_group_name(wfi, sub_iteration, thread):
+    return f"configs_ensemble/{wfi}/{sub_iteration}/{thread}"
+
+
+def hdf_save(hdf_file, data, attr, wfs):
+    """Append one row of data and store the current wave function parameters.
+
+    This is the data part of
+    :func:`pyqmc.method.ensemble_optimization_wfbywf.hdf_save`; the walker
+    populations are stored separately by :func:`save_configs_ensemble`, once per
+    iteration rather than once per state. Note that unlike that version, attr is
+    actually written.
+    """
+    if hdf_file is None:
+        return
+    with h5py.File(hdf_file, "a") as hdf:
+        for k, it in attr.items():
+            if k not in hdf.attrs:
+                hdf.attrs[k] = it
+        for wfi, wf in enumerate(wfs):
+            if f"wf/{wfi}" not in hdf:
+                hdf.create_group(f"wf/{wfi}")
+                for k, it in wf.parameters.items():
+                    hdf[f"wf/{wfi}/" + k] = gpu.asnumpy(it).copy()
+        hdftools.append_hdf(hdf, data)
+        for wfi, wf in enumerate(wfs):
+            for k, it in wf.parameters.items():
+                hdf[f"wf/{wfi}/" + k][...] = gpu.asnumpy(it).copy()
+
+
+def save_configs_ensemble(hdf_file, configs_ensemble):
+    """Store every walker population.
+
+    The SR version stores a single configs object, so a restart gives every
+    state, sub-iteration, and thread the same walkers and throws away the
+    populations they had equilibrated into. Here each one is written to its own
+    group, and the first is also written to the top-level 'configs' so that the
+    file stays readable by tools expecting the old layout.
+    """
+    if hdf_file is None:
+        return
+    with h5py.File(hdf_file, "a") as hdf:
+        for wfi, by_sub in enumerate(configs_ensemble):
+            for sub_iteration, by_thread in enumerate(by_sub):
+                for thread, configs in enumerate(by_thread):
+                    name = configs_group_name(wfi, sub_iteration, thread)
+                    if name not in hdf:
+                        configs.initialize_hdf(hdf.require_group(name))
+                    configs.to_hdf(hdf[name])
+        if "configs" not in hdf:
+            configs_ensemble[0][0][0].initialize_hdf(hdf)
+        configs_ensemble[0][0][0].to_hdf(hdf)
+
+
+def load_configs_ensemble(hdf, configs_ensemble):
+    """Load the walker populations written by :func:`save_configs_ensemble` in
+    place. Any population missing from the file is left as it was passed in,
+    which is what happens when restarting from a file written before the
+    populations were stored separately.
+    """
+    missing = []
+    for wfi, by_sub in enumerate(configs_ensemble):
+        for sub_iteration, by_thread in enumerate(by_sub):
+            for thread, configs in enumerate(by_thread):
+                name = configs_group_name(wfi, sub_iteration, thread)
+                if name not in hdf:
+                    missing.append(name)
+                    continue
+                stored = hdf[name]["configs"].shape
+                if stored != configs.configs.shape:
+                    raise ValueError(
+                        f"{name} in the restart file has shape {stored}, but this "
+                        f"calculation has {configs.configs.shape}. Restarting requires "
+                        "the same number of walkers."
+                    )
+                configs.load_hdf(hdf[name])
+    if missing:
+        logging.warning(
+            "no stored walkers for %s; starting them from the configurations passed in",
+            ", ".join(missing),
+        )
 
 
 class MinSRWfbyWf:
@@ -426,17 +507,8 @@ def optimize_ensemble(
         overlap_penalty = np.ones((nwf, nwf)) * 0.5
 
     iteration_offset = 0
-    if hdf_file is not None and os.path.isfile(hdf_file):  # restarting -- read in data
-        with h5py.File(hdf_file, "r") as hdf:
-            if "wf" in hdf:
-                for wfi, wf in enumerate(wfs):
-                    grp = hdf[f"wf/{wfi}"]
-                    for k in grp:
-                        wf.parameters[k] = gpu.cp.asarray(grp[k])
-            if "iteration" in hdf:
-                iteration_offset = np.max(hdf["iteration"][...]) + 1
-            configs.load_hdf(hdf)
-    else:
+    restarting = hdf_file is not None and os.path.isfile(hdf_file)
+    if not restarting:
         _, configs = pyqmc.method.mc.vmc(
             wfs[0],
             configs,
@@ -446,10 +518,25 @@ def optimize_ensemble(
             **warmup_kwargs,
         )
 
+    # two walker populations per state and sub-iteration: one for the energy
+    # thread and one for the overlap thread
     configs_ensemble = [
         [[copy.deepcopy(configs) for _ in range(2)] for _ in range(len(updater[wfi]))]
         for wfi in range(nwf)
     ]
+
+    if restarting:  # read in wave functions, iteration count, and every population
+        with h5py.File(hdf_file, "r") as hdf:
+            if "wf" in hdf:
+                for wfi, wf in enumerate(wfs):
+                    grp = hdf[f"wf/{wfi}"]
+                    for k in grp:
+                        wf.parameters[k] = gpu.cp.asarray(grp[k])
+            if "iteration" in hdf:
+                iteration_offset = np.max(hdf["iteration"][...]) + 1
+            if "configs" in hdf:
+                configs.load_hdf(hdf)
+            load_configs_ensemble(hdf, configs_ensemble)
     for i in range(iteration_offset, max_iterations):
         # renormalize so that the overlap matrix is in terms of normalized states
         _, data_unweighted, configs = pyqmc.method.sample_many.sample_overlap(
@@ -521,7 +608,8 @@ def optimize_ensemble(
                     save_data,
                     {"tau": tau, "eps": transform.eps},
                     wfs,
-                    configs_ensemble[wfi][sub_iteration][0],
                 )
+        # every population is written together, once the iteration is complete
+        save_configs_ensemble(hdf_file, configs_ensemble)
 
     return wfs

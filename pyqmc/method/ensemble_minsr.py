@@ -14,14 +14,24 @@
 """
 Ensemble (excited state) optimization with minSR.
 
-This is the minSR counterpart of
-:mod:`pyqmc.method.ensemble_optimization_threaded`. The algorithm is unchanged:
-each state is sampled separately in its own thread, each state above the ground
-state carries an overlap penalty against the lower states, and the update is a
-stochastic reconfiguration step. The only difference is how the SR equations are
-solved.
+:class:`MinSRWfbyWf` is a drop-in replacement for
+:class:`pyqmc.method.ensemble_optimization.StochasticReconfigurationWfbyWf`: it
+plugs into the same :func:`pyqmc.method.ensemble_optimization.optimize_ensemble`
+driver and gets the same threading, warmups, and checkpointing::
 
-The gradient here has two pieces,
+    from pyqmc.method.ensemble_optimization import optimize_ensemble
+    from pyqmc.method.ensemble_minsr import MinSRWfbyWf
+
+    updater = [[MinSRWfbyWf(enacc, LinearTransform(wf.parameters, to_opt))]
+               for wf in wfs]
+    optimize_ensemble(wfs, configs, updater, hdf_file, tau=0.1,
+                      vmc_kwargs={"nblocks": 1, "nsteps_per_block": 10})
+
+The algorithm is unchanged -- each state sampled separately, an overlap penalty
+against the lower states, a stochastic reconfiguration step. Only the solve is
+different, and the (nparameters, nparameters) S matrix is never built.
+
+The ensemble gradient has two pieces,
 
 .. math:: f = f_{\\rm energy} + f_{\\rm overlap}
 
@@ -30,126 +40,33 @@ The energy piece comes from per-sample derivatives, so
 which is exactly the minSR structure. The overlap penalty piece comes from the
 separate overlap sampling and is just a vector, with no reason to lie in the row
 space of A. :func:`pyqmc.method.minsr.sr_solve` applies the same regularized
-inverse to both using only the (nsamples, nsamples) kernel, so the
-(nparameters, nparameters) S matrix is never built for either piece.
+inverse to both using only the (nsamples, nsamples) kernel.
 """
-
-import copy
-import logging
-import os
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import h5py
 import numpy as np
-import pandas as pd
 import scipy.stats
 
-import pyqmc.gpu as gpu
-import pyqmc.method.hdftools as hdftools
-import pyqmc.method.mc
-import pyqmc.method.sample_many
-from pyqmc.method.ensemble_optimization_threaded import round_to_fixed_sum
-from pyqmc.method.ensemble_optimization_wfbywf import renormalize, set_wf_params
 from pyqmc.method.minsr import real_design_matrix, sample_minsr_data, sr_solve
-
-
-def configs_group_name(wfi, sub_iteration, thread):
-    return f"configs_ensemble/{wfi}/{sub_iteration}/{thread}"
-
-
-def hdf_save(hdf_file, data, attr, wfs):
-    """Append one row of data and store the current wave function parameters.
-
-    This is the data part of
-    :func:`pyqmc.method.ensemble_optimization_wfbywf.hdf_save`; the walker
-    populations are stored separately by :func:`save_configs_ensemble`, once per
-    iteration rather than once per state. Note that unlike that version, attr is
-    actually written.
-    """
-    if hdf_file is None:
-        return
-    with h5py.File(hdf_file, "a") as hdf:
-        for k, it in attr.items():
-            if k not in hdf.attrs:
-                hdf.attrs[k] = it
-        for wfi, wf in enumerate(wfs):
-            if f"wf/{wfi}" not in hdf:
-                hdf.create_group(f"wf/{wfi}")
-                for k, it in wf.parameters.items():
-                    hdf[f"wf/{wfi}/" + k] = gpu.asnumpy(it).copy()
-        hdftools.append_hdf(hdf, data)
-        for wfi, wf in enumerate(wfs):
-            for k, it in wf.parameters.items():
-                hdf[f"wf/{wfi}/" + k][...] = gpu.asnumpy(it).copy()
-
-
-def save_configs_ensemble(hdf_file, configs_ensemble):
-    """Store every walker population.
-
-    The SR version stores a single configs object, so a restart gives every
-    state, sub-iteration, and thread the same walkers and throws away the
-    populations they had equilibrated into. Here each one is written to its own
-    group, and the first is also written to the top-level 'configs' so that the
-    file stays readable by tools expecting the old layout.
-    """
-    if hdf_file is None:
-        return
-    with h5py.File(hdf_file, "a") as hdf:
-        for wfi, by_sub in enumerate(configs_ensemble):
-            for sub_iteration, by_thread in enumerate(by_sub):
-                for thread, configs in enumerate(by_thread):
-                    name = configs_group_name(wfi, sub_iteration, thread)
-                    if name not in hdf:
-                        configs.initialize_hdf(hdf.require_group(name))
-                    configs.to_hdf(hdf[name])
-        if "configs" not in hdf:
-            configs_ensemble[0][0][0].initialize_hdf(hdf)
-        configs_ensemble[0][0][0].to_hdf(hdf)
-
-
-def load_configs_ensemble(hdf, configs_ensemble):
-    """Load the walker populations written by :func:`save_configs_ensemble` in
-    place. Any population missing from the file is left as it was passed in,
-    which is what happens when restarting from a file written before the
-    populations were stored separately.
-    """
-    missing = []
-    for wfi, by_sub in enumerate(configs_ensemble):
-        for sub_iteration, by_thread in enumerate(by_sub):
-            for thread, configs in enumerate(by_thread):
-                name = configs_group_name(wfi, sub_iteration, thread)
-                if name not in hdf:
-                    missing.append(name)
-                    continue
-                stored = hdf[name]["configs"].shape
-                if stored != configs.configs.shape:
-                    raise ValueError(
-                        f"{name} in the restart file has shape {stored}, but this "
-                        f"calculation has {configs.configs.shape}. Restarting requires "
-                        "the same number of walkers."
-                    )
-                configs.load_hdf(hdf[name])
-    if missing:
-        logging.warning(
-            "no stored walkers for %s; starting them from the configurations passed in",
-            ", ".join(missing),
-        )
 
 
 class MinSRWfbyWf:
     """Updater for one state of an ensemble, the minSR analogue of
-    :class:`pyqmc.method.ensemble_optimization_wfbywf.StochasticReconfigurationWfbyWf`.
+    :class:`pyqmc.method.ensemble_optimization.StochasticReconfigurationWfbyWf`.
 
-    It is used in two places: as the accumulator passed to
+    It is used in two places by the driver: as the accumulator passed to
     :func:`pyqmc.method.sample_many.sample_overlap`, where `avg` accumulates the
     weighted derivatives that give the overlap gradient, and as the object that
     turns the sampled data into a parameter change in `delta_p`.
 
     Unlike the SR version there is no `onewf` accumulator, because the energy
-    part is sampled per configuration by
-    :func:`pyqmc.method.minsr.sample_minsr_data` rather than averaged into
-    dpH/dppsi/dpidpj.
+    part is sampled per configuration by `sample_energy` rather than averaged
+    into dpH/dppsi/dpidpj.
+
+    Note that the number of samples per state per iteration is
+    nconfig * vmc_kwargs['nblocks'], and the kernel solved is square in that
+    number, so the driver's default of 10 blocks is usually not what you want
+    here: pass vmc_kwargs={"nblocks": 1, ...} unless you have the memory for it.
 
     :parameter enacc: an EnergyAccumulator-like object
     :parameter transform: a LinearTransform for this state's parameters
@@ -165,6 +82,28 @@ class MinSRWfbyWf:
 
     def allwfs(self):
         return self
+
+    def sample_energy(
+        self, wf, configs, client=None, npartitions=None, verbose=True, **kwargs
+    ):
+        """Sample this state on its own, keeping the derivatives per
+        configuration instead of averaging them into an S matrix.
+
+        `verbose` is accepted for the interface and ignored; the sampling here
+        has nothing per-block to report.
+
+        :returns: (data, configs) with data in the form block_average expects
+        """
+        return sample_minsr_data(
+            wf,
+            configs,
+            self.transform,
+            self.enacc,
+            self.nodal_cutoff,
+            client=client,
+            npartitions=npartitions,
+            **kwargs,
+        )
 
     def avg(self, configs, wfs, weights):
         """Weighted derivatives of the last wave function in `wfs`, averaged over
@@ -191,7 +130,7 @@ class MinSRWfbyWf:
         """Average the sampled data, with the same signature and normalization as
         StochasticReconfigurationWfbyWf.block_average.
 
-        `data_sample1` is the per-sample output of sample_minsr_data rather than
+        `data_sample1` is the per-sample output of sample_energy rather than
         block-averaged SR data, so the derivative rows are passed through
         unaveraged for delta_p to build the design matrix from.
         """
@@ -286,330 +225,3 @@ class MinSRWfbyWf:
             print("Gradient norm: ", report["pgrad"])
             print("Dot product between gradient and SR step: ", report["SRdot"])
         return dp, report
-
-
-def evaluate_gradients_threaded(
-    wfs,
-    configs_ensemble,
-    updater,
-    client=None,
-    npartitions=1,
-    minsr_kwargs=None,
-    overlap_kwargs=None,
-    verbose=True,
-    overlap_thread_weight=None,
-):
-    """Sample the energy derivatives and the overlaps for every state, threaded.
-
-    Same structure as
-    :func:`pyqmc.method.ensemble_optimization_threaded.evaluate_gradients_threaded`:
-    two threads per (state, sub-iteration), one sampling that state alone and one
-    sampling the combined distribution of the states up to it, with the client's
-    workers divided between the threads by estimated cost. The difference is that
-    the first thread stores per-configuration derivatives instead of accumulating
-    dpidpj.
-
-    :parameter list wfs: list of wave functions
-    :parameter list configs_ensemble: nested list of configurations indexed by state, sub-iteration, then thread
-    :parameter list updater: nested list of MinSRWfbyWf objects indexed by state then sub-iteration
-    :parameter client: an object with submit() functions that return futures
-    :parameter int npartitions: the number of workers to submit at a time
-    :parameter dict minsr_kwargs: options for sample_minsr_data
-    :parameter dict overlap_kwargs: options for sample_overlap
-
-    :return: (data_sample1_ensemble, data_weighted_ensemble, data_unweighted_ensemble, configs_ensemble)
-
-    With a client the sampling runs in worker processes, so the threads only
-    read the wave functions. Without one it runs in this process, where the
-    samplers mutate wave function internal state, so each thread is given its own
-    copy. That is meant for testing; real runs should pass a client.
-    """
-    if minsr_kwargs is None:
-        minsr_kwargs = {}
-    if overlap_kwargs is None:
-        overlap_kwargs = {}
-    nwf = len(wfs)
-    nthreads = 2 * sum([len(updater[wfi]) for wfi in range(nwf)])
-    data_sample1_ensemble = [
-        [0 for _ in range(len(updater[wfi]))] for wfi in range(nwf)
-    ]
-    data_weighted_ensemble = [
-        [0 for _ in range(len(updater[wfi]))] for wfi in range(nwf)
-    ]
-    data_unweighted_ensemble = [
-        [0 for _ in range(len(updater[wfi]))] for wfi in range(nwf)
-    ]
-    energy_workers = {}
-    overlap_workers = {}
-    if nthreads == 0:
-        return (
-            data_sample1_ensemble,
-            data_weighted_ensemble,
-            data_unweighted_ensemble,
-            configs_ensemble,
-        )
-
-    weights = np.zeros(nthreads)
-    threadcount = 0
-    # Energy
-    for transform in updater:
-        for _ in transform:
-            weights[threadcount] = 1.0
-            threadcount += 1
-    # overlap: the estimate is that the energy costs about the same
-    # as sampling one wave function. So we add nwf/2.0 to the weight
-    # because we are sampling wfi+1 wave functions
-    for wfi, transform in enumerate(updater):
-        if overlap_thread_weight is None:
-            for _ in transform:
-                weights[threadcount] = (1 + wfi) / 2.0
-                threadcount += 1
-        else:
-            for _ in transform:
-                weights[threadcount] = overlap_thread_weight[wfi]
-                threadcount += 1
-
-    npartitions_by_thread = round_to_fixed_sum(weights, npartitions)
-
-    if verbose:
-        print("nthreads", nthreads, "npartitions", npartitions_by_thread, flush=True)
-    start_time = time.perf_counter()
-    threadcount = 0
-    with ThreadPoolExecutor(max_workers=nthreads) as threader:
-        for wfi, wf in enumerate(wfs):
-            for sub_iteration, transform in enumerate(updater[wfi]):
-                energy_workers_thread = threader.submit(
-                    sample_minsr_data,
-                    wf if client is not None else copy.deepcopy(wf),
-                    configs_ensemble[wfi][sub_iteration][0],
-                    transform.transform,
-                    transform.enacc,
-                    transform.nodal_cutoff,
-                    client=client,
-                    npartitions=npartitions_by_thread[threadcount],
-                    **minsr_kwargs,
-                )
-                energy_workers[energy_workers_thread] = (wfi, sub_iteration)
-                threadcount += 1
-        for wfi, wf in enumerate(wfs):
-            for sub_iteration, transform in enumerate(updater[wfi]):
-                sampled_wfs = wfs[0 : wfi + 1]
-                if client is None:
-                    sampled_wfs = [copy.deepcopy(w) for w in sampled_wfs]
-                overlap_workers_thread = threader.submit(
-                    pyqmc.method.sample_many.sample_overlap,
-                    sampled_wfs,
-                    configs_ensemble[wfi][sub_iteration][1],
-                    transform.allwfs(),
-                    client=client,
-                    npartitions=npartitions_by_thread[threadcount],
-                    **overlap_kwargs,
-                )
-                overlap_workers[overlap_workers_thread] = (wfi, sub_iteration)
-                threadcount += 1
-        all_workers = {**energy_workers, **overlap_workers}
-
-        middle_time = time.perf_counter()
-        times = []
-        for future in as_completed(all_workers):
-            wfi, sub_iteration = all_workers[future]
-            if future in energy_workers:
-                times.append(
-                    {
-                        "time": time.perf_counter() - middle_time,
-                        "type": "energy",
-                        "wfi": wfi,
-                        "sub_iteration": sub_iteration,
-                    }
-                )
-                (
-                    data_sample1_ensemble[wfi][sub_iteration],
-                    configs_ensemble[wfi][sub_iteration][0],
-                ) = future.result()
-            elif future in overlap_workers:
-                times.append(
-                    {
-                        "time": time.perf_counter() - middle_time,
-                        "type": "overlap",
-                        "wfi": wfi,
-                        "sub_iteration": sub_iteration,
-                    }
-                )
-                (
-                    data_weighted_ensemble[wfi][sub_iteration],
-                    data_unweighted_ensemble[wfi][sub_iteration],
-                    configs_ensemble[wfi][sub_iteration][1],
-                ) = future.result()
-            else:
-                raise ValueError("Received unknown future")
-    if verbose:
-        print("time to submit", middle_time - start_time, flush=True)
-        print(pd.DataFrame(times))
-    return (
-        data_sample1_ensemble,
-        data_weighted_ensemble,
-        data_unweighted_ensemble,
-        configs_ensemble,
-    )
-
-
-def optimize_ensemble(
-    wfs,
-    configs,
-    updater,
-    hdf_file,
-    client=None,
-    tau=0.1,
-    max_iterations=100,
-    overlap_penalty=None,
-    npartitions=None,
-    verbose=True,
-    overlap_thread_weight=None,
-    warmup_kwargs=None,
-    minsr_kwargs=None,
-    overlap_kwargs=None,
-):
-    """Optimize a set of wave functions using ensemble VMC with minSR.
-
-    This is a drop-in replacement for
-    :func:`pyqmc.method.ensemble_optimization_threaded.optimize_ensemble` that
-    takes MinSRWfbyWf updaters instead of StochasticReconfigurationWfbyWf ones
-    and never builds the S matrix. `tau` and `overlap_penalty` have the same
-    meaning in both.
-
-    The number of samples per state per iteration is
-    nconfig * minsr_kwargs['nblocks'], and the kernel that gets solved is square
-    in that number, so nblocks defaults to 1 here where the SR version uses 10
-    blocks of averaging. Raise it for better statistics at quadratic memory cost.
-
-    :parameter list wfs: list of wave functions, ordered from the ground state up
-    :parameter configs: initial configurations
-    :parameter list updater: nested list of MinSRWfbyWf objects indexed by state then sub-iteration
-    :parameter str hdf_file: file to store output; the format matches the SR version
-    :parameter client: an object with submit() functions that return futures
-    :parameter float tau: step size in parameter space
-    :parameter int max_iterations: total number of iterations, including any read from hdf_file
-    :parameter overlap_penalty: (nwf, nwf) penalty matrix, default 0.5 everywhere
-    :parameter int npartitions: the number of workers to submit at a time
-    :parameter dict warmup_kwargs: options for the initial vmc warmup
-    :parameter dict minsr_kwargs: options for sample_minsr_data
-    :parameter dict overlap_kwargs: options for sample_overlap
-    :returns: list of optimized wave functions
-    """
-    if warmup_kwargs is None or len(warmup_kwargs) == 0:
-        warmup_kwargs = {"nblocks": 1, "nsteps_per_block": 100}
-    if minsr_kwargs is None or len(minsr_kwargs) == 0:
-        minsr_kwargs = {"nblocks": 1, "nsteps_per_block": 10}
-    if overlap_kwargs is None or len(overlap_kwargs) == 0:
-        overlap_kwargs = {"nblocks": 10, "nsteps": 10}
-    nwf = len(wfs)
-    if overlap_penalty is None:
-        overlap_penalty = np.ones((nwf, nwf)) * 0.5
-
-    iteration_offset = 0
-    restarting = hdf_file is not None and os.path.isfile(hdf_file)
-    if not restarting:
-        _, configs = pyqmc.method.mc.vmc(
-            wfs[0],
-            configs,
-            verbose=verbose,
-            client=client,
-            npartitions=npartitions,
-            **warmup_kwargs,
-        )
-
-    # two walker populations per state and sub-iteration: one for the energy
-    # thread and one for the overlap thread
-    configs_ensemble = [
-        [[copy.deepcopy(configs) for _ in range(2)] for _ in range(len(updater[wfi]))]
-        for wfi in range(nwf)
-    ]
-
-    if restarting:  # read in wave functions, iteration count, and every population
-        with h5py.File(hdf_file, "r") as hdf:
-            if "wf" in hdf:
-                for wfi, wf in enumerate(wfs):
-                    grp = hdf[f"wf/{wfi}"]
-                    for k in grp:
-                        wf.parameters[k] = gpu.cp.asarray(grp[k])
-            if "iteration" in hdf:
-                iteration_offset = np.max(hdf["iteration"][...]) + 1
-            if "configs" in hdf:
-                configs.load_hdf(hdf)
-            load_configs_ensemble(hdf, configs_ensemble)
-    for i in range(iteration_offset, max_iterations):
-        # renormalize so that the overlap matrix is in terms of normalized states
-        _, data_unweighted, configs = pyqmc.method.sample_many.sample_overlap(
-            wfs,
-            configs_ensemble[0][0][0],
-            None,
-            client=client,
-            npartitions=npartitions,
-            **overlap_kwargs,
-        )
-        norm = np.mean(data_unweighted["overlap"], axis=0)
-        if verbose:
-            print("Normalization step", norm.diagonal())
-        renormalize(wfs, norm.diagonal(), pivot=0)
-
-        (
-            data_sample1_ensemble,
-            data_weighted_ensemble,
-            data_unweighted_ensemble,
-            configs_ensemble,
-        ) = evaluate_gradients_threaded(
-            wfs,
-            configs_ensemble,
-            updater,
-            client=client,
-            npartitions=npartitions,
-            minsr_kwargs=minsr_kwargs,
-            overlap_kwargs=overlap_kwargs,
-            verbose=verbose,
-            overlap_thread_weight=overlap_thread_weight,
-        )
-
-        for wfi, wf in enumerate(wfs):
-            for sub_iteration, transform in enumerate(updater[wfi]):
-                avg, error = transform.block_average(
-                    data_sample1_ensemble[wfi][sub_iteration],
-                    data_weighted_ensemble[wfi][sub_iteration],
-                    data_unweighted_ensemble[wfi][sub_iteration]["overlap"],
-                )
-                if verbose:
-                    print(
-                        "Iteration",
-                        i,
-                        "wf ",
-                        wfi,
-                        " sub iteration ",
-                        sub_iteration,
-                        "Energy",
-                        avg["total"],
-                        "Overlap",
-                        avg["overlap"][wfi, :],
-                    )
-                dp, report = transform.delta_p(
-                    [tau], avg, overlap_penalty, verbose=verbose
-                )
-                x = transform.transform.serialize_parameters(wf.parameters)
-                set_wf_params(wf, x + dp[0], transform)
-
-                save_data = {
-                    f"energy{wfi}": avg["total"],
-                    f"energy_error{wfi}": error["total"],
-                    f"overlap{wfi}": avg["overlap"],
-                    "iteration": i,
-                    "wavefunction": wfi,
-                    "sub_iteration": sub_iteration,
-                }
-                hdf_save(
-                    hdf_file,
-                    save_data,
-                    {"tau": tau, "eps": transform.eps},
-                    wfs,
-                )
-        # every population is written together, once the iteration is complete
-        save_configs_ensemble(hdf_file, configs_ensemble)
-
-    return wfs

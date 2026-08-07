@@ -46,6 +46,27 @@ class StochasticReconfigurationWfbyWf:
     def allwfs(self):
         return self
 
+    def sample_energy(self, wf, configs, client=None, npartitions=None, verbose=True, **kwargs):
+        """Sample this state on its own and accumulate whatever delta_p needs
+        from that distribution, here the SR averages dpH, dppsi, and dpidpj.
+
+        The driver calls this rather than running vmc itself, so that an updater
+        that needs something else from the single-state sampling -- minSR needs
+        the derivatives per configuration, not averaged into dpidpj -- can be
+        dropped in without a separate driver.
+
+        :returns: (data, configs) with data in the form block_average expects
+        """
+        return pyqmc.method.mc.vmc(
+            wf,
+            configs,
+            accumulators={"": self.onewf()},
+            verbose=verbose,
+            client=client,
+            npartitions=npartitions,
+            **kwargs,
+        )
+
     def avg(self, configs, wfs, weights=None):
         """
         Compute (weighted) average
@@ -224,6 +245,9 @@ def load_all_configs(hdf, configs, updater):
 def hdf_save(hdf_file, data, attr, wfs, norm_configs, gradient_configs):
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
+            for k, it in attr.items():
+                if k not in hdf.attrs:
+                    hdf.attrs[k] = it
             for wfi, wf in enumerate(wfs):
                 if f"wf/{wfi}" not in hdf.keys():
                     hdf.create_group(f"wf/{wfi}")
@@ -399,17 +423,27 @@ def sample_gradient_configs_threaded(
             transform = None if updater is None else updater[wfi][sub_iteration]
             # vmc sampling
             if kind == "energy":
-                accumulators = None if transform is None else {"": transform.onewf()}
-                future = threader.submit(
-                    pyqmc.method.mc.vmc,
-                    wfs[wfi],
-                    gradient_configs[wfi][sub_iteration]["energy"],
-                    accumulators=accumulators,
-                    verbose=verbose if updater is not None else False,
-                    client=client,
-                    npartitions=npartitions_by_thread[threadcount],
-                    **vmc_kwargs,
-                )
+                if transform is None:  # warmup: propagate only, measure nothing
+                    future = threader.submit(
+                        pyqmc.method.mc.vmc,
+                        wfs[wfi],
+                        gradient_configs[wfi][sub_iteration]["energy"],
+                        accumulators=None,
+                        verbose=False,
+                        client=client,
+                        npartitions=npartitions_by_thread[threadcount],
+                        **vmc_kwargs,
+                    )
+                else:  # the updater decides what to collect from this sampling
+                    future = threader.submit(
+                        transform.sample_energy,
+                        wfs[wfi],
+                        gradient_configs[wfi][sub_iteration]["energy"],
+                        client=client,
+                        npartitions=npartitions_by_thread[threadcount],
+                        verbose=verbose,
+                        **vmc_kwargs,
+                    )
             # prefix-overlap sampling
             else:
                 accumulator = None if transform is None else transform.allwfs()

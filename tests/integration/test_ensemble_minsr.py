@@ -24,12 +24,20 @@ import numpy as np
 import pytest
 
 import pyqmc.api as pyq
-from pyqmc.method.ensemble_minsr import (
-    MinSRWfbyWf,
-    load_configs_ensemble,
-    optimize_ensemble,
-)
+from pyqmc.method.ensemble_minsr import MinSRWfbyWf
+from pyqmc.method.ensemble_optimization import load_all_configs, optimize_ensemble
 from pyqmc.observables.accumulators import LinearTransform
+
+# small samplings so the test is quick; nblocks=1 for the energy sampling because
+# the minSR kernel is square in the total number of samples
+KWS = dict(
+    vmc_kwargs={"nblocks": 1, "nsteps_per_block": 3},
+    overlap_kwargs={"nblocks": 2, "nsteps_per_block": 3},
+    initial_vmc_warmup_kwargs={"nblocks": 1, "nsteps_per_block": 3},
+    initial_overlap_warmup_kwargs={"nblocks": 1, "nsteps_per_block": 3},
+    refresh_vmc_warmup_kwargs={"nblocks": 1, "nsteps_per_block": 2},
+    refresh_overlap_warmup_kwargs={"nblocks": 1, "nsteps_per_block": 2},
+)
 
 
 def make_ensemble(mol, mf, mc, nstates):
@@ -50,8 +58,9 @@ def make_ensemble(mol, mf, mc, nstates):
 
 @pytest.mark.slow
 def test_ensemble_minsr(H2_casci, tmp_path):
-    """Two states optimized together: energies are recorded for both, the states
-    stay distinct, and the hdf output has the same layout as the SR version."""
+    """Two states optimized together through the shared ensemble driver: energies
+    are recorded for both, the states stay distinct, and the checkpoint holds
+    every walker population."""
     mol, mf, mc = H2_casci
     hdf_file = str(tmp_path / "ensemble_minsr.hdf5")
 
@@ -60,88 +69,55 @@ def test_ensemble_minsr(H2_casci, tmp_path):
     configs = pyq.initial_guess(mol, 200)
 
     wfs = optimize_ensemble(
-        wfs,
-        configs,
-        updater,
-        hdf_file=hdf_file,
-        tau=0.1,
-        max_iterations=3,
-        npartitions=1,
-        verbose=False,
-        minsr_kwargs={"nblocks": 1, "nsteps_per_block": 3},
-        overlap_kwargs={"nblocks": 2, "nsteps": 3},
+        wfs, configs, updater, hdf_file, tau=0.1, max_iterations=3,
+        npartitions=1, verbose=False, **KWS
     )
 
     with h5py.File(hdf_file, "r") as hdf:
-        keys = set(hdf.keys())
-        assert {"energy0", "energy1", "overlap0", "overlap1", "iteration"} <= keys
+        assert {"energy0", "energy1", "overlap0", "overlap1", "iteration"} <= set(hdf)
         assert hdf.attrs["tau"] == 0.1
         assert list(hdf["wavefunction"][()]) == [0, 1] * 3
         assert list(hdf["iteration"][()]) == [0, 0, 1, 1, 2, 2]
-        # energy{i} is only written on the rows belonging to state i, so it has
-        # one entry per iteration rather than one per row
+        # energy{i} is only written on the rows belonging to state i
         e0 = hdf["energy0"][()]
         e1 = hdf["energy1"][()]
         err0 = hdf["energy_error0"][()]
         overlap1 = hdf["overlap1"][()]
-        assert len(e0) == 3 and len(e1) == 3 and len(overlap1) == 3
+        assert len(e0) == 3 and len(e1) == 3
         assert np.all(np.isfinite(e0)) and np.all(np.isfinite(e1))
         assert np.all(err0 > 0)
-        # the excited state stays above the ground state
-        assert e1[-1] > e0[-1]
-        # normalized off-diagonal overlap stays below 1, i.e. the states are distinct
+        assert e1[-1] > e0[-1]  # the excited state stays above the ground state
         norm = np.sqrt(np.abs(overlap1[-1][0, 0] * overlap1[-1][1, 1]))
-        assert np.abs(overlap1[-1][1, 0]) / norm < 0.5
+        assert np.abs(overlap1[-1][1, 0]) / norm < 0.5  # states stay distinct
 
-    # every walker population is stored, not just one of them
-    with h5py.File(hdf_file, "r") as hdf:
-        stored = {
-            (wfi, thread): hdf[f"configs_ensemble/{wfi}/0/{thread}/configs"][()]
-            for wfi in range(2)
-            for thread in range(2)
-        }
-    assert len(stored) == 4
-    for key, other in [((0, 0), (0, 1)), ((0, 0), (1, 0))]:
-        assert not np.allclose(stored[key], stored[other]), (key, other)
-
-    # restarting continues from the recorded iteration, with those populations
+    # every walker population is checkpointed, and they are genuinely different
     wfs2, updater2 = make_ensemble(mol, mf, mc, nstates=2)
     fresh = pyq.initial_guess(mol, 200)
-    loaded = [
-        [[copy.deepcopy(fresh) for _ in range(2)] for _ in range(1)] for _ in range(2)
-    ]
     with h5py.File(hdf_file, "r") as hdf:
-        load_configs_ensemble(hdf, loaded)
-    for wfi in range(2):
-        for thread in range(2):
-            assert np.allclose(
-                loaded[wfi][0][thread].configs, stored[(wfi, thread)], rtol=1e-6
-            )
+        norm_configs, gradient_configs = load_all_configs(hdf, fresh, updater2)
+    populations = [norm_configs.configs] + [
+        gradient_configs[wfi][0][kind].configs
+        for wfi in range(2)
+        for kind in ("energy", "overlap")
+    ]
+    assert len(populations) == 5
+    for i, a in enumerate(populations):
+        for b in populations[i + 1 :]:
+            assert not np.array_equal(a, b)
 
+    # restarting continues from the recorded iteration
     optimize_ensemble(
-        wfs2,
-        fresh,
-        updater2,
-        hdf_file=hdf_file,
-        tau=0.1,
-        max_iterations=4,
-        npartitions=1,
-        verbose=False,
-        minsr_kwargs={"nblocks": 1, "nsteps_per_block": 3},
-        overlap_kwargs={"nblocks": 2, "nsteps": 3},
+        wfs2, fresh, updater2, hdf_file, tau=0.1, max_iterations=4,
+        npartitions=1, verbose=False, **KWS
     )
     with h5py.File(hdf_file, "r") as hdf:
         assert list(hdf["iteration"][()]) == [0, 0, 1, 1, 2, 2, 3, 3]
-        # the restart moved the walkers on from where they were saved
-        assert not np.allclose(
-            hdf["configs_ensemble/1/0/1/configs"][()], stored[(1, 1)]
-        )
 
 
 @pytest.mark.slow
 def test_ensemble_minsr_with_client(H2_casci, tmp_path):
-    """With a client the sampling happens in worker processes, so the threads
-    share the wave functions instead of copying them."""
+    """With a client the sampling happens in worker processes, so the driver
+    runs the state threads concurrently instead of one at a time."""
     from concurrent.futures import ProcessPoolExecutor
 
     mol, mf, mc = H2_casci
@@ -151,18 +127,9 @@ def test_ensemble_minsr_with_client(H2_casci, tmp_path):
     wfs, updater = make_ensemble(mol, mf, mc, nstates=2)
     ncore = 2
     with ProcessPoolExecutor(max_workers=ncore) as client:
-        wfs = optimize_ensemble(
-            wfs,
-            pyq.initial_guess(mol, 200),
-            updater,
-            hdf_file=hdf_file,
-            client=client,
-            tau=0.1,
-            max_iterations=2,
-            npartitions=ncore,
-            verbose=False,
-            minsr_kwargs={"nblocks": 1, "nsteps_per_block": 3},
-            overlap_kwargs={"nblocks": 2, "nsteps": 3},
+        optimize_ensemble(
+            wfs, pyq.initial_guess(mol, 200), updater, hdf_file, tau=0.1,
+            max_iterations=2, client=client, npartitions=ncore, verbose=False, **KWS
         )
     with h5py.File(hdf_file, "r") as hdf:
         assert np.all(np.isfinite(hdf["energy0"][()]))
@@ -174,10 +141,7 @@ def test_ensemble_minsr_with_client(H2_casci, tmp_path):
 def test_ensemble_minsr_matches_sr(H2_casci):
     """The ensemble minSR step reproduces the ensemble SR step on real sampled
     data, including the overlap penalty."""
-    from pyqmc.method.ensemble_optimization_wfbywf import (
-        StochasticReconfigurationWfbyWf,
-    )
-    from pyqmc.method.minsr import sample_minsr_data
+    from pyqmc.method.ensemble_optimization import StochasticReconfigurationWfbyWf
     from pyqmc.method.sample_many import sample_overlap
 
     mol, mf, mc = H2_casci
@@ -190,11 +154,9 @@ def test_ensemble_minsr_matches_sr(H2_casci):
     penalty = np.ones((2, 2)) * 0.5
 
     # one energy sample and one overlap sample, shared by both updates
-    sample1, configs = sample_minsr_data(
-        wfs[wfi], configs, up.transform, up.enacc, up.nodal_cutoff, nsteps_per_block=3
-    )
+    sample1, configs = up.sample_energy(wfs[wfi], configs, nsteps_per_block=3)
     weighted, unweighted, _ = sample_overlap(
-        wfs, configs, up.allwfs(), nblocks=2, nsteps=3
+        wfs, configs, up.allwfs(), nblocks=2, nsteps_per_block=3
     )
 
     up.eps = eps

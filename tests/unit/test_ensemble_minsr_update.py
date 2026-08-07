@@ -19,13 +19,8 @@ import h5py
 import numpy as np
 import pytest
 
-from pyqmc.configurations.coord import OpenConfigs, PeriodicConfigs
-from pyqmc.method.ensemble_minsr import (
-    MinSRWfbyWf,
-    load_configs_ensemble,
-    save_configs_ensemble,
-)
-from pyqmc.method.ensemble_optimization_wfbywf import StochasticReconfigurationWfbyWf
+from pyqmc.method.ensemble_minsr import MinSRWfbyWf
+from pyqmc.method.ensemble_optimization import StochasticReconfigurationWfbyWf
 
 
 def make_data(rng, nsamples, nparams, nwf):
@@ -108,79 +103,3 @@ def test_ensemble_minsr_overlap_term_matters():
     with_penalty = minsr.delta_p([0.1], avg, np.ones((nwf, nwf)) * 0.5)[0][0]
     no_penalty = minsr.delta_p([0.1], avg, np.zeros((nwf, nwf)))[0][0]
     assert not np.allclose(with_penalty, no_penalty)
-
-
-def make_configs_ensemble(rng, nwf, nsub, nconfig=5, periodic=False):
-    """A distinct walker population for every state, sub-iteration, and thread."""
-    lvecs = np.eye(3) * 4.0
-
-    def one():
-        c = rng.normal(size=(nconfig, 2, 3))
-        return PeriodicConfigs(c, lvecs) if periodic else OpenConfigs(c)
-
-    return [[[one() for _ in range(2)] for _ in range(nsub)] for _ in range(nwf)]
-
-
-@pytest.mark.parametrize("periodic", [False, True])
-def test_configs_ensemble_roundtrip(tmp_path, periodic):
-    """Every walker population survives a save/load cycle, which is what makes a
-    restart resume with the populations it equilibrated."""
-    rng = np.random.default_rng(seed=7)
-    nwf, nsub = 3, 2
-    stored = make_configs_ensemble(rng, nwf, nsub, periodic=periodic)
-    hdf_file = str(tmp_path / "configs.hdf5")
-    save_configs_ensemble(hdf_file, stored)
-
-    loaded = make_configs_ensemble(rng, nwf, nsub, periodic=periodic)
-    with h5py.File(hdf_file, "r") as hdf:
-        load_configs_ensemble(hdf, loaded)
-
-    # configs datasets are created without a dtype, so h5py stores them as
-    # float32; this is how every pyqmc restart file already stores walkers
-    for wfi in range(nwf):
-        for sub in range(nsub):
-            for thread in range(2):
-                assert np.allclose(
-                    stored[wfi][sub][thread].configs,
-                    loaded[wfi][sub][thread].configs,
-                    rtol=1e-6,
-                ), (wfi, sub, thread)
-                if periodic:
-                    assert np.array_equal(
-                        stored[wfi][sub][thread].wrap, loaded[wfi][sub][thread].wrap
-                    )
-    # populations really are distinct, so the test above is not comparing copies
-    assert not np.array_equal(stored[0][0][0].configs, stored[0][0][1].configs)
-    assert not np.array_equal(stored[0][0][0].configs, stored[1][0][0].configs)
-
-
-def test_configs_ensemble_missing_group_falls_back(tmp_path, caplog):
-    """A file written without the per-thread populations leaves them as passed
-    in rather than failing, so old restart files still work."""
-    rng = np.random.default_rng(seed=8)
-    hdf_file = str(tmp_path / "old_style.hdf5")
-    original = make_configs_ensemble(rng, 1, 1)
-    # a file with only the top-level configs, as the SR version writes
-    with h5py.File(hdf_file, "a") as hdf:
-        original[0][0][0].initialize_hdf(hdf)
-        original[0][0][0].to_hdf(hdf)
-
-    loaded = make_configs_ensemble(rng, 1, 1)
-    expected = [c.configs.copy() for c in loaded[0][0]]
-    with h5py.File(hdf_file, "r") as hdf:
-        load_configs_ensemble(hdf, loaded)
-    for got, want in zip(loaded[0][0], expected):
-        assert np.array_equal(got.configs, want)
-    assert "no stored walkers" in caplog.text
-
-
-def test_configs_ensemble_shape_mismatch(tmp_path):
-    """Restarting with a different number of walkers is an error, not silent
-    corruption."""
-    rng = np.random.default_rng(seed=9)
-    hdf_file = str(tmp_path / "configs.hdf5")
-    save_configs_ensemble(hdf_file, make_configs_ensemble(rng, 1, 1, nconfig=5))
-    wrong = make_configs_ensemble(rng, 1, 1, nconfig=7)
-    with h5py.File(hdf_file, "r") as hdf:
-        with pytest.raises(ValueError, match="same number of walkers"):
-            load_configs_ensemble(hdf, wrong)

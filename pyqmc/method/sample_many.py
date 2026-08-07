@@ -67,7 +67,7 @@ def invert_list_of_dicts(A, asarray=True):
         return {k: [a[k] for a in A] for k in A[0].keys()}
 
 
-def sample_overlap_run(wfs, configs, tstep, nsteps, nblocks, energy,
+def sample_overlap_run(wfs, configs, tstep, nsteps_per_block, nblocks, energy,
                           hdf_file=None, client=None, npartitions=None):
     """
     Use a single core to sample over blocks
@@ -78,9 +78,9 @@ def sample_overlap_run(wfs, configs, tstep, nsteps, nblocks, energy,
     for block in range(nblocks):
         print("-", end="", flush=True)
         if client is None:
-            w, u, configs = sample_overlap_worker(wfs, configs, tstep, nsteps, energy)
+            w, u, configs = sample_overlap_worker(wfs, configs, tstep, nsteps_per_block, energy)
         else:
-            w, u, configs = sample_overlap_client(wfs, configs, tstep, nsteps, energy, client, npartitions)
+            w, u, configs = sample_overlap_client(wfs, configs, tstep, nsteps_per_block, energy, client, npartitions)
         weighted.append(w)
         unweighted.append(u)
         hdf_save(hdf_file, w, u, dict(tstep=tstep), configs)
@@ -138,6 +138,7 @@ def sample_overlap_worker(wfs, configs, tstep, nsteps, energy):
     nconf, nelec = configs.configs.shape[:2]
 
     for n in range(nsteps):
+        acc = 0.0
         for e in range(nelec):  # a sweep
             # Propose move
             grads = [np.real(wf.gradient(e, configs.electron(e)).T) for wf in wfs]
@@ -164,7 +165,6 @@ def sample_overlap_worker(wfs, configs, tstep, nsteps, energy):
 
             ratio = t_prob * np.sum(wf_ratios * weights, axis=0) / weights.sum(axis=0)
             accept = ratio > np.random.rand(nconf)
-            # block_avg["acceptance"][n] += accept.mean() / nelec
 
             # Update wave function
             configs.move(e, newcoorde, accept)
@@ -172,10 +172,12 @@ def sample_overlap_worker(wfs, configs, tstep, nsteps, energy):
                 wf.updateinternals(
                     e, newcoorde, configs, mask=accept, saved_values=saved
                 )
+            acc += np.mean(accept) / nelec
 
         weights = compute_weights(wfs)
         unweighted_dat = {}
         unweighted_dat["overlap"] = np.mean(weights, axis=-1)
+        unweighted_dat["acceptance"] = acc
         rolling_average(unweighted_block, unweighted_dat, nsteps)
         # Collect rolling average
         if energy is not None:
@@ -188,15 +190,16 @@ def sample_overlap_worker(wfs, configs, tstep, nsteps, energy):
 def rolling_average(block, data, nsteps):
     for k, it in data.items():
         if k not in block:
-            block[k] = np.zeros((*it.shape,), dtype=it.dtype)
-        block[k] += it / nsteps
+            block[k] = it / nsteps
+        else:
+            block[k] += it / nsteps
 
 
 def sample_overlap(
     wfs,
     configs,
     energy,
-    nsteps=10,
+    nsteps_per_block=10,
     nblocks=10,
     tstep=0.5,
     hdf_file=None,
@@ -211,7 +214,7 @@ def sample_overlap(
                 if "configs" in hdf.keys():
                     configs.load_hdf(hdf)
 
-    return sample_overlap_run(wfs, configs, tstep, nsteps, nblocks, energy, hdf_file, client, npartitions)
+    return sample_overlap_run(wfs, configs, tstep, nsteps_per_block, nblocks, energy, hdf_file, client, npartitions)
 
 def normalize(weighted, unweighted):
     """

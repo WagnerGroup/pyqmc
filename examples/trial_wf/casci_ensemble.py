@@ -68,7 +68,7 @@ def run_ensemble(
     nconfig=800,
 ):
     """ """
-    from pyqmc.method.ensemble_optimization_wfbywf import (
+    from pyqmc.method.ensemble_optimization import (
         optimize_ensemble,
         StochasticReconfigurationWfbyWf,
     )

@@ -16,6 +16,28 @@ import numpy as np
 import pyqmc.configurations.distance as distance
 import pyqmc.pbc.pbc as pbc
 import copy
+import logging
+
+
+def warn_if_stored_precision_differs(dataset, array, name):
+    """Warn when a restart file stores a different type than we compute in.
+
+    Files written before configurations were stored with an explicit dtype hold
+    float32. Restarting from one keeps writing float32, because the dataset
+    already exists and to_hdf writes into it, so the loss of precision would
+    otherwise go unnoticed for the rest of the calculation.
+    """
+    if dataset.dtype != array.dtype:
+        logging.warning(
+            "%s in this file is stored as %s but is computed as %s. "
+            "This file was probably written by an older version; it will keep "
+            "being written as %s. Start from a new file to store %s.",
+            name,
+            dataset.dtype,
+            array.dtype,
+            dataset.dtype,
+            array.dtype,
+        )
 
 
 class OpenElectron:
@@ -94,11 +116,14 @@ class OpenConfigs:
         self.configs = self.configs.reshape(shape)
 
     def initialize_hdf(self, hdf):
+        # dtype is given explicitly; h5py would otherwise default to float32 and
+        # silently round the coordinates on the way to disk
         hdf.create_dataset(
             "configs",
             self.configs.shape,
             chunks=True,
             maxshape=(None, *self.configs.shape[1:]),
+            dtype=self.configs.dtype,
         )
 
     def to_hdf(self, hdf):
@@ -107,6 +132,7 @@ class OpenConfigs:
 
     def load_hdf(self, hdf):
         """Note that the number of configurations will change to reflect the number in the hdf file."""
+        warn_if_stored_precision_differs(hdf["configs"], self.configs, "configs")
         # The ... seems to be necessary to avoid changing the dtype and screwing up
         # pyscf's calls.
         self.configs[...] = np.array(hdf["configs"])
@@ -229,14 +255,21 @@ class PeriodicConfigs:
         self.wrap = self.wrap.reshape(shape)
 
     def initialize_hdf(self, hdf):
+        # dtype is given explicitly; h5py would otherwise default to float32 and
+        # silently round the coordinates on the way to disk
         hdf.create_dataset(
             "configs",
             self.configs.shape,
             chunks=True,
             maxshape=(None, *self.configs.shape[1:]),
+            dtype=self.configs.dtype,
         )
         hdf.create_dataset(
-            "wrap", self.wrap.shape, chunks=True, maxshape=(None, *self.wrap.shape[1:])
+            "wrap",
+            self.wrap.shape,
+            chunks=True,
+            maxshape=(None, *self.wrap.shape[1:]),
+            dtype=self.wrap.dtype,
         )
 
     def to_hdf(self, hdf):
@@ -246,6 +279,7 @@ class PeriodicConfigs:
         hdf["wrap"][...] = self.wrap
 
     def load_hdf(self, hdf):
+        warn_if_stored_precision_differs(hdf["configs"], self.configs, "configs")
         # The ... seems to be necessary to avoid changing the dtype and screwing up
         # pyscf's calls.
         self.configs[...] = hdf["configs"][()]

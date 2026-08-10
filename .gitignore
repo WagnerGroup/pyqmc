@@ -127,3 +127,20 @@ dmypy.json
 #vim files
 *.swp
 .DS_Store
+
+# QMC output: checkpoints, sampled configurations, and run results
+*.hdf5
+*.h5
+# but not the small reference files the tests read
+!tests/files/*.hdf5
+
+# pyscf checkpoints
+*.chk
+
+# visualization output
+*.xsf
+
+# IDE / editor settings
+.idea/
+.vscode/
+*.code-workspace

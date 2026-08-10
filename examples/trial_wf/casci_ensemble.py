@@ -66,12 +66,10 @@ def run_ensemble(
     nstates=3,
     tau=0.1,
     nconfig=800,
+    method="sr",
 ):
     """ """
-    from pyqmc.method.ensemble_optimization import (
-        optimize_ensemble,
-        StochasticReconfigurationWfbyWf,
-    )
+    from pyqmc.method.ensemble_optimization import optimize_ensemble
 
     mol, mf, mc = pyq.recover_pyscf(scf_checkfile, ci_checkfile, cancel_outputs=False)
 
@@ -80,8 +78,7 @@ def run_ensemble(
         mcs[i].ci = mc.ci[i]
 
     wfs = []
-    energy = pyq.EnergyAccumulator(mol)
-    sr_accumulator = []
+    transforms = []
 
     for i in range(nstates):
         wf, to_opt = pyq.generate_wf(
@@ -92,15 +89,8 @@ def run_ensemble(
                 if "wf2" in k:
                     wf.parameters[k] = f["wf"][k][()]
         wfs.append(wf)
-        sr_accumulator.append(
-            [
-                StochasticReconfigurationWfbyWf(
-                    energy,
-                    pyqmc.observables.accumulators.LinearTransform(
-                        wf.parameters, to_opt
-                    ),
-                )
-            ]
+        transforms.append(
+            pyqmc.observables.accumulators.LinearTransform(wf.parameters, to_opt)
         )
 
     configs = pyq.initial_guess(mol, nconfig)
@@ -108,8 +98,14 @@ def run_ensemble(
     return optimize_ensemble(
         wfs,
         configs,
-        sr_accumulator,
+        transforms,
         hdf_file=hdf_file,
+        enacc=pyq.EnergyAccumulator(mol),
+        # pass method="minsr" to solve the same equations in sample space, which
+        # avoids building the (nparameters, nparameters) S matrix; with it, set
+        # vmc_kwargs={"nblocks": 1, ...} since the kernel is square in the
+        # number of samples
+        method=method,
         max_iterations=max_iterations,
         client=client,
         npartitions=npartitions,

@@ -103,3 +103,54 @@ def test_ensemble_minsr_overlap_term_matters():
     with_penalty = minsr.delta_p([0.1], avg, np.ones((nwf, nwf)) * 0.5)[0][0]
     no_penalty = minsr.delta_p([0.1], avg, np.zeros((nwf, nwf)))[0][0]
     assert not np.allclose(with_penalty, no_penalty)
+
+
+def test_method_selection():
+    """optimize_ensemble builds the updaters, so choosing an algorithm is a
+    keyword rather than importing a different class from a different module."""
+    from pyqmc.method.ensemble_optimization import build_updaters, make_updater
+
+    class FakeEnacc:
+        def keys(self):
+            return set()
+
+        def shapes(self):
+            return {}
+
+    class FakeTransform:
+        nparams = 3
+
+    enacc, transform = FakeEnacc(), FakeTransform()
+
+    assert isinstance(
+        make_updater(transform, enacc, "sr"), StochasticReconfigurationWfbyWf
+    )
+    assert isinstance(make_updater(transform, enacc, "minsr"), MinSRWfbyWf)
+    with pytest.raises(ValueError, match="Unknown method"):
+        make_updater(transform, enacc, "nonsense")
+
+    # each method keeps its own default regularization, and eps overrides it
+    assert make_updater(transform, enacc, "sr").eps == 1e-3
+    assert make_updater(transform, enacc, "minsr").eps == 1e-2
+    assert make_updater(transform, enacc, "minsr", eps=0.5).eps == 0.5
+    # eps reaches the solve; it used to land in nodal_cutoff instead
+    sr = make_updater(transform, enacc, "sr", eps=0.25, nodal_cutoff=0.01)
+    assert sr.onewf().eps == 0.25 and sr.onewf().nodal_cutoff == 0.01
+
+    # a flat list of transforms is one per state; nesting adds sub-iterations
+    flat = build_updaters([transform, transform], enacc, "minsr")
+    assert [len(state) for state in flat] == [1, 1]
+    nested = build_updaters([[transform, transform], [transform]], enacc, "minsr")
+    assert [len(state) for state in nested] == [2, 1]
+
+    # already-built updaters pass through untouched
+    built = MinSRWfbyWf(enacc, transform)
+    assert build_updaters([built], enacc)[0][0] is built
+
+    # one accumulator per state is allowed; a mismatched count is an error
+    per_state = build_updaters([transform, transform], [enacc, FakeEnacc()], "sr")
+    assert per_state[0][0].enacc is enacc
+    with pytest.raises(ValueError, match="energy accumulators"):
+        build_updaters([transform, transform], [enacc], "sr")
+    with pytest.raises(ValueError, match="enacc is required"):
+        build_updaters([transform], None, "sr")

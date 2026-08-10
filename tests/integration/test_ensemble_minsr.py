@@ -24,8 +24,11 @@ import numpy as np
 import pytest
 
 import pyqmc.api as pyq
-from pyqmc.method.ensemble_minsr import MinSRWfbyWf
-from pyqmc.method.ensemble_optimization import load_all_configs, optimize_ensemble
+from pyqmc.method.ensemble_optimization import (
+    load_all_configs,
+    make_updater,
+    optimize_ensemble,
+)
 from pyqmc.observables.accumulators import LinearTransform
 
 # small samplings so the test is quick; nblocks=1 for the energy sampling because
@@ -43,17 +46,16 @@ KWS = dict(
 def make_ensemble(mol, mf, mc, nstates):
     """A CASCI state for each root, with its determinant coefficients free."""
     mcs = [copy.copy(mc) for _ in range(nstates)]
-    energy = pyq.EnergyAccumulator(mol)
     wfs = []
-    updater = []
+    transforms = []
     for i in range(nstates):
         mcs[i].ci = mc.ci[i]
         wf, to_opt = pyq.generate_slater(
             mol, mf, mc=mcs[i], optimize_determinants=True, tol=1e-20
         )
         wfs.append(wf)
-        updater.append([MinSRWfbyWf(energy, LinearTransform(wf.parameters, to_opt))])
-    return wfs, updater
+        transforms.append(LinearTransform(wf.parameters, to_opt))
+    return wfs, transforms
 
 
 @pytest.mark.slow
@@ -65,12 +67,12 @@ def test_ensemble_minsr(H2_casci, tmp_path):
     hdf_file = str(tmp_path / "ensemble_minsr.hdf5")
 
     np.random.seed(0)
-    wfs, updater = make_ensemble(mol, mf, mc, nstates=2)
+    wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
     configs = pyq.initial_guess(mol, 200)
 
     wfs = optimize_ensemble(
-        wfs, configs, updater, hdf_file, tau=0.1, max_iterations=3,
-        npartitions=1, verbose=False, **KWS
+        wfs, configs, transforms, hdf_file, enacc=pyq.EnergyAccumulator(mol),
+        method="minsr", tau=0.1, max_iterations=3, npartitions=1, verbose=False, **KWS
     )
 
     with h5py.File(hdf_file, "r") as hdf:
@@ -91,10 +93,10 @@ def test_ensemble_minsr(H2_casci, tmp_path):
         assert np.abs(overlap1[-1][1, 0]) / norm < 0.5  # states stay distinct
 
     # every walker population is checkpointed, and they are genuinely different
-    wfs2, updater2 = make_ensemble(mol, mf, mc, nstates=2)
+    wfs2, transforms2 = make_ensemble(mol, mf, mc, nstates=2)
     fresh = pyq.initial_guess(mol, 200)
     with h5py.File(hdf_file, "r") as hdf:
-        norm_configs, gradient_configs = load_all_configs(hdf, fresh, updater2)
+        norm_configs, gradient_configs = load_all_configs(hdf, fresh, [[t] for t in transforms2])
     populations = [norm_configs.configs] + [
         gradient_configs[wfi][0][kind].configs
         for wfi in range(2)
@@ -107,8 +109,8 @@ def test_ensemble_minsr(H2_casci, tmp_path):
 
     # restarting continues from the recorded iteration
     optimize_ensemble(
-        wfs2, fresh, updater2, hdf_file, tau=0.1, max_iterations=4,
-        npartitions=1, verbose=False, **KWS
+        wfs2, fresh, transforms2, hdf_file, enacc=pyq.EnergyAccumulator(mol),
+        method="minsr", tau=0.1, max_iterations=4, npartitions=1, verbose=False, **KWS
     )
     with h5py.File(hdf_file, "r") as hdf:
         assert list(hdf["iteration"][()]) == [0, 0, 1, 1, 2, 2, 3, 3]
@@ -124,11 +126,12 @@ def test_ensemble_minsr_with_client(H2_casci, tmp_path):
     hdf_file = str(tmp_path / "ensemble_minsr_client.hdf5")
 
     np.random.seed(0)
-    wfs, updater = make_ensemble(mol, mf, mc, nstates=2)
+    wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
     ncore = 2
     with ProcessPoolExecutor(max_workers=ncore) as client:
         optimize_ensemble(
-            wfs, pyq.initial_guess(mol, 200), updater, hdf_file, tau=0.1,
+            wfs, pyq.initial_guess(mol, 200), transforms, hdf_file,
+            enacc=pyq.EnergyAccumulator(mol), method="minsr", tau=0.1,
             max_iterations=2, client=client, npartitions=ncore, verbose=False, **KWS
         )
     with h5py.File(hdf_file, "r") as hdf:
@@ -146,10 +149,10 @@ def test_ensemble_minsr_matches_sr(H2_casci):
 
     mol, mf, mc = H2_casci
     np.random.seed(0)
-    wfs, updater = make_ensemble(mol, mf, mc, nstates=2)
+    wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
     configs = pyq.initial_guess(mol, 300)
     wfi = 1  # the excited state, which carries the overlap penalty
-    up = updater[wfi][0]
+    up = make_updater(transforms[wfi], pyq.EnergyAccumulator(mol), method="minsr")
     eps, tau = 1e-2, 0.1
     penalty = np.ones((2, 2)) * 0.5
 

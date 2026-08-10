@@ -33,12 +33,18 @@ class StochasticReconfigurationWfbyWf:
     given the averages given by avg()
     """
 
-    def __init__(self, enacc, transform, eps=1e-3):
+    def __init__(self, enacc, transform, eps=1e-3, nodal_cutoff=1e-3):
         """ """
         self.enacc = enacc
         self.transform = transform
         self.eps = eps
-        self._onewf = StochasticReconfiguration(enacc, transform, eps)
+        self.nodal_cutoff = nodal_cutoff
+        # eps used to be passed positionally here, which landed it in
+        # nodal_cutoff; the two defaults coincide, so only a non-default eps was
+        # affected, and it retuned the nodal regularization rather than the solve
+        self._onewf = StochasticReconfiguration(
+            enacc, transform, nodal_cutoff=nodal_cutoff, eps=eps
+        )
 
     def onewf(self):
         return self._onewf
@@ -333,6 +339,72 @@ def round_to_fixed_sum(x: np.ndarray, target_sum: int) -> np.ndarray:
     return y
 
 
+#: algorithms optimize_ensemble can be asked for by name, and the regularization
+#: each one wants by default
+UPDATERS = {
+    "sr": (StochasticReconfigurationWfbyWf, 1e-3),
+    "minsr": (None, 1e-2),  # imported on demand; see make_updater
+}
+
+
+def make_updater(transform, enacc, method="sr", eps=None, nodal_cutoff=1e-3):
+    """Build the per-state updater for one algorithm.
+
+    :parameter transform: a LinearTransform for this state's parameters
+    :parameter enacc: an EnergyAccumulator-like object
+    :parameter str method: 'sr' for stochastic reconfiguration, which builds the
+        (nparameters, nparameters) S matrix, or 'minsr', which solves the same
+        equations in sample space and never builds it
+    :parameter float eps: regularization of the solve; defaults to what the
+        method wants, 1e-3 for sr and 1e-2 for minsr
+    :parameter float nodal_cutoff: regularization distance for the nodal divergence of the derivatives
+    """
+    if method not in UPDATERS:
+        raise ValueError(
+            f"Unknown method {method!r}; choose one of {sorted(UPDATERS)}."
+        )
+    cls, default_eps = UPDATERS[method]
+    if cls is None:  # deferred so that minsr can build on this module
+        from pyqmc.method.ensemble_minsr import MinSRWfbyWf
+
+        cls = MinSRWfbyWf
+    return cls(
+        enacc,
+        transform,
+        eps=default_eps if eps is None else eps,
+        nodal_cutoff=nodal_cutoff,
+    )
+
+
+def build_updaters(transforms, enacc=None, method="sr", eps=None, nodal_cutoff=1e-3):
+    """Turn parameter transforms into the nested list of updaters the driver uses.
+
+    :parameter transforms: one transform per state, or a nested list indexed by
+        state then sub-iteration. Objects that are already updaters (anything
+        with delta_p) are passed through, so a hand-built updater still works.
+    :parameter enacc: an EnergyAccumulator-like object shared by every state, or
+        a list with one per state
+    :returns: nested list of updaters indexed by state then sub-iteration
+    """
+    nested = [t if isinstance(t, (list, tuple)) else [t] for t in transforms]
+    if all(hasattr(t, "delta_p") for state in nested for t in state):
+        return [list(state) for state in nested]
+    if enacc is None:
+        raise ValueError(
+            "enacc is required to build updaters from transforms; pass an "
+            "EnergyAccumulator, or pass updater objects instead of transforms."
+        )
+    enaccs = enacc if isinstance(enacc, (list, tuple)) else [enacc] * len(nested)
+    if len(enaccs) != len(nested):
+        raise ValueError(
+            f"got {len(enaccs)} energy accumulators for {len(nested)} states"
+        )
+    return [
+        [make_updater(t, e, method, eps, nodal_cutoff) for t in state]
+        for state, e in zip(nested, enaccs)
+    ]
+
+
 def _warmup_overlap(wfs, configs, client, npartitions, kwargs):
     if not kwargs or kwargs.get("nblocks", 1) <= 0:
         return configs
@@ -558,8 +630,12 @@ def evaluate_gradients_threaded(
 def optimize_ensemble(
     wfs,
     configs,
-    updater,
+    transforms,
     hdf_file,
+    enacc=None,
+    method="sr",
+    eps=None,
+    nodal_cutoff=1e-3,
     tau=1,
     max_iterations=100,
     overlap_penalty=None,
@@ -590,8 +666,23 @@ def optimize_ensemble(
     Args:
         wfs (list): list of wave functions to be optimized
         configs: initial configs before warmup if not loaded from a checkpoint
-        updater (list[list]): nested list of StochasticReconfigurationWfbyWf accumulators indexed by state then by sub-iteration
+        transforms (list): one LinearTransform per state, or a nested list indexed
+            by state then by sub-iteration. Already-built updaters are accepted
+            here too, in which case enacc, method, eps, and nodal_cutoff are unused.
         hdf_file (str): path for the checkpoint file
+        enacc: an EnergyAccumulator-like object shared by every state, or a list
+            with one per state. Required unless transforms are already updaters.
+        method (str): 'sr' for stochastic reconfiguration, or 'minsr' to solve the
+            same equations in sample space without building the
+            (nparameters, nparameters) S matrix. minSR is worth it when there are
+            more parameters than samples; note that the number of samples per
+            state is nconfig * vmc_kwargs['nblocks'], and the kernel it solves is
+            square in that, so the default of 10 blocks is usually not what you
+            want with it.
+        eps (float): regularization of the solve; defaults to what the method
+            wants, 1e-3 for sr and 1e-2 for minsr
+        nodal_cutoff (float): regularization distance for the nodal divergence of
+            the parameter derivatives
         tau (float): optimization step size
         max_iterations (int): maximum number of optimization iterations
         overlap_penalty (np.ndarray): overlap penalty matrix with shape (nwf, nwf)
@@ -622,6 +713,11 @@ def optimize_ensemble(
         vmc_kwargs = dict(nblocks=10, nsteps_per_block=10)
     if not overlap_kwargs:
         overlap_kwargs = dict(nblocks=10, nsteps_per_block=10)
+    updater = build_updaters(transforms, enacc, method, eps, nodal_cutoff)
+    if len(updater) != len(wfs):
+        raise ValueError(
+            f"got transforms for {len(updater)} states but {len(wfs)} wave functions"
+        )
     nwf = len(wfs)
     if overlap_penalty is None:
         overlap_penalty = np.ones((nwf, nwf)) * 0.5

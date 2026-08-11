@@ -44,7 +44,7 @@ def test_testvalue_many(wf, configs, tol=1e-6):
     wfcopy = copy.copy(wf)
 
     delta = 1e-2
-    tval = np.zeros((nconf, ne))
+    tval = np.zeros((nconf, ne), dtype=wf.dtype)
     epos = configs.make_irreducible(0, configs.configs[:, 0, :] + delta)
     for e in range(ne):
         tval[:, e], savedvals = wf.testvalue(e, epos)
@@ -79,7 +79,7 @@ def test_testvalue_aux(wf, configs, aux, tol=1e-6):
     wfcopy.recompute(configs)
     print(dir(wfcopy))
 
-    tval = np.zeros((nconf, naux))
+    tval = np.zeros((nconf, naux), dtype=wf.dtype)
     e = 0
     for a in range(naux):
         tval[:, a], _ = wf.testvalue(e, aux.select_electrons(a))

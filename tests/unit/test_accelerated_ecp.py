@@ -47,12 +47,14 @@ def test_selected(diamond_primitive):
     deterministic = ECPAccumulator(mol, stochastic_rotation = False, nselect_deterministic = 1000)
     stochastic = ECPAccumulator(mol, stochastic_rotation = False)
 
-    ref = deterministic(configs, wf)
+    # the ECP energy is real; for PBC wave functions it comes back complex with
+    # a roundoff-level imaginary part, so take the real part explicitly
+    ref = deterministic(configs, wf).real
 
     nsample = 100
     samples = np.zeros((nsample, ref.shape[0]))
     for i in range(nsample):
-        samples[i,:] = stochastic(configs, wf)
+        samples[i,:] = stochastic(configs, wf).real
 
 
     avg = np.mean(samples, axis=0)
@@ -80,7 +82,7 @@ def test_accelerated_PBC(diamond_primitive):
     samples = np.zeros((nsample, nconfig))
     samples_trad = np.zeros_like(samples)
     for i in range(nsample):
-        samples[i,:] = stochastic(configs, wf)
+        samples[i,:] = stochastic(configs, wf).real
         samples_trad[i,:] = eval_ecp.ecp(mol, configs, wf, threshold=-1).real
 
 

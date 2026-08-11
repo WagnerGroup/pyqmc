@@ -19,7 +19,6 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
 import pyscf
-import pyscf.hci
 import pyqmc.api as pyq
 from pyqmc.wf.slater import Slater
 
@@ -31,8 +30,8 @@ def avg(vec):
     return avg, std / np.sqrt(nblock)
 
 
-def test_shci_wf_is_better(H2_ccecp_hci):
-    mol, mf, cisolver = H2_ccecp_hci
+def test_sci_wf_is_better(H2_ccecp_sci):
+    mol, mf, cisolver = H2_ccecp_sci
 
     configs = pyq.initial_guess(mol, 1000)
     wf = Slater(mol, mf, cisolver, tol=0.0)
@@ -45,6 +44,7 @@ def test_shci_wf_is_better(H2_ccecp_hci):
     )
     en, err = avg(data["energytotal"][1:])
     nsigma = 4
-    assert len(wf.parameters["det_coeff"]) == len(cisolver.ci)
+    # cisolver.ci is a 2D SCIvector (alpha strings by beta strings)
+    assert len(wf.parameters["det_coeff"]) == np.asarray(cisolver.ci).size
     assert en - nsigma * err < mf.e_tot
     assert en + nsigma * err > cisolver.energy

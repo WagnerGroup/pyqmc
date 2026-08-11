@@ -22,7 +22,8 @@ import pyscf.pbc
 import pyscf.pbc.dft
 import numpy as np
 import pyqmc.api as pyq
-#import pyscf.hci
+import pyscf.ao2mo
+import pyscf.fci
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -85,19 +86,21 @@ def H2_ccecp_uhf():
 
 
 @pytest.fixture(scope="module")
-def H2_ccecp_hci(H2_ccecp_rhf):
-    import pyscf.hci
+def H2_ccecp_sci(H2_ccecp_rhf):
     mol, mf = H2_ccecp_rhf
 
-    cisolver = pyscf.hci.SCI(mol)
-    cisolver.select_cutoff = 0.1
+    cisolver = pyscf.fci.SCI(mol)
+    cisolver.select_cutoff = 0.01
     nmo = mf.mo_coeff.shape[1]
     nelec = mol.nelec
     h1 = mf.mo_coeff.T.dot(mf.get_hcore()).dot(mf.mo_coeff)
     h2 = pyscf.ao2mo.full(mol, mf.mo_coeff)
-    e, civec = cisolver.kernel(h1, h2, nmo, nelec, verbose=4)
-    cisolver.ci = civec[0]
-    cisolver.energy = e +  mf.energy_nuc()
+    e, civec = cisolver.kernel(h1, h2, nmo, nelec)
+    cisolver.ci = civec
+    # norb and nelec are not set by kernel(), but deters_from_sci() needs them
+    cisolver.norb = nmo
+    cisolver.nelec = nelec
+    cisolver.energy = e + mf.energy_nuc()
 
     return mol, mf, cisolver
 

@@ -44,7 +44,7 @@ def test_testvalue_many(wf, configs, tol=1e-6):
     wfcopy = copy.copy(wf)
 
     delta = 1e-2
-    tval = np.zeros((nconf, ne))
+    tval = np.zeros((nconf, ne), dtype=wf.dtype)
     epos = configs.make_irreducible(0, configs.configs[:, 0, :] + delta)
     for e in range(ne):
         tval[:, e], savedvals = wf.testvalue(e, epos)
@@ -79,7 +79,7 @@ def test_testvalue_aux(wf, configs, aux, tol=1e-6):
     wfcopy.recompute(configs)
     print(dir(wfcopy))
 
-    tval = np.zeros((nconf, naux))
+    tval = np.zeros((nconf, naux), dtype=wf.dtype)
     e = 0
     for a in range(naux):
         tval[:, a], _ = wf.testvalue(e, aux.select_electrons(a))
@@ -218,6 +218,15 @@ def test_wf_pgradient(wf, configs, delta=1e-5):
 
 
 
+def relative_error(computed, reference):
+    """Relative difference between two arrays, falling back to the absolute
+    difference where the reference is exactly zero. Jastrow gradients are
+    exactly zero when an electron is out of range of every basis function,
+    which would otherwise give 0/0 = nan."""
+    denominator = np.abs(reference)
+    return np.abs(computed - reference) / np.where(denominator > 0, denominator, 1.0)
+
+
 def test_wf_gradient_laplacian(wf, configs):
     nconf, nelec = configs.configs.shape[0:2]
     wf.recompute(configs)
@@ -236,7 +245,7 @@ def test_wf_gradient_laplacian(wf, configs):
         tt1 = time.perf_counter()
         tsep += ts1 - ts0
         ttog += tt1 - tt0
-    rel_grad = np.abs((andgrad - grad) / grad)
+    rel_grad = relative_error(andgrad, grad)
     rmax_grad = np.max(rel_grad)
 
     print("time evaluated separately", tsep)
@@ -277,8 +286,8 @@ def test_wf_gradient_value(wf, configs):
         tt1 = time.perf_counter()
         tsep += ts1 - ts0
         ttog += tt1 - tt0
-    rel_grad = np.abs((andgrad - grad) / grad)
-    rel_val = np.abs((andval - val) / val)
+    rel_grad = relative_error(andgrad, grad)
+    rel_val = relative_error(andval, val)
     rmax_grad = np.max(rel_grad)
     rmax_val = np.max(rel_val)
     max_saved = np.max(saved_diff)

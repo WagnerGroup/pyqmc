@@ -62,11 +62,16 @@ def recover_pyscf(chkfile, ci_checkfile=None, cancel_outputs=True):
     else:
         mol = pyscf.pbc.lib.chkfile.load_cell(chkfile)
         with h5py.File(chkfile, "r") as f:
-            has_kpts = "mo_occ__from_list__" in f["/scf"].keys()
-            if has_kpts:
+            # k-point objects save 'kpts'; single-kpoint ones save 'kpt'
+            has_kpts = "kpts" in f["/scf"].keys()
+            if "mo_occ__from_list__" in f["/scf"].keys():
+                # pyscf < 2.14 saved the per-kpoint quantities as lists;
+                # for KUHF the entries are themselves lists (spin, kpt).
                 rhf = "000000" in f["/scf/mo_occ__from_list__/"].keys()
             else:
-                rhf = len(f["/scf/mo_occ"].shape) == 1
+                # newer pyscf saves them as stacked arrays: (kpt, nmo) for KRHF,
+                # (spin, kpt, nmo) for KUHF, (nmo) for RHF, (spin, nmo) for UHF.
+                rhf = len(f["/scf/mo_occ"].shape) == (2 if has_kpts else 1)
         if cancel_outputs:
             mol.output = None
             mol.stdout = None

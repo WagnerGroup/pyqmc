@@ -154,8 +154,8 @@ def test_pbc_wfs_triplet(h_noncubic_sto3g_triplet, epsilon=1e-5, nconf=10):
         run_tests(wf, epos, epsilon)
 
 
-def test_hci_wf(H2_ccecp_hci, epsilon=1e-5):
-    mol, mf, cisolver = H2_ccecp_hci
+def test_sci_wf(H2_ccecp_sci, epsilon=1e-5):
+    mol, mf, cisolver = H2_ccecp_sci
     configs = pyq.initial_guess(mol, 10)
     wf = Slater(mol, mf, cisolver, tol=0.0)
     run_tests(wf, configs, epsilon)

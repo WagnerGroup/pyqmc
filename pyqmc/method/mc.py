@@ -83,9 +83,13 @@ def limdrift(g, cutoff=1):
     """
     tot = np.linalg.norm(g, axis=1)
     mask = tot > cutoff
+    # np.where evaluates both branches, so a zero gradient (an electron out of
+    # range of every basis function) would divide by zero even though the
+    # result is discarded. Only the masked entries are actually rescaled.
+    safe_tot = np.where(mask, tot, 1.0)
     # by using where we can avoid modifying the original array
     # and so we have JAX compatibility
-    g = np.where(mask[:, np.newaxis], cutoff * g / tot[:, np.newaxis], g)
+    g = np.where(mask[:, np.newaxis], cutoff * g / safe_tot[:, np.newaxis], g)
     return g
 
 

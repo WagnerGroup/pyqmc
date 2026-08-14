@@ -636,7 +636,7 @@ def optimize_ensemble(
     method="sr",
     eps=None,
     nodal_cutoff=1e-3,
-    tau=1,
+    tau=.02,
     max_iterations=100,
     overlap_penalty=None,
     npartitions=None,

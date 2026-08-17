@@ -673,6 +673,7 @@ def optimize_ensemble(
     overlap_thread_weight=None,
     vmc_kwargs=None,
     overlap_kwargs=None,
+    norm_kwargs=None,
     initial_vmc_warmup_kwargs=None,
     initial_overlap_warmup_kwargs=None,
     refresh_vmc_warmup_kwargs=None,
@@ -683,9 +684,11 @@ def optimize_ensemble(
     Optimize a set of wave functions using ensemble VMC.
 
     Separate configurations are maintained for the all-wf overlap, the vmc, and the prefix-overlap distributions.
-    Warmups are performed by default. Empty individual warmup dictionaries disable the corresponding warmups.
-    Initial warmups are skipped when all configurations can be restored from a checkpoint.
-    Refresh warmups are run before measurements in each iteration, unless disabled.
+    Initial warmups are performed by default, and are skipped when all configurations can be restored from a checkpoint.
+    Empty individual warmup dictionaries disable the corresponding warmups.
+    Refresh warmups before each iteration's measurements are off by default: every set of configs is already
+    propagated by its own measurement each iteration, and the measurement sampling is doing almost exactly what
+    a refresh warmup would do. Enable them by passing the corresponding dictionaries if a case needs it.
     Starting configs precedence:
         1. If `hdf_file` exists, restart from its configs, initial warmups are skipped
         2. Otherwise, use `(norm_configs, gradient_configs)` from the supplied `all_configs` (optional)
@@ -719,10 +722,13 @@ def optimize_ensemble(
         overlap_thread_weight (list): a list of float that overrides the default thread weights (1 + wfi) / 2.0
         vmc_kwargs (dict): options for measurement `vmc`
         overlap_kwargs (dict): options for measurement `sample_overlap`
+        norm_kwargs (dict): options for the normalization `sample_overlap`; defaults to
+            overlap_kwargs with nblocks=2, since the norms only set a rescaling and
+            only matter to within a factor of two or so
         initial_vmc_warmup_kwargs (dict): options for initial warmup `vmc`; an empty dictionary disables it
         initial_overlap_warmup_kwargs (dict): options for initial warmup `sample_overlap`; an empty dictionary disables it
-        refresh_vmc_warmup_kwargs (dict): options for refresh warmup `vmc`; an empty dictionary disables it
-        refresh_overlap_warmup_kwargs (dict): options for refresh warmup `sample_overlap`; an empty dictionary disables it
+        refresh_vmc_warmup_kwargs (dict): options for refresh warmup `vmc`; defaults to off, pass a dictionary to enable
+        refresh_overlap_warmup_kwargs (dict): options for refresh warmup `sample_overlap`; defaults to off, pass a dictionary to enable
         all_configs (tuple): `(norm_configs, gradient_configs)`, a full set of configs to start the optimization
 
     Return:
@@ -734,9 +740,9 @@ def optimize_ensemble(
     if initial_overlap_warmup_kwargs is None:
         initial_overlap_warmup_kwargs = dict(nblocks=1, nsteps_per_block=100)
     if refresh_vmc_warmup_kwargs is None:
-        refresh_vmc_warmup_kwargs = dict(nblocks=1, nsteps_per_block=10)
+        refresh_vmc_warmup_kwargs = {}
     if refresh_overlap_warmup_kwargs is None:
-        refresh_overlap_warmup_kwargs = dict(nblocks=1, nsteps_per_block=10)
+        refresh_overlap_warmup_kwargs = {}
     if  vmc_kwargs is None:
         if method=='minsr':
             vmc_kwargs = dict(nblocks=1, nsteps_per_block=10)
@@ -744,6 +750,8 @@ def optimize_ensemble(
             vmc_kwargs = dict(nblocks=10, nsteps_per_block=10)
     if not overlap_kwargs:
         overlap_kwargs = dict(nblocks=10, nsteps_per_block=10)
+    if norm_kwargs is None:
+        norm_kwargs = dict(overlap_kwargs, nblocks=2)
     updater = build_updaters(transforms, enacc, method, eps, nodal_cutoff)
     if len(updater) != len(wfs):
         raise ValueError(
@@ -814,14 +822,15 @@ def optimize_ensemble(
             npartitions=npartitions,
             kwargs=refresh_overlap_warmup_kwargs,
         )
-        # Norm measurement
+        # Norm measurement. The norms only set a rescaling of the wave functions,
+        # so a couple of blocks is plenty; see norm_kwargs.
         _, data_unweighted, norm_configs = pyqmc.method.sample_many.sample_overlap(
             wfs,
             norm_configs,
             None,
             client=client,
             npartitions=npartitions,
-            **overlap_kwargs,
+            **norm_kwargs,
         )
         norm = np.mean(data_unweighted["overlap"], axis=0)
         if verbose:

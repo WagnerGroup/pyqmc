@@ -749,7 +749,10 @@ def optimize_ensemble(
         else:
             vmc_kwargs = dict(nblocks=10, nsteps_per_block=10)
     if not overlap_kwargs:
-        overlap_kwargs = dict(nblocks=10, nsteps_per_block=10)
+        if method=='minsr':
+            overlap_kwargs = dict(nblocks=1, nsteps_per_block=10)
+        else:
+            overlap_kwargs = dict(nblocks=10, nsteps_per_block=10)
     if norm_kwargs is None:
         norm_kwargs = dict(overlap_kwargs, nblocks=2)
     updater = build_updaters(transforms, enacc, method, eps, nodal_cutoff)

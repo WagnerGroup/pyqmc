@@ -145,7 +145,6 @@ def test_ensemble_minsr_matches_sr(H2_casci):
     """The ensemble minSR step reproduces the ensemble SR step on real sampled
     data, including the overlap penalty."""
     from pyqmc.method.ensemble_optimization import StochasticReconfigurationWfbyWf
-    from pyqmc.method.sample_many import sample_overlap
 
     mol, mf, mc = H2_casci
     np.random.seed(0)
@@ -158,8 +157,8 @@ def test_ensemble_minsr_matches_sr(H2_casci):
 
     # one energy sample and one overlap sample, shared by both updates
     sample1, configs = up.sample_energy(wfs[wfi], configs, nsteps_per_block=3)
-    weighted, unweighted, _ = sample_overlap(
-        wfs, configs, up.allwfs(), nblocks=2, nsteps_per_block=3
+    weighted, unweighted, _ = up.sample_overlap(
+        wfs, configs, nblocks=2, nsteps_per_block=3
     )
 
     up.eps = eps
@@ -181,3 +180,61 @@ def test_ensemble_minsr_matches_sr(H2_casci):
     dp_sr = sr.delta_p([tau], sr_avg, penalty)[0][0]
 
     assert np.allclose(dp_sr, dp_minsr, atol=1e-8), np.abs(dp_sr - dp_minsr).max()
+
+
+@pytest.mark.slow
+def test_overlap_derivatives_match_accumulator(H2_casci):
+    """The snapshot estimator of the overlap gradient computes exactly the
+    quantity the every-step accumulator averages.
+
+    minSR evaluates the weighted derivatives once per block instead of at every
+    Metropolis step, which is the same unbiased average of the same
+    per-configuration quantity -- just far fewer pgradient calls. On a fixed set
+    of configurations the two must agree to machine precision.
+    """
+    from pyqmc.method.ensemble_minsr import (
+        MinSRWfbyWf,
+        overlap_derivatives_worker,
+    )
+    from pyqmc.method.ensemble_optimization import StochasticReconfigurationWfbyWf
+    from pyqmc.method.sample_many import compute_weights
+
+    mol, mf, mc = H2_casci
+    np.random.seed(0)
+    wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
+    configs = pyq.initial_guess(mol, 50)
+
+    enacc = pyq.EnergyAccumulator(mol)
+    up = MinSRWfbyWf(enacc, transforms[-1])
+    sr = StochasticReconfigurationWfbyWf(enacc, transforms[-1])
+
+    for wf in wfs:
+        wf.recompute(configs)
+    accumulated = sr.avg(configs, wfs, compute_weights(wfs))["wtdp"]
+
+    total, nconfig = overlap_derivatives_worker(wfs, configs, up.transform)
+    assert nconfig == configs.configs.shape[0]
+    assert np.allclose(total / nconfig, accumulated, atol=1e-12)
+
+
+@pytest.mark.slow
+def test_sample_overlap_shapes(H2_casci):
+    """MinSRWfbyWf.sample_overlap returns what block_average expects: one wtdp
+    per block, and the overlap matrix still accumulated at every step."""
+    from pyqmc.method.ensemble_minsr import MinSRWfbyWf
+
+    mol, mf, mc = H2_casci
+    np.random.seed(0)
+    wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
+    configs = pyq.initial_guess(mol, 50)
+
+    up = MinSRWfbyWf(pyq.EnergyAccumulator(mol), transforms[-1])
+    nblocks = 3
+    weighted, unweighted, configs = up.sample_overlap(
+        wfs, configs, nblocks=nblocks, nsteps_per_block=2
+    )
+    nparams = transforms[-1].nparams
+    assert weighted["wtdp"].shape == (nblocks, nparams, 2, 2)
+    assert unweighted["overlap"].shape == (nblocks, 2, 2)
+    assert unweighted["acceptance"].shape == (nblocks,)
+    assert np.all(np.isfinite(weighted["wtdp"]))

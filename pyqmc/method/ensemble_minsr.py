@@ -47,21 +47,57 @@ import h5py
 import numpy as np
 import scipy.stats
 
+import pyqmc.method.sample_many
 from pyqmc.method.minsr import real_design_matrix, sample_minsr_data, sr_solve
+
+
+def overlap_derivatives_worker(wfs, configs, transform):
+    """Weighted parameter derivatives of the last wave function, summed over the
+    configurations of one snapshot.
+
+    :parameter wfs: the wave functions sharing the overlap distribution
+    :parameter configs: (nconfig, nelec, 3) configurations distributed as sum_i |psi_i|^2
+    :parameter transform: a LinearTransform for the last wave function's parameters
+    :returns: ((nparameters, nwf, nwf) sum over configurations, number of configurations)
+    """
+    for wf in wfs:
+        wf.recompute(configs)
+    dp = transform.serialize_gradients(wfs[-1].pgradient())
+    weights = pyqmc.method.sample_many.compute_weights(wfs)
+    return np.einsum("cp,jkc->pjk", dp, weights, optimize=True), weights.shape[-1]
+
+
+def sample_overlap_derivatives(wfs, configs, transform, client=None, npartitions=None):
+    """Average of :func:`overlap_derivatives_worker` over all configurations,
+    distributed over a client if one is given.
+
+    The configurations are not propagated here, so they are not returned.
+
+    :returns: (nparameters, nwf, nwf) weighted derivatives averaged over configurations
+    """
+    if client is None:
+        total, nconfig = overlap_derivatives_worker(wfs, configs, transform)
+        return total / nconfig
+    runs = [
+        client.submit(overlap_derivatives_worker, wfs, conf, transform)
+        for conf in configs.split(npartitions)
+    ]
+    results = [r.result() for r in runs]
+    return sum(r[0] for r in results) / sum(r[1] for r in results)
 
 
 class MinSRWfbyWf:
     """Updater for one state of an ensemble, the minSR analogue of
     :class:`pyqmc.method.ensemble_optimization.StochasticReconfigurationWfbyWf`.
 
-    It is used in two places by the driver: as the accumulator passed to
-    :func:`pyqmc.method.sample_many.sample_overlap`, where `avg` accumulates the
-    weighted derivatives that give the overlap gradient, and as the object that
-    turns the sampled data into a parameter change in `delta_p`.
+    It drives both samplings for its state -- `sample_energy` for the energy and
+    `sample_overlap` for the overlap penalty -- and turns the result into a
+    parameter change in `delta_p`.
 
-    Unlike the SR version there is no `onewf` accumulator, because the energy
-    part is sampled per configuration by `sample_energy` rather than averaged
-    into dpH/dppsi/dpidpj.
+    Unlike the SR version it is not an accumulator at all. Both samplings run
+    with no accumulator and evaluate the parameter derivatives per configuration
+    on a snapshot per block, rather than averaging them into dpH/dppsi/dpidpj or
+    into wtdp at every Metropolis step.
 
     Note that the number of samples per state per iteration is
     nconfig * vmc_kwargs['nblocks'], and the kernel solved is square in that
@@ -80,8 +116,58 @@ class MinSRWfbyWf:
         self.eps = eps
         self.nodal_cutoff = nodal_cutoff
 
-    def allwfs(self):
-        return self
+    def sample_overlap(
+        self,
+        wfs,
+        configs,
+        client=None,
+        npartitions=None,
+        nblocks=10,
+        nsteps_per_block=10,
+        tstep=0.5,
+    ):
+        """Sample the overlap distribution and accumulate what delta_p needs from
+        it, here the weighted derivatives that give the overlap gradient.
+
+        The derivatives are evaluated on one decorrelated snapshot per block
+        rather than at every Metropolis step. Both estimates of
+
+        .. math:: \\partial_p \\langle \\psi_k | \\psi_i \\rangle
+                  = \\langle O_p^* w_{ki} \\rangle_\\rho
+
+        are unbiased averages of the same per-configuration quantity, so the
+        update is unchanged; the snapshot version just calls `pgradient` nblocks
+        times instead of nblocks * nsteps_per_block times, which is the whole
+        point of minSR on the energy side too. The overlap matrix itself needs
+        only `wf.value()` and is still accumulated at every step.
+
+        :returns: (weighted, unweighted, configs), matching
+            :func:`pyqmc.method.sample_many.sample_overlap`
+        """
+        wtdp = []
+        unweighted = []
+        for _ in range(nblocks):
+            _, block_unweighted, configs = pyqmc.method.sample_many.sample_overlap(
+                wfs,
+                configs,
+                None,
+                nblocks=1,
+                nsteps_per_block=nsteps_per_block,
+                tstep=tstep,
+                client=client,
+                npartitions=npartitions,
+            )
+            unweighted.append(block_unweighted)
+            wtdp.append(
+                sample_overlap_derivatives(
+                    wfs, configs, self.transform, client, npartitions
+                )
+            )
+        weighted = {"wtdp": np.asarray(wtdp)}
+        unweighted = {
+            k: np.concatenate([u[k] for u in unweighted], axis=0) for k in unweighted[0]
+        }
+        return weighted, unweighted, configs
 
     def sample_energy(
         self, wf, configs, client=None, npartitions=None, verbose=True, **kwargs
@@ -104,23 +190,6 @@ class MinSRWfbyWf:
             npartitions=npartitions,
             **kwargs,
         )
-
-    def avg(self, configs, wfs, weights):
-        """Weighted derivatives of the last wave function in `wfs`, averaged over
-        configurations. Identical to the StochasticReconfigurationWfbyWf version.
-        """
-        wfi = len(wfs) - 1
-        dp = self.transform.serialize_gradients(wfs[wfi].pgradient())
-        nconfig = weights.shape[-1]
-        return {"wtdp": np.einsum("cp,jkc->pjk", dp, weights, optimize=True) / nconfig}
-
-    def keys(self):
-        return self.enacc.keys().union(["wtdp"])
-
-    def shapes(self):
-        d = {"wtdp": (self.transform.nparams,)}
-        d.update(self.enacc.shapes())
-        return d
 
     def update_state(self, hdf_file: h5py.File):
         """This accumulator keeps no state."""

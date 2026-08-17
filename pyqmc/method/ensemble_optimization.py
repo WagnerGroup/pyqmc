@@ -73,6 +73,26 @@ class StochasticReconfigurationWfbyWf:
             **kwargs,
         )
 
+    def sample_overlap(self, wfs, configs, client=None, npartitions=None, **kwargs):
+        """Sample the overlap distribution and accumulate whatever delta_p needs
+        from it, here the weighted derivatives averaged over every step.
+
+        The driver calls this rather than passing an accumulator itself, so that
+        an updater that wants something else from the overlap sampling -- minSR
+        evaluates the derivatives on one snapshot per block rather than at every
+        step -- can be dropped in without a separate driver.
+
+        :returns: (weighted, unweighted, configs)
+        """
+        return pyqmc.method.sample_many.sample_overlap(
+            wfs,
+            configs,
+            self.allwfs(),
+            client=client,
+            npartitions=npartitions,
+            **kwargs,
+        )
+
     def avg(self, configs, wfs, weights=None):
         """
         Compute (weighted) average
@@ -517,13 +537,21 @@ def sample_gradient_configs_threaded(
                         **vmc_kwargs,
                     )
             # prefix-overlap sampling
-            else:
-                accumulator = None if transform is None else transform.allwfs()
+            elif transform is None:  # warmup: propagate only, measure nothing
                 future = threader.submit(
                     pyqmc.method.sample_many.sample_overlap,
                     wfs[0:wfi + 1],
                     gradient_configs[wfi][sub_iteration]["overlap"],
-                    accumulator,
+                    None,
+                    client=client,
+                    npartitions=npartitions_by_thread[threadcount],
+                    **overlap_kwargs,
+                )
+            else:  # the updater decides what to collect from this sampling
+                future = threader.submit(
+                    transform.sample_overlap,
+                    wfs[0:wfi + 1],
+                    gradient_configs[wfi][sub_iteration]["overlap"],
                     client=client,
                     npartitions=npartitions_by_thread[threadcount],
                     **overlap_kwargs,
@@ -706,10 +734,10 @@ def optimize_ensemble(
     if initial_overlap_warmup_kwargs is None:
         initial_overlap_warmup_kwargs = dict(nblocks=1, nsteps_per_block=100)
     if refresh_vmc_warmup_kwargs is None:
-        refresh_vmc_warmup_kwargs = dict(nblocks=1, nsteps_per_block=30)
+        refresh_vmc_warmup_kwargs = dict(nblocks=1, nsteps_per_block=10)
     if refresh_overlap_warmup_kwargs is None:
-        refresh_overlap_warmup_kwargs = dict(nblocks=1, nsteps_per_block=30)
-    if not vmc_kwargs:
+        refresh_overlap_warmup_kwargs = dict(nblocks=1, nsteps_per_block=10)
+    if  vmc_kwargs is None:
         if method=='minsr':
             vmc_kwargs = dict(nblocks=1, nsteps_per_block=10)
         else:

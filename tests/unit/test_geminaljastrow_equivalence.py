@@ -11,10 +11,10 @@
 #
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-"""GeminalJastrowAccelerated must be the same wave function as GeminalJastrow.
+"""GeminalJastrow must be the same wave function as GeminalJastrowReference.
 
 The rewrite is algebraic, not an approximation, so every method is checked
-against the original to machine precision rather than to a sampling tolerance.
+against the reference to machine precision rather than to a sampling tolerance.
 """
 
 import numpy as np
@@ -23,8 +23,7 @@ from pyscf import gto
 
 import pyqmc.api as pyq
 import pyqmc.wf.testwf as testwf
-from pyqmc.wf.geminal_accelerated import GeminalJastrowAccelerated
-from pyqmc.wf.geminaljastrow import GeminalJastrow
+from pyqmc.wf.geminaljastrow import GeminalJastrow, GeminalJastrowReference
 
 TOL = 1e-12
 
@@ -43,7 +42,7 @@ def h2o():
 def make_pair(mol, nconfig=17, seed=0):
     """The two wave functions with identical parameters, on identical configs."""
     rng = np.random.default_rng(seed)
-    old, new = GeminalJastrow(mol), GeminalJastrowAccelerated(mol)
+    old, new = GeminalJastrowReference(mol), GeminalJastrow(mol)
     coeff = rng.normal(size=old.parameters["gcoeff"].shape) * 0.05
     old.parameters["gcoeff"] = coeff.copy()
     new.parameters["gcoeff"] = coeff.copy()
@@ -132,7 +131,7 @@ def test_value_cache_survives_updates(h2o):
             assert np.abs(v_o[1] - v_n[1]).max() < TOL, (step, e)
 
     # the incrementally maintained value equals a fresh recompute
-    fresh = GeminalJastrowAccelerated(h2o)
+    fresh = GeminalJastrow(h2o)
     fresh.parameters["gcoeff"] = new.parameters["gcoeff"].copy()
     fresh.recompute(configs)
     assert np.abs(fresh.value()[1] - new.value()[1]).max() < 1e-10
@@ -155,7 +154,7 @@ def test_updateinternals_without_saved_values(h2o):
 def test_generic_wf_checks(h2o):
     """The standard wave function test battery, as run for GeminalJastrow."""
     np.random.seed(0)
-    wf = GeminalJastrowAccelerated(h2o)
+    wf = GeminalJastrow(h2o)
     wf.parameters["gcoeff"] = (
         np.random.normal(size=wf.parameters["gcoeff"].shape) * 0.05
     )

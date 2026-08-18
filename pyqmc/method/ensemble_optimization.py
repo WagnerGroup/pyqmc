@@ -578,8 +578,10 @@ def _format_step_report(report):
     """The diagnostics an updater returns from delta_p, on one line.
 
     pgrad and SRdot are common to every updater; anything else it reports --
-    the overlap penalty cost, CG iteration counts -- is appended as it comes, so
-    that a new updater's diagnostics show up without touching the driver.
+    the overlap penalty cost, CG iteration counts, how long the solve took -- is
+    appended as it comes, so that a new updater's diagnostics show up without
+    touching the driver. Keys ending in `_seconds` are printed as times, and
+    flags that are True are left out, having nothing to report.
     """
     named = {"pgrad": "|grad|", "SRdot": "grad.step"}
     parts = [
@@ -593,6 +595,9 @@ def _format_step_report(report):
         if isinstance(value, (bool, np.bool_)):
             if not value:  # a flag is worth printing only when it is a problem
                 parts.append(f"{key} = False")
+            continue
+        if key.endswith("_seconds"):  # any updater can report a timing this way
+            parts.append(f"{key[: -len('_seconds')]} = {float(value):.3f}s")
             continue
         parts.append(f"{key} = {float(np.real(value)):.4g}")
     return "   ".join(parts)
@@ -990,9 +995,13 @@ def optimize_ensemble(
                 )
                 # the driver formats the diagnostics uniformly from the report,
                 # so the updater does not print its own
+                delta_p_start = time.perf_counter()
                 dp, report = transform.delta_p(
                     [tau], avg, overlap_penalty, verbose=False
                 )
+                # the solve does not parallelize the way the sampling does, so
+                # it is worth seeing next to the per-job sampling times
+                report["delta_p_seconds"] = time.perf_counter() - delta_p_start
                 if verbose:
                     label = f"wf {wfi}"
                     if len(transform_list) > 1:

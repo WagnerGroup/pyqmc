@@ -102,7 +102,11 @@ import numpy as np
 import pyqmc.gpu as gpu
 import pyqmc.method.mc
 from pyqmc.method.linemin import opt_hdf
-from pyqmc.method.minsr import sample_minsr_data, set_wf_params
+from pyqmc.method.minsr import (
+    local_energy_error,
+    sample_minsr_data,
+    set_wf_params,
+)
 
 #: rows of the derivative matrix touched at once when accumulating diag(S)
 _DIAG_CHUNK = 4096
@@ -512,11 +516,7 @@ def cgsr_optimization(
 
             energy = np.mean(data["total"]).real
             nsamples = data["total"].shape[0]
-            if len(data["block_energy"]) > 1:
-                block_energy = data["block_energy"].real
-                energy_error = np.std(block_energy) / np.sqrt(len(block_energy))
-            else:
-                energy_error = np.std(data["total"].real) / np.sqrt(nsamples)
+            energy_error = local_energy_error(data["total"])
             if verbose:
                 print("Current energy", energy, energy_error)
 

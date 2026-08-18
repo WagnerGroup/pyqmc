@@ -233,6 +233,29 @@ def minsr_update(
     return dp, report
 
 
+def local_energy_error(eloc):
+    """Standard error of the mean local energy, from the per-configuration values.
+
+    The methods that keep derivatives per configuration keep the local energies
+    that way too, so the error bar comes from the spread across configurations
+    rather than from the scatter of a handful of block means. That means a single
+    block is enough -- which matters, because these methods default to one -- and
+    with several blocks it uses every sample instead of `nblocks` numbers.
+
+    Walkers are independent Markov chains, and blocks are separated by
+    `nsteps_per_block` sweeps precisely to decorrelate them, so the samples are
+    treated as independent. That is the same assumption the block-mean estimator
+    makes; if it is in doubt, raise `nsteps_per_block`.
+
+    :parameter eloc: (nsamples,) local energies, possibly complex
+    :returns: the standard error, or nan if there is nothing to estimate from
+    """
+    eloc = np.real(np.asarray(eloc))
+    if eloc.size < 2:
+        return np.nan
+    return np.std(eloc, ddof=1) / np.sqrt(eloc.size)
+
+
 def sample_minsr_data(
     wf,
     coords,
@@ -442,11 +465,7 @@ def minsr_optimization(
 
             energy = np.mean(data["total"]).real
             nsamples = data["total"].shape[0]
-            if len(data["block_energy"]) > 1:
-                block_energy = data["block_energy"].real
-                energy_error = np.std(block_energy) / np.sqrt(len(block_energy))
-            else:
-                energy_error = np.std(data["total"].real) / np.sqrt(nsamples)
+            energy_error = local_energy_error(data["total"])
             if verbose:
                 print("Current energy", energy, energy_error)
 

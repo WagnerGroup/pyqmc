@@ -26,7 +26,7 @@ from pyqmc.method.cgsr import (
     preconditioned_conjugate_gradient,
     sr_gradient,
 )
-from pyqmc.method.minsr import minsr_update, real_design_matrix
+from pyqmc.method.minsr import local_energy_error, minsr_update, real_design_matrix
 
 
 def make_data(rng, nsamples, nparams, complex_derivatives=False, scales=None):
@@ -281,3 +281,40 @@ def test_zero_gradient_returns_zero_step():
     dp, report, v = cgsr_update(dppsi, np.full(50, -1.5), 0.1)
     assert np.all(dp == 0.0)
     assert report["cg_iterations"] == 0
+
+
+def test_local_energy_error_uses_every_sample():
+    rng = np.random.default_rng(5)
+    eloc = rng.normal(size=500)
+    assert local_energy_error(eloc) == pytest.approx(
+        np.std(eloc, ddof=1) / np.sqrt(500)
+    )
+
+
+def test_local_energy_error_works_from_one_block():
+    """The whole point: these methods default to a single block, where the
+    scatter of block means does not exist."""
+    rng = np.random.default_rng(7)
+    err = local_energy_error(rng.normal(size=200))
+    assert np.isfinite(err) and err > 0
+
+
+def test_local_energy_error_takes_the_real_part():
+    rng = np.random.default_rng(11)
+    real = rng.normal(size=100)
+    assert local_energy_error(real + 1j * rng.normal(size=100)) == pytest.approx(
+        local_energy_error(real)
+    )
+
+
+def test_local_energy_error_is_nan_for_a_single_sample():
+    assert np.isnan(local_energy_error(np.array([1.0])))
+
+
+def test_local_energy_error_is_unbiased():
+    """It should recover the true standard error, unlike the scatter of a couple
+    of block means, which is biased low."""
+    rng = np.random.default_rng(13)
+    sigma, n = 1.0, 400
+    estimates = [local_energy_error(rng.normal(0, sigma, size=n)) for _ in range(2000)]
+    assert np.mean(estimates) == pytest.approx(sigma / np.sqrt(n), rel=0.01)

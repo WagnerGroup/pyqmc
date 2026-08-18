@@ -125,3 +125,52 @@ def test_ensemble_cgsr_with_client(H2_casci, tmp_path):
     with h5py.File(hdf_file, "r") as hdf:
         assert np.all(np.isfinite(hdf["energy0"][()]))
         assert len(hdf["energy1"][()]) == 2
+
+
+@pytest.mark.slow
+def test_verbose_reports_solve_cost_and_error_bars(H2_casci, tmp_path, capsys):
+    """The verbose output has to carry the two things the sampling summary does
+    not: how long the (unparallelized) solve took, and an error bar that a single
+    block of sampling can actually produce."""
+    mol, mf, mc = H2_casci
+    np.random.seed(0)
+    wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
+    optimize_ensemble(
+        wfs, pyq.initial_guess(mol, 200), transforms,
+        str(tmp_path / "verbose.hdf5"), enacc=pyq.EnergyAccumulator(mol),
+        method="cgsr", tau=0.1, max_iterations=2, npartitions=1, verbose=True,
+        **KWS
+    )
+    out = capsys.readouterr().out
+    assert "=== Iteration 0 ===" in out
+    assert "delta_p = " in out
+    assert "sampling: 4 jobs" in out
+    # the per-block progress characters interleave unreadably across threads
+    assert "----" not in out
+
+    with h5py.File(str(tmp_path / "verbose.hdf5"), "r") as hdf:
+        for key in ["energy_error0", "energy_error1"]:
+            err = hdf[key][()]
+            assert np.all(np.isfinite(err)) and np.all(err > 0), key
+
+
+@pytest.mark.slow
+def test_error_bars_from_a_single_block(H2_casci, tmp_path):
+    """One block of overlap and vmc sampling is the default for the per-sample
+    methods, and it still has to give a usable error bar."""
+    mol, mf, mc = H2_casci
+    np.random.seed(0)
+    wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
+    hdf_file = str(tmp_path / "oneblock.hdf5")
+    optimize_ensemble(
+        wfs, pyq.initial_guess(mol, 300), transforms, hdf_file,
+        enacc=pyq.EnergyAccumulator(mol), method="cgsr", tau=0.1,
+        max_iterations=2, npartitions=1, verbose=False,
+        vmc_kwargs={"nblocks": 1, "nsteps_per_block": 3},
+        overlap_kwargs={"nblocks": 1, "nsteps_per_block": 3},
+        initial_vmc_warmup_kwargs={"nblocks": 1, "nsteps_per_block": 3},
+        initial_overlap_warmup_kwargs={"nblocks": 1, "nsteps_per_block": 3},
+    )
+    with h5py.File(hdf_file, "r") as hdf:
+        err = hdf["energy_error0"][()]
+        assert np.all(np.isfinite(err)) and np.all(err > 0)

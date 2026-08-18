@@ -119,6 +119,14 @@ def test_format_step_report_shows_flags_that_are_not():
     assert "cg_converged = False" in line
 
 
+def test_format_step_report_shows_timings_as_times():
+    """delta_p does not parallelize the way the sampling does, so its cost is
+    worth seeing; any updater can report one the same way."""
+    line = _format_step_report({"pgrad": 0.5, "delta_p_seconds": 1.25})
+    assert "delta_p = 1.250s" in line
+    assert "delta_p_seconds" not in line
+
+
 def test_format_step_report_skips_non_scalars():
     line = _format_step_report({"pgrad": 0.5, "vector": np.arange(3), "name": "sr"})
     assert "vector" not in line and "name" not in line

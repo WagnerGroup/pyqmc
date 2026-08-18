@@ -13,6 +13,8 @@
 # copies or substantial portions of the Software.
 
 
+import importlib
+
 import pyqmc.method.sample_many
 import numpy as np
 import pyqmc
@@ -363,7 +365,10 @@ def round_to_fixed_sum(x: np.ndarray, target_sum: int) -> np.ndarray:
 #: each one wants by default
 UPDATERS = {
     "sr": (StochasticReconfigurationWfbyWf, 1e-3),
-    "minsr": (None, 1e-2),  # imported on demand; see make_updater
+    # given as (module, class name) so that the import happens on demand and
+    # those modules are free to build on this one; see make_updater
+    "minsr": (("pyqmc.method.ensemble_minsr", "MinSRWfbyWf"), 1e-2),
+    "cgsr": (("pyqmc.method.ensemble_cgsr", "CGSRWfbyWf"), 1e-2),
 }
 
 
@@ -373,10 +378,12 @@ def make_updater(transform, enacc, method="sr", eps=None, nodal_cutoff=1e-3):
     :parameter transform: a LinearTransform for this state's parameters
     :parameter enacc: an EnergyAccumulator-like object
     :parameter str method: 'sr' for stochastic reconfiguration, which builds the
-        (nparameters, nparameters) S matrix, or 'minsr', which solves the same
-        equations in sample space and never builds it
+        (nparameters, nparameters) S matrix, 'minsr', which solves the same
+        equations in sample space and never builds it, or 'cgsr', which solves
+        them iteratively and builds neither that matrix nor the sample-space
+        kernel
     :parameter float eps: regularization of the solve; defaults to what the
-        method wants, 1e-3 for sr and 1e-2 for minsr
+        method wants, 1e-3 for sr and 1e-2 for minsr and cgsr
     :parameter float nodal_cutoff: regularization distance for the nodal divergence of the derivatives
     """
     if method not in UPDATERS:
@@ -384,10 +391,9 @@ def make_updater(transform, enacc, method="sr", eps=None, nodal_cutoff=1e-3):
             f"Unknown method {method!r}; choose one of {sorted(UPDATERS)}."
         )
     cls, default_eps = UPDATERS[method]
-    if cls is None:  # deferred so that minsr can build on this module
-        from pyqmc.method.ensemble_minsr import MinSRWfbyWf
-
-        cls = MinSRWfbyWf
+    if isinstance(cls, tuple):  # deferred import
+        module_name, class_name = cls
+        cls = getattr(importlib.import_module(module_name), class_name)
     return cls(
         enacc,
         transform,
@@ -703,15 +709,21 @@ def optimize_ensemble(
         hdf_file (str): path for the checkpoint file
         enacc: an EnergyAccumulator-like object shared by every state, or a list
             with one per state. Required unless transforms are already updaters.
-        method (str): 'sr' for stochastic reconfiguration, or 'minsr' to solve the
-            same equations in sample space without building the
-            (nparameters, nparameters) S matrix. minSR is worth it when there are
-            more parameters than samples; note that the number of samples per
-            state is nconfig * vmc_kwargs['nblocks'], and the kernel it solves is
-            square in that, so the default of 10 blocks is usually not what you
-            want with it.
+        method (str): 'sr' for stochastic reconfiguration, which builds the
+            (nparameters, nparameters) S matrix; 'minsr', which solves the same
+            equations in sample space without building it; or 'cgsr', which
+            solves them by conjugate gradient and builds neither that matrix nor
+            the sample-space kernel.
+            minSR is worth it when there are more parameters than samples. Note
+            that the number of samples per state is
+            nconfig * vmc_kwargs['nblocks'], and the kernel it solves is square
+            in that, which is why it defaults to one block rather than ten.
+            cgsr shares that default because it shares the sampling, but it does
+            not share the reason: its cost and memory are both linear in the
+            sample count, so it is the one to raise nblocks on if the statistics
+            need it. See pyqmc.method.cgsr for where the crossover sits.
         eps (float): regularization of the solve; defaults to what the method
-            wants, 1e-3 for sr and 1e-2 for minsr
+            wants, 1e-3 for sr and 1e-2 for minsr and cgsr
         nodal_cutoff (float): regularization distance for the nodal divergence of
             the parameter derivatives
         tau (float): optimization step size
@@ -743,13 +755,16 @@ def optimize_ensemble(
         refresh_vmc_warmup_kwargs = {}
     if refresh_overlap_warmup_kwargs is None:
         refresh_overlap_warmup_kwargs = {}
+    # minsr and cgsr both keep the derivatives per configuration, so they share
+    # these defaults; sr averages them into dpidpj and wants more blocks
+    per_sample = method in ("minsr", "cgsr")
     if  vmc_kwargs is None:
-        if method=='minsr':
+        if per_sample:
             vmc_kwargs = dict(nblocks=1, nsteps_per_block=10)
         else:
             vmc_kwargs = dict(nblocks=10, nsteps_per_block=10)
     if not overlap_kwargs:
-        if method=='minsr':
+        if per_sample:
             overlap_kwargs = dict(nblocks=1, nsteps_per_block=10)
         else:
             overlap_kwargs = dict(nblocks=10, nsteps_per_block=10)

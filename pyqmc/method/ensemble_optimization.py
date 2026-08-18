@@ -33,18 +33,65 @@ class StochasticReconfigurationWfbyWf:
     given the averages given by avg()
     """
 
-    def __init__(self, enacc, transform, eps=1e-3):
+    def __init__(self, enacc, transform, eps=1e-3, nodal_cutoff=1e-3):
         """ """
         self.enacc = enacc
         self.transform = transform
         self.eps = eps
-        self._onewf = StochasticReconfiguration(enacc, transform, eps)
+        self.nodal_cutoff = nodal_cutoff
+        # eps used to be passed positionally here, which landed it in
+        # nodal_cutoff; the two defaults coincide, so only a non-default eps was
+        # affected, and it retuned the nodal regularization rather than the solve
+        self._onewf = StochasticReconfiguration(
+            enacc, transform, nodal_cutoff=nodal_cutoff, eps=eps
+        )
 
     def onewf(self):
         return self._onewf
 
     def allwfs(self):
         return self
+
+    def sample_energy(self, wf, configs, client=None, npartitions=None, verbose=True, **kwargs):
+        """Sample this state on its own and accumulate whatever delta_p needs
+        from that distribution, here the SR averages dpH, dppsi, and dpidpj.
+
+        The driver calls this rather than running vmc itself, so that an updater
+        that needs something else from the single-state sampling -- minSR needs
+        the derivatives per configuration, not averaged into dpidpj -- can be
+        dropped in without a separate driver.
+
+        :returns: (data, configs) with data in the form block_average expects
+        """
+        return pyqmc.method.mc.vmc(
+            wf,
+            configs,
+            accumulators={"": self.onewf()},
+            verbose=verbose,
+            client=client,
+            npartitions=npartitions,
+            **kwargs,
+        )
+
+    def sample_overlap(self, wfs, configs, client=None, npartitions=None, **kwargs):
+        """Sample the overlap distribution and accumulate whatever delta_p needs
+        from it, here the weighted derivatives averaged over every step.
+
+        The driver calls this rather than passing an accumulator itself, so that
+        an updater that wants something else from the overlap sampling -- minSR
+        evaluates the derivatives on one snapshot per block rather than at every
+        step -- can be dropped in without a separate driver.
+
+        :returns: (weighted, unweighted, configs)
+        """
+        return pyqmc.method.sample_many.sample_overlap(
+            wfs,
+            configs,
+            self.allwfs(),
+            client=client,
+            npartitions=npartitions,
+            **kwargs,
+        )
 
     def avg(self, configs, wfs, weights=None):
         """
@@ -224,6 +271,9 @@ def load_all_configs(hdf, configs, updater):
 def hdf_save(hdf_file, data, attr, wfs, norm_configs, gradient_configs):
     if hdf_file is not None:
         with h5py.File(hdf_file, "a") as hdf:
+            for k, it in attr.items():
+                if k not in hdf.attrs:
+                    hdf.attrs[k] = it
             for wfi, wf in enumerate(wfs):
                 if f"wf/{wfi}" not in hdf.keys():
                     hdf.create_group(f"wf/{wfi}")
@@ -307,6 +357,72 @@ def round_to_fixed_sum(x: np.ndarray, target_sum: int) -> np.ndarray:
     y[y < 1] = 1
 
     return y
+
+
+#: algorithms optimize_ensemble can be asked for by name, and the regularization
+#: each one wants by default
+UPDATERS = {
+    "sr": (StochasticReconfigurationWfbyWf, 1e-3),
+    "minsr": (None, 1e-2),  # imported on demand; see make_updater
+}
+
+
+def make_updater(transform, enacc, method="sr", eps=None, nodal_cutoff=1e-3):
+    """Build the per-state updater for one algorithm.
+
+    :parameter transform: a LinearTransform for this state's parameters
+    :parameter enacc: an EnergyAccumulator-like object
+    :parameter str method: 'sr' for stochastic reconfiguration, which builds the
+        (nparameters, nparameters) S matrix, or 'minsr', which solves the same
+        equations in sample space and never builds it
+    :parameter float eps: regularization of the solve; defaults to what the
+        method wants, 1e-3 for sr and 1e-2 for minsr
+    :parameter float nodal_cutoff: regularization distance for the nodal divergence of the derivatives
+    """
+    if method not in UPDATERS:
+        raise ValueError(
+            f"Unknown method {method!r}; choose one of {sorted(UPDATERS)}."
+        )
+    cls, default_eps = UPDATERS[method]
+    if cls is None:  # deferred so that minsr can build on this module
+        from pyqmc.method.ensemble_minsr import MinSRWfbyWf
+
+        cls = MinSRWfbyWf
+    return cls(
+        enacc,
+        transform,
+        eps=default_eps if eps is None else eps,
+        nodal_cutoff=nodal_cutoff,
+    )
+
+
+def build_updaters(transforms, enacc=None, method="sr", eps=None, nodal_cutoff=1e-3):
+    """Turn parameter transforms into the nested list of updaters the driver uses.
+
+    :parameter transforms: one transform per state, or a nested list indexed by
+        state then sub-iteration. Objects that are already updaters (anything
+        with delta_p) are passed through, so a hand-built updater still works.
+    :parameter enacc: an EnergyAccumulator-like object shared by every state, or
+        a list with one per state
+    :returns: nested list of updaters indexed by state then sub-iteration
+    """
+    nested = [t if isinstance(t, (list, tuple)) else [t] for t in transforms]
+    if all(hasattr(t, "delta_p") for state in nested for t in state):
+        return [list(state) for state in nested]
+    if enacc is None:
+        raise ValueError(
+            "enacc is required to build updaters from transforms; pass an "
+            "EnergyAccumulator, or pass updater objects instead of transforms."
+        )
+    enaccs = enacc if isinstance(enacc, (list, tuple)) else [enacc] * len(nested)
+    if len(enaccs) != len(nested):
+        raise ValueError(
+            f"got {len(enaccs)} energy accumulators for {len(nested)} states"
+        )
+    return [
+        [make_updater(t, e, method, eps, nodal_cutoff) for t in state]
+        for state, e in zip(nested, enaccs)
+    ]
 
 
 def _warmup_overlap(wfs, configs, client, npartitions, kwargs):
@@ -399,25 +515,43 @@ def sample_gradient_configs_threaded(
             transform = None if updater is None else updater[wfi][sub_iteration]
             # vmc sampling
             if kind == "energy":
-                accumulators = None if transform is None else {"": transform.onewf()}
-                future = threader.submit(
-                    pyqmc.method.mc.vmc,
-                    wfs[wfi],
-                    gradient_configs[wfi][sub_iteration]["energy"],
-                    accumulators=accumulators,
-                    verbose=verbose if updater is not None else False,
-                    client=client,
-                    npartitions=npartitions_by_thread[threadcount],
-                    **vmc_kwargs,
-                )
+                if transform is None:  # warmup: propagate only, measure nothing
+                    future = threader.submit(
+                        pyqmc.method.mc.vmc,
+                        wfs[wfi],
+                        gradient_configs[wfi][sub_iteration]["energy"],
+                        accumulators=None,
+                        verbose=False,
+                        client=client,
+                        npartitions=npartitions_by_thread[threadcount],
+                        **vmc_kwargs,
+                    )
+                else:  # the updater decides what to collect from this sampling
+                    future = threader.submit(
+                        transform.sample_energy,
+                        wfs[wfi],
+                        gradient_configs[wfi][sub_iteration]["energy"],
+                        client=client,
+                        npartitions=npartitions_by_thread[threadcount],
+                        verbose=verbose,
+                        **vmc_kwargs,
+                    )
             # prefix-overlap sampling
-            else:
-                accumulator = None if transform is None else transform.allwfs()
+            elif transform is None:  # warmup: propagate only, measure nothing
                 future = threader.submit(
                     pyqmc.method.sample_many.sample_overlap,
                     wfs[0:wfi + 1],
                     gradient_configs[wfi][sub_iteration]["overlap"],
-                    accumulator,
+                    None,
+                    client=client,
+                    npartitions=npartitions_by_thread[threadcount],
+                    **overlap_kwargs,
+                )
+            else:  # the updater decides what to collect from this sampling
+                future = threader.submit(
+                    transform.sample_overlap,
+                    wfs[0:wfi + 1],
+                    gradient_configs[wfi][sub_iteration]["overlap"],
                     client=client,
                     npartitions=npartitions_by_thread[threadcount],
                     **overlap_kwargs,
@@ -524,9 +658,13 @@ def evaluate_gradients_threaded(
 def optimize_ensemble(
     wfs,
     configs,
-    updater,
+    transforms,
     hdf_file,
-    tau=1,
+    enacc=None,
+    method="sr",
+    eps=None,
+    nodal_cutoff=1e-3,
+    tau=.02,
     max_iterations=100,
     overlap_penalty=None,
     npartitions=None,
@@ -535,6 +673,7 @@ def optimize_ensemble(
     overlap_thread_weight=None,
     vmc_kwargs=None,
     overlap_kwargs=None,
+    norm_kwargs=None,
     initial_vmc_warmup_kwargs=None,
     initial_overlap_warmup_kwargs=None,
     refresh_vmc_warmup_kwargs=None,
@@ -545,9 +684,11 @@ def optimize_ensemble(
     Optimize a set of wave functions using ensemble VMC.
 
     Separate configurations are maintained for the all-wf overlap, the vmc, and the prefix-overlap distributions.
-    Warmups are performed by default. Empty individual warmup dictionaries disable the corresponding warmups.
-    Initial warmups are skipped when all configurations can be restored from a checkpoint.
-    Refresh warmups are run before measurements in each iteration, unless disabled.
+    Initial warmups are performed by default, and are skipped when all configurations can be restored from a checkpoint.
+    Empty individual warmup dictionaries disable the corresponding warmups.
+    Refresh warmups before each iteration's measurements are off by default: every set of configs is already
+    propagated by its own measurement each iteration, and the measurement sampling is doing almost exactly what
+    a refresh warmup would do. Enable them by passing the corresponding dictionaries if a case needs it.
     Starting configs precedence:
         1. If `hdf_file` exists, restart from its configs, initial warmups are skipped
         2. Otherwise, use `(norm_configs, gradient_configs)` from the supplied `all_configs` (optional)
@@ -556,8 +697,23 @@ def optimize_ensemble(
     Args:
         wfs (list): list of wave functions to be optimized
         configs: initial configs before warmup if not loaded from a checkpoint
-        updater (list[list]): nested list of StochasticReconfigurationWfbyWf accumulators indexed by state then by sub-iteration
+        transforms (list): one LinearTransform per state, or a nested list indexed
+            by state then by sub-iteration. Already-built updaters are accepted
+            here too, in which case enacc, method, eps, and nodal_cutoff are unused.
         hdf_file (str): path for the checkpoint file
+        enacc: an EnergyAccumulator-like object shared by every state, or a list
+            with one per state. Required unless transforms are already updaters.
+        method (str): 'sr' for stochastic reconfiguration, or 'minsr' to solve the
+            same equations in sample space without building the
+            (nparameters, nparameters) S matrix. minSR is worth it when there are
+            more parameters than samples; note that the number of samples per
+            state is nconfig * vmc_kwargs['nblocks'], and the kernel it solves is
+            square in that, so the default of 10 blocks is usually not what you
+            want with it.
+        eps (float): regularization of the solve; defaults to what the method
+            wants, 1e-3 for sr and 1e-2 for minsr
+        nodal_cutoff (float): regularization distance for the nodal divergence of
+            the parameter derivatives
         tau (float): optimization step size
         max_iterations (int): maximum number of optimization iterations
         overlap_penalty (np.ndarray): overlap penalty matrix with shape (nwf, nwf)
@@ -566,10 +722,13 @@ def optimize_ensemble(
         overlap_thread_weight (list): a list of float that overrides the default thread weights (1 + wfi) / 2.0
         vmc_kwargs (dict): options for measurement `vmc`
         overlap_kwargs (dict): options for measurement `sample_overlap`
+        norm_kwargs (dict): options for the normalization `sample_overlap`; defaults to
+            overlap_kwargs with nblocks=2, since the norms only set a rescaling and
+            only matter to within a factor of two or so
         initial_vmc_warmup_kwargs (dict): options for initial warmup `vmc`; an empty dictionary disables it
         initial_overlap_warmup_kwargs (dict): options for initial warmup `sample_overlap`; an empty dictionary disables it
-        refresh_vmc_warmup_kwargs (dict): options for refresh warmup `vmc`; an empty dictionary disables it
-        refresh_overlap_warmup_kwargs (dict): options for refresh warmup `sample_overlap`; an empty dictionary disables it
+        refresh_vmc_warmup_kwargs (dict): options for refresh warmup `vmc`; defaults to off, pass a dictionary to enable
+        refresh_overlap_warmup_kwargs (dict): options for refresh warmup `sample_overlap`; defaults to off, pass a dictionary to enable
         all_configs (tuple): `(norm_configs, gradient_configs)`, a full set of configs to start the optimization
 
     Return:
@@ -581,13 +740,26 @@ def optimize_ensemble(
     if initial_overlap_warmup_kwargs is None:
         initial_overlap_warmup_kwargs = dict(nblocks=1, nsteps_per_block=100)
     if refresh_vmc_warmup_kwargs is None:
-        refresh_vmc_warmup_kwargs = dict(nblocks=1, nsteps_per_block=30)
+        refresh_vmc_warmup_kwargs = {}
     if refresh_overlap_warmup_kwargs is None:
-        refresh_overlap_warmup_kwargs = dict(nblocks=1, nsteps_per_block=30)
-    if not vmc_kwargs:
-        vmc_kwargs = dict(nblocks=10, nsteps_per_block=10)
+        refresh_overlap_warmup_kwargs = {}
+    if  vmc_kwargs is None:
+        if method=='minsr':
+            vmc_kwargs = dict(nblocks=1, nsteps_per_block=10)
+        else:
+            vmc_kwargs = dict(nblocks=10, nsteps_per_block=10)
     if not overlap_kwargs:
-        overlap_kwargs = dict(nblocks=10, nsteps_per_block=10)
+        if method=='minsr':
+            overlap_kwargs = dict(nblocks=1, nsteps_per_block=10)
+        else:
+            overlap_kwargs = dict(nblocks=10, nsteps_per_block=10)
+    if norm_kwargs is None:
+        norm_kwargs = dict(overlap_kwargs, nblocks=2)
+    updater = build_updaters(transforms, enacc, method, eps, nodal_cutoff)
+    if len(updater) != len(wfs):
+        raise ValueError(
+            f"got transforms for {len(updater)} states but {len(wfs)} wave functions"
+        )
     nwf = len(wfs)
     if overlap_penalty is None:
         overlap_penalty = np.ones((nwf, nwf)) * 0.5
@@ -653,14 +825,15 @@ def optimize_ensemble(
             npartitions=npartitions,
             kwargs=refresh_overlap_warmup_kwargs,
         )
-        # Norm measurement
+        # Norm measurement. The norms only set a rescaling of the wave functions,
+        # so a couple of blocks is plenty; see norm_kwargs.
         _, data_unweighted, norm_configs = pyqmc.method.sample_many.sample_overlap(
             wfs,
             norm_configs,
             None,
             client=client,
             npartitions=npartitions,
-            **overlap_kwargs,
+            **norm_kwargs,
         )
         norm = np.mean(data_unweighted["overlap"], axis=0)
         if verbose:

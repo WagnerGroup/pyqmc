@@ -17,6 +17,7 @@ import pyqmc.wftools as wftools
 import pyqmc.pyscftools as pyscftools
 import pyqmc.pbc.supercell as supercell
 import pyqmc.method.linemin as linemin
+import pyqmc.method.minsr as minsr
 import pyqmc.method.dmc as dmc
 import pyqmc.method.mc
 import pyqmc.reblock
@@ -39,8 +40,13 @@ def OPTIMIZE(
     slater_kws=None,
     target_root=None,
     nodal_cutoff=1e-3,
+    optimizer="linemin",
     **linemin_kws,
 ):
+    """optimizer selects the optimization driver: 'linemin' for stochastic
+    reconfiguration with a correlated-sampling line minimization, or 'minsr' for
+    the minimum-step SR algorithm, which computes the same update without
+    forming the S matrix. Remaining keyword arguments are passed to the driver."""
     linemin_kws["hdf_file"] = output
     if load_parameters is not None and output is not None and os.path.isfile(output):
         raise RuntimeError(
@@ -62,7 +68,21 @@ def OPTIMIZE(
         target_root=target_root,
         nodal_cutoff=nodal_cutoff,
     )
-    linemin.line_minimization(wf, configs, acc, **linemin_kws)
+    if optimizer == "linemin":
+        linemin.line_minimization(wf, configs, acc, **linemin_kws)
+    elif optimizer == "minsr":
+        # minsr works directly with the transform and the energy accumulator; the
+        # S matrix that acc would build is exactly what it avoids.
+        minsr.minsr_optimization(
+            wf,
+            configs,
+            acc.transform,
+            acc.enacc,
+            nodal_cutoff=nodal_cutoff,
+            **linemin_kws,
+        )
+    else:
+        raise ValueError(f"Unknown optimizer {optimizer}; use 'linemin' or 'minsr'.")
 
 
 def generate_accumulators(

@@ -15,15 +15,23 @@
 """
 Here we demonstrate how to create and optimize an ensemble of wave functions,
 using CASCI to generate the initial wave functions.
+
+Pass a client to run the states in parallel; without one the sampling runs
+serially, which is fine for a quick check but slow for real work. The optimizer
+is selected with `method`: "sr" builds the (nparameters, nparameters) S matrix,
+"minsr" solves the same equations in sample space and never builds it, which is
+what you want when there are more parameters than samples.
 """
 
 from pyscf import gto, scf, mcscf
 import h5py
 import pyqmc.api as pyq
 import pyqmc.observables.accumulators
+from pyqmc.method.ensemble_optimization import optimize_ensemble
 from rich import print
 import os
 import copy
+from concurrent.futures import ProcessPoolExecutor
 
 
 def run_scf(atoms, scf_checkfile):
@@ -66,13 +74,9 @@ def run_ensemble(
     nstates=3,
     tau=0.1,
     nconfig=800,
+    method="sr",
 ):
     """ """
-    from pyqmc.method.ensemble_optimization import (
-        optimize_ensemble,
-        StochasticReconfigurationWfbyWf,
-    )
-
     mol, mf, mc = pyq.recover_pyscf(scf_checkfile, ci_checkfile, cancel_outputs=False)
 
     mcs = [copy.copy(mc) for i in range(nstates)]
@@ -80,8 +84,7 @@ def run_ensemble(
         mcs[i].ci = mc.ci[i]
 
     wfs = []
-    energy = pyq.EnergyAccumulator(mol)
-    sr_accumulator = []
+    transforms = []
 
     for i in range(nstates):
         wf, to_opt = pyq.generate_wf(
@@ -92,24 +95,25 @@ def run_ensemble(
                 if "wf2" in k:
                     wf.parameters[k] = f["wf"][k][()]
         wfs.append(wf)
-        sr_accumulator.append(
-            [
-                StochasticReconfigurationWfbyWf(
-                    energy,
-                    pyqmc.observables.accumulators.LinearTransform(
-                        wf.parameters, to_opt
-                    ),
-                )
-            ]
+        transforms.append(
+            pyqmc.observables.accumulators.LinearTransform(wf.parameters, to_opt)
         )
 
     configs = pyq.initial_guess(mol, nconfig)
 
+    # minSR solves in sample space, and the kernel it solves is square in the
+    # number of samples, nconfig * nblocks, so take a single block there. SR
+    # averages over blocks instead, and its cost does not depend on the count.
+    vmc_kwargs = {"nblocks": 1} if method == "minsr" else None
+
     return optimize_ensemble(
         wfs,
         configs,
-        sr_accumulator,
+        transforms,
         hdf_file=hdf_file,
+        enacc=pyq.EnergyAccumulator(mol),
+        method=method,
+        vmc_kwargs=vmc_kwargs,
         max_iterations=max_iterations,
         client=client,
         npartitions=npartitions,
@@ -133,10 +137,16 @@ if __name__ == "__main__":
             verbose=True,
         )
     ensemble_checkfile = f"{__file__}.ensemble.hdf5"
-    run_ensemble(
-        scf_checkfile,
-        ci_checkfile,
-        jastrow_checkfile,
-        ensemble_checkfile,
-        max_iterations=50,
-    )
+    # Drop the client to run this serially, e.g. while trying something out.
+    ncores = 9
+    with ProcessPoolExecutor(max_workers=ncores) as executor:
+        run_ensemble(
+            scf_checkfile,
+            ci_checkfile,
+            jastrow_checkfile,
+            ensemble_checkfile,
+            max_iterations=50,
+            client=executor,
+            npartitions=ncores,
+            method="sr",
+        )

@@ -48,6 +48,7 @@ import numpy as np
 import scipy.stats
 
 import pyqmc.method.sample_many
+from pyqmc.method.ensemble_optimization import _block_sem
 from pyqmc.method.minsr import real_design_matrix, sample_minsr_data, sr_solve
 
 
@@ -213,7 +214,7 @@ class MinSRWfbyWf:
         for k in ["wtdp"]:
             it = data[k]
             avg[k] = np.mean(it, axis=0) / Nij[wfi]
-            error[k] = scipy.stats.sem(it, axis=0) / Nij[wfi]
+            error[k] = _block_sem(it) / Nij[wfi]
         avg["overlap"] = weight_avg
 
         eloc = data_sample1["total"]

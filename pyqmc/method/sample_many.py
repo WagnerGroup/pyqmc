@@ -68,7 +68,7 @@ def invert_list_of_dicts(A, asarray=True):
 
 
 def sample_overlap_run(wfs, configs, tstep, nsteps_per_block, nblocks, energy,
-                          hdf_file=None, client=None, npartitions=None):
+                          hdf_file=None, client=None, npartitions=None, verbose=False):
     """
     Use a single core to sample over blocks
     """
@@ -76,7 +76,8 @@ def sample_overlap_run(wfs, configs, tstep, nsteps_per_block, nblocks, energy,
     weighted = []
     unweighted = []
     for block in range(nblocks):
-        print("-", end="", flush=True)
+        if verbose:
+            print("-", end="", flush=True)
         if client is None:
             w, u, configs = sample_overlap_worker(wfs, configs, tstep, nsteps_per_block, energy)
         else:
@@ -205,8 +206,14 @@ def sample_overlap(
     hdf_file=None,
     client=None,
     npartitions=None,
+    verbose=False,
 ):
-    """ """
+    """Sample nblocks of the distribution proportional to sum_i |Psi_i|^2.
+
+    `verbose` prints one character per block, matching pyqmc.method.mc.vmc. It is
+    off by default because callers that run several of these at once in threads
+    get unreadable interleaved output.
+    """
     if hdf_file is not None and os.path.isfile(hdf_file):
         with h5py.File(hdf_file, "r") as f:
             with h5py.File(hdf_file, "r") as hdf:
@@ -214,7 +221,7 @@ def sample_overlap(
                 if "configs" in hdf.keys():
                     configs.load_hdf(hdf)
 
-    return sample_overlap_run(wfs, configs, tstep, nsteps_per_block, nblocks, energy, hdf_file, client, npartitions)
+    return sample_overlap_run(wfs, configs, tstep, nsteps_per_block, nblocks, energy, hdf_file, client, npartitions, verbose)
 
 def normalize(weighted, unweighted):
     """

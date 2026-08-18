@@ -21,8 +21,8 @@ import pyqmc
 import h5py
 from pyqmc.method import hdftools
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import NamedTuple
 import time
-import pandas as pd
 import pyqmc.gpu as gpu
 import os
 from pyqmc.observables.stochastic_reconfiguration import StochasticReconfiguration
@@ -143,7 +143,7 @@ class StochasticReconfigurationWfbyWf:
         for k in ["wtdp"]:
             it = data[k]
             avg[k] = np.mean(it, axis=0) / Nij[wfi]
-            error[k] = scipy.stats.sem(it, axis=0) / Nij[wfi]
+            error[k] = _block_sem(it) / Nij[wfi]
 
         avg["overlap"] = weight_avg
 
@@ -221,12 +221,25 @@ class StochasticReconfigurationWfbyWf:
         report = {
             "pgrad": np.linalg.norm(pgrad),
             "SRdot": np.dot(pgrad, v) / (np.linalg.norm(v) * np.linalg.norm(pgrad)),
+            "overlap_cost": overlap_cost,
         }
         if verbose:
             print("overlap gradient norm", np.linalg.norm(ovlp))
             print("Gradient norm: ", np.linalg.norm(pgrad))
             print("Dot product between gradient and SR step: ", report["SRdot"])
         return dp, report
+
+
+def _block_sem(blocks):
+    """Standard error over the leading (block) axis.
+
+    scipy.stats.sem warns and returns nan for a single block, which is a common
+    case here since the per-sample methods default to one. Return the nan
+    without the warning.
+    """
+    if blocks.shape[0] < 2:
+        return np.full(blocks.shape[1:], np.nan)
+    return scipy.stats.sem(blocks, axis=0)
 
 
 def _configs_to_hdf(hdf, configs):
@@ -449,6 +462,159 @@ def _sampling_requested(kwargs):
     return bool(kwargs) and kwargs.get("nblocks", 1) > 0
 
 
+class _SamplingJob(NamedTuple):
+    """One sampling task: which distribution, for which state and sub-iteration.
+
+    `weight` is this job's share of the partitions. `cost` is an estimate of its
+    wall time, used only to decide submission order.
+    """
+
+    kind: str  # "energy" or "overlap"
+    wfi: int
+    sub_iteration: int
+    weight: float
+    cost: float
+
+    def label(self, with_sub_iteration=False):
+        sub = f".{self.sub_iteration}" if with_sub_iteration else ""
+        return f"{self.kind} wf{self.wfi}{sub}"
+
+
+def _sweeps(kwargs):
+    """Metropolis sweeps one sampling job will run."""
+    return kwargs.get("nblocks", 1) * kwargs.get("nsteps_per_block", 10)
+
+
+def _build_sampling_jobs(
+    gradient_configs, vmc_kwargs, overlap_kwargs, overlap_thread_weight=None
+):
+    """List the sampling jobs for one round, longest first.
+
+    Ordering matters when there are fewer partitions than jobs: the client then
+    has fewer workers than tasks and starts them in submission order, so
+    submitting a long job last leaves it running alone at the end and sets the
+    makespan. The prefix-overlap sampling for the highest state propagates the
+    most wave functions and is usually the longest job of the round, so it goes
+    first.
+
+    The cost estimate is sweeps times the number of wave functions propagated,
+    which is why overlap sampling for state `wfi` counts `wfi + 1`. It is only
+    used for ordering; `weight`, which `overlap_thread_weight` overrides, is what
+    divides up the partitions.
+    """
+    jobs = []
+    if _sampling_requested(vmc_kwargs):
+        sweeps = _sweeps(vmc_kwargs)
+        for wfi, state_configs in enumerate(gradient_configs):
+            for sub_iteration in range(len(state_configs)):
+                jobs.append(_SamplingJob("energy", wfi, sub_iteration, 1.0, sweeps))
+    if _sampling_requested(overlap_kwargs):
+        sweeps = _sweeps(overlap_kwargs)
+        for wfi, state_configs in enumerate(gradient_configs):
+            for sub_iteration in range(len(state_configs)):
+                if overlap_thread_weight is None:
+                    weight = (1 + wfi) / 2.0
+                else:
+                    weight = overlap_thread_weight[wfi]
+                jobs.append(
+                    _SamplingJob(
+                        "overlap", wfi, sub_iteration, weight, sweeps * (wfi + 1)
+                    )
+                )
+    # ties go to overlap, which does more work per sweep than vmc, then to the
+    # higher state
+    jobs.sort(key=lambda job: (-job.cost, job.kind == "energy", -job.wfi))
+    return jobs
+
+
+def _timed(function, *args, **kwargs):
+    """Run `function` and report how long it took, so that the summary reports
+    durations rather than completion times."""
+    start = time.perf_counter()
+    result = function(*args, **kwargs)
+    return result, time.perf_counter() - start
+
+
+def _submit_sampling_job(
+    threader, job, wfs, gradient_configs, updater, client, npartitions,
+    vmc_kwargs, overlap_kwargs,
+):
+    """Submit one job. `updater` of None means a warmup: propagate only, measure
+    nothing.
+
+    :parameter npartitions: partitions for this job alone, not the total
+    :returns: a future whose result is (sampling output, seconds)
+    """
+    configs = gradient_configs[job.wfi][job.sub_iteration][job.kind]
+    transform = None if updater is None else updater[job.wfi][job.sub_iteration]
+    # the samplers print progress per block, which is unreadable interleaved
+    # across threads; the summary from _format_sampling_summary replaces it
+    common = dict(client=client, npartitions=npartitions)
+
+    if job.kind == "energy":
+        if transform is None:
+            return threader.submit(
+                _timed, pyqmc.method.mc.vmc, wfs[job.wfi], configs,
+                accumulators=None, verbose=False, **common, **vmc_kwargs,
+            )
+        # the updater decides what to collect from this sampling
+        return threader.submit(
+            _timed, transform.sample_energy, wfs[job.wfi], configs,
+            verbose=False, **common, **vmc_kwargs,
+        )
+
+    prefix = wfs[: job.wfi + 1]
+    if transform is None:
+        return threader.submit(
+            _timed, pyqmc.method.sample_many.sample_overlap, prefix, configs, None,
+            **common, **overlap_kwargs,
+        )
+    return threader.submit(
+        _timed, transform.sample_overlap, prefix, configs, **common, **overlap_kwargs
+    )
+
+
+def _format_step_report(report):
+    """The diagnostics an updater returns from delta_p, on one line.
+
+    pgrad and SRdot are common to every updater; anything else it reports --
+    the overlap penalty cost, CG iteration counts -- is appended as it comes, so
+    that a new updater's diagnostics show up without touching the driver.
+    """
+    named = {"pgrad": "|grad|", "SRdot": "grad.step"}
+    parts = [
+        f"{named[key]} = {float(np.real(report[key])):.4g}"
+        for key in named
+        if key in report
+    ]
+    for key, value in report.items():
+        if key in named or np.ndim(value) != 0 or isinstance(value, str):
+            continue
+        if isinstance(value, (bool, np.bool_)):
+            if not value:  # a flag is worth printing only when it is a problem
+                parts.append(f"{key} = False")
+            continue
+        parts.append(f"{key} = {float(np.real(value)):.4g}")
+    return "   ".join(parts)
+
+
+def _format_sampling_summary(jobs, partitions, durations, submit_time):
+    """One block of text for a round of sampling: what ran, on how many
+    partitions, and how long each took."""
+    with_sub = any(job.sub_iteration for job in jobs)
+    order = sorted(range(len(jobs)), key=lambda i: -durations[i])
+    lines = [
+        f"  sampling: {len(jobs)} jobs on {sum(partitions)} partitions"
+        f" (submitted in {submit_time:.3f}s)"
+    ]
+    for i in order:
+        lines.append(
+            f"      {jobs[i].label(with_sub):<16s} {durations[i]:7.2f}s"
+            f"  [{partitions[i]} partition{'s' if partitions[i] != 1 else ''}]"
+        )
+    return "\n".join(lines)
+
+
 def sample_gradient_configs_threaded(
     wfs,
     gradient_configs,
@@ -467,35 +633,16 @@ def sample_gradient_configs_threaded(
 
     Sampling jobs are assigned partitions according to their weights. Every active sampling job
     receives at least one partition, so when ``npartitions`` is smaller than the number of active
-    jobs, the total assigned partitions is the number of active jobs.
+    jobs, the total assigned partitions is the number of active jobs. Jobs are submitted longest
+    first; see :func:`_build_sampling_jobs`.
     """
-    run_energy = _sampling_requested(vmc_kwargs)
-    run_overlap = _sampling_requested(overlap_kwargs)
+    energy_data = [[None for _ in state] for state in gradient_configs]
+    overlap_data_weighted = [[None for _ in state] for state in gradient_configs]
+    overlap_data_unweighted = [[None for _ in state] for state in gradient_configs]
 
-    energy_data = [
-        [None for _ in state_configs] for state_configs in gradient_configs
-    ]
-    overlap_data_weighted = [
-        [None for _ in state_configs] for state_configs in gradient_configs
-    ]
-    overlap_data_unweighted = [
-        [None for _ in state_configs] for state_configs in gradient_configs
-    ]
-
-    jobs = []
-    if run_energy:
-        for wfi, state_configs in enumerate(gradient_configs):
-            for sub_iteration in range(len(state_configs)):
-                jobs.append(("energy", wfi, sub_iteration, 1.0))
-    if run_overlap:
-        for wfi, state_configs in enumerate(gradient_configs):
-            for sub_iteration in range(len(state_configs)):
-                if overlap_thread_weight is None:
-                    weight = (1 + wfi) / 2.0
-                else:
-                    weight = overlap_thread_weight[wfi]
-                jobs.append(("overlap", wfi, sub_iteration, weight))
-
+    jobs = _build_sampling_jobs(
+        gradient_configs, vmc_kwargs, overlap_kwargs, overlap_thread_weight
+    )
     if not jobs:
         return (
             energy_data,
@@ -505,92 +652,45 @@ def sample_gradient_configs_threaded(
         )
 
     available_partitions = len(jobs) if npartitions is None else npartitions
-    npartitions_by_thread = round_to_fixed_sum(
-        np.array([job[-1] for job in jobs]), available_partitions
+    partitions = round_to_fixed_sum(
+        np.array([job.weight for job in jobs]), available_partitions
     )
-    if verbose:
-        print("nthreads", len(jobs), "npartitions", npartitions_by_thread, flush=True)
 
-    workers = {}
-    start_time = time.perf_counter()
-
+    durations = [0.0] * len(jobs)
     # Without separate workers, sampling tasks share wave-function state, so run them one at a time
     max_workers = len(jobs) if client is not None else 1
+    start_time = time.perf_counter()
     with ThreadPoolExecutor(max_workers=max_workers) as threader:
-        for threadcount, (kind, wfi, sub_iteration, _) in enumerate(jobs):
-            transform = None if updater is None else updater[wfi][sub_iteration]
-            # vmc sampling
-            if kind == "energy":
-                if transform is None:  # warmup: propagate only, measure nothing
-                    future = threader.submit(
-                        pyqmc.method.mc.vmc,
-                        wfs[wfi],
-                        gradient_configs[wfi][sub_iteration]["energy"],
-                        accumulators=None,
-                        verbose=False,
-                        client=client,
-                        npartitions=npartitions_by_thread[threadcount],
-                        **vmc_kwargs,
-                    )
-                else:  # the updater decides what to collect from this sampling
-                    future = threader.submit(
-                        transform.sample_energy,
-                        wfs[wfi],
-                        gradient_configs[wfi][sub_iteration]["energy"],
-                        client=client,
-                        npartitions=npartitions_by_thread[threadcount],
-                        verbose=verbose,
-                        **vmc_kwargs,
-                    )
-            # prefix-overlap sampling
-            elif transform is None:  # warmup: propagate only, measure nothing
-                future = threader.submit(
-                    pyqmc.method.sample_many.sample_overlap,
-                    wfs[0:wfi + 1],
-                    gradient_configs[wfi][sub_iteration]["overlap"],
-                    None,
-                    client=client,
-                    npartitions=npartitions_by_thread[threadcount],
-                    **overlap_kwargs,
-                )
-            else:  # the updater decides what to collect from this sampling
-                future = threader.submit(
-                    transform.sample_overlap,
-                    wfs[0:wfi + 1],
-                    gradient_configs[wfi][sub_iteration]["overlap"],
-                    client=client,
-                    npartitions=npartitions_by_thread[threadcount],
-                    **overlap_kwargs,
-                )
-            workers[future] = (kind, wfi, sub_iteration)
+        futures = {
+            _submit_sampling_job(
+                threader, job, wfs, gradient_configs, updater, client,
+                partitions[i], vmc_kwargs, overlap_kwargs,
+            ): i
+            for i, job in enumerate(jobs)
+        }
+        submit_time = time.perf_counter() - start_time
 
-        middle_time = time.perf_counter()
-        times = []
-        for future in as_completed(workers):
-            kind, wfi, sub_iteration = workers[future]
-            times.append(
-                {
-                    "time": time.perf_counter() - middle_time,
-                    "type": kind,
-                    "wfi": wfi,
-                    "sub_iteration": sub_iteration,
-                }
-            )
-            if kind == "energy":
+        for future in as_completed(futures):
+            i = futures[future]
+            job = jobs[i]
+            result, durations[i] = future.result()
+            if job.kind == "energy":
                 (
-                    energy_data[wfi][sub_iteration],
-                    gradient_configs[wfi][sub_iteration]["energy"],
-                ) = future.result()
+                    energy_data[job.wfi][job.sub_iteration],
+                    gradient_configs[job.wfi][job.sub_iteration]["energy"],
+                ) = result
             else:
                 (
-                    overlap_data_weighted[wfi][sub_iteration],
-                    overlap_data_unweighted[wfi][sub_iteration],
-                    gradient_configs[wfi][sub_iteration]["overlap"],
-                ) = future.result()
+                    overlap_data_weighted[job.wfi][job.sub_iteration],
+                    overlap_data_unweighted[job.wfi][job.sub_iteration],
+                    gradient_configs[job.wfi][job.sub_iteration]["overlap"],
+                ) = result
 
     if verbose:
-        print("time to submit", middle_time - start_time, flush=True)
-        print(pd.DataFrame(times))
+        print(
+            _format_sampling_summary(jobs, partitions, durations, submit_time),
+            flush=True,
+        )
     return (
         energy_data,
         overlap_data_weighted,
@@ -832,6 +932,8 @@ def optimize_ensemble(
         )
 
     for i in range(iteration_offset, max_iterations):
+        if verbose:
+            print(f"\n=== Iteration {i} ===", flush=True)
         # Refresh warmup for the normalization sampling
         norm_configs = _warmup_overlap(
             wfs,
@@ -852,7 +954,10 @@ def optimize_ensemble(
         )
         norm = np.mean(data_unweighted["overlap"], axis=0)
         if verbose:
-            print("Normalization step", norm.diagonal())
+            diag = np.array2string(
+                np.real(norm.diagonal()), precision=4, suppress_small=True
+            )
+            print(f"  normalization: {diag}", flush=True)
         renormalize(wfs, norm.diagonal(), pivot=0)
 
         # Refresh warmup and gradient measurement
@@ -883,22 +988,28 @@ def optimize_ensemble(
                     overlap_data_weighted[wfi][sub_iteration],
                     overlap_data_unweighted[wfi][sub_iteration]["overlap"],
                 )
-                if verbose:
-                    print(
-                        "Iteration",
-                        i,
-                        "wf ",
-                        wfi,
-                        " sub iteration ",
-                        sub_iteration,
-                        "Energy",
-                        avg["total"],
-                        "Overlap",
-                        avg["overlap"][wfi, :],
-                    )
+                # the driver formats the diagnostics uniformly from the report,
+                # so the updater does not print its own
                 dp, report = transform.delta_p(
-                    [tau], avg, overlap_penalty, verbose=True
+                    [tau], avg, overlap_penalty, verbose=False
                 )
+                if verbose:
+                    label = f"wf {wfi}"
+                    if len(transform_list) > 1:
+                        label += f" sub {sub_iteration}"
+                    line = (
+                        f"  {label}: E = {float(np.real(avg['total'])):.6f}"
+                        f" +/- {float(np.real(error['total'])):.6f}"
+                    )
+                    if wfi > 0:  # overlap with the states below this one
+                        lower = np.array2string(
+                            np.abs(avg["overlap"][wfi, :wfi]),
+                            precision=4,
+                            suppress_small=True,
+                        )
+                        line += f"   overlap with lower states {lower}"
+                    print(line, flush=True)
+                    print(f"      {_format_step_report(report)}", flush=True)
                 x = transform.transform.serialize_parameters(wf.parameters)
                 x = x + dp[0]
                 set_wf_params(wf, x, transform)

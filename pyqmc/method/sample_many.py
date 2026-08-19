@@ -73,8 +73,12 @@ def sample_overlap_run(wfs, configs, tstep, nsteps_per_block, nblocks, energy,
     Use a single core to sample over blocks
     """
     nconf, nelec, _ = configs.configs.shape
-    weighted = []
-    unweighted = []
+    # weighted and unweighted are dictionaries of arrays, accessed as
+    # weighted[quantity][block, ...]. Each block is written straight into them,
+    # rather than collected into a list and stacked at the end, which would keep
+    # the list and the stacked copy live at once.
+    weighted, unweighted = {}, {}
+    allocated = False
     for block in range(nblocks):
         if verbose:
             print("-", end="", flush=True)
@@ -82,14 +86,17 @@ def sample_overlap_run(wfs, configs, tstep, nsteps_per_block, nblocks, energy,
             w, u, configs = sample_overlap_worker(wfs, configs, tstep, nsteps_per_block, energy)
         else:
             w, u, configs = sample_overlap_client(wfs, configs, tstep, nsteps_per_block, energy, client, npartitions)
-        weighted.append(w)
-        unweighted.append(u)
         hdf_save(hdf_file, w, u, dict(tstep=tstep), configs)
 
-    # here we modify the data so that weighted and unweighted are dictionaries of arrays
-    # Access as weighted[quantity][block, ...]
-    weighted = invert_list_of_dicts(weighted)
-    unweighted = invert_list_of_dicts(unweighted)
+        if not allocated:
+            weighted = mc._allocate_blocks(w, nblocks)
+            unweighted = mc._allocate_blocks(u, nblocks)
+            allocated = True
+        for k, out in weighted.items():
+            out[block] = w[k]
+        for k, out in unweighted.items():
+            out[block] = u[k]
+        del w, u
     return weighted, unweighted, configs
 
 def sample_overlap_client(wfs, configs, tstep, nsteps, energy, client, npartitions):
@@ -108,22 +115,22 @@ def sample_overlap_client(wfs, configs, tstep, nsteps, energy, client, npartitio
         client.submit(sample_overlap_worker, wfs, conf, tstep, nsteps, energy)
         for conf in config
     ]
-    allresults = list(zip(*[r.result() for r in runs])) #weighted, unweighted, configs
-    configs.join(allresults[2])
     confweight = np.array([len(c.configs) for c in config], dtype=float)
     confweight /= np.mean(confweight) * npartitions
-    weighted_block = {}
-    for k in allresults[0][0].keys():
-        weighted_block[k] = np.sum(
-            [res[k] * w for res, w in zip(allresults[0], confweight)], axis=0
-        )
-    unweighted_block = {}
-    for k in allresults[1][0].keys():
-        unweighted_block[k] = np.sum(
-            [res[k] * w for res, w in zip(allresults[1], confweight)], axis=0
-        )
 
-
+    # accumulate as results arrive and drop each one; holding all npartitions
+    # results and then a weighted copy of each is what makes the receiving node
+    # the memory bottleneck
+    weighted_block, unweighted_block = {}, {}
+    newconfigs = []
+    for i, weight in enumerate(confweight):
+        w, u, conf = runs[i].result()
+        runs[i] = None  # the future caches its result; drop it before the next
+        mc._accumulate_weighted(weighted_block, w, weight)
+        mc._accumulate_weighted(unweighted_block, u, weight)
+        newconfigs.append(conf)
+        del w, u
+    configs.join(newconfigs)
     return weighted_block, unweighted_block, configs
 
 

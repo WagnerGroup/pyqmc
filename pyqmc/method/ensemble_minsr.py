@@ -45,10 +45,15 @@ inverse to both using only the (nsamples, nsamples) kernel.
 
 import h5py
 import numpy as np
-import scipy.stats
 
 import pyqmc.method.sample_many
-from pyqmc.method.minsr import real_design_matrix, sample_minsr_data, sr_solve
+from pyqmc.method.ensemble_optimization import _block_sem
+from pyqmc.method.minsr import (
+    local_energy_error,
+    real_design_matrix,
+    sample_minsr_data,
+    sr_solve,
+)
 
 
 def overlap_derivatives_worker(wfs, configs, transform):
@@ -213,18 +218,17 @@ class MinSRWfbyWf:
         for k in ["wtdp"]:
             it = data[k]
             avg[k] = np.mean(it, axis=0) / Nij[wfi]
-            error[k] = scipy.stats.sem(it, axis=0) / Nij[wfi]
+            error[k] = _block_sem(it) / Nij[wfi]
         avg["overlap"] = weight_avg
 
         eloc = data_sample1["total"]
         avg["dppsi_samples"] = data_sample1["dppsi"]
         avg["eloc_samples"] = eloc
         avg["total"] = np.mean(eloc).real
-        block_energy = data_sample1["block_energy"].real
-        if len(block_energy) > 1:
-            error["total"] = scipy.stats.sem(block_energy)
-        else:
-            error["total"] = np.std(eloc.real) / np.sqrt(len(eloc))
+        # the local energies are kept per configuration, so the error bar comes
+        # from their spread rather than from the scatter of the block means; one
+        # block is enough, which is what these methods default to
+        error["total"] = local_energy_error(eloc)
         return avg, error
 
     def _collect_terms(self, avg):

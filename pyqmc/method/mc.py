@@ -157,6 +157,36 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
     return block_avg, configs
 
 
+def _allocate_blocks(block, nblocks):
+    """Preallocate stacked output arrays shaped from one block's data.
+
+    Blocks are written into these as they arrive. Collecting a list of blocks and
+    stacking it at the end instead keeps both the list and the stacked copy live
+    at once, so the peak is twice the result -- and for an accumulator returning
+    something the size of the parameter space squared, that doubling can be the
+    difference between fitting in memory and not.
+    """
+    return {
+        k: np.empty((nblocks, *np.asarray(it).shape), dtype=np.asarray(it).dtype)
+        for k, it in block.items()
+    }
+
+
+def _accumulate_weighted(total, block, weight):
+    """total += weight * block, entry by entry, allocating on first use.
+
+    Summing a list of weighted results instead holds one weighted copy per
+    partition at once; this holds one.
+    """
+    for k, it in block.items():
+        contribution = np.asarray(it) * weight
+        if k in total:
+            total[k] += contribution
+        else:
+            total[k] = contribution
+    return total
+
+
 def vmc_parallel(
     wf, configs, tstep, nsteps_per_block, accumulators, client, npartitions
 ):
@@ -165,15 +195,20 @@ def vmc_parallel(
         client.submit(vmc_worker, wf, conf, tstep, nsteps_per_block, accumulators)
         for conf in config
     ]
-    allresults = list(zip(*[r.result() for r in runs]))
-    configs.join(allresults[1])
     confweight = np.array([len(c.configs) for c in config], dtype=float)
     confweight /= np.mean(confweight) * npartitions
+
+    # accumulate as results arrive and drop each one, rather than holding all
+    # npartitions of them and then a weighted copy of each
     block_avg = {}
-    for k in allresults[0][0].keys():
-        block_avg[k] = np.sum(
-            [res[k] * w for res, w in zip(allresults[0], confweight)], axis=0
-        )
+    newconfigs = []
+    for i, weight in enumerate(confweight):
+        res, conf = runs[i].result()
+        runs[i] = None  # the future caches its result; drop it before the next
+        _accumulate_weighted(block_avg, res, weight)
+        newconfigs.append(conf)
+        del res
+    configs.join(newconfigs)
     return block_avg, configs
 
 
@@ -246,13 +281,14 @@ def vmc(
                         f"Restarting calculation {continue_from} from block {blockoffset}"
                     )
 
-    df = []
+    df_return = None
+    nblocks_to_run = max(nblocks - blockoffset, 0)
 
     if blockoffset >= nblocks:
         logging.warning(
             f"blockoffset {blockoffset} >= nblocks {nblocks}; no steps will be run."
         )
-    for block in range(blockoffset, nblocks):
+    for iblock, block in enumerate(range(blockoffset, nblocks)):
         if verbose:
             print("-", end="", flush=True)
         if client is None:
@@ -263,16 +299,16 @@ def vmc(
             block_avg, configs = vmc_parallel(
                 wf, configs, tstep, nsteps_per_block, accumulators, client, npartitions
             )
-        # Append blocks
         block_avg["block"] = block
         block_avg["nconfig"] = nsteps_per_block * configs.configs.shape[0]
         vmc_file(hdf_file, block_avg, dict(tstep=tstep), configs)
-        df.append(block_avg)
+        # write straight into the output rather than collecting blocks to stack
+        if df_return is None:
+            df_return = _allocate_blocks(block_avg, nblocks_to_run)
+        for k, out in df_return.items():
+            out[iblock] = block_avg[k]
+        del block_avg
     if verbose:
         print("vmc done")
 
-    df_return = {}
-    if len(df) > 0:
-        for k in df[0].keys():
-            df_return[k] = np.asarray([d[k] for d in df])
-    return df_return, configs
+    return ({} if df_return is None else df_return), configs

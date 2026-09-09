@@ -18,6 +18,16 @@ from pyqmc.observables.accumulators_multiwf import invert_list_of_dicts
 import scipy.stats
 
 
+def _weighted_average(arr, weights, wsum):
+    """Equivalent to np.average(arr, weights=weights, axis=0).
+
+    np.average forms a full-size (weights * arr) temporary before reducing it,
+    which dominates the cost for the (nconf, nparams) arrays here. tensordot
+    contracts axis 0 directly through BLAS instead.
+    """
+    return np.tensordot(weights, arr, axes=(0, 0)) / wsum
+
+
 def nodal_regularization(grad2, nodal_cutoff=1e-3):
     """
     Return true if a given configuration is within nodal_cutoff
@@ -105,14 +115,15 @@ class StochasticReconfiguration:
 
         dp_regularized = dp * f[:, np.newaxis]
 
-        d = {k: np.average(it, weights=weights, axis=0) for k, it in den.items()}
+        wsum = np.sum(weights)
+        d = {k: _weighted_average(it, weights, wsum) for k, it in den.items()}
         if self.transform.nparams > 0:
-            d["dpH"] = np.einsum(
-                "i,ij->j", energy, weights[:, np.newaxis] * dp_regularized
-            )
-            d["dppsi"] = np.average(dp_regularized, weights=weights, axis=0)
+            # dpH and dpidpj share this (nconf, nparams) temporary; build it once.
+            w_dp_regularized = weights[:, np.newaxis] * dp_regularized
+            d["dpH"] = energy @ w_dp_regularized
+            d["dppsi"] = _weighted_average(dp_regularized, weights, wsum)
             d["dpidpj"] = np.einsum(
-                "ij,ik->jk", dp, weights[:, np.newaxis] * dp_regularized, optimize=True
+                "ij,ik->jk", dp, w_dp_regularized, optimize=True
             )
 
         return d

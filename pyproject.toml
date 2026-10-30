@@ -8,6 +8,7 @@ license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "numpy (>=1.25.0)",
     "scipy (>=1.10.0,<2.0.0)",
     "pyscf (>=2.8.0,<3.0.0)",
     "h5py (>=3.13.0,<4.0.0)",

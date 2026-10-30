@@ -18,6 +18,7 @@ import pyqmc.method.sample_many as sm
 import h5py
 import os
 import pyqmc.method.mc
+import pyqmc.rng
 import copy
 import logging
 
@@ -118,6 +119,7 @@ def line_minimization(
     client=None,
     npartitions=None,
     correlated_sampling = True,
+    rng=None,
 ):
     """Optimizes energy by determining gradients with stochastic reconfiguration
         and minimizing the energy along gradient directions using correlated sampling.
@@ -137,6 +139,7 @@ def line_minimization(
     :parameter boolean verbose: print output if True
     :parameter int npts: number of points to fit to in each line minimization
     :parameter str hdf_file: Hdf_file to store vmc output.
+    :parameter rng: anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module generator
     :parameter client: an object with submit() functions that return futures
     :parameter int npartitions: the number of workers to submit at a time
     :return: optimized wave function, optimization data
@@ -158,6 +161,7 @@ def line_minimization(
     assert npts >= 3, f"linemin npts={npts}; need npts >= 3 for correlated sampling"
     if correlated_reference_wfs is None:
         correlated_reference_wfs = [0, 1]
+    rng = pyqmc.rng.get_rng(rng)
 
     iteration_offset = 0
     sub_iteration_offset = 0
@@ -182,6 +186,7 @@ def line_minimization(
             accumulators={},
             client=client,
             npartitions=npartitions,
+            rng=rng,
             **warmup_options,
         )
         if verbose:
@@ -228,6 +233,7 @@ def line_minimization(
                 accumulators={"pgrad": pgrad},
                 client=client,
                 npartitions=npartitions,
+                rng=rng,
                 **vmcoptions,
             )
 
@@ -255,7 +261,7 @@ def line_minimization(
             # Correlated sampling line minimization.
             if correlated_sampling:
                 x0, min_data = correlated_sampling_minimum(steprange, npts, stderr_weight, correlated_reference_wfs,
-                                                       pgrad, wf, data, x0, coords, client, npartitions)
+                                                       pgrad, wf, data, x0, coords, client, npartitions, rng)
                 step_data.update(min_data)
                 if verbose:
                     print("Moved", step_data['est_min'])
@@ -288,7 +294,7 @@ def sr_step(steprange,
 def correlated_sampling_minimum(steprange, npts, stderr_weight, correlated_reference_wfs, #these are linemin parameters
                                 pgrad, wf,
                                 data, x0, coords, # data from this calculation
-                                client, npartitions): #parallel execution
+                                client, npartitions, rng): #parallel execution
     """
     steprange: how far to go out
     npts: how many samples
@@ -314,6 +320,7 @@ def correlated_sampling_minimum(steprange, npts, stderr_weight, correlated_refer
         client=client,
         npartitions=npartitions,
         ref_wfs=correlated_reference_wfs,
+        rng=rng,
     )
 
     w = correlated_data["weight"].copy()
@@ -337,7 +344,15 @@ def correlated_sampling_minimum(steprange, npts, stderr_weight, correlated_refer
 
 
 def correlated_compute(
-    wf, configs, params, pgrad_acc, client=None, npartitions=None, ref_wfs=None, **kws
+    wf,
+    configs,
+    params,
+    pgrad_acc,
+    client=None,
+    npartitions=None,
+    ref_wfs=None,
+    rng=None,
+    **kws,
 ):
     """
     Evaluates energy on the same set of configs for correlated sampling of different wave function parameters
@@ -356,17 +371,23 @@ def correlated_compute(
     wfs = [copy.deepcopy(wf) for i in ref_wfs]
     for i in ref_wfs:
         set_wf_params(wfs[i], params[i], pgrad_acc)
+    rng = pyqmc.rng.get_rng(rng)
     # sample combined distribution
     _, _, configs = sm.sample_overlap(
-        wfs, configs, None, client=client, npartitions=npartitions, **kws
+        wfs, configs, None, client=client, npartitions=npartitions, rng=rng, **kws
     )
 
     if client is None:
-        return correlated_compute_worker(wf, configs, params, pgrad_acc, ref_wfs)
+        return correlated_compute_worker(
+            wf, configs, params, pgrad_acc, ref_wfs, rng=rng
+        )
     config = configs.split(npartitions)
+    children = rng.spawn(len(config))
     runs = [
-        client.submit(correlated_compute_worker, wf, conf, params, pgrad_acc, ref_wfs)
-        for conf in config
+        client.submit(
+            correlated_compute_worker, wf, conf, params, pgrad_acc, ref_wfs, rng=child
+        )
+        for conf, child in zip(config, children)
     ]
     allresults = [r.result() for r in runs]
     block_avg = {}
@@ -375,7 +396,8 @@ def correlated_compute(
     return block_avg
 
 
-def correlated_compute_worker(wf, configs, params, pgrad_acc, ref_wfs):
+@pyqmc.rng.worker
+def correlated_compute_worker(wf, configs, params, pgrad_acc, ref_wfs, *, rng=None):
     """
     Evaluates accumulator on the same set of configs for correlated sampling of different wave function parameters
 
@@ -391,10 +413,11 @@ def correlated_compute_worker(wf, configs, params, pgrad_acc, ref_wfs):
     """
 
     data = []
-    current_state = np.random.get_state()
+    # every parameter set sees the same ECP quadrature rotations
+    current_state = rng.bit_generator.state
     psi = np.zeros((len(params), len(configs.configs)))
     for i, p in enumerate(params):
-        np.random.set_state(current_state)
+        rng.bit_generator.state = current_state
         set_wf_params(wf, p, pgrad_acc)
         psi[i] = wf.recompute(configs)[1]  # recompute gives logdet
         df = pgrad_acc.enacc(configs, wf)

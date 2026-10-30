@@ -22,6 +22,7 @@ import pytest
 from pyscf import gto
 
 import pyqmc.api as pyq
+import pyqmc.rng
 import pyqmc.wf.testwf as testwf
 from pyqmc.wf.geminaljastrow import GeminalJastrow, GeminalJastrowReference
 
@@ -46,7 +47,7 @@ def make_pair(mol, nconfig=17, seed=0):
     coeff = rng.normal(size=old.parameters["gcoeff"].shape) * 0.05
     old.parameters["gcoeff"] = coeff.copy()
     new.parameters["gcoeff"] = coeff.copy()
-    np.random.seed(seed)
+    pyqmc.rng.seed(seed)
     configs = pyq.initial_guess(mol, nconfig)
     old.recompute(configs)
     new.recompute(configs)
@@ -154,6 +155,7 @@ def test_updateinternals_without_saved_values(h2o):
 def test_generic_wf_checks(h2o):
     """The standard wave function test battery, as run for GeminalJastrow."""
     np.random.seed(0)
+    pyqmc.rng.seed(0)
     wf = GeminalJastrow(h2o)
     wf.parameters["gcoeff"] = (
         np.random.normal(size=wf.parameters["gcoeff"].shape) * 0.05

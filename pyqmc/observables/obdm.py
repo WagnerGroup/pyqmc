@@ -18,6 +18,7 @@ import pyqmc.wf.orbitals
 import numpy as np
 import pyqmc.method.mc as mc
 from pyqmc.gpu import cp, asnumpy
+from pyqmc.rng import get_rng
 
 import pyqmc.pbc.supercell as supercell
 
@@ -146,7 +147,7 @@ class OBDMAccumulator:
         }
         naux = self._extra_config.configs.shape[0]
 
-        auxassignments = np.random.randint(0, naux, size=(self._nsweeps, nconf))
+        auxassignments = get_rng().integers(0, naux, size=(self._nsweeps, nconf))
         accept, extra_configs, borb_aux = sample_onebody(
             self._extra_config,
             self.orbitals,
@@ -227,12 +228,12 @@ def sample_onebody(configs, orbitals, spin, gtoval, nsamples=1, tstep=0.5):
     allconfigs = []
     allorbs = []
     for s in range(nsamples):
-        shift = np.sqrt(tstep) * np.random.randn(*configs.configs.shape)
+        shift = np.sqrt(tstep) * get_rng().standard_normal(configs.configs.shape)
         newconfigs = configs.make_irreducible(0, (configs.configs + shift)[:, 0])
         ao = orbitals.aos(gtoval, newconfigs)
         borbnew = orbitals.mos(ao, spin=spin)
         fsumnew = (cp.abs(borbnew) ** 2).sum(axis=1)
-        accept = asnumpy(fsumnew / fsum) > np.random.rand(n)
+        accept = asnumpy(fsumnew / fsum) > get_rng().random(n)
         configs.move(0, newconfigs, accept)
         borb[accept] = borbnew[accept]
         fsum[accept] = fsumnew[accept]

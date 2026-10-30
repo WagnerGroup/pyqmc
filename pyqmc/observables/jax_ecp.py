@@ -16,6 +16,7 @@ import numpy as np
 from typing import NamedTuple
 from functools import partial
 from pyqmc.observables.eval_ecp import get_P_l, rnExp
+from pyqmc.rng import get_rng
 import time
 
 
@@ -246,7 +247,7 @@ def downselect_move_info(
 
     # Select the random evaluation points
     cdf = np.cumsum(normalized_probability, axis=1)
-    r = np.random.random((nconf, nselect_random))
+    r = get_rng().random((nconf, nselect_random))
     indices_random = (r[:, np.newaxis, :] > cdf[:, :, np.newaxis]).sum(
         axis=1
     )  # nconf x npoints x nselect_random

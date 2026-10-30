@@ -18,6 +18,7 @@ import numpy as np
 import pyqmc.method.mc as mc
 import pyqmc.observables.obdm as obdm
 import pyqmc.gpu as gpu
+from pyqmc.rng import get_rng
 import pyqmc.wf.orbitals
 import pyqmc.pbc.supercell as supercell
 import warnings
@@ -163,7 +164,7 @@ class TBDMAccumulator:
                 self._nsweeps,
                 tstep=self._tstep,
             )
-            assignments.append(np.random.randint(0, naux, size=(self._nsweeps, nconf)))
+            assignments.append(get_rng().integers(0, naux, size=(self._nsweeps, nconf)))
             self._aux_configs[spin] = tmp_config[-1].copy()
             acceptance.append(accept)
             for conf, assign in zip(tmp_config, assignments[-1]):

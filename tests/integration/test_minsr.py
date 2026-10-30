@@ -18,6 +18,7 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
+import pyqmc.rng
 import pandas as pd
 import pytest
 
@@ -38,7 +39,7 @@ def test_minsr(H2_ccecp_uhf):
     mol, mf = H2_ccecp_uhf
     mol.output, mol.stdout = None, None
 
-    np.random.seed(0)
+    pyqmc.rng.seed(0)
     wf, to_opt = generate_wf(mol, mf)
     nconf = 1000
     wf, df = minsr_optimization(
@@ -68,7 +69,7 @@ def test_minsr_sub_iterations(H2_ccecp_uhf, tmp_path):
     mol.output, mol.stdout = None, None
     hdf_file = str(tmp_path / "minsr_sub.hdf5")
 
-    np.random.seed(0)
+    pyqmc.rng.seed(0)
     wf, to_opt = generate_wf(mol, mf)
     # one transform per Jastrow parameter group
     groups = ["wf2acoeff", "wf2bcoeff"]

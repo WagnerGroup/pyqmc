@@ -20,6 +20,7 @@ import scipy.stats
 import os
 import h5py
 import pyqmc.method.hdftools as hdftools
+import pyqmc.rng
 
 
 
@@ -68,10 +69,12 @@ def invert_list_of_dicts(A, asarray=True):
 
 
 def sample_overlap_run(wfs, configs, tstep, nsteps_per_block, nblocks, energy,
-                          hdf_file=None, client=None, npartitions=None, verbose=False):
+                          hdf_file=None, client=None, npartitions=None, verbose=False,
+                          rng=None):
     """
     Use a single core to sample over blocks
     """
+    rng = pyqmc.rng.get_rng(rng)
     nconf, nelec, _ = configs.configs.shape
     # weighted and unweighted are dictionaries of arrays, accessed as
     # weighted[quantity][block, ...]. Each block is written straight into them,
@@ -83,9 +86,9 @@ def sample_overlap_run(wfs, configs, tstep, nsteps_per_block, nblocks, energy,
         if verbose:
             print("-", end="", flush=True)
         if client is None:
-            w, u, configs = sample_overlap_worker(wfs, configs, tstep, nsteps_per_block, energy)
+            w, u, configs = sample_overlap_worker(wfs, configs, tstep, nsteps_per_block, energy, rng=rng)
         else:
-            w, u, configs = sample_overlap_client(wfs, configs, tstep, nsteps_per_block, energy, client, npartitions)
+            w, u, configs = sample_overlap_client(wfs, configs, tstep, nsteps_per_block, energy, client, npartitions, rng=rng)
         hdf_save(hdf_file, w, u, dict(tstep=tstep), configs)
 
         if not allocated:
@@ -99,7 +102,9 @@ def sample_overlap_run(wfs, configs, tstep, nsteps_per_block, nblocks, energy,
         del w, u
     return weighted, unweighted, configs
 
-def sample_overlap_client(wfs, configs, tstep, nsteps, energy, client, npartitions):
+def sample_overlap_client(
+    wfs, configs, tstep, nsteps, energy, client, npartitions, rng=None
+):
     """
     Sample nblocks, saving every block.
     wfs: list of wave functions
@@ -109,11 +114,13 @@ def sample_overlap_client(wfs, configs, tstep, nsteps, energy, client, npartitio
     energy: Accumulator object
     client: futures client
     npartitions: number of jobs to submit to the client.
+    rng: anything accepted by pyqmc.rng.get_rng; each partition gets a child of it.
     """
     config = configs.split(npartitions)
+    children = pyqmc.rng.get_rng(rng).spawn(len(config))
     runs = [
-        client.submit(sample_overlap_worker, wfs, conf, tstep, nsteps, energy)
-        for conf in config
+        client.submit(sample_overlap_worker, wfs, conf, tstep, nsteps, energy, rng=child)
+        for conf, child in zip(config, children)
     ]
     confweight = np.array([len(c.configs) for c in config], dtype=float)
     confweight /= np.mean(confweight) * npartitions
@@ -135,7 +142,8 @@ def sample_overlap_client(wfs, configs, tstep, nsteps, energy, client, npartitio
 
 
 
-def sample_overlap_worker(wfs, configs, tstep, nsteps, energy):
+@pyqmc.rng.worker
+def sample_overlap_worker(wfs, configs, tstep, nsteps, energy, *, rng=None):
     r"""Run nstep Metropolis steps to sample a distribution proportional to
     :math:`\sum_i |\Psi_i|^2`, where :math:`\Psi_i` = wfs[i]
     """
@@ -151,7 +159,7 @@ def sample_overlap_worker(wfs, configs, tstep, nsteps, energy):
             # Propose move
             grads = [np.real(wf.gradient(e, configs.electron(e)).T) for wf in wfs]
             grad = mc.limdrift(np.mean(grads, axis=0))
-            gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconf, 3))
+            gauss = rng.normal(scale=np.sqrt(tstep), size=(nconf, 3))
             newcoorde = configs.configs[:, e, :] + gauss + grad * tstep
             newcoorde = configs.make_irreducible(e, newcoorde)
             # print(configs.wrap)
@@ -172,7 +180,7 @@ def sample_overlap_worker(wfs, configs, tstep, nsteps, energy):
             weights = np.exp(2 * (log_values - log_values[0]))
 
             ratio = t_prob * np.sum(wf_ratios * weights, axis=0) / weights.sum(axis=0)
-            accept = ratio > np.random.rand(nconf)
+            accept = ratio > rng.random(nconf)
 
             # Update wave function
             configs.move(e, newcoorde, accept)
@@ -214,12 +222,15 @@ def sample_overlap(
     client=None,
     npartitions=None,
     verbose=False,
+    rng=None,
 ):
     """Sample nblocks of the distribution proportional to sum_i |Psi_i|^2.
 
     `verbose` prints one character per block, matching pyqmc.method.mc.vmc. It is
     off by default because callers that run several of these at once in threads
     get unreadable interleaved output.
+
+    `rng` is anything accepted by :func:`pyqmc.rng.get_rng`.
     """
     if hdf_file is not None and os.path.isfile(hdf_file):
         with h5py.File(hdf_file, "r") as f:
@@ -228,7 +239,7 @@ def sample_overlap(
                 if "configs" in hdf.keys():
                     configs.load_hdf(hdf)
 
-    return sample_overlap_run(wfs, configs, tstep, nsteps_per_block, nblocks, energy, hdf_file, client, npartitions, verbose)
+    return sample_overlap_run(wfs, configs, tstep, nsteps_per_block, nblocks, energy, hdf_file, client, npartitions, verbose, rng=rng)
 
 def normalize(weighted, unweighted):
     """

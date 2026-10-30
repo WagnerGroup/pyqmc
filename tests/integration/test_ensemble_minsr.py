@@ -21,6 +21,7 @@ import copy
 
 import h5py
 import numpy as np
+import pyqmc.rng
 import pytest
 
 import pyqmc.api as pyq
@@ -66,7 +67,7 @@ def test_ensemble_minsr(H2_casci, tmp_path):
     mol, mf, mc = H2_casci
     hdf_file = str(tmp_path / "ensemble_minsr.hdf5")
 
-    np.random.seed(0)
+    pyqmc.rng.seed(0)
     wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
     configs = pyq.initial_guess(mol, 200)
 
@@ -125,7 +126,7 @@ def test_ensemble_minsr_with_client(H2_casci, tmp_path):
     mol, mf, mc = H2_casci
     hdf_file = str(tmp_path / "ensemble_minsr_client.hdf5")
 
-    np.random.seed(0)
+    pyqmc.rng.seed(0)
     wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
     ncore = 2
     with ProcessPoolExecutor(max_workers=ncore) as client:
@@ -147,7 +148,7 @@ def test_ensemble_minsr_matches_sr(H2_casci):
     from pyqmc.method.ensemble_optimization import StochasticReconfigurationWfbyWf
 
     mol, mf, mc = H2_casci
-    np.random.seed(0)
+    pyqmc.rng.seed(0)
     wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
     configs = pyq.initial_guess(mol, 300)
     wfi = 1  # the excited state, which carries the overlap penalty
@@ -200,7 +201,7 @@ def test_overlap_derivatives_match_accumulator(H2_casci):
     from pyqmc.method.sample_many import compute_weights
 
     mol, mf, mc = H2_casci
-    np.random.seed(0)
+    pyqmc.rng.seed(0)
     wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
     configs = pyq.initial_guess(mol, 50)
 
@@ -224,7 +225,7 @@ def test_sample_overlap_shapes(H2_casci):
     from pyqmc.method.ensemble_minsr import MinSRWfbyWf
 
     mol, mf, mc = H2_casci
-    np.random.seed(0)
+    pyqmc.rng.seed(0)
     wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
     configs = pyq.initial_guess(mol, 50)
 

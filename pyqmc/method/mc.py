@@ -19,10 +19,11 @@ import numpy as np
 import h5py
 import logging
 import pyqmc.method.hdftools as hdftools
+import pyqmc.rng
 import time
 
 
-def initial_guess(mol, nconfig, r=1.0):
+def initial_guess(mol, nconfig, r=1.0, rng=None):
     """Generate an initial guess by distributing electrons near atoms
     proportional to their charge.
 
@@ -33,11 +34,14 @@ def initial_guess(mol, nconfig, r=1.0):
     :parameter mol: A PySCF-like molecule object. Should have atom_charges(), atom_coords(), and nelec
     :parameter nconfig: How many configurations to generate.
     :parameter r: How far from the atoms to distribute the electrons
+    :parameter rng: anything accepted by :func:`pyqmc.rng.get_rng`
     :returns: (nconfig,nelectrons,3) array of electron positions randomly distributed near the atoms.
     :rtype: ndarray
 
     """
     from pyqmc.configurations.coord import OpenConfigs, PeriodicConfigs
+
+    rng = pyqmc.rng.get_rng(rng)
 
     epos = np.zeros((nconfig, np.sum(mol.nelec), 3))
     wts = mol.atom_charges()
@@ -59,13 +63,13 @@ def initial_guess(mol, nconfig, r=1.0):
         if totleft > 0:
             # bins = np.cumsum(nleft) / totleft
             inds = np.argpartition(
-                np.random.random((nconfig, len(wts))), totleft, axis=1
+                rng.random((nconfig, len(wts))), totleft, axis=1
             )[:, :totleft]
             epos[:, ind0 + nassigned : ind0 + mol.nelec[s], :] = mol.atom_coords()[
                 inds
             ]  # assign remaining electrons
 
-    epos += r * np.random.randn(*epos.shape)  # random shifts from atom positions
+    epos += r * rng.standard_normal(epos.shape)  # random shifts from atom positions
     if hasattr(mol, "a"):
         epos = PeriodicConfigs(epos, mol.lattice_vectors())
     else:
@@ -103,7 +107,8 @@ def vmc_file(hdf_file, data, attr, configs):
             configs.to_hdf(hdf)
 
 
-def vmc_worker(wf, configs, tstep, nsteps, accumulators):
+@pyqmc.rng.worker
+def vmc_worker(wf, configs, tstep, nsteps, accumulators, *, rng=None):
     """
     Run VMC for nsteps.
 
@@ -120,7 +125,7 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
             # Propose move
             g, _, _ = wf.gradient_value(e, configs.electron(e))
             grad = limdrift(np.real(g.T))
-            gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconf, 3))
+            gauss = rng.normal(scale=np.sqrt(tstep), size=(nconf, 3))
             newcoorde = configs.configs[:, e, :] + gauss + grad * tstep
             newcoorde = configs.make_irreducible(e, newcoorde)
 
@@ -133,7 +138,7 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
             # Acceptance
             t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
             ratio = np.abs(new_val) ** 2 * t_prob
-            accept = ratio > np.random.rand(nconf)
+            accept = ratio > rng.random(nconf)
 
             # Update wave function
             configs.move(e, newcoorde, accept)
@@ -188,12 +193,16 @@ def _accumulate_weighted(total, block, weight):
 
 
 def vmc_parallel(
-    wf, configs, tstep, nsteps_per_block, accumulators, client, npartitions
+    wf, configs, tstep, nsteps_per_block, accumulators, client, npartitions, rng=None
 ):
     config = configs.split(npartitions)
+    # one independent stream per partition
+    children = pyqmc.rng.get_rng(rng).spawn(len(config))
     runs = [
-        client.submit(vmc_worker, wf, conf, tstep, nsteps_per_block, accumulators)
-        for conf in config
+        client.submit(
+            vmc_worker, wf, conf, tstep, nsteps_per_block, accumulators, rng=child
+        )
+        for conf, child in zip(config, children)
     ]
     confweight = np.array([len(c.configs) for c in config], dtype=float)
     confweight /= np.mean(confweight) * npartitions
@@ -226,6 +235,7 @@ def vmc(
     continue_from=None,
     client=None,
     npartitions=None,
+    rng=None,
 ):
     """Run a Monte Carlo sample of a given wave function.
 
@@ -244,6 +254,7 @@ def vmc(
     :parameter str continue_from: Hdf_file to continue vmc calculation from.
     :parameter client: an object with submit() functions that return futures
     :parameter int npartitions: the number of workers to submit at a time
+    :parameter rng: anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module generator
     :returns: (df,configs)
        df: A list of dictionaries nstep long that contains all results from the accumulators. These are averaged across all walkers.
 
@@ -251,6 +262,7 @@ def vmc(
     :rtype: list of dictionaries, pyqmc.coord.Configs
 
     """
+    rng = pyqmc.rng.get_rng(rng)
     if nsteps is not None:
         nblocks = nsteps
         nsteps_per_block = 1
@@ -293,11 +305,18 @@ def vmc(
             print("-", end="", flush=True)
         if client is None:
             block_avg, configs = vmc_worker(
-                wf, configs, tstep, nsteps_per_block, accumulators
+                wf, configs, tstep, nsteps_per_block, accumulators, rng=rng
             )
         else:
             block_avg, configs = vmc_parallel(
-                wf, configs, tstep, nsteps_per_block, accumulators, client, npartitions
+                wf,
+                configs,
+                tstep,
+                nsteps_per_block,
+                accumulators,
+                client,
+                npartitions,
+                rng=rng,
             )
         block_avg["block"] = block
         block_avg["nconfig"] = nsteps_per_block * configs.configs.shape[0]

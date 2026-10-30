@@ -40,6 +40,7 @@ import numpy as np
 
 import pyqmc.gpu as gpu
 import pyqmc.method.mc
+import pyqmc.rng
 from pyqmc.method.linemin import opt_hdf
 from pyqmc.observables.stochastic_reconfiguration import nodal_regularization
 
@@ -51,7 +52,8 @@ def set_wf_params(wf, params, transform):
         wf.parameters[k] = newparms[k]
 
 
-def sample_derivatives_worker(wf, configs, transform, enacc, nodal_cutoff):
+@pyqmc.rng.worker
+def sample_derivatives_worker(wf, configs, transform, enacc, nodal_cutoff, *, rng=None):
     """Evaluate the local energy and the parameter derivatives of log(psi) for
     every configuration, without averaging over configurations.
 

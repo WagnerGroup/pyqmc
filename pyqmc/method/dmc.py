@@ -17,6 +17,7 @@ import numpy as np
 import pyqmc.method.mc as mc
 import h5py
 import logging
+import pyqmc.rng
 
 
 def limdrift(g, tau, acyrus=0.5):
@@ -46,10 +47,10 @@ def get_V2(configs, wf, acc_out):
     return v2
 
 
-def propose_drift_diffusion(wf, configs, tstep, e):
+def propose_drift_diffusion(wf, configs, tstep, e, rng):
     nconfig = configs.configs.shape[0]
     grad = limdrift(np.real(wf.gradient(e, configs.electron(e)).T), tstep)
-    gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconfig, 3))
+    gauss = rng.normal(scale=np.sqrt(tstep), size=(nconfig, 3))
     eposnew = configs.configs[:, e, :] + gauss + grad
     newepos = configs.make_irreducible(e, eposnew)
 
@@ -64,13 +65,13 @@ def propose_drift_diffusion(wf, configs, tstep, e):
     ratio = np.abs(wfratio) ** 2 * t_prob
     if wf.dtype == float:
         ratio *= np.sign(wfratio)
-    accept = ratio > np.random.rand(nconfig)
+    accept = ratio > rng.random(nconfig)
     r2 = np.sum((gauss + grad) ** 2, axis=1)
 
     return newepos, accept, r2, saved
 
 
-def propose_tmoves(wf, configs, energy_accumulator, tstep, e):
+def propose_tmoves(wf, configs, energy_accumulator, tstep, e, rng):
     """
     No side effect calculation of t-moves
 
@@ -87,7 +88,7 @@ def propose_tmoves(wf, configs, energy_accumulator, tstep, e):
     norm = 1.0 + np.sum(forward_probability, axis=1)  # EQN 34
 
     def select_walker(array):
-        r = np.random.rand()
+        r = rng.random()
         return np.searchsorted(array, r)
 
     cdf = np.cumsum(forward_probability / norm[:, np.newaxis], axis=1)
@@ -120,6 +121,7 @@ def propose_tmoves(wf, configs, energy_accumulator, tstep, e):
     return newpos, move_selected, acceptance, np.sum(t_amplitudes)
 
 
+@pyqmc.rng.worker
 def dmc_propagate(
     wf,
     configs,
@@ -131,6 +133,8 @@ def dmc_propagate(
     nsteps=5,
     accumulators=None,
     ekey=("energy", "total"),
+    *,
+    rng=None,
 ):
     """
     Propagate DMC without branching
@@ -168,15 +172,17 @@ def dmc_propagate(
         if accumulators[ekey[0]].has_nonlocal_moves():
             for e in range(nelec):  # T-moves
                 newepos, mask, probability, ecp_totweight = propose_tmoves(
-                    wf, configs, accumulators[ekey[0]], tstep, e
+                    wf, configs, accumulators[ekey[0]], tstep, e, rng
                 )
-                accept = mask & (probability > np.random.rand(nconfig))
+                accept = mask & (probability > rng.random(nconfig))
                 configs.move(e, newepos, accept)
                 wf.updateinternals(e, newepos, configs, mask=accept)
                 tmove_acceptance += accept / nelec
 
         for e in range(nelec):  # drift-diffusion
-            newepos, accept, r2, saved = propose_drift_diffusion(wf, configs, tstep, e)
+            newepos, accept, r2, saved = propose_drift_diffusion(
+                wf, configs, tstep, e, rng
+            )
             configs.move(e, newepos, accept)
             wf.updateinternals(e, newepos, configs, mask=accept, saved_values=saved)
             r2_proposed += r2
@@ -339,7 +345,7 @@ def branch_trigger_maxweight(configs, weights, trigger_size=2.0):
     return configs, weights, {"max branches": 1, "Number of walkers killed": 0}
 
 
-def branch(configs, weights):
+def branch(configs, weights, rng=None):
     """
     Perform branching on a set of walkers using the 'stochastic comb'
 
@@ -358,7 +364,7 @@ def branch(configs, weights):
     probability = np.cumsum(weights)
     wtot = probability[-1]
 
-    base = np.random.rand() * wtot
+    base = pyqmc.rng.get_rng(rng).random() * wtot
     newinds = np.searchsorted(
         probability, (base + np.linspace(0, wtot, nconfig, endpoint=False)) % wtot
     )
@@ -391,7 +397,8 @@ def dmc_file(hdf_file, data, attr, configs, weights):
             hdf["weights"][:] = weights
 
 
-def evaluate_energy_worker(configs, wf, en):
+@pyqmc.rng.worker
+def evaluate_energy_worker(configs, wf, en, *, rng=None):
     wf.recompute(configs)
     return en(configs, wf)
 

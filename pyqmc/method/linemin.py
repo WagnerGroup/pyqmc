@@ -18,6 +18,7 @@ import pyqmc.method.sample_many as sm
 import h5py
 import os
 import pyqmc.method.mc
+import pyqmc.rng
 import copy
 import logging
 
@@ -375,7 +376,8 @@ def correlated_compute(
     return block_avg
 
 
-def correlated_compute_worker(wf, configs, params, pgrad_acc, ref_wfs):
+@pyqmc.rng.worker
+def correlated_compute_worker(wf, configs, params, pgrad_acc, ref_wfs, *, rng=None):
     """
     Evaluates accumulator on the same set of configs for correlated sampling of different wave function parameters
 
@@ -391,10 +393,11 @@ def correlated_compute_worker(wf, configs, params, pgrad_acc, ref_wfs):
     """
 
     data = []
-    current_state = np.random.get_state()
+    # every parameter set sees the same ECP quadrature rotations
+    current_state = rng.bit_generator.state
     psi = np.zeros((len(params), len(configs.configs)))
     for i, p in enumerate(params):
-        np.random.set_state(current_state)
+        rng.bit_generator.state = current_state
         set_wf_params(wf, p, pgrad_acc)
         psi[i] = wf.recompute(configs)[1]  # recompute gives logdet
         df = pgrad_acc.enacc(configs, wf)

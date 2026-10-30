@@ -31,7 +31,7 @@ def test_ecp_sj(C2_ccecp_rhf, nconf=10000):
     mol, mf = C2_ccecp_rhf
     THRESHOLDS = [1e15, 10]
 
-    np.random.seed(1234)
+    pyqmc.rng.seed(1234)
     coords = initial_guess(mol, nconf)
     wf = MultiplyWF(Slater(mol, mf), generate_jastrow(mol)[0])
     wf.recompute(coords)

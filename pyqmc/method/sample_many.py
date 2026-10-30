@@ -20,6 +20,7 @@ import scipy.stats
 import os
 import h5py
 import pyqmc.method.hdftools as hdftools
+import pyqmc.rng
 
 
 
@@ -135,7 +136,8 @@ def sample_overlap_client(wfs, configs, tstep, nsteps, energy, client, npartitio
 
 
 
-def sample_overlap_worker(wfs, configs, tstep, nsteps, energy):
+@pyqmc.rng.worker
+def sample_overlap_worker(wfs, configs, tstep, nsteps, energy, *, rng=None):
     r"""Run nstep Metropolis steps to sample a distribution proportional to
     :math:`\sum_i |\Psi_i|^2`, where :math:`\Psi_i` = wfs[i]
     """
@@ -151,7 +153,7 @@ def sample_overlap_worker(wfs, configs, tstep, nsteps, energy):
             # Propose move
             grads = [np.real(wf.gradient(e, configs.electron(e)).T) for wf in wfs]
             grad = mc.limdrift(np.mean(grads, axis=0))
-            gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconf, 3))
+            gauss = rng.normal(scale=np.sqrt(tstep), size=(nconf, 3))
             newcoorde = configs.configs[:, e, :] + gauss + grad * tstep
             newcoorde = configs.make_irreducible(e, newcoorde)
             # print(configs.wrap)
@@ -172,7 +174,7 @@ def sample_overlap_worker(wfs, configs, tstep, nsteps, energy):
             weights = np.exp(2 * (log_values - log_values[0]))
 
             ratio = t_prob * np.sum(wf_ratios * weights, axis=0) / weights.sum(axis=0)
-            accept = ratio > np.random.rand(nconf)
+            accept = ratio > rng.random(nconf)
 
             # Update wave function
             configs.move(e, newcoorde, accept)

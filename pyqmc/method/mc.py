@@ -19,10 +19,11 @@ import numpy as np
 import h5py
 import logging
 import pyqmc.method.hdftools as hdftools
+import pyqmc.rng
 import time
 
 
-def initial_guess(mol, nconfig, r=1.0):
+def initial_guess(mol, nconfig, r=1.0, rng=None):
     """Generate an initial guess by distributing electrons near atoms
     proportional to their charge.
 
@@ -33,11 +34,14 @@ def initial_guess(mol, nconfig, r=1.0):
     :parameter mol: A PySCF-like molecule object. Should have atom_charges(), atom_coords(), and nelec
     :parameter nconfig: How many configurations to generate.
     :parameter r: How far from the atoms to distribute the electrons
+    :parameter rng: anything accepted by :func:`pyqmc.rng.get_rng`
     :returns: (nconfig,nelectrons,3) array of electron positions randomly distributed near the atoms.
     :rtype: ndarray
 
     """
     from pyqmc.configurations.coord import OpenConfigs, PeriodicConfigs
+
+    rng = pyqmc.rng.get_rng(rng)
 
     epos = np.zeros((nconfig, np.sum(mol.nelec), 3))
     wts = mol.atom_charges()
@@ -59,13 +63,13 @@ def initial_guess(mol, nconfig, r=1.0):
         if totleft > 0:
             # bins = np.cumsum(nleft) / totleft
             inds = np.argpartition(
-                np.random.random((nconfig, len(wts))), totleft, axis=1
+                rng.random((nconfig, len(wts))), totleft, axis=1
             )[:, :totleft]
             epos[:, ind0 + nassigned : ind0 + mol.nelec[s], :] = mol.atom_coords()[
                 inds
             ]  # assign remaining electrons
 
-    epos += r * np.random.randn(*epos.shape)  # random shifts from atom positions
+    epos += r * rng.standard_normal(epos.shape)  # random shifts from atom positions
     if hasattr(mol, "a"):
         epos = PeriodicConfigs(epos, mol.lattice_vectors())
     else:
@@ -103,7 +107,8 @@ def vmc_file(hdf_file, data, attr, configs):
             configs.to_hdf(hdf)
 
 
-def vmc_worker(wf, configs, tstep, nsteps, accumulators):
+@pyqmc.rng.worker
+def vmc_worker(wf, configs, tstep, nsteps, accumulators, *, rng=None):
     """
     Run VMC for nsteps.
 
@@ -120,7 +125,7 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
             # Propose move
             g, _, _ = wf.gradient_value(e, configs.electron(e))
             grad = limdrift(np.real(g.T))
-            gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconf, 3))
+            gauss = rng.normal(scale=np.sqrt(tstep), size=(nconf, 3))
             newcoorde = configs.configs[:, e, :] + gauss + grad * tstep
             newcoorde = configs.make_irreducible(e, newcoorde)
 
@@ -133,7 +138,7 @@ def vmc_worker(wf, configs, tstep, nsteps, accumulators):
             # Acceptance
             t_prob = np.exp(1 / (2 * tstep) * (forward - backward))
             ratio = np.abs(new_val) ** 2 * t_prob
-            accept = ratio > np.random.rand(nconf)
+            accept = ratio > rng.random(nconf)
 
             # Update wave function
             configs.move(e, newcoorde, accept)

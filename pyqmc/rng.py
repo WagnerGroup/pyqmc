@@ -27,6 +27,7 @@ draws come from the worker's stream as well.
 For reproducible runs, call ``pyqmc.rng.seed(s)`` or pass ``rng=s`` to an entry point.
 """
 import contextlib
+import functools
 import numpy as np
 
 _rng = np.random.default_rng()  # OS entropy at import
@@ -69,3 +70,21 @@ def using(rng):
         yield _rng
     finally:
         _rng = old
+
+
+def worker(f):
+    """Decorator for a function that does the random work for one partition of walkers.
+
+    The decorated function takes a keyword-only ``rng=None``. The wrapper resolves it
+    with ``get_rng``, passes the Generator on, and runs the function inside
+    ``using(rng)``, so accumulators called from it draw from the same stream as
+    the function's own moves.
+    """
+
+    @functools.wraps(f)
+    def wrapped(*args, rng=None, **kwargs):
+        rng = get_rng(rng)
+        with using(rng):
+            return f(*args, rng=rng, **kwargs)
+
+    return wrapped

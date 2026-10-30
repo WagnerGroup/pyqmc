@@ -21,6 +21,7 @@ import logging
 from typing import NamedTuple
 from collections import namedtuple
 from functools import partial
+from pyqmc.rng import get_rng
 
 
 class ECPAccumulator:
@@ -198,7 +199,7 @@ def ecp_mask(v_l, threshold):
     l = 2 * np.arange(v_l.shape[1] - 1) + 1
     prob = np.dot(np.abs(v_l[:, :-1]), threshold * (2 * l + 1))
     prob = np.minimum(1, prob)
-    accept = prob > np.random.random(size=prob.shape)
+    accept = prob > get_rng().random(size=prob.shape)
     return accept, prob
 
 
@@ -320,7 +321,7 @@ def get_rot(nconf, naip):
     # if nconf > 0:  # get around a bug(?) when there are zero configurations.
     # rot = scipy.spatial.transform.Rotation.random(nconf).as_matrix()
     # rot = np.identity(3)[np.newaxis].repeat(nconf, axis=0)
-    rot = scipy.spatial.transform.Rotation.random().as_matrix()
+    rot = scipy.spatial.transform.Rotation.random(random_state=get_rng()).as_matrix()
     # else:
     #    rot = np.zeros((0, 3, 3))
     quadrature_grid = generate_quadrature_grids()

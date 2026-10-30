@@ -75,8 +75,7 @@ class GeminalJastrowReference:
                 self.orbitals = pyqmc.wf.orbitals.MoleculeOrbitalEvaluator(mol, [0, 0])
         else:
             self.orbitals = orbitals
-        randpos = np.random.random((1, 3))
-        dim = mol.eval_gto("GTOval_sph", randpos).shape[-1]
+        dim = mol.eval_gto("GTOval_sph", np.zeros((1, 3))).shape[-1]
         self.parameters = {"gcoeff": gpu.cp.zeros(int(dim * (dim + 1) / 2))}
         self.dtype = float
         self.optimize = "greedy"

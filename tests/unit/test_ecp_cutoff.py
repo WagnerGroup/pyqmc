@@ -20,6 +20,7 @@ from pyqmc.observables.accumulators import EnergyAccumulator
 from pyqmc.wf.slater import Slater
 from pyqmc.wftools import generate_jastrow
 import numpy as np
+import pyqmc.rng
 import time
 
 
@@ -37,7 +38,7 @@ def test_ecp_sj(C2_ccecp_rhf, nconf=10000):
     times = []
     energies = []
     for threshold in THRESHOLDS:
-        np.random.seed(1234)
+        pyqmc.rng.seed(1234)  # same ECP rotations for both thresholds
         eacc = EnergyAccumulator(mol, threshold)
         start = time.time()
         energy = eacc(coords, wf)

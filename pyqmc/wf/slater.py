@@ -224,6 +224,8 @@ class Slater:
             self._gtoval_deriv1 = "GTOval_sph_deriv1"
             self._gtoval_deriv2 = "GTOval_sph_deriv2"
 
+        self._det_array = None
+
     def recompute(self, configs):
         """This computes the value from scratch. Returns the logarithm of the wave function as
         (phase,logdet). If the wf is real, phase will be +/- 1."""
@@ -257,6 +259,7 @@ class Slater:
                     mo_vals[compute[:, d], d, :, :]
                 )
             # spin, Nconf, [ndet_up, ndet_dn], nelec, nelec
+        self._det_array = None
         return self.value()
 
     def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
@@ -289,6 +292,7 @@ class Slater:
         )
         self._dets[s][0, mask, :] *= self.get_phase(det_ratio)
         self._dets[s][1, mask, :] += gpu.cp.log(gpu.cp.abs(det_ratio))
+        self._det_array = None
 
     def value(self):
         """Return logarithm of the wave function as noted in recompute()"""
@@ -339,6 +343,29 @@ class Slater:
             denom = denom[:, gpu.cp.newaxis]
         return numer / denom
 
+    def _det_array_cached(self):
+        """The determinant prefactor used by _testrowderiv.
+
+        It depends only on self._dets and self._det_map, so it is invariant
+        across the many _testrowderiv calls between two updates of the
+        internals. Recomputing it per call costs about half the time spent in
+        _testrowderiv; cache it and invalidate wherever self._dets changes.
+        """
+        if self._det_array is None:
+            upref = gpu.cp.amax(self._dets[0][1]).real
+            dnref = gpu.cp.amax(self._dets[1][1]).real
+            self._det_array = (
+                self._dets[0][0, :, self._det_map[0]]
+                * self._dets[1][0, :, self._det_map[1]]
+                * gpu.cp.exp(
+                    self._dets[0][1, :, self._det_map[0]]
+                    + self._dets[1][1, :, self._det_map[1]]
+                    - upref
+                    - dnref
+                )
+            )
+        return self._det_array
+
     def _testrowderiv(self, e, vec, spin=None):
         """vec is a nconfig,nmo vector which replaces row e"""
         s = int(e >= self._nelec[0]) if spin is None else spin
@@ -349,19 +376,7 @@ class Slater:
             self._inverse[s][..., e - s * self._nelec[0]],
         )
 
-        upref = gpu.cp.amax(self._dets[0][1]).real
-        dnref = gpu.cp.amax(self._dets[1][1]).real
-
-        det_array = (
-            self._dets[0][0, :, self._det_map[0]]
-            * self._dets[1][0, :, self._det_map[1]]
-            * gpu.cp.exp(
-                self._dets[0][1, :, self._det_map[0]]
-                + self._dets[1][1, :, self._det_map[1]]
-                - upref
-                - dnref
-            )
-        )
+        det_array = self._det_array_cached()
         numer = gpu.cp.einsum(
             "ei...d,d,di->ei...",
             ratios[..., self._det_map[s]],

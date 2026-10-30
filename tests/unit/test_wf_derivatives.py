@@ -26,15 +26,19 @@ from pyqmc.wftools import generate_gps_jastrow
 from pyqmc.wf.gps2 import GPSJastrow
 import pyqmc.api as pyq
 
-import jax
-from pyqmc.wf.jax.slater import JAXSlater
-from pyqmc.wf.jax.jastrowspin import JAXJastrowSpin
-cpu=True
-if cpu:
-    jax.config.update('jax_platform_name', 'cpu')
-    jax.config.update("jax_enable_x64", True)
+try:
+    import jax
+    from pyqmc.wf.jax.slater import JAXSlater
+    from pyqmc.wf.jax.jastrowspin import JAXJastrowSpin
+except ImportError:
+    jax = None
 else:
-    pass 
+    cpu=True
+    if cpu:
+        jax.config.update('jax_platform_name', 'cpu')
+        jax.config.update("jax_enable_x64", True)
+    else:
+        pass 
 
 
 def run_tests(wf, epos, epsilon):
@@ -79,7 +83,7 @@ def test_obc_wfs(LiH_sto3g_rhf, epsilon=1e-5, nconf=11):
 
     mol, mf = LiH_sto3g_rhf
     a_basis, b_basis = default_jastrow_basis(mol)
-    for wf in [
+    wfs = [
         generate_gps_jastrow(mol)[0],
         MultiplyWF(Slater(mol, mf), generate_gps_jastrow(mol)[0]),
         generate_jastrow(mol)[0],
@@ -94,9 +98,10 @@ def test_obc_wfs(LiH_sto3g_rhf, epsilon=1e-5, nconf=11):
         ),
         Slater(mol, mf),
         GPSJastrow(mol, pyq.initial_guess(mol, 2).configs.reshape(-1, 2, 3)),
-        JAXSlater(mol, mf),
-        JAXJastrowSpin(mol),
-    ]:
+    ]
+    if jax is not None:
+        wfs.extend([JAXSlater(mol, mf), JAXJastrowSpin(mol)])
+    for wf in wfs:
         for k in wf.parameters.keys():
             if k != "mo_coeff":
                 wf.parameters[k] = cp.asarray(np.random.rand(*wf.parameters[k].shape))

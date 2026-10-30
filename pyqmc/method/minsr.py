@@ -280,6 +280,7 @@ def sample_minsr_data(
     tstep=0.5,
     client=None,
     npartitions=None,
+    rng=None,
 ):
     """Sample the derivatives and local energies used to build the minSR update.
 
@@ -292,6 +293,7 @@ def sample_minsr_data(
     :returns: (data, coords) where data has 'dppsi' (nsamples, nparameters),
         'total' (nsamples,), and 'block_energy' (nblocks,)
     """
+    rng = pyqmc.rng.get_rng(rng)
     dppsi = []
     eloc = []
     block_energy = []
@@ -305,9 +307,10 @@ def sample_minsr_data(
             tstep=tstep,
             client=client,
             npartitions=npartitions,
+            rng=rng,
         )
         block = sample_derivatives(
-            wf, coords, transform, enacc, nodal_cutoff, client, npartitions
+            wf, coords, transform, enacc, nodal_cutoff, client, npartitions, rng=rng
         )
         dppsi.append(block["dppsi"])
         eloc.append(block["total"])
@@ -338,6 +341,7 @@ def minsr_optimization(
     hdf_file=None,
     client=None,
     npartitions=None,
+    rng=None,
 ):
     """Optimize the energy with the minSR algorithm.
 
@@ -391,6 +395,7 @@ def minsr_optimization(
     :parameter str hdf_file: hdf file to store output; the format matches line_minimization
     :parameter client: an object with submit() functions that return futures
     :parameter int npartitions: the number of workers to submit at a time
+    :parameter rng: anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module generator
     :return: optimized wave function, optimization data
     """
     transforms = list(transform) if isinstance(transform, (list, tuple)) else [transform]
@@ -400,6 +405,7 @@ def minsr_optimization(
                 "minsr_optimization takes a transform and an energy accumulator, not a "
                 "StochasticReconfiguration object; pass acc.transform and acc.enacc."
             )
+    rng = pyqmc.rng.get_rng(rng)
     if vmcoptions is None:
         vmcoptions = {}
     if warmup_options is None:
@@ -431,6 +437,7 @@ def minsr_optimization(
             client=client,
             npartitions=npartitions,
             verbose=verbose,
+            rng=rng,
             **warmup_options,
         )
         if verbose:
@@ -469,6 +476,7 @@ def minsr_optimization(
                 nodal_cutoff,
                 client=client,
                 npartitions=npartitions,
+                rng=rng,
                 **vmcoptions,
             )
             if np.isnan(data["total"]).any():

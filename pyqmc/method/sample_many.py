@@ -69,10 +69,12 @@ def invert_list_of_dicts(A, asarray=True):
 
 
 def sample_overlap_run(wfs, configs, tstep, nsteps_per_block, nblocks, energy,
-                          hdf_file=None, client=None, npartitions=None, verbose=False):
+                          hdf_file=None, client=None, npartitions=None, verbose=False,
+                          rng=None):
     """
     Use a single core to sample over blocks
     """
+    rng = pyqmc.rng.get_rng(rng)
     nconf, nelec, _ = configs.configs.shape
     # weighted and unweighted are dictionaries of arrays, accessed as
     # weighted[quantity][block, ...]. Each block is written straight into them,
@@ -84,9 +86,9 @@ def sample_overlap_run(wfs, configs, tstep, nsteps_per_block, nblocks, energy,
         if verbose:
             print("-", end="", flush=True)
         if client is None:
-            w, u, configs = sample_overlap_worker(wfs, configs, tstep, nsteps_per_block, energy)
+            w, u, configs = sample_overlap_worker(wfs, configs, tstep, nsteps_per_block, energy, rng=rng)
         else:
-            w, u, configs = sample_overlap_client(wfs, configs, tstep, nsteps_per_block, energy, client, npartitions)
+            w, u, configs = sample_overlap_client(wfs, configs, tstep, nsteps_per_block, energy, client, npartitions, rng=rng)
         hdf_save(hdf_file, w, u, dict(tstep=tstep), configs)
 
         if not allocated:
@@ -220,12 +222,15 @@ def sample_overlap(
     client=None,
     npartitions=None,
     verbose=False,
+    rng=None,
 ):
     """Sample nblocks of the distribution proportional to sum_i |Psi_i|^2.
 
     `verbose` prints one character per block, matching pyqmc.method.mc.vmc. It is
     off by default because callers that run several of these at once in threads
     get unreadable interleaved output.
+
+    `rng` is anything accepted by :func:`pyqmc.rng.get_rng`.
     """
     if hdf_file is not None and os.path.isfile(hdf_file):
         with h5py.File(hdf_file, "r") as f:
@@ -234,7 +239,7 @@ def sample_overlap(
                 if "configs" in hdf.keys():
                     configs.load_hdf(hdf)
 
-    return sample_overlap_run(wfs, configs, tstep, nsteps_per_block, nblocks, energy, hdf_file, client, npartitions, verbose)
+    return sample_overlap_run(wfs, configs, tstep, nsteps_per_block, nblocks, energy, hdf_file, client, npartitions, verbose, rng=rng)
 
 def normalize(weighted, unweighted):
     """

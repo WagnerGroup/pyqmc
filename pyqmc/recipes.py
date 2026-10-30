@@ -20,6 +20,7 @@ import pyqmc.method.linemin as linemin
 import pyqmc.method.minsr as minsr
 import pyqmc.method.dmc as dmc
 import pyqmc.method.mc
+import pyqmc.rng
 import pyqmc.reblock
 import numpy as np
 import h5py
@@ -41,12 +42,16 @@ def OPTIMIZE(
     target_root=None,
     nodal_cutoff=1e-3,
     optimizer="linemin",
+    rng=None,
     **linemin_kws,
 ):
     """optimizer selects the optimization driver: 'linemin' for stochastic
     reconfiguration with a correlated-sampling line minimization, or 'minsr' for
     the minimum-step SR algorithm, which computes the same update without
-    forming the S matrix. Remaining keyword arguments are passed to the driver."""
+    forming the S matrix. Remaining keyword arguments are passed to the driver.
+    rng is anything accepted by pyqmc.rng.get_rng; it seeds the initial
+    configurations and the driver."""
+    rng = pyqmc.rng.get_rng(rng)
     linemin_kws["hdf_file"] = output
     if load_parameters is not None and output is not None and os.path.isfile(output):
         raise RuntimeError(
@@ -67,9 +72,10 @@ def OPTIMIZE(
         slater_kws=slater_kws,
         target_root=target_root,
         nodal_cutoff=nodal_cutoff,
+        rng=rng,
     )
     if optimizer == "linemin":
-        linemin.line_minimization(wf, configs, acc, **linemin_kws)
+        linemin.line_minimization(wf, configs, acc, rng=rng, **linemin_kws)
     elif optimizer == "minsr":
         # minsr works directly with the transform and the energy accumulator; the
         # S matrix that acc would build is exactly what it avoids.
@@ -79,6 +85,7 @@ def OPTIMIZE(
             acc.transform,
             acc.enacc,
             nodal_cutoff=nodal_cutoff,
+            rng=rng,
             **linemin_kws,
         )
     else:
@@ -138,8 +145,10 @@ def VMC(
     jastrow_kws=None,
     slater_kws=None,
     accumulators=None,
+    rng=None,
     **vmc_kws,
 ):
+    rng = pyqmc.rng.get_rng(rng)
     vmc_kws["hdf_file"] = output
     wf, configs, acc = initialize_qmc_objects(
         dft_checkfile,
@@ -150,9 +159,10 @@ def VMC(
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
         accumulators=accumulators,
+        rng=rng,
     )
 
-    pyqmc.method.mc.vmc(wf, configs, accumulators=acc, **vmc_kws)
+    pyqmc.method.mc.vmc(wf, configs, accumulators=acc, rng=rng, **vmc_kws)
 
 
 def DMC(
@@ -165,8 +175,10 @@ def DMC(
     jastrow_kws=None,
     slater_kws=None,
     accumulators=None,
+    rng=None,
     **dmc_kws,
 ):
+    rng = pyqmc.rng.get_rng(rng)
     dmc_kws["hdf_file"] = output
     wf, configs, acc = initialize_qmc_objects(
         dft_checkfile,
@@ -177,9 +189,10 @@ def DMC(
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
         accumulators=accumulators,
+        rng=rng,
     )
 
-    dmc.rundmc(wf, configs, accumulators=acc, **dmc_kws)
+    dmc.rundmc(wf, configs, accumulators=acc, rng=rng, **dmc_kws)
 
 
 def initialize_qmc_objects(
@@ -194,6 +207,7 @@ def initialize_qmc_objects(
     opt_wf=False,
     target_root=0,
     nodal_cutoff=1e-3,
+    rng=None,
 ):
     if ci_checkfile is None:
         mol, mf = pyscftools.recover_pyscf(dft_checkfile)
@@ -212,7 +226,7 @@ def initialize_qmc_objects(
     if load_parameters is not None:
         wftools.read_wf(wf, load_parameters)
 
-    configs = pyqmc.method.mc.initial_guess(mol, nconfig)
+    configs = pyqmc.method.mc.initial_guess(mol, nconfig, rng=rng)
     if opt_wf:
         acc = pyqmc.observables.accumulators.gradient_generator(
             mol, wf, to_opt, nodal_cutoff=nodal_cutoff

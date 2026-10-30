@@ -443,6 +443,7 @@ def rundmc(
     vmc_warmup=10,
     branchcut_start=10,
     feedback=1.0,
+    rng=None,
 ):
     """
     Run DMC
@@ -466,6 +467,7 @@ def rundmc(
     :parameter int vmc_warmup: If starting a run, how many VMC warmup blocks to run
     :parameter int branchcut_start: Used in computing weights. Recommended for "experts only".
     :parameter float feedback: Feedback strength for controlling normalization. Recommended for "experts only".
+    :parameter rng: anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module generator
     :returns: (df,coords,weights)
       df: A list of dictionaries nblocks long that contains all results from the accumulators.
 
@@ -474,6 +476,7 @@ def rundmc(
       weights: The final weights from this calculation
     :rtype: list of dictionaries, pyqmc.coord.Configs, ndarray
     """
+    rng = pyqmc.rng.get_rng(rng)
 
     if nsteps_per_block is None:
         nsteps_per_block = max(1, int(0.1 / tstep)) # default to branching every 0.1 time units, which is a common choice in DMC
@@ -520,10 +523,11 @@ def rundmc(
             npartitions=npartitions,
             verbose=verbose,
             nblocks=vmc_warmup,
+            rng=rng,
         )
-        en = evaluate_energies(wf, configs, accumulators[ekey[0]], client, npartitions)[
-            ekey[1]
-        ]
+        en = evaluate_energies(
+            wf, configs, accumulators[ekey[0]], client, npartitions, rng=rng
+        )[ekey[1]]
         eref = np.mean(en).real
         e_trial = eref
         e_est = eref
@@ -553,6 +557,7 @@ def rundmc(
                 nsteps=nsteps_per_block,
                 accumulators=accumulators,
                 ekey=ekey,
+                rng=rng,
             )
         else:
             df_, configs, weights = dmc_propagate_parallel(
@@ -568,6 +573,7 @@ def rundmc(
                 nsteps=nsteps_per_block,
                 accumulators=accumulators,
                 ekey=ekey,
+                rng=rng,
             )
 
         df_["e_trial"] = e_trial
@@ -578,7 +584,7 @@ def rundmc(
         df_["weight_std"] = np.std(weights)
         df_["nsteps_per_block"] = nsteps_per_block
 
-        configs, weights, branch_info = branch(configs, weights)
+        configs, weights, branch_info = branch(configs, weights, rng=rng)
         df_.update(branch_info)
         df.append(df_)
         dmc_file(hdf_file, df_, {}, configs, weights)

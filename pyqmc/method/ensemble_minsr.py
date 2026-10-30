@@ -47,6 +47,7 @@ import h5py
 import numpy as np
 
 import pyqmc.method.sample_many
+import pyqmc.rng
 from pyqmc.method.ensemble_optimization import _block_sem
 from pyqmc.method.minsr import (
     local_energy_error,
@@ -130,6 +131,7 @@ class MinSRWfbyWf:
         nblocks=10,
         nsteps_per_block=10,
         tstep=0.5,
+        rng=None,
     ):
         """Sample the overlap distribution and accumulate what delta_p needs from
         it, here the weighted derivatives that give the overlap gradient.
@@ -149,6 +151,7 @@ class MinSRWfbyWf:
         :returns: (weighted, unweighted, configs), matching
             :func:`pyqmc.method.sample_many.sample_overlap`
         """
+        rng = pyqmc.rng.get_rng(rng)
         wtdp = []
         unweighted = []
         for _ in range(nblocks):
@@ -161,6 +164,7 @@ class MinSRWfbyWf:
                 tstep=tstep,
                 client=client,
                 npartitions=npartitions,
+                rng=rng,
             )
             unweighted.append(block_unweighted)
             wtdp.append(

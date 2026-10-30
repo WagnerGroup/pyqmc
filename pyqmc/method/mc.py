@@ -235,6 +235,7 @@ def vmc(
     continue_from=None,
     client=None,
     npartitions=None,
+    rng=None,
 ):
     """Run a Monte Carlo sample of a given wave function.
 
@@ -253,6 +254,7 @@ def vmc(
     :parameter str continue_from: Hdf_file to continue vmc calculation from.
     :parameter client: an object with submit() functions that return futures
     :parameter int npartitions: the number of workers to submit at a time
+    :parameter rng: anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module generator
     :returns: (df,configs)
        df: A list of dictionaries nstep long that contains all results from the accumulators. These are averaged across all walkers.
 
@@ -260,6 +262,7 @@ def vmc(
     :rtype: list of dictionaries, pyqmc.coord.Configs
 
     """
+    rng = pyqmc.rng.get_rng(rng)
     if nsteps is not None:
         nblocks = nsteps
         nsteps_per_block = 1
@@ -302,11 +305,18 @@ def vmc(
             print("-", end="", flush=True)
         if client is None:
             block_avg, configs = vmc_worker(
-                wf, configs, tstep, nsteps_per_block, accumulators
+                wf, configs, tstep, nsteps_per_block, accumulators, rng=rng
             )
         else:
             block_avg, configs = vmc_parallel(
-                wf, configs, tstep, nsteps_per_block, accumulators, client, npartitions
+                wf,
+                configs,
+                tstep,
+                nsteps_per_block,
+                accumulators,
+                client,
+                npartitions,
+                rng=rng,
             )
         block_avg["block"] = block
         block_avg["nconfig"] = nsteps_per_block * configs.configs.shape[0]

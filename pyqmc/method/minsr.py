@@ -72,17 +72,28 @@ def sample_derivatives_worker(wf, configs, transform, enacc, nodal_cutoff, *, rn
 
 
 def sample_derivatives(
-    wf, configs, transform, enacc, nodal_cutoff, client=None, npartitions=None
+    wf,
+    configs,
+    transform,
+    enacc,
+    nodal_cutoff,
+    client=None,
+    npartitions=None,
+    rng=None,
 ):
     """Same as :func:`sample_derivatives_worker`, distributed over a client if one is given."""
+    rng = pyqmc.rng.get_rng(rng)
     if client is None:
-        return sample_derivatives_worker(wf, configs, transform, enacc, nodal_cutoff)
+        return sample_derivatives_worker(
+            wf, configs, transform, enacc, nodal_cutoff, rng=rng
+        )
     config = configs.split(npartitions)
+    children = rng.spawn(len(config))
     runs = [
         client.submit(
-            sample_derivatives_worker, wf, conf, transform, enacc, nodal_cutoff
+            sample_derivatives_worker, wf, conf, transform, enacc, nodal_cutoff, rng=child
         )
-        for conf in config
+        for conf, child in zip(config, children)
     ]
     allresults = [r.result() for r in runs]
     return {

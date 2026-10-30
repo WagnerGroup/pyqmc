@@ -338,7 +338,15 @@ def correlated_sampling_minimum(steprange, npts, stderr_weight, correlated_refer
 
 
 def correlated_compute(
-    wf, configs, params, pgrad_acc, client=None, npartitions=None, ref_wfs=None, **kws
+    wf,
+    configs,
+    params,
+    pgrad_acc,
+    client=None,
+    npartitions=None,
+    ref_wfs=None,
+    rng=None,
+    **kws,
 ):
     """
     Evaluates energy on the same set of configs for correlated sampling of different wave function parameters
@@ -362,12 +370,18 @@ def correlated_compute(
         wfs, configs, None, client=client, npartitions=npartitions, **kws
     )
 
+    rng = pyqmc.rng.get_rng(rng)
     if client is None:
-        return correlated_compute_worker(wf, configs, params, pgrad_acc, ref_wfs)
+        return correlated_compute_worker(
+            wf, configs, params, pgrad_acc, ref_wfs, rng=rng
+        )
     config = configs.split(npartitions)
+    children = rng.spawn(len(config))
     runs = [
-        client.submit(correlated_compute_worker, wf, conf, params, pgrad_acc, ref_wfs)
-        for conf in config
+        client.submit(
+            correlated_compute_worker, wf, conf, params, pgrad_acc, ref_wfs, rng=child
+        )
+        for conf, child in zip(config, children)
     ]
     allresults = [r.result() for r in runs]
     block_avg = {}

@@ -100,7 +100,9 @@ def sample_overlap_run(wfs, configs, tstep, nsteps_per_block, nblocks, energy,
         del w, u
     return weighted, unweighted, configs
 
-def sample_overlap_client(wfs, configs, tstep, nsteps, energy, client, npartitions):
+def sample_overlap_client(
+    wfs, configs, tstep, nsteps, energy, client, npartitions, rng=None
+):
     """
     Sample nblocks, saving every block.
     wfs: list of wave functions
@@ -110,11 +112,13 @@ def sample_overlap_client(wfs, configs, tstep, nsteps, energy, client, npartitio
     energy: Accumulator object
     client: futures client
     npartitions: number of jobs to submit to the client.
+    rng: anything accepted by pyqmc.rng.get_rng; each partition gets a child of it.
     """
     config = configs.split(npartitions)
+    children = pyqmc.rng.get_rng(rng).spawn(len(config))
     runs = [
-        client.submit(sample_overlap_worker, wfs, conf, tstep, nsteps, energy)
-        for conf in config
+        client.submit(sample_overlap_worker, wfs, conf, tstep, nsteps, energy, rng=child)
+        for conf, child in zip(config, children)
     ]
     confweight = np.array([len(c.configs) for c in config], dtype=float)
     confweight /= np.mean(confweight) * npartitions

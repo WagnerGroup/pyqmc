@@ -241,7 +241,9 @@ def compute_S(e_trial, e_est, branchcut, v2, tau, eloc, nelec):
     return e_trial - e_est + e_cut / denominator
 
 
-def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **kwargs):
+def dmc_propagate_parallel(
+    wf, configs, weights, client, npartitions, *args, rng=None, **kwargs
+):
     r"""Parallelizes calls to dmc_propagate by splitting configs
 
     If npartitions does not evenly divide nconfigs, we need to reweight the results based on the number of configs per parallel task.
@@ -284,9 +286,10 @@ def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **k
 
     config = configs.split(npartitions)
     weight = np.array_split(weights, npartitions)
+    children = pyqmc.rng.get_rng(rng).spawn(len(config))
     runs = [
-        client.submit(dmc_propagate, wf, conf, wt, *args, **kwargs)
-        for conf, wt in zip(config, weight)
+        client.submit(dmc_propagate, wf, conf, wt, *args, rng=child, **kwargs)
+        for conf, wt, child in zip(config, weight, children)
     ]
     allresults = list(zip(*[r.result() for r in runs]))
     configs.join(allresults[1])
@@ -403,13 +406,18 @@ def evaluate_energy_worker(configs, wf, en, *, rng=None):
     return en(configs, wf)
 
 
-def evaluate_energies(wf, configs, en, client, npartitions):
+def evaluate_energies(wf, configs, en, client, npartitions, rng=None):
+    rng = pyqmc.rng.get_rng(rng)
     if client is None:
-        return evaluate_energy_worker(configs, wf, en)
+        return evaluate_energy_worker(configs, wf, en, rng=rng)
 
     else:
         config = configs.split(npartitions)
-        runs = [client.submit(evaluate_energy_worker, conf, wf, en) for conf in config]
+        children = rng.spawn(len(config))
+        runs = [
+            client.submit(evaluate_energy_worker, conf, wf, en, rng=child)
+            for conf, child in zip(config, children)
+        ]
         ret = {}
         data = [r.result() for r in runs]
         for k in data[0].keys():

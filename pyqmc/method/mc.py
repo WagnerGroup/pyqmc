@@ -193,12 +193,16 @@ def _accumulate_weighted(total, block, weight):
 
 
 def vmc_parallel(
-    wf, configs, tstep, nsteps_per_block, accumulators, client, npartitions
+    wf, configs, tstep, nsteps_per_block, accumulators, client, npartitions, rng=None
 ):
     config = configs.split(npartitions)
+    # one independent stream per partition
+    children = pyqmc.rng.get_rng(rng).spawn(len(config))
     runs = [
-        client.submit(vmc_worker, wf, conf, tstep, nsteps_per_block, accumulators)
-        for conf in config
+        client.submit(
+            vmc_worker, wf, conf, tstep, nsteps_per_block, accumulators, rng=child
+        )
+        for conf, child in zip(config, children)
     ]
     confweight = np.array([len(c.configs) for c in config], dtype=float)
     confweight /= np.mean(confweight) * npartitions

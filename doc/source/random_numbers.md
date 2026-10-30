@@ -98,16 +98,3 @@ only spawn and submit, and the workers run in the client's processes; without on
 `optimize_ensemble` runs its sampling jobs one at a time. A client that runs workers as
 threads in one process is not supported.
 
-### Background
-
-Before this design, pyqmc drew from numpy's global state. That caused two bugs:
-
-1. A driver script that called `np.random.seed(fixed)` and restarted an optimization
-   replayed the same random numbers after every restart. Two restarts in a row
-   propagated the saved walkers with the stream that produced them, biasing the energy
-   for that iteration.
-2. Workers forked by `concurrent.futures.ProcessPoolExecutor` on Linux (the default
-   start method before Python 3.14) inherited the parent's global state, so all
-   workers drew the same numbers. VMC energies drifted in a sawtooth whose period was
-   the number of workers ([issue #503](https://github.com/WagnerGroup/pyqmc/issues/503)).
-   macOS starts workers with `spawn`, which reseeds them, so the bug did not appear there.

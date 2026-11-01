@@ -467,7 +467,8 @@ def rundmc(
     :parameter int vmc_warmup: If starting a run, how many VMC warmup blocks to run
     :parameter int branchcut_start: Used in computing weights. Recommended for "experts only".
     :parameter float feedback: Feedback strength for controlling normalization. Recommended for "experts only".
-    :parameter rng: anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module generator
+    :parameter rng: anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module generator.
+        Use only for testing; restarts in particular will be broken if you don't know what you are doing.
     :returns: (df,coords,weights)
       df: A list of dictionaries nblocks long that contains all results from the accumulators.
 

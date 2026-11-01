@@ -50,7 +50,7 @@ def OPTIMIZE(
     the minimum-step SR algorithm, which computes the same update without
     forming the S matrix. Remaining keyword arguments are passed to the driver.
     rng is anything accepted by pyqmc.rng.get_rng; it seeds the initial
-    configurations and the driver."""
+    configurations and the driver. Use only for testing; restarts in particular will be broken if you don't know what you are doing."""
     rng = pyqmc.rng.get_rng(rng)
     linemin_kws["hdf_file"] = output
     if load_parameters is not None and output is not None and os.path.isfile(output):

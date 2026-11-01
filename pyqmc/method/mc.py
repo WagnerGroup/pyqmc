@@ -254,7 +254,8 @@ def vmc(
     :parameter str continue_from: Hdf_file to continue vmc calculation from.
     :parameter client: an object with submit() functions that return futures
     :parameter int npartitions: the number of workers to submit at a time
-    :parameter rng: anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module generator
+    :parameter rng: anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module generator.
+        Use only for testing; restarts in particular will be broken if you don't know what you are doing.
     :returns: (df,configs)
        df: A list of dictionaries nstep long that contains all results from the accumulators. These are averaged across all walkers.
 

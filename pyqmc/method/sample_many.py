@@ -230,7 +230,8 @@ def sample_overlap(
     off by default because callers that run several of these at once in threads
     get unreadable interleaved output.
 
-    `rng` is anything accepted by :func:`pyqmc.rng.get_rng`.
+    `rng` is anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module
+    generator. Use only for testing; restarts in particular will be broken if you don't know what you are doing.
     """
     if hdf_file is not None and os.path.isfile(hdf_file):
         with h5py.File(hdf_file, "r") as f:

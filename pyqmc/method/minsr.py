@@ -395,7 +395,8 @@ def minsr_optimization(
     :parameter str hdf_file: hdf file to store output; the format matches line_minimization
     :parameter client: an object with submit() functions that return futures
     :parameter int npartitions: the number of workers to submit at a time
-    :parameter rng: anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module generator
+    :parameter rng: anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module generator.
+        Use only for testing; restarts in particular will be broken if you don't know what you are doing.
     :return: optimized wave function, optimization data
     """
     transforms = list(transform) if isinstance(transform, (list, tuple)) else [transform]

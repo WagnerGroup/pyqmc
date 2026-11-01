@@ -7,6 +7,10 @@ effect on pyqmc.
 
 ### Reproducible runs
 
+**Only do this for testing or debugging.** A fixed seed gives the same random numbers
+every time a script runs, so restarting a calculation with the same seed biases it
+(see the pitfall below). Production runs should not set a seed.
+
 Either reseed pyqmc's module generator once at the top of a script:
 
 ```python

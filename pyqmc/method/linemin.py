@@ -139,7 +139,8 @@ def line_minimization(
     :parameter boolean verbose: print output if True
     :parameter int npts: number of points to fit to in each line minimization
     :parameter str hdf_file: Hdf_file to store vmc output.
-    :parameter rng: anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module generator
+    :parameter rng: anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module generator.
+        Use only for testing; restarts in particular will be broken if you don't know what you are doing.
     :parameter client: an object with submit() functions that return futures
     :parameter int npartitions: the number of workers to submit at a time
     :return: optimized wave function, optimization data

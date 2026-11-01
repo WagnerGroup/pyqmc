@@ -860,7 +860,8 @@ def optimize_ensemble(
         refresh_vmc_warmup_kwargs (dict): options for refresh warmup `vmc`; defaults to off, pass a dictionary to enable
         refresh_overlap_warmup_kwargs (dict): options for refresh warmup `sample_overlap`; defaults to off, pass a dictionary to enable
         all_configs (tuple): `(norm_configs, gradient_configs)`, a full set of configs to start the optimization
-        rng: anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module generator
+        rng: anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module generator.
+            Use only for testing; restarts in particular will be broken if you don't know what you are doing.
 
     Return:
         wfs (list): list of optimized wave functions

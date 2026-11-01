@@ -24,6 +24,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import NamedTuple
 import time
 import pyqmc.gpu as gpu
+import pyqmc.rng
 import os
 from pyqmc.observables.stochastic_reconfiguration import StochasticReconfiguration
 import scipy.stats
@@ -444,7 +445,7 @@ def build_updaters(transforms, enacc=None, method="sr", eps=None, nodal_cutoff=1
     ]
 
 
-def _warmup_overlap(wfs, configs, client, npartitions, kwargs):
+def _warmup_overlap(wfs, configs, client, npartitions, kwargs, rng):
     if not kwargs or kwargs.get("nblocks", 1) <= 0:
         return configs
     _, _, configs = pyqmc.method.sample_many.sample_overlap(
@@ -453,6 +454,7 @@ def _warmup_overlap(wfs, configs, client, npartitions, kwargs):
         None,
         client=client,
         npartitions=npartitions,
+        rng=rng,
         **kwargs,
     )
     return configs
@@ -537,19 +539,20 @@ def _timed(function, *args, **kwargs):
 
 def _submit_sampling_job(
     threader, job, wfs, gradient_configs, updater, client, npartitions,
-    vmc_kwargs, overlap_kwargs,
+    vmc_kwargs, overlap_kwargs, rng,
 ):
     """Submit one job. `updater` of None means a warmup: propagate only, measure
     nothing.
 
     :parameter npartitions: partitions for this job alone, not the total
+    :parameter rng: a Generator for this job alone, not shared with other threads
     :returns: a future whose result is (sampling output, seconds)
     """
     configs = gradient_configs[job.wfi][job.sub_iteration][job.kind]
     transform = None if updater is None else updater[job.wfi][job.sub_iteration]
     # the samplers print progress per block, which is unreadable interleaved
     # across threads; the summary from _format_sampling_summary replaces it
-    common = dict(client=client, npartitions=npartitions)
+    common = dict(client=client, npartitions=npartitions, rng=rng)
 
     if job.kind == "energy":
         if transform is None:
@@ -630,6 +633,7 @@ def sample_gradient_configs_threaded(
     overlap_kwargs=None,
     verbose=True,
     overlap_thread_weight=None,
+    rng=None,
 ):
     """
     Sample all vmc and prefix-overlap configurations. It is a warmup run when `updater` is `None`
@@ -640,6 +644,9 @@ def sample_gradient_configs_threaded(
     receives at least one partition, so when ``npartitions`` is smaller than the number of active
     jobs, the total assigned partitions is the number of active jobs. Jobs are submitted longest
     first; see :func:`_build_sampling_jobs`.
+
+    Each job gets its own child of `rng`, spawned here before any thread starts, so
+    the streams do not depend on the order in which the threads run.
     """
     energy_data = [[None for _ in state] for state in gradient_configs]
     overlap_data_weighted = [[None for _ in state] for state in gradient_configs]
@@ -656,6 +663,7 @@ def sample_gradient_configs_threaded(
             gradient_configs,
         )
 
+    children = pyqmc.rng.get_rng(rng).spawn(len(jobs))
     available_partitions = len(jobs) if npartitions is None else npartitions
     partitions = round_to_fixed_sum(
         np.array([job.weight for job in jobs]), available_partitions
@@ -669,7 +677,7 @@ def sample_gradient_configs_threaded(
         futures = {
             _submit_sampling_job(
                 threader, job, wfs, gradient_configs, updater, client,
-                partitions[i], vmc_kwargs, overlap_kwargs,
+                partitions[i], vmc_kwargs, overlap_kwargs, children[i],
             ): i
             for i, job in enumerate(jobs)
         }
@@ -716,6 +724,7 @@ def evaluate_gradients_threaded(
     refresh_overlap_warmup_kwargs=None,
     verbose=True,
     overlap_thread_weight=None,
+    rng=None,
 ):
     """
     Evaluate parameter gradients for each state and sub-iteration using threads.
@@ -733,6 +742,7 @@ def evaluate_gradients_threaded(
         overlap_data_unweighted (list): nested list of unweighted sample_overlap outputs indexed by state then by sub-iteration
         gradient_configs (list): updated configurations with the same structure
     """
+    rng = pyqmc.rng.get_rng(rng)
     if not vmc_kwargs:
         vmc_kwargs = dict(nblocks=10, nsteps_per_block=10)
     if not overlap_kwargs:
@@ -750,6 +760,7 @@ def evaluate_gradients_threaded(
             overlap_kwargs=refresh_overlap_warmup_kwargs,
             verbose=verbose,
             overlap_thread_weight=overlap_thread_weight,
+            rng=rng,
         )
 
     # Gradient measurement
@@ -763,6 +774,7 @@ def evaluate_gradients_threaded(
         overlap_kwargs=overlap_kwargs,
         verbose=verbose,
         overlap_thread_weight=overlap_thread_weight,
+        rng=rng,
     )
 
 
@@ -790,6 +802,7 @@ def optimize_ensemble(
     refresh_vmc_warmup_kwargs=None,
     refresh_overlap_warmup_kwargs=None,
     all_configs=None,
+    rng=None,
 ):
     """
     Optimize a set of wave functions using ensemble VMC.
@@ -847,11 +860,13 @@ def optimize_ensemble(
         refresh_vmc_warmup_kwargs (dict): options for refresh warmup `vmc`; defaults to off, pass a dictionary to enable
         refresh_overlap_warmup_kwargs (dict): options for refresh warmup `sample_overlap`; defaults to off, pass a dictionary to enable
         all_configs (tuple): `(norm_configs, gradient_configs)`, a full set of configs to start the optimization
+        rng: anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module generator
 
     Return:
         wfs (list): list of optimized wave functions
     """
 
+    rng = pyqmc.rng.get_rng(rng)
     if initial_vmc_warmup_kwargs is None:
         initial_vmc_warmup_kwargs = dict(nblocks=1, nsteps_per_block=100)
     if initial_overlap_warmup_kwargs is None:
@@ -923,6 +938,7 @@ def optimize_ensemble(
             client=client,
             npartitions=npartitions,
             kwargs=initial_overlap_warmup_kwargs,
+            rng=rng,
         )
         _, _, _, gradient_configs = sample_gradient_configs_threaded(
             wfs,
@@ -934,6 +950,7 @@ def optimize_ensemble(
             overlap_kwargs=initial_overlap_warmup_kwargs,
             verbose=verbose,
             overlap_thread_weight=overlap_thread_weight,
+            rng=rng,
         )
 
     for i in range(iteration_offset, max_iterations):
@@ -946,6 +963,7 @@ def optimize_ensemble(
             client=client,
             npartitions=npartitions,
             kwargs=refresh_overlap_warmup_kwargs,
+            rng=rng,
         )
         # Norm measurement. The norms only set a rescaling of the wave functions,
         # so a couple of blocks is plenty; see norm_kwargs.
@@ -955,6 +973,7 @@ def optimize_ensemble(
             None,
             client=client,
             npartitions=npartitions,
+            rng=rng,
             **norm_kwargs,
         )
         norm = np.mean(data_unweighted["overlap"], axis=0)
@@ -982,6 +1001,7 @@ def optimize_ensemble(
             refresh_vmc_warmup_kwargs=refresh_vmc_warmup_kwargs,
             refresh_overlap_warmup_kwargs=refresh_overlap_warmup_kwargs,
             overlap_thread_weight=overlap_thread_weight,
+            rng=rng,
         )
 
         for wfi, wf in enumerate(wfs):

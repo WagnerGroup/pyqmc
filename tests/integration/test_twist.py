@@ -13,6 +13,7 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
+import pyqmc.rng
 import pyqmc.api as pyq
 from pyqmc.wf.slater import Slater
 from pyqmc.pbc.pbc import enforce_pbc
@@ -56,7 +57,7 @@ def runtest(mol, mf, kind=0):
 
     pht, valt = wft.recompute(coords)
     enacc = pyq.EnergyAccumulator(mol, threshold=np.inf)
-    np.random.seed(0)
+    pyqmc.rng.seed(0)
     ent = enacc(coords, wft)
 
     e = 0
@@ -69,7 +70,7 @@ def runtest(mol, mf, kind=0):
     ]
 
     phtnew, valtnew = wft.recompute(newcoords)
-    np.random.seed(0)
+    pyqmc.rng.seed(0)
     entnew = enacc(newcoords, wft)
 
     assert np.linalg.norm(pht * phase.prod(axis=1) - phtnew) < 1e-10, (

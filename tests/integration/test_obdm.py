@@ -19,9 +19,10 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 
 import numpy as np
+import pyqmc.rng
 from numpy.linalg import solve
 
-np.random.seed(12534234)
+pyqmc.rng.seed(12534234)
 from pyscf import gto, scf, lo
 from pyqmc.wf.slater import Slater
 from pyqmc.method.mc import initial_guess, vmc

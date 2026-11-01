@@ -18,6 +18,7 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 import numpy as np
+import pyqmc.rng
 import pandas as pd
 import pytest
 
@@ -38,7 +39,7 @@ def test_cgsr(H2_ccecp_uhf):
     mol, mf = H2_ccecp_uhf
     mol.output, mol.stdout = None, None
 
-    np.random.seed(0)
+    pyqmc.rng.seed(0)
     wf, to_opt = generate_wf(mol, mf)
     wf, df = cgsr_optimization(
         wf,
@@ -77,7 +78,7 @@ def test_cgsr_matches_minsr_trajectory(H2_ccecp_uhf):
         ("minsr", minsr_optimization, {}),
         ("cgsr", cgsr_optimization, dict(rtol=1e-10)),
     ]:
-        np.random.seed(0)
+        pyqmc.rng.seed(0)
         wf, to_opt = generate_wf(mol, mf)
         _, df = optimize(
             wf,
@@ -102,7 +103,7 @@ def test_cgsr_sub_iterations_and_restart(H2_ccecp_uhf, tmp_path):
     mol.output, mol.stdout = None, None
     hdf_file = str(tmp_path / "cgsr_sub.hdf5")
 
-    np.random.seed(0)
+    pyqmc.rng.seed(0)
     wf, to_opt = generate_wf(mol, mf)
     groups = ["wf2acoeff", "wf2bcoeff"]
     transforms = [LinearTransform(wf.parameters, {k: to_opt[k]}) for k in groups]

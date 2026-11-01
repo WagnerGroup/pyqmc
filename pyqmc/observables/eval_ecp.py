@@ -16,6 +16,7 @@ import numpy as np
 import copy
 import scipy.spatial.transform
 import functools
+from pyqmc.rng import get_rng
 
 
 def ecp(mol, configs, wf, threshold, naip=None):
@@ -142,7 +143,7 @@ def ecp_mask(v_l, threshold):
         prob = np.minimum(1, prob)
     else:
         prob = np.ones(v_l.shape[0])
-    accept = prob > np.random.random(size=prob.shape)
+    accept = prob > get_rng().random(size=prob.shape)
     return accept, prob
 
 
@@ -260,7 +261,7 @@ def get_rot(nconf, naip, stochastic=True):
     :rtype:  ((naip,) array, (nconf, naip, 3) array)
     """
 
-    rot = scipy.spatial.transform.Rotation.random().as_matrix()
+    rot = scipy.spatial.transform.Rotation.random(random_state=get_rng()).as_matrix()
     quadrature_grid = generate_quadrature_grids()
 
     if naip not in quadrature_grid.keys():

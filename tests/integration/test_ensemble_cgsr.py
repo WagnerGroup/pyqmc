@@ -21,6 +21,7 @@ import copy
 
 import h5py
 import numpy as np
+import pyqmc.rng
 import pytest
 
 import pyqmc.api as pyq
@@ -59,7 +60,7 @@ def test_ensemble_cgsr(H2_casci, tmp_path):
     mol, mf, mc = H2_casci
     hdf_file = str(tmp_path / "ensemble_cgsr.hdf5")
 
-    np.random.seed(0)
+    pyqmc.rng.seed(0)
     wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
     optimize_ensemble(
         wfs, pyq.initial_guess(mol, 200), transforms, hdf_file,
@@ -85,7 +86,7 @@ def test_ensemble_cgsr_matches_minsr(H2_casci, tmp_path):
 
     energies = {}
     for method in ["minsr", "cgsr"]:
-        np.random.seed(0)
+        pyqmc.rng.seed(0)
         wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
         updaters = transforms
         if method == "cgsr":  # tighten CG so the comparison is not solver-limited
@@ -114,7 +115,7 @@ def test_ensemble_cgsr_with_client(H2_casci, tmp_path):
     mol, mf, mc = H2_casci
     hdf_file = str(tmp_path / "ensemble_cgsr_client.hdf5")
 
-    np.random.seed(0)
+    pyqmc.rng.seed(0)
     wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
     with ProcessPoolExecutor(max_workers=2) as client:
         optimize_ensemble(
@@ -133,7 +134,7 @@ def test_verbose_reports_solve_cost_and_error_bars(H2_casci, tmp_path, capsys):
     not: how long the (unparallelized) solve took, and an error bar that a single
     block of sampling can actually produce."""
     mol, mf, mc = H2_casci
-    np.random.seed(0)
+    pyqmc.rng.seed(0)
     wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
     optimize_ensemble(
         wfs, pyq.initial_guess(mol, 200), transforms,
@@ -159,7 +160,7 @@ def test_error_bars_from_a_single_block(H2_casci, tmp_path):
     """One block of overlap and vmc sampling is the default for the per-sample
     methods, and it still has to give a usable error bar."""
     mol, mf, mc = H2_casci
-    np.random.seed(0)
+    pyqmc.rng.seed(0)
     wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
     hdf_file = str(tmp_path / "oneblock.hdf5")
     optimize_ensemble(

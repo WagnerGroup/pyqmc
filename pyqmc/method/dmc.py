@@ -17,6 +17,7 @@ import numpy as np
 import pyqmc.method.mc as mc
 import h5py
 import logging
+import pyqmc.rng
 
 
 def limdrift(g, tau, acyrus=0.5):
@@ -46,10 +47,10 @@ def get_V2(configs, wf, acc_out):
     return v2
 
 
-def propose_drift_diffusion(wf, configs, tstep, e):
+def propose_drift_diffusion(wf, configs, tstep, e, rng):
     nconfig = configs.configs.shape[0]
     grad = limdrift(np.real(wf.gradient(e, configs.electron(e)).T), tstep)
-    gauss = np.random.normal(scale=np.sqrt(tstep), size=(nconfig, 3))
+    gauss = rng.normal(scale=np.sqrt(tstep), size=(nconfig, 3))
     eposnew = configs.configs[:, e, :] + gauss + grad
     newepos = configs.make_irreducible(e, eposnew)
 
@@ -64,13 +65,13 @@ def propose_drift_diffusion(wf, configs, tstep, e):
     ratio = np.abs(wfratio) ** 2 * t_prob
     if wf.dtype == float:
         ratio *= np.sign(wfratio)
-    accept = ratio > np.random.rand(nconfig)
+    accept = ratio > rng.random(nconfig)
     r2 = np.sum((gauss + grad) ** 2, axis=1)
 
     return newepos, accept, r2, saved
 
 
-def propose_tmoves(wf, configs, energy_accumulator, tstep, e):
+def propose_tmoves(wf, configs, energy_accumulator, tstep, e, rng):
     """
     No side effect calculation of t-moves
 
@@ -87,7 +88,7 @@ def propose_tmoves(wf, configs, energy_accumulator, tstep, e):
     norm = 1.0 + np.sum(forward_probability, axis=1)  # EQN 34
 
     def select_walker(array):
-        r = np.random.rand()
+        r = rng.random()
         return np.searchsorted(array, r)
 
     cdf = np.cumsum(forward_probability / norm[:, np.newaxis], axis=1)
@@ -120,6 +121,7 @@ def propose_tmoves(wf, configs, energy_accumulator, tstep, e):
     return newpos, move_selected, acceptance, np.sum(t_amplitudes)
 
 
+@pyqmc.rng.worker
 def dmc_propagate(
     wf,
     configs,
@@ -131,6 +133,8 @@ def dmc_propagate(
     nsteps=5,
     accumulators=None,
     ekey=("energy", "total"),
+    *,
+    rng=None,
 ):
     """
     Propagate DMC without branching
@@ -168,15 +172,17 @@ def dmc_propagate(
         if accumulators[ekey[0]].has_nonlocal_moves():
             for e in range(nelec):  # T-moves
                 newepos, mask, probability, ecp_totweight = propose_tmoves(
-                    wf, configs, accumulators[ekey[0]], tstep, e
+                    wf, configs, accumulators[ekey[0]], tstep, e, rng
                 )
-                accept = mask & (probability > np.random.rand(nconfig))
+                accept = mask & (probability > rng.random(nconfig))
                 configs.move(e, newepos, accept)
                 wf.updateinternals(e, newepos, configs, mask=accept)
                 tmove_acceptance += accept / nelec
 
         for e in range(nelec):  # drift-diffusion
-            newepos, accept, r2, saved = propose_drift_diffusion(wf, configs, tstep, e)
+            newepos, accept, r2, saved = propose_drift_diffusion(
+                wf, configs, tstep, e, rng
+            )
             configs.move(e, newepos, accept)
             wf.updateinternals(e, newepos, configs, mask=accept, saved_values=saved)
             r2_proposed += r2
@@ -235,7 +241,9 @@ def compute_S(e_trial, e_est, branchcut, v2, tau, eloc, nelec):
     return e_trial - e_est + e_cut / denominator
 
 
-def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **kwargs):
+def dmc_propagate_parallel(
+    wf, configs, weights, client, npartitions, *args, rng=None, **kwargs
+):
     r"""Parallelizes calls to dmc_propagate by splitting configs
 
     If npartitions does not evenly divide nconfigs, we need to reweight the results based on the number of configs per parallel task.
@@ -278,9 +286,10 @@ def dmc_propagate_parallel(wf, configs, weights, client, npartitions, *args, **k
 
     config = configs.split(npartitions)
     weight = np.array_split(weights, npartitions)
+    children = pyqmc.rng.get_rng(rng).spawn(len(config))
     runs = [
-        client.submit(dmc_propagate, wf, conf, wt, *args, **kwargs)
-        for conf, wt in zip(config, weight)
+        client.submit(dmc_propagate, wf, conf, wt, *args, rng=child, **kwargs)
+        for conf, wt, child in zip(config, weight, children)
     ]
     allresults = list(zip(*[r.result() for r in runs]))
     configs.join(allresults[1])
@@ -339,7 +348,7 @@ def branch_trigger_maxweight(configs, weights, trigger_size=2.0):
     return configs, weights, {"max branches": 1, "Number of walkers killed": 0}
 
 
-def branch(configs, weights):
+def branch(configs, weights, rng=None):
     """
     Perform branching on a set of walkers using the 'stochastic comb'
 
@@ -358,7 +367,7 @@ def branch(configs, weights):
     probability = np.cumsum(weights)
     wtot = probability[-1]
 
-    base = np.random.rand() * wtot
+    base = pyqmc.rng.get_rng(rng).random() * wtot
     newinds = np.searchsorted(
         probability, (base + np.linspace(0, wtot, nconfig, endpoint=False)) % wtot
     )
@@ -391,18 +400,24 @@ def dmc_file(hdf_file, data, attr, configs, weights):
             hdf["weights"][:] = weights
 
 
-def evaluate_energy_worker(configs, wf, en):
+@pyqmc.rng.worker
+def evaluate_energy_worker(configs, wf, en, *, rng=None):
     wf.recompute(configs)
     return en(configs, wf)
 
 
-def evaluate_energies(wf, configs, en, client, npartitions):
+def evaluate_energies(wf, configs, en, client, npartitions, rng=None):
+    rng = pyqmc.rng.get_rng(rng)
     if client is None:
-        return evaluate_energy_worker(configs, wf, en)
+        return evaluate_energy_worker(configs, wf, en, rng=rng)
 
     else:
         config = configs.split(npartitions)
-        runs = [client.submit(evaluate_energy_worker, conf, wf, en) for conf in config]
+        children = rng.spawn(len(config))
+        runs = [
+            client.submit(evaluate_energy_worker, conf, wf, en, rng=child)
+            for conf, child in zip(config, children)
+        ]
         ret = {}
         data = [r.result() for r in runs]
         for k in data[0].keys():
@@ -428,6 +443,7 @@ def rundmc(
     vmc_warmup=10,
     branchcut_start=10,
     feedback=1.0,
+    rng=None,
 ):
     """
     Run DMC
@@ -451,6 +467,7 @@ def rundmc(
     :parameter int vmc_warmup: If starting a run, how many VMC warmup blocks to run
     :parameter int branchcut_start: Used in computing weights. Recommended for "experts only".
     :parameter float feedback: Feedback strength for controlling normalization. Recommended for "experts only".
+    :parameter rng: anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module generator
     :returns: (df,coords,weights)
       df: A list of dictionaries nblocks long that contains all results from the accumulators.
 
@@ -459,6 +476,7 @@ def rundmc(
       weights: The final weights from this calculation
     :rtype: list of dictionaries, pyqmc.coord.Configs, ndarray
     """
+    rng = pyqmc.rng.get_rng(rng)
 
     if nsteps_per_block is None:
         nsteps_per_block = max(1, int(0.1 / tstep)) # default to branching every 0.1 time units, which is a common choice in DMC
@@ -505,10 +523,11 @@ def rundmc(
             npartitions=npartitions,
             verbose=verbose,
             nblocks=vmc_warmup,
+            rng=rng,
         )
-        en = evaluate_energies(wf, configs, accumulators[ekey[0]], client, npartitions)[
-            ekey[1]
-        ]
+        en = evaluate_energies(
+            wf, configs, accumulators[ekey[0]], client, npartitions, rng=rng
+        )[ekey[1]]
         eref = np.mean(en).real
         e_trial = eref
         e_est = eref
@@ -538,6 +557,7 @@ def rundmc(
                 nsteps=nsteps_per_block,
                 accumulators=accumulators,
                 ekey=ekey,
+                rng=rng,
             )
         else:
             df_, configs, weights = dmc_propagate_parallel(
@@ -553,6 +573,7 @@ def rundmc(
                 nsteps=nsteps_per_block,
                 accumulators=accumulators,
                 ekey=ekey,
+                rng=rng,
             )
 
         df_["e_trial"] = e_trial
@@ -563,7 +584,7 @@ def rundmc(
         df_["weight_std"] = np.std(weights)
         df_["nsteps_per_block"] = nsteps_per_block
 
-        configs, weights, branch_info = branch(configs, weights)
+        configs, weights, branch_info = branch(configs, weights, rng=rng)
         df_.update(branch_info)
         df.append(df_)
         dmc_file(hdf_file, df_, {}, configs, weights)

@@ -101,6 +101,7 @@ import numpy as np
 
 import pyqmc.gpu as gpu
 import pyqmc.method.mc
+import pyqmc.rng
 from pyqmc.method.linemin import opt_hdf
 from pyqmc.method.minsr import (
     local_energy_error,
@@ -374,6 +375,7 @@ def cgsr_optimization(
     hdf_file=None,
     client=None,
     npartitions=None,
+    rng=None,
 ):
     """Optimize the energy with conjugate-gradient stochastic reconfiguration.
 
@@ -424,6 +426,7 @@ def cgsr_optimization(
         line_minimization
     :parameter client: an object with submit() functions that return futures
     :parameter int npartitions: the number of workers to submit at a time
+    :parameter rng: anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module generator
     :return: optimized wave function, optimization data
     """
     transforms = list(transform) if isinstance(transform, (list, tuple)) else [transform]
@@ -433,6 +436,7 @@ def cgsr_optimization(
                 "cgsr_optimization takes a transform and an energy accumulator, not a "
                 "StochasticReconfiguration object; pass acc.transform and acc.enacc."
             )
+    rng = pyqmc.rng.get_rng(rng)
     if vmcoptions is None:
         vmcoptions = {}
     if warmup_options is None:
@@ -464,6 +468,7 @@ def cgsr_optimization(
             client=client,
             npartitions=npartitions,
             verbose=verbose,
+            rng=rng,
             **warmup_options,
         )
         if verbose:
@@ -507,6 +512,7 @@ def cgsr_optimization(
                 nodal_cutoff,
                 client=client,
                 npartitions=npartitions,
+                rng=rng,
                 **vmcoptions,
             )
             if np.isnan(data["total"]).any():

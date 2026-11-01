@@ -148,6 +148,9 @@ def VMC(
     rng=None,
     **vmc_kws,
 ):
+    """Remaining keyword arguments are passed to pyqmc.method.mc.vmc.
+    rng is anything accepted by pyqmc.rng.get_rng; it seeds the initial
+    configurations and the VMC run. Use only for testing; restarts in particular will be broken if you don't know what you are doing."""
     rng = pyqmc.rng.get_rng(rng)
     vmc_kws["hdf_file"] = output
     wf, configs, acc = initialize_qmc_objects(
@@ -178,6 +181,9 @@ def DMC(
     rng=None,
     **dmc_kws,
 ):
+    """Remaining keyword arguments are passed to pyqmc.method.dmc.rundmc.
+    rng is anything accepted by pyqmc.rng.get_rng; it seeds the initial
+    configurations and the DMC run. Use only for testing; restarts in particular will be broken if you don't know what you are doing."""
     rng = pyqmc.rng.get_rng(rng)
     dmc_kws["hdf_file"] = output
     wf, configs, acc = initialize_qmc_objects(

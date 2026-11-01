@@ -34,7 +34,8 @@ def initial_guess(mol, nconfig, r=1.0, rng=None):
     :parameter mol: A PySCF-like molecule object. Should have atom_charges(), atom_coords(), and nelec
     :parameter nconfig: How many configurations to generate.
     :parameter r: How far from the atoms to distribute the electrons
-    :parameter rng: anything accepted by :func:`pyqmc.rng.get_rng`
+    :parameter rng: anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module generator.
+        Use only for testing; restarts in particular will be broken if you don't know what you are doing.
     :returns: (nconfig,nelectrons,3) array of electron positions randomly distributed near the atoms.
     :rtype: ndarray
 

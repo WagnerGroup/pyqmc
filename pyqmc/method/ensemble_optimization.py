@@ -13,7 +13,6 @@
 # copies or substantial portions of the Software.
 
 
-import importlib
 
 import pyqmc.method.sample_many
 import numpy as np
@@ -25,221 +24,8 @@ from typing import NamedTuple
 import time
 import pyqmc.rng
 import os
-from pyqmc.observables.stochastic_reconfiguration import StochasticReconfiguration
-import scipy.stats
-
-
-class StochasticReconfigurationWfbyWf:
-    """
-    This class works as an accumulator, but has an extra method that computes the change in parameters
-    given the averages given by avg()
-    """
-
-    def __init__(self, enacc, transform, eps=1e-3, nodal_cutoff=1e-3):
-        """ """
-        self.enacc = enacc
-        self.transform = transform
-        self.eps = eps
-        self.nodal_cutoff = nodal_cutoff
-        # eps used to be passed positionally here, which landed it in
-        # nodal_cutoff; the two defaults coincide, so only a non-default eps was
-        # affected, and it retuned the nodal regularization rather than the solve
-        self._onewf = StochasticReconfiguration(
-            enacc, transform, nodal_cutoff=nodal_cutoff, eps=eps
-        )
-
-    def onewf(self):
-        return self._onewf
-
-    def allwfs(self):
-        return self
-
-    def sample_energy(self, wf, configs, client=None, npartitions=None, verbose=True, **kwargs):
-        """Sample this state on its own and accumulate whatever delta_p needs
-        from that distribution, here the SR averages dpH, dppsi, and dpidpj.
-
-        The driver calls this rather than running vmc itself, so that an updater
-        that needs something else from the single-state sampling -- minSR needs
-        the derivatives per configuration, not averaged into dpidpj -- can be
-        dropped in without a separate driver.
-
-        :returns: (data, configs) with data in the form block_average expects
-        """
-        return pyqmc.method.mc.vmc(
-            wf,
-            configs,
-            accumulators={"": self.onewf()},
-            verbose=verbose,
-            client=client,
-            npartitions=npartitions,
-            **kwargs,
-        )
-
-    def sample_overlap(self, wfs, configs, client=None, npartitions=None, **kwargs):
-        """Sample the overlap distribution and accumulate whatever delta_p needs
-        from it, here the weighted derivatives averaged over every step.
-
-        The driver calls this rather than passing an accumulator itself, so that
-        an updater that wants something else from the overlap sampling -- minSR
-        evaluates the derivatives on one snapshot per block rather than at every
-        step -- can be dropped in without a separate driver.
-
-        :returns: (weighted, unweighted, configs)
-        """
-        return pyqmc.method.sample_many.sample_overlap(
-            wfs,
-            configs,
-            self.allwfs(),
-            client=client,
-            npartitions=npartitions,
-            **kwargs,
-        )
-
-    def avg(self, configs, wfs, weights=None):
-        """
-        Compute (weighted) average
-        """
-        wfi = len(wfs) - 1
-        dp = self.transform.serialize_gradients(wfs[wfi].pgradient())
-        nconfig = weights.shape[-1]
-        # here we assume that you are evaluating the derivative wrt the last wave function
-        d = {}
-        d["wtdp"] = np.einsum("cp,jkc->pjk", dp, weights, optimize=True) / nconfig
-        return d
-
-    def keys(self):
-        return self.enacc.keys().union(["dpH", "dppsi", "dpidpj"])
-
-    def shapes(self):
-        nparms = self.transform.nparams()
-        d = {"dppsi": (nparms,)}
-        d.update(self.enacc.shapes())
-        return d
-
-    def update_state(self, hdf_file: h5py.File):
-        """
-        Update the state of the accumulator from a restart file.
-        StochasticReconfiguration does not keep a state.
-
-        hdf_file: h5py.File object
-        """
-        pass
-
-    def block_average(self, data_sample1, data, weights):
-        """
-        This is meant to be called to create correctly weighted average after a number of blocks have
-        been performed.
-        weights are block, wf, wf
-        data is a dictionary, with each entry being a numpy array of shape (block, ...) (i.e., block is added to the front of what's returned from avg())
-        """
-        weight_avg = np.mean(weights, axis=0)
-
-        N = np.abs(weight_avg.diagonal())
-        Nij = np.sqrt(np.outer(N, N))
-
-        avg = {}
-        error = {}
-        wfi = Nij.shape[0] - 1
-        for k in ["wtdp"]:
-            it = data[k]
-            avg[k] = np.mean(it, axis=0) / Nij[wfi]
-            error[k] = _block_sem(it) / Nij[wfi]
-
-        avg["overlap"] = weight_avg
-
-        for k in ["total", "dppsi", "dpH", "dpidpj"]:
-            it = data_sample1[k]
-            avg[k] = np.mean(it, axis=0)
-            error[k] = scipy.stats.sem(it, axis=0)
-        return avg, error
-
-    def _collect_terms(self, avg, error):
-        ret = {}
-        nwf = avg["overlap"].shape[0]
-        N = np.abs(avg["overlap"].diagonal())
-        Nij = np.sqrt(np.outer(N, N))
-
-        # bits that don't depend on the overlap
-        ret["dp_energy"] = np.real(avg["dpH"] - avg["total"] * np.conj(avg["dppsi"]))
-        ret["dpidpj"] = np.real(
-            avg["dpidpj"] - np.einsum("i,j->ij", np.conj(avg["dppsi"]), avg["dppsi"])
-        )
-
-        # overlap gradient
-        fac = np.ones((nwf, nwf)) + np.identity(nwf)
-        wfi = nwf - 1
-        ret["norm"] = N
-        ret["overlap"] = avg["overlap"] / Nij
-        ret["dp_norm"] = 2.0 * np.real(avg["wtdp"][:, wfi, wfi])
-        norm_part = np.einsum("i,p->pi", avg["overlap"][wfi, :], ret["dp_norm"]) / N
-        ret["dp_overlap"] = (
-            fac[wfi] * (avg["wtdp"][:, wfi, :] - 0.5 * norm_part) / Nij[wfi]
-        )
-        ret["energy"] = avg["total"]
-        return ret
-
-    def delta_p(
-        self, steps: np.ndarray, data: dict, overlap_penalty: np.ndarray, verbose=False
-    ):
-        """
-        steps: a list/numpy array of timesteps
-        data: averaged data from avg() or __call__. Note that if you use VMC to compute this with
-        an accumulator with a name, you'll need to remove that name from the keys.
-        That is, the keys should be equal to the ones returned by keys().
-
-
-        Compute the change in parameters given the data from a stochastic reconfiguration step.
-        Return the change in parameters, and data that we may want to use for diagnostics.
-        """
-        data = self._collect_terms(data, None)
-        nwf = data["overlap"].shape[0]
-        wfi = nwf - 1
-        overlap_cost = 0.0
-        for i in range(wfi):
-            overlap_cost += overlap_penalty[wfi, i] * data["overlap"][wfi, i]
-        if verbose:
-            print("Overlap cost", overlap_cost)
-
-        Sij = np.real(data["dpidpj"])
-        invSij = np.linalg.inv(Sij + self.eps * np.eye(Sij.shape[0]))
-
-        ovlp = 0.0
-        #print("dp overlap", data["dp_overlap"].shape)
-
-        for i in range(wfi):
-            ovlp += (
-                2.0
-                * data["dp_overlap"][:, i]
-                * overlap_penalty[wfi, i]
-                * data["overlap"][wfi, i]
-            )
-        #print("dp_energy", data["dp_energy"])
-        pgrad = data["dp_energy"] + ovlp
-
-        v = np.einsum("ij,j->i", invSij, pgrad)
-        dp = [-step * v for step in steps]
-        report = {
-            "pgrad": np.linalg.norm(pgrad),
-            "SRdot": np.dot(pgrad, v) / (np.linalg.norm(v) * np.linalg.norm(pgrad)),
-            "overlap_cost": overlap_cost,
-        }
-        if verbose:
-            print("overlap gradient norm", np.linalg.norm(ovlp))
-            print("Gradient norm: ", np.linalg.norm(pgrad))
-            print("Dot product between gradient and SR step: ", report["SRdot"])
-        return dp, report
-
-
-def _block_sem(blocks):
-    """Standard error over the leading (block) axis.
-
-    scipy.stats.sem warns and returns nan for a single block, which is a common
-    case here since the per-sample methods default to one. Return the nan
-    without the warning.
-    """
-    if blocks.shape[0] < 2:
-        return np.full(blocks.shape[1:], np.nan)
-    return scipy.stats.sem(blocks, axis=0)
+from pyqmc.method.ensemble_updaters import EnsembleUpdater, build_updaters, make_updater  # noqa: F401
+from pyqmc.method.optimize import set_wf_params
 
 
 def _configs_to_hdf(hdf, configs):
@@ -255,7 +41,7 @@ def load_all_configs(hdf, configs, updater):
     Args:
         hdf: the HDF5 object to load the configurations from
         configs: configs that supply the configuration type and shape
-        updater: nested list of StochasticReconfigurationWfbyWf accumulators indexed by state then by sub-iteration
+        updater: nested list of EnsembleUpdater objects indexed by state then by sub-iteration
 
     Return:
         norm_configs: configs used for normalization sampling
@@ -307,12 +93,6 @@ def hdf_save(hdf_file, data, attr, wfs, norm_configs, gradient_configs):
             for wfi, wf in enumerate(wfs):
                 for k, it in wf.parameters.items():
                     hdf[f"wf/{wfi}/" + k][:] = it.copy()
-
-
-def set_wf_params(wf, params, updater):
-    newparms = updater.transform.deserialize(wf, params)
-    for k in newparms.keys():
-        wf.parameters[k] = newparms[k]
 
 
 def renormalize(wfs, norms, pivot=0, N=1):
@@ -372,76 +152,6 @@ def round_to_fixed_sum(x: np.ndarray, target_sum: int) -> np.ndarray:
     y[y < 1] = 1
 
     return y
-
-
-#: algorithms optimize_ensemble can be asked for by name, and the regularization
-#: each one wants by default
-UPDATERS = {
-    "sr": (StochasticReconfigurationWfbyWf, 1e-3),
-    # given as (module, class name) so that the import happens on demand and
-    # those modules are free to build on this one; see make_updater
-    "minsr": (("pyqmc.method.ensemble_minsr", "MinSRWfbyWf"), 1e-2),
-    "cgsr": (("pyqmc.method.ensemble_cgsr", "CGSRWfbyWf"), 1e-2),
-}
-
-
-def make_updater(transform, enacc, method="sr", eps=None, nodal_cutoff=1e-3):
-    """Build the per-state updater for one algorithm.
-
-    :parameter transform: a LinearTransform for this state's parameters
-    :parameter enacc: an EnergyAccumulator-like object
-    :parameter str method: 'sr' for stochastic reconfiguration, which builds the
-        (nparameters, nparameters) S matrix, 'minsr', which solves the same
-        equations in sample space and never builds it, or 'cgsr', which solves
-        them iteratively and builds neither that matrix nor the sample-space
-        kernel
-    :parameter float eps: regularization of the solve; defaults to what the
-        method wants, 1e-3 for sr and 1e-2 for minsr and cgsr
-    :parameter float nodal_cutoff: regularization distance for the nodal divergence of the derivatives
-    """
-    if method not in UPDATERS:
-        raise ValueError(
-            f"Unknown method {method!r}; choose one of {sorted(UPDATERS)}."
-        )
-    cls, default_eps = UPDATERS[method]
-    if isinstance(cls, tuple):  # deferred import
-        module_name, class_name = cls
-        cls = getattr(importlib.import_module(module_name), class_name)
-    return cls(
-        enacc,
-        transform,
-        eps=default_eps if eps is None else eps,
-        nodal_cutoff=nodal_cutoff,
-    )
-
-
-def build_updaters(transforms, enacc=None, method="sr", eps=None, nodal_cutoff=1e-3):
-    """Turn parameter transforms into the nested list of updaters the driver uses.
-
-    :parameter transforms: one transform per state, or a nested list indexed by
-        state then sub-iteration. Objects that are already updaters (anything
-        with delta_p) are passed through, so a hand-built updater still works.
-    :parameter enacc: an EnergyAccumulator-like object shared by every state, or
-        a list with one per state
-    :returns: nested list of updaters indexed by state then sub-iteration
-    """
-    nested = [t if isinstance(t, (list, tuple)) else [t] for t in transforms]
-    if all(hasattr(t, "delta_p") for state in nested for t in state):
-        return [list(state) for state in nested]
-    if enacc is None:
-        raise ValueError(
-            "enacc is required to build updaters from transforms; pass an "
-            "EnergyAccumulator, or pass updater objects instead of transforms."
-        )
-    enaccs = enacc if isinstance(enacc, (list, tuple)) else [enacc] * len(nested)
-    if len(enaccs) != len(nested):
-        raise ValueError(
-            f"got {len(enaccs)} energy accumulators for {len(nested)} states"
-        )
-    return [
-        [make_updater(t, e, method, eps, nodal_cutoff) for t in state]
-        for state, e in zip(nested, enaccs)
-    ]
 
 
 def _warmup_overlap(wfs, configs, client, npartitions, kwargs, rng):
@@ -786,7 +496,7 @@ def optimize_ensemble(
     method="sr",
     eps=None,
     nodal_cutoff=1e-3,
-    tau=.02,
+    tau=0.01,
     max_iterations=100,
     overlap_penalty=None,
     npartitions=None,
@@ -843,9 +553,11 @@ def optimize_ensemble(
             wants, 1e-3 for sr and 1e-2 for minsr and cgsr
         nodal_cutoff (float): regularization distance for the nodal divergence of
             the parameter derivatives
-        tau (float): optimization step size
+        tau (float): step size along the SR direction, which uses the true
+            gradient of the objective in pyqmc.method.ensemble_updaters
         max_iterations (int): maximum number of optimization iterations
-        overlap_penalty (np.ndarray): overlap penalty matrix with shape (nwf, nwf)
+        overlap_penalty (np.ndarray): (nwf, nwf) penalty lambda; state i is optimized on
+            E_i + sum_{j<i} lambda_ij |S_ij|^2 with S the normalized overlap. Defaults to ones.
         npartitions (int): total number of partitions distributed among the threads
         client: an object with submit() functions that return futures
         overlap_thread_weight (list): a list of float that overrides the default thread weights (1 + wfi) / 2.0
@@ -896,7 +608,7 @@ def optimize_ensemble(
         )
     nwf = len(wfs)
     if overlap_penalty is None:
-        overlap_penalty = np.ones((nwf, nwf)) * 0.5
+        overlap_penalty = np.ones((nwf, nwf))
 
     iteration_offset = 0
     checkpoint_configs = None
@@ -1026,8 +738,8 @@ def optimize_ensemble(
                     if len(transform_list) > 1:
                         label += f" sub {sub_iteration}"
                     line = (
-                        f"  {label}: E = {float(np.real(avg['total'])):.6f}"
-                        f" +/- {float(np.real(error['total'])):.6f}"
+                        f"  {label}: E = {float(np.real(avg['energy'])):.6f}"
+                        f" +/- {float(np.real(error['energy'])):.6f}"
                     )
                     if wfi > 0:  # overlap with the states below this one
                         lower = np.array2string(
@@ -1040,11 +752,11 @@ def optimize_ensemble(
                     print(f"      {_format_step_report(report)}", flush=True)
                 x = transform.transform.serialize_parameters(wf.parameters)
                 x = x + dp[0]
-                set_wf_params(wf, x, transform)
+                set_wf_params(wf, x, transform.transform)
 
                 save_data = {
-                    f"energy{wfi}": avg["total"],
-                    f"energy_error{wfi}": error["total"],
+                    f"energy{wfi}": avg["energy"],
+                    f"energy_error{wfi}": error["energy"],
                     f"overlap{wfi}": avg["overlap"],
                     "iteration": i,
                     "wavefunction": wfi,

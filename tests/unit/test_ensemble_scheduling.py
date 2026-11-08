@@ -18,8 +18,8 @@ import warnings
 import numpy as np
 import pytest
 
+from pyqmc.method.ensemble_updaters import _block_sem
 from pyqmc.method.ensemble_optimization import (
-    _block_sem,
     _build_sampling_jobs,
     _format_step_report,
     _sweeps,

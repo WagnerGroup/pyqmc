@@ -69,7 +69,7 @@ def run_ensemble(
     client=None,
     npartitions=None,
     nstates=3,
-    tau=0.1,
+    tau=0.05,
     nconfig=800,
     method="sr",
 ):

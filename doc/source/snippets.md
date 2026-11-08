@@ -169,6 +169,27 @@ if __name__ == "__main__":
     wf, _ = pyq.generate_wf(mol, mf, mc=mc)
 ```
 
+### Optimize excited states with an ensemble
+
+`ENSEMBLE_OPTIMIZE` optimizes the lowest `nstates` states together, starting state `i` from CI root `i`.
+The CI checkfile must hold several roots, for example from a CASCI with `mc.fcisolver.nroots` set.
+Only the Jastrow is read from `load_parameters`; the Slater part of each state, including orbital coefficients, comes from its CI root.
+By default the determinant coefficients of each state are optimized.
+`VMC` and `DMC` read state `i` back with `target_root=i`. Use the same `ci_checkfile` and determinant cutoff `tol` as the optimization, so that the determinant list matches.
+
+```
+pyq.OPTIMIZE("mf.chk", "opt.chk", ci_checkfile="cas.chk")
+pyq.ENSEMBLE_OPTIMIZE("mf.chk", "ensemble.chk", "cas.chk", nstates=3, load_parameters="opt.chk")
+for i in range(3):
+    pyq.VMC(
+        "mf.chk",
+        f"vmc_{i}.chk",
+        ci_checkfile="cas.chk",
+        load_parameters="ensemble.chk",
+        target_root=i,
+    )
+```
+
 ### Create a wavefunction with 3 body Jastrow factor.
 
 ```

@@ -12,7 +12,7 @@
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
-from pyqmc.recipes import OPTIMIZE, VMC, DMC, read_mc_output, read_opt
+from pyqmc.recipes import OPTIMIZE, ENSEMBLE_OPTIMIZE, VMC, DMC, read_mc_output, read_opt
 from pyqmc.pbc.supercell import get_supercell
 from pyqmc.observables.accumulators import EnergyAccumulator, gradient_generator
 from pyqmc.observables.s2_accumulator import S2Accumulator

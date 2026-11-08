@@ -240,7 +240,12 @@ def generate_wf(
     return wf, to_opt
 
 
-def read_wf(wf, wf_file):
+def _is_ensemble_group(grp):
+    """Ensemble optimization stores state i under wf/{i}/."""
+    return len(grp) > 0 and all(k.isdigit() for k in grp.keys())
+
+
+def read_wf(wf, wf_file, state=0, skip_prefixes=()):
     """Read the wave function parameters from wf_file into wf.
 
     Typical usage:
@@ -250,18 +255,41 @@ def read_wf(wf, wf_file):
        linemin(wf, coords, ..., hdf_file="linemin.hdf5")
        read_wf(wf, "linemin.hdf5")
 
+    The file layout is detected. Single-state optimizers store parameters under
+    ``wf/``; ensemble optimization stores state ``i`` under ``wf/{i}/``, and
+    ``state`` selects which one to read.
+
     :param wf: object to load saved parameters into
     :type wf: wave function object with parameters dictionary
     :param wf_file: A HDF5 file with "wf" key. The parameters in this file will be read into the wave function in-place
     :type wf_file: string
+    :param state: which state to read from an ensemble file. A single-state file
+        only holds state 0, so a nonzero state is an error.
+    :type state: int
+    :param skip_prefixes: parameters whose names start with any of these are not
+        read. For a wave function from generate_wf, ``("wf1",)`` skips the Slater
+        determinant and reads only the Jastrow factors.
+    :type skip_prefixes: tuple of str
 
-    :return: nothing"""
+    :return: wf"""
 
     with h5py.File(wf_file, "r") as hdf:
         if "wf" not in hdf.keys():
             raise Exception("Did not find wf in hdf file")
         grp = hdf["wf"]
-        for k in grp.keys():
+        ensemble = _is_ensemble_group(grp)
+        if ensemble:
+            if str(state) not in grp:
+                raise ValueError(
+                    f"State {state} not found in {wf_file}; it holds states {sorted(grp.keys(), key=int)}."
+                )
+            grp = grp[str(state)]
+        elif state != 0:
+            raise ValueError(
+                f"{wf_file} holds a single wave function, so it has no state {state}."
+            )
+        keys = [k for k in grp.keys() if not k.startswith(tuple(skip_prefixes))]
+        for k in keys:
             new_parms = np.array(grp[k])
             if wf.parameters[k].shape != new_parms.shape:
                 raise Exception(

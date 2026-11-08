@@ -16,7 +16,7 @@ pyqmc.rng.seed(1234)
 
 or pass `rng` to an entry point (`initial_guess`, `vmc`, `rundmc`, `line_minimization`,
 `minsr_optimization`, `cgsr_optimization`, `optimize_ensemble`, and the `OPTIMIZE`,
-`VMC`, and `DMC` recipes):
+`ENSEMBLE_OPTIMIZE`, `VMC`, and `DMC` recipes):
 
 ```python
 rng = np.random.default_rng(1234)

@@ -15,11 +15,10 @@
 import numpy as np
 import pyqmc.observables.energy as energy
 import pyqmc.observables.ewald as ewald
-import pyqmc.observables.eval_ecp as eval_ecp
+import pyqmc.observables.ecp as ecp
 from pyqmc.observables.stochastic_reconfiguration import StochasticReconfiguration
 import copy
 import time
-import pyqmc.observables.jax_ecp as ecp_accumulator
 from pyqmc.pbc.pbc import enforce_pbc
 
 
@@ -42,26 +41,35 @@ def gradient_generator(
 
 
 class EnergyAccumulator:
-    """Returns local energy of each configuration in a dictionary."""
+    """Returns local energy of each configuration in a dictionary.
 
-    def __init__(self, mol, threshold=10, naip=None, use_old_ecp=True, **kwargs):
+    :parameter ecp_sampling: how the nonlocal ECP is sampled: 'threshold'
+        (:class:`pyqmc.observables.ecp.ThresholdECP`) or 'fixed'
+        (:class:`pyqmc.observables.ecp.FixedBudgetECP`). Which is faster
+        depends on the system and the wave function backend.
+    :parameter threshold: used by 'threshold' sampling only.
+    :parameter naip: number of quadrature points; see
+        :func:`pyqmc.observables.ecp.default_naip`.
+    :parameter ecp_kws: further keyword arguments for the ECP evaluator, such as
+        nselect_deterministic and nselect_random for 'fixed' sampling.
+    :parameter kwargs: passed to the Coulomb (Ewald) evaluator.
+    """
+
+    def __init__(
+        self, mol, threshold=10, naip=None, ecp_sampling="threshold", ecp_kws=None, **kwargs
+    ):
         self.mol = mol
-        self.threshold = threshold
-        self.naip = naip
         if hasattr(mol, "a"):
             self.coulomb = ewald.Ewald(mol, **kwargs)
         else:
             self.coulomb = energy.OpenCoulomb(mol, **kwargs)
-        self.use_old_ecp = use_old_ecp
-        if not use_old_ecp:
-            self.ecp = ecp_accumulator.ECPAccumulator(mol, naip=naip)
+        self.ecp = ecp.make_ecp(
+            mol, ecp_sampling, threshold=threshold, naip=naip, **(ecp_kws or {})
+        )
 
     def __call__(self, configs, wf):
         ee, ei, ii = self.coulomb.energy(configs)
-        if self.use_old_ecp:
-            ecp_val = eval_ecp.ecp(self.mol, configs, wf, self.threshold, self.naip)
-        else:
-            ecp_val = self.ecp(configs, wf)
+        ecp_val = self.ecp(configs, wf)
         ke, grad2 = energy.kinetic(configs, wf)
 
         return {
@@ -77,15 +85,10 @@ class EnergyAccumulator:
         return {k: np.mean(it, axis=0) for k, it in self(configs, wf).items()}
 
     def nonlocal_tmoves(self, configs, wf, e, tau):
-        if self.use_old_ecp:
-            return eval_ecp.compute_tmoves(
-                self.mol, configs, wf, e, self.threshold, tau
-            )
-        else:
-            return self.ecp.nonlocal_tmoves(configs, wf, e, tau)
+        return self.ecp.nonlocal_tmoves(configs, wf, e, tau)
 
     def has_nonlocal_moves(self):
-        return self.mol._ecp != {}
+        return self.ecp.has_nonlocal_moves()
 
     def keys(self):
         return set(["ke", "ee", "ei", "ecp", "total", "grad2"])

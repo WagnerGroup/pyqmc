@@ -87,7 +87,7 @@ def run_optimization(mol, mf, mc):
     }
     wf, to_opt = pyq.generate_wf(mol, mf, mc=mc, slater_kws=slater_kws, jax=True)
     configs = pyq.initial_guess(mol, nconfig=1000)
-    acc = pyq.gradient_generator(mol, wf, to_opt, use_old_ecp=False)
+    acc = pyq.gradient_generator(mol, wf, to_opt, ecp_sampling="fixed")
 
     pyq.line_minimization(
         wf, 

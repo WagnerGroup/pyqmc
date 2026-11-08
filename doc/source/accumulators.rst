@@ -12,7 +12,7 @@ Energy
 
 Effective Core Potential (ECP)
 ==============================
-.. automodule:: pyqmc.eval_ecp
+.. automodule:: pyqmc.observables.ecp
    :members:
 
 Ewald summation

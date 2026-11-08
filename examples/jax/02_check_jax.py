@@ -44,11 +44,11 @@ def check_value(configs, wf_jax, wf_pyscf):
 def check_energy(configs, wf_jax, wf_pyscf) -> pd.DataFrame:
     """
     Check the various energies.
-    Note that between old and new ECPS they should only agree on average
+    Note that the two ECP sampling methods should only agree on average
 
     """
-    enacc = {'old':pyq.EnergyAccumulator(cell, use_old_ecp=True),
-             'new': pyq.EnergyAccumulator(cell, use_old_ecp=False)  }
+    enacc = {'threshold': pyq.EnergyAccumulator(cell, ecp_sampling='threshold'),
+             'fixed': pyq.EnergyAccumulator(cell, ecp_sampling='fixed')}
     wfs = {'jax': wf_jax, 'pyscf': wf_pyscf}
     data = []
     for ecp in enacc.keys():

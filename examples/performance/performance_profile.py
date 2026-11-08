@@ -3,8 +3,7 @@ import h5py
 import time
 import os
 import pyscf.pbc.tools.k2gamma as k2gamma
-from pyqmc.observables.eval_ecp import ecp
-from pyqmc.observables.jax_ecp import ECPAccumulator
+from pyqmc.observables.ecp import ThresholdECP, FixedBudgetECP
 
 # here we are desperately trying to avoid multithreading
 # to get a good read on the single-threaded performance
@@ -62,11 +61,12 @@ def evaluate_laplacian(configs, wf):
 def evaluate_old_ecp(configs, cell, wf, threshold=10):
     data = {}
     N = configs.configs.shape[0]
-    res = ecp(cell, configs, wf, threshold=threshold)
+    ecp = ThresholdECP(cell, threshold=threshold)
+    res = ecp(configs, wf)
     jax.block_until_ready(res)
 
     start_time = time.perf_counter()
-    res = ecp(cell, configs, wf, threshold=threshold)
+    res = ecp(configs, wf)
     jax.block_until_ready(res)
     end_time = time.perf_counter()
 
@@ -78,7 +78,7 @@ def evaluate_old_ecp(configs, cell, wf, threshold=10):
 def evaluate_new_ecp(configs, cell, wf):
     data = {}
     N = configs.configs.shape[0]
-    accumulator = ECPAccumulator(cell)
+    accumulator = FixedBudgetECP(cell)
     res = accumulator(configs, wf)
     jax.block_until_ready(res)
 

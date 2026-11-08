@@ -16,8 +16,7 @@ import pyqmc.observables.obdm as obdm
 import pyqmc.wftools as wftools
 import pyqmc.pyscftools as pyscftools
 import pyqmc.pbc.supercell as supercell
-import pyqmc.method.linemin as linemin
-import pyqmc.method.minsr as minsr
+import pyqmc.method.optimize as optimize
 import pyqmc.method.ensemble_optimization as ensemble_optimization
 import pyqmc.method.dmc as dmc
 import pyqmc.method.mc
@@ -41,21 +40,22 @@ def OPTIMIZE(
     jastrow_kws=None,
     slater_kws=None,
     nodal_cutoff=1e-3,
-    optimizer="linemin",
+    method="sr",
+    updater_kws=None,
     rng=None,
-    **linemin_kws,
+    **optimize_kws,
 ):
     """Optimize a ground-state wave function. If ci_checkfile holds several
     roots, the first is used; use ENSEMBLE_OPTIMIZE for excited states.
 
-    optimizer selects the optimization driver: 'linemin' for stochastic
-    reconfiguration with a correlated-sampling line minimization, or 'minsr' for
-    the minimum-step SR algorithm, which computes the same update without
-    forming the S matrix. Remaining keyword arguments are passed to the driver.
-    rng is anything accepted by pyqmc.rng.get_rng; it seeds the initial
-    configurations and the driver."""
+    method selects how the SR equations are solved: 'sr' with the explicit S
+    matrix, 'minsr' in sample space, or 'cgsr' by conjugate gradient; see
+    :mod:`pyqmc.method.optimize`. updater_kws are passed to the updater, for
+    example eps. Remaining keyword arguments are passed to
+    :func:`pyqmc.method.optimize.optimize`, for example tstep, line_search,
+    max_iterations, and vmc_kwargs. rng is anything accepted by
+    pyqmc.rng.get_rng; it seeds the initial configurations and the driver."""
     rng = pyqmc.rng.get_rng(rng)
-    linemin_kws["hdf_file"] = output
     if load_parameters is not None and output is not None and os.path.isfile(output):
         raise RuntimeError(
             "load_parameters is not None and output={0} already exists! Delete or rename {0} and try again.".format(
@@ -75,22 +75,10 @@ def OPTIMIZE(
         nodal_cutoff=nodal_cutoff,
         rng=rng,
     )
-    if optimizer == "linemin":
-        linemin.line_minimization(wf, configs, acc, rng=rng, **linemin_kws)
-    elif optimizer == "minsr":
-        # minsr works directly with the transform and the energy accumulator; the
-        # S matrix that acc would build is exactly what it avoids.
-        minsr.minsr_optimization(
-            wf,
-            configs,
-            acc.transform,
-            acc.enacc,
-            nodal_cutoff=nodal_cutoff,
-            rng=rng,
-            **linemin_kws,
-        )
-    else:
-        raise ValueError(f"Unknown optimizer {optimizer}; use 'linemin' or 'minsr'.")
+    updater = optimize.make_updater(
+        acc.transform, acc.enacc, method, nodal_cutoff=nodal_cutoff, **(updater_kws or {})
+    )
+    return optimize.optimize(wf, configs, updater, hdf_file=output, rng=rng, **optimize_kws)
 
 
 def ENSEMBLE_OPTIMIZE(

@@ -22,11 +22,11 @@ import pytest
 
 from pyqmc.method.cgsr import (
     SROperator,
-    cgsr_update,
+    cgsr_direction,
     preconditioned_conjugate_gradient,
     sr_gradient,
 )
-from pyqmc.method.minsr import local_energy_error, minsr_update, real_design_matrix
+from pyqmc.method.minsr import local_energy_error, minsr_direction, real_design_matrix
 
 
 def make_data(rng, nsamples, nparams, complex_derivatives=False, scales=None):
@@ -110,15 +110,15 @@ def test_solve_matches_dense_solve(nsamples, nparams, precondition):
 
 @pytest.mark.parametrize("nsamples,nparams", [(25, 60), (60, 25)])
 @pytest.mark.parametrize("complex_derivatives", [False, True])
-def test_cgsr_update_matches_minsr(nsamples, nparams, complex_derivatives):
-    """minSR is the closed-form solve of the same system, so the two updates
+def test_cgsr_direction_matches_minsr(nsamples, nparams, complex_derivatives):
+    """minSR is the closed-form solve of the same system, so the two directions
     agree wherever both are affordable."""
     rng = np.random.default_rng(31)
     dppsi, eloc = make_data(rng, nsamples, nparams, complex_derivatives)
-    eps, tstep = 1e-2, 0.1
+    eps = 1e-2
 
-    dp_minsr, _ = minsr_update(dppsi, eloc, tstep, eps=eps)
-    dp_cg, report, _ = cgsr_update(dppsi, eloc, tstep, eps=eps, rtol=1e-10)
+    dp_minsr, _ = minsr_direction(dppsi, eloc, eps=eps)
+    dp_cg, report = cgsr_direction(dppsi, eloc, eps=eps, rtol=1e-10)
 
     assert report["cg_converged"]
     scale = np.abs(dp_minsr).max()
@@ -150,7 +150,7 @@ def test_no_large_matrix_is_formed(monkeypatch):
 
     monkeypatch.setattr(np, "empty", guarded_empty)
     monkeypatch.setattr(np, "zeros", guarded_zeros)
-    cgsr_update(dppsi, eloc, 0.1, eps=1e-2, rtol=1e-8)
+    cgsr_direction(dppsi, eloc, eps=1e-2, rtol=1e-8)
     assert seen == [], f"allocated large arrays: {seen}"
 
 
@@ -249,28 +249,20 @@ def test_warm_start_does_not_change_the_answer():
 def test_iteration_cap_reports_non_convergence():
     rng = np.random.default_rng(83)
     dppsi, eloc = make_data(rng, 200, 100, scales=np.logspace(-3, 3, 100))
-    dp, report, _ = cgsr_update(
-        dppsi, eloc, 0.1, eps=1e-8, rtol=1e-14, max_cg_iterations=2, precondition=False
+    dp, report = cgsr_direction(
+        dppsi, eloc, eps=1e-8, rtol=1e-14, max_cg_iterations=2, precondition=False
     )
     assert report["cg_iterations"] == 2
     assert not report["cg_converged"]
     assert np.all(np.isfinite(dp))
 
 
-def test_max_norm_clips_the_step():
-    rng = np.random.default_rng(97)
-    dppsi, eloc = make_data(rng, 100, 30)
-    dp, report, _ = cgsr_update(dppsi, eloc, 10.0, eps=1e-3, max_norm=0.05)
-    assert report["clipped"]
-    assert np.linalg.norm(dp) == pytest.approx(0.05)
-
-
 def test_empty_transform():
     rng = np.random.default_rng(101)
     dppsi = np.zeros((10, 0))
     eloc = rng.normal(size=10)
-    dp, report, v = cgsr_update(dppsi, eloc, 0.1)
-    assert dp.shape == (0,) and v.shape == (0,)
+    v, report = cgsr_direction(dppsi, eloc)
+    assert v.shape == (0,)
     assert report["cg_iterations"] == 0
 
 
@@ -278,8 +270,8 @@ def test_zero_gradient_returns_zero_step():
     """A constant local energy has no gradient, so there is nothing to solve."""
     rng = np.random.default_rng(103)
     dppsi = rng.normal(size=(50, 20))
-    dp, report, v = cgsr_update(dppsi, np.full(50, -1.5), 0.1)
-    assert np.all(dp == 0.0)
+    v, report = cgsr_direction(dppsi, np.full(50, -1.5))
+    assert np.all(v == 0.0)
     assert report["cg_iterations"] == 0
 
 

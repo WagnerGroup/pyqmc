@@ -197,17 +197,15 @@ import pyscf.gto as gto
 import pyscf.scf as scf
 import pyqmc.api as pyq
 import pyqmc.wftools as wftools
-import pyqmc.mc as mc
 
-def linemin(mol,mf):
+def optimize(mol,mf):
     #create wavefunction object. note jastrow_kws have to be passed even if empty
     wf, to_opt = wftools.generate_wf(mol, mf,jastrow=[wftools.generate_jastrow,wftools.generate_jastrow3],jastrow_kws=[{},{}]
 )                   
     nconf = 100
-    configs = mc.initial_guess(mol, nconf)
-    wf, dfgrad = pyq.line_minimization(
-        wf, configs, pyq.gradient_generator(mol, wf, to_opt),max_iterations=50,verbose=True,hdf_file='3_jastrow.chk'
-    )
+    configs = pyq.initial_guess(mol, nconf)
+    updater = pyq.SRUpdate(pyq.EnergyAccumulator(mol), pyq.LinearTransform(wf.parameters, to_opt))
+    wf, df = pyq.optimize(wf, configs, updater, max_iterations=50, verbose=True, hdf_file='3_jastrow.chk')
 
   
 def H2_ccecp_uhf():
@@ -225,7 +223,7 @@ def H2_ccecp_uhf():
 
 if __name__ == "__main__":
     mol,mf = H2_ccecp_uhf()
-    linemin(mol,mf)
+    optimize(mol,mf)
 ```
 
 

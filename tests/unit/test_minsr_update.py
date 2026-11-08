@@ -15,88 +15,73 @@
 import numpy as np
 import pytest
 
-from pyqmc.method.minsr import minsr_update, real_design_matrix
-from pyqmc.observables.stochastic_reconfiguration import StochasticReconfiguration
+from pyqmc.method.cgsr import cgsr_direction
+from pyqmc.method.minsr import minsr_direction, real_design_matrix
+from pyqmc.observables.stochastic_reconfiguration import sr_averages, sr_direction
 
 
-def sr_data(dppsi, eloc):
-    """Averages in the form that StochasticReconfiguration.delta_p expects."""
-    return {
-        "total": np.mean(eloc),
-        "dppsi": np.mean(dppsi, axis=0),
-        "dpH": np.mean(eloc[:, np.newaxis] * dppsi, axis=0),
-        "dpidpj": np.einsum("ij,ik->jk", dppsi, dppsi) / dppsi.shape[0],
-    }
-
-
-@pytest.mark.parametrize("nsamples,nparams", [(20, 50), (50, 20), (30, 30)])
-def test_minsr_equals_sr(nsamples, nparams):
-    """minSR and regularized SR give the same update, whether there are more
-    samples than parameters or fewer."""
-    rng = np.random.default_rng(seed=12345)
+def make_data(seed, nsamples, nparams, complex_values=False):
+    rng = np.random.default_rng(seed)
     dppsi = rng.normal(size=(nsamples, nparams))
     eloc = rng.normal(size=nsamples)
-    tstep = 0.13
+    if complex_values:
+        dppsi = dppsi + 1j * rng.normal(size=(nsamples, nparams))
+        eloc = eloc + 1j * rng.normal(size=nsamples)
+    return dppsi, eloc
+
+
+def sr_direction_from_samples(dppsi, eloc, eps, inverse_strategy="regularized_inverse", g=None):
+    """The explicit-S direction, built through the same averages the accumulator uses."""
+    return sr_direction(sr_averages({"total": eloc}, dppsi), eps, inverse_strategy, g=g)
+
+
+@pytest.mark.parametrize("complex_values", [False, True])
+@pytest.mark.parametrize("nsamples,nparams", [(20, 50), (50, 20), (30, 30)])
+def test_solvers_agree(nsamples, nparams, complex_values):
+    """Explicit S, minSR, and CG give the same direction, whether there are more
+    samples than parameters or fewer, and for complex derivatives."""
+    dppsi, eloc = make_data(12345, nsamples, nparams, complex_values)
     eps = 1e-2
-
-    sr = StochasticReconfiguration(
-        None, None, eps=eps, inverse_strategy="regularized_inverse"
-    )
-    dp_sr = sr.delta_p([tstep], sr_data(dppsi, eloc))[0][0]
-    dp_minsr, report = minsr_update(dppsi, eloc, tstep, eps=eps)
-
-    assert np.allclose(dp_sr, dp_minsr, atol=1e-10), np.abs(dp_sr - dp_minsr).max()
+    v_sr, report = sr_direction_from_samples(dppsi, eloc, eps)
+    v_minsr, _ = minsr_direction(dppsi, eloc, eps)
+    v_cg, _ = cgsr_direction(dppsi, eloc, eps, rtol=1e-12)
+    assert np.allclose(v_sr, v_minsr, atol=1e-10), np.abs(v_sr - v_minsr).max()
+    assert np.allclose(v_sr, v_cg, atol=1e-8), np.abs(v_sr - v_cg).max()
     assert report["SRdot"] > 0
 
 
-def test_minsr_solves_sr_equations():
-    """The update satisfies (S + eps) dp = -tstep * f with the conjugated
-    definitions of S and f, for complex derivatives and local energies."""
-    rng = np.random.default_rng(seed=54321)
-    nsamples, nparams = 25, 40
-    dppsi = rng.normal(size=(nsamples, nparams)) + 1j * rng.normal(
-        size=(nsamples, nparams)
-    )
-    eloc = rng.normal(size=nsamples) + 1j * rng.normal(size=nsamples)
-    tstep, eps = 0.05, 1e-3
+def test_extra_gradient():
+    """An extra gradient term g enters every solver the same way."""
+    dppsi, eloc = make_data(3, 25, 40, complex_values=True)
+    g = np.random.default_rng(4).normal(size=40)
+    eps = 1e-2
+    v_sr, _ = sr_direction_from_samples(dppsi, eloc, eps, g=g)
+    v_minsr, _ = minsr_direction(dppsi, eloc, eps, g=g)
+    v_cg, _ = cgsr_direction(dppsi, eloc, eps, rtol=1e-12, g=g)
+    assert np.allclose(v_sr, v_minsr, atol=1e-8)
+    assert np.allclose(v_sr, v_cg, atol=1e-8)
 
-    dp, _ = minsr_update(dppsi, eloc, tstep, eps=eps)
+
+def test_minsr_solves_sr_equations():
+    """The direction satisfies (S + eps) v = f with the conjugated definitions
+    of S and f, for complex derivatives and local energies."""
+    dppsi, eloc = make_data(54321, 25, 40, complex_values=True)
+    eps = 1e-3
+    v, _ = minsr_direction(dppsi, eloc, eps=eps)
 
     A, b = real_design_matrix(dppsi, eloc)
     S = A.T @ A
     f = 2 * A.T @ b
-    residual = (S + eps * np.eye(nparams)) @ dp + tstep * f
-    assert np.linalg.norm(residual) < 1e-10 * np.linalg.norm(tstep * f)
-    assert dp.dtype == np.dtype(float)
+    residual = (S + eps * np.eye(S.shape[0])) @ v - f
+    assert np.linalg.norm(residual) < 1e-10 * np.linalg.norm(f)
+    assert v.dtype == np.dtype(float)
 
 
 def test_minsr_pseudo_inverse():
     """Without regularization, minSR gives the minimum-norm solution of the SR
-    equations, which is the same direction as the SR pseudo-inverse update."""
-    rng = np.random.default_rng(seed=99)
-    nsamples, nparams = 15, 60
-    dppsi = rng.normal(size=(nsamples, nparams))
-    eloc = rng.normal(size=nsamples)
-    tstep, eps = 0.1, 1e-8
-
-    sr = StochasticReconfiguration(
-        None, None, eps=eps, inverse_strategy="pseudo_inverse"
-    )
-    dp_sr = sr.delta_p([tstep], sr_data(dppsi, eloc))[0][0]
-    dp_minsr, _ = minsr_update(
-        dppsi, eloc, tstep, eps=eps, inverse_strategy="pseudo_inverse"
-    )
-    assert np.allclose(dp_sr, dp_minsr, atol=1e-6), np.abs(dp_sr - dp_minsr).max()
-
-
-def test_minsr_max_norm():
-    rng = np.random.default_rng(seed=7)
-    dppsi = rng.normal(size=(30, 30))
-    eloc = rng.normal(size=30)
-    dp_unclipped, _ = minsr_update(dppsi, eloc, 1.0, eps=1e-3)
-    max_norm = 0.5 * np.linalg.norm(dp_unclipped)
-    dp, report = minsr_update(dppsi, eloc, 1.0, eps=1e-3, max_norm=max_norm)
-    assert np.isclose(np.linalg.norm(dp), max_norm)
-    assert report["clipped"]
-    # clipping only rescales; the direction is unchanged
-    assert np.allclose(dp, dp_unclipped * max_norm / np.linalg.norm(dp_unclipped))
+    equations, which is the same direction as the SR pseudo-inverse."""
+    dppsi, eloc = make_data(99, 15, 60)
+    eps = 1e-8
+    v_sr, _ = sr_direction_from_samples(dppsi, eloc, eps, "pseudo_inverse")
+    v_minsr, _ = minsr_direction(dppsi, eloc, eps=eps, inverse_strategy="pseudo_inverse")
+    assert np.allclose(v_sr, v_minsr, atol=1e-6), np.abs(v_sr - v_minsr).max()

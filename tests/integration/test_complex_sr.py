@@ -17,10 +17,11 @@ import os
 import pyqmc.api as pyq
 import copy
 import h5py
+from pyqmc.observables.accumulators import LinearTransform
 
 
-def test_complex_linemin(H2_ccecp_rhf, optfile="linemin.hdf5"):
-    """Test linemin for the case of complex orbital coefficients.
+def test_complex_sr(H2_ccecp_rhf, tmp_path):
+    """Test SR optimization for the case of complex orbital coefficients.
     We check whether it completes successfully and whether the energy has decreased.
     """
     mol, mf = H2_ccecp_rhf
@@ -36,12 +37,10 @@ def test_complex_linemin(H2_ccecp_rhf, optfile="linemin.hdf5"):
     wf, to_opt = pyq.generate_wf(mol, mf, slater_kws=slater_kws)
 
     configs = pyq.initial_guess(mol, 1000)
-    acc = pyq.gradient_generator(mol, wf, to_opt)
-    pyq.line_minimization(
-        wf, configs, acc, verbose=True, hdf_file=optfile, max_iterations=5
-    )
+    optfile = str(tmp_path / "sr.hdf5")
+    updater = pyq.SRUpdate(pyq.EnergyAccumulator(mol), LinearTransform(wf.parameters, to_opt))
+    pyq.optimize(wf, configs, updater, verbose=True, hdf_file=optfile, max_iterations=5)
     assert os.path.isfile(optfile)
     with h5py.File(optfile, "r") as f:
         en = f["energy"][()]
     assert en[0] > en[-1]
-    os.remove(optfile)

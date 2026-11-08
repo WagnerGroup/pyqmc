@@ -61,9 +61,9 @@ def make_wf_object(scf_checkfile, ci_checkfile, eps=1e-3, nconfig=1000):
             na=4
         ),  # arguably you don't want the 'a' (electron-nucleus) jastrow here
     )
-    gradient = pyq.gradient_generator(mol, wf, to_opt, eps=eps)
+    updater = pyq.SRUpdate(pyq.EnergyAccumulator(mol), pyq.LinearTransform(wf.parameters, to_opt), eps=eps)
     coords = pyq.initial_guess(mol, nconfig=nconfig)
-    return wf, gradient, coords
+    return wf, updater, coords
 
 if __name__ == "__main__":
     scf_checkfile = f"{__file__}.scf.hdf5"
@@ -71,9 +71,9 @@ if __name__ == "__main__":
     run_scf(scf_checkfile)
     run_casscf(scf_checkfile, ci_checkfile)  # or can use run_casci
     for eps in [1e-1, 1e-2, 1e-3, 1e-4]:
-        wf, pgrad, coords = make_wf_object(scf_checkfile, ci_checkfile, eps=eps)
-        pyq.line_minimization(
-            wf, coords, pgrad, verbose=True, hdf_file=f"{__file__}_na4_{eps}.hdf5"
+        wf, updater, coords = make_wf_object(scf_checkfile, ci_checkfile, eps=eps)
+        pyq.optimize(
+            wf, coords, updater, verbose=True, hdf_file=f"{__file__}_na4_{eps}.hdf5"
         )
 
     # pyq.OPTIMIZE(scf_checkfile, "optimize.chk", ci_checkfile=ci_checkfile, max_iterations=1, verbose=True)

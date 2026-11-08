@@ -13,7 +13,7 @@
 # copies or substantial portions of the Software.
 
 from dask.distributed import Client, LocalCluster
-import pyqmc
+import pyqmc.api as pyq
 
 ncore = 2
 nconfig = ncore * 400
@@ -33,35 +33,33 @@ if __name__ == "__main__":
     cluster = LocalCluster(n_workers=ncore, threads_per_worker=1)
     client = Client(cluster)
     mol, mf = run_scf()
-    from pyqmc import vmc, line_minimization, rundmc
-
-    wf, to_opt = pyqmc.default_sj(mol, mf)
-    pgrad_acc = pyqmc.gradient_generator(mol, wf, to_opt)
-    configs = pyqmc.initial_guess(mol, nconfig)
-    line_minimization(
+    wf, to_opt = pyq.generate_wf(mol, mf)
+    enacc = pyq.EnergyAccumulator(mol)
+    configs = pyq.initial_guess(mol, nconfig)
+    pyq.optimize(
         wf,
         configs,
-        pgrad_acc,
+        pyq.SRUpdate(enacc, pyq.LinearTransform(wf.parameters, to_opt)),
         hdf_file="h2o_opt.hdf",
         client=client,
         npartitions=ncore,
         verbose=True,
     )
-    df, configs = vmc(
+    df, configs = pyq.vmc(
         wf,
         configs,
         hdf_file="h2o_vmc.hdf",
-        accumulators={"energy": pgrad_acc.enacc},
+        accumulators={"energy": enacc},
         client=client,
         npartitions=ncore,
         verbose=True,
     )
-    dfdmc, configs, weights = rundmc(
+    dfdmc, configs, weights = pyq.rundmc(
         wf,
         configs,
         hdf_file="h2o_dmc.hdf",
         nblocks=1000,
-        accumulators={"energy": pgrad_acc.enacc},
+        accumulators={"energy": enacc},
         ekey=("energy", "total"),
         tstep=0.02,
         verbose=True,

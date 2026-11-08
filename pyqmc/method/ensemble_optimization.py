@@ -160,9 +160,9 @@ class StochasticReconfigurationWfbyWf:
         Nij = np.sqrt(np.outer(N, N))
 
         # bits that don't depend on the overlap
-        ret["dp_energy"] = np.real(avg["dpH"] - avg["total"] * avg["dppsi"])
+        ret["dp_energy"] = np.real(avg["dpH"] - avg["total"] * np.conj(avg["dppsi"]))
         ret["dpidpj"] = np.real(
-            avg["dpidpj"] - np.einsum("i,j->ij", avg["dppsi"], avg["dppsi"])
+            avg["dpidpj"] - np.einsum("i,j->ij", np.conj(avg["dppsi"]), avg["dppsi"])
         )
 
         # overlap gradient

@@ -27,7 +27,8 @@ from pyqmc.api import (
     generate_wf,
     gradient_generator,
     initial_guess,
-    minsr_optimization,
+    optimize,
+    MinSRUpdate,
 )
 from pyqmc.observables.accumulators import LinearTransform
 
@@ -42,11 +43,10 @@ def test_minsr(H2_ccecp_uhf):
     pyqmc.rng.seed(0)
     wf, to_opt = generate_wf(mol, mf)
     nconf = 1000
-    wf, df = minsr_optimization(
+    wf, df = optimize(
         wf,
         initial_guess(mol, nconf),
-        LinearTransform(wf.parameters, to_opt),
-        EnergyAccumulator(mol),
+        MinSRUpdate(EnergyAccumulator(mol), LinearTransform(wf.parameters, to_opt)),
         tstep=0.1,
         max_iterations=20,
         verbose=True,
@@ -73,21 +73,19 @@ def test_minsr_sub_iterations(H2_ccecp_uhf, tmp_path):
     wf, to_opt = generate_wf(mol, mf)
     # one transform per Jastrow parameter group
     groups = ["wf2acoeff", "wf2bcoeff"]
-    transforms = [
-        LinearTransform(wf.parameters, {k: to_opt[k]}) for k in groups
+    updaters = [
+        MinSRUpdate(EnergyAccumulator(mol), LinearTransform(wf.parameters, {k: to_opt[k]}))
+        for k in groups
     ]
     start = {k: np.array(v) for k, v in wf.parameters.items()}
     frozen = [k for k in wf.parameters if k not in groups]
 
     kws = dict(
         tstep=0.1,
-        vmcoptions={"nsteps_per_block": 5},
+        vmc_kwargs={"nsteps_per_block": 5},
         hdf_file=hdf_file,
     )
-    wf, df = minsr_optimization(
-        wf, initial_guess(mol, 400), transforms, EnergyAccumulator(mol),
-        max_iterations=6, **kws
-    )
+    wf, df = optimize(wf, initial_guess(mol, 400), updaters, max_iterations=6, **kws)
 
     df = pd.DataFrame(df)
     assert len(df) == 12
@@ -102,11 +100,11 @@ def test_minsr_sub_iterations(H2_ccecp_uhf, tmp_path):
 
     # restarting continues after the last recorded sub-iteration
     wf2, _ = generate_wf(mol, mf)
-    transforms2 = [LinearTransform(wf2.parameters, {k: to_opt[k]}) for k in groups]
-    wf2, df2 = minsr_optimization(
-        wf2, initial_guess(mol, 400), transforms2, EnergyAccumulator(mol),
-        max_iterations=8, **kws
-    )
+    updaters2 = [
+        MinSRUpdate(EnergyAccumulator(mol), LinearTransform(wf2.parameters, {k: to_opt[k]}))
+        for k in groups
+    ]
+    wf2, df2 = optimize(wf2, initial_guess(mol, 400), updaters2, max_iterations=8, **kws)
     assert [d["iteration"] for d in df2] == [6, 6, 7, 7]
     assert [d["sub_iteration"] for d in df2] == [0, 1, 0, 1]
     with h5py.File(hdf_file, "r") as hdf:
@@ -115,32 +113,20 @@ def test_minsr_sub_iterations(H2_ccecp_uhf, tmp_path):
 
 @pytest.mark.slow
 def test_minsr_matches_sr_step(H2_ccecp_uhf):
-    """One minSR step reproduces the stochastic reconfiguration step computed
-    from the same samples, without ever forming the S matrix."""
-    from pyqmc.method.minsr import minsr_update, sample_minsr_data
+    """On the same sampled data, the minSR direction equals the explicit-S
+    direction built from the averages the SR accumulator uses."""
+    from pyqmc.observables.stochastic_reconfiguration import sr_averages, sr_direction
 
     mol, mf = H2_ccecp_uhf
     mol.output, mol.stdout = None, None
     wf, to_opt = generate_wf(mol, mf)
     pgrad = gradient_generator(mol, wf, to_opt)
-    coords = initial_guess(mol, 200)
+    updater = MinSRUpdate(pgrad.enacc, pgrad.transform, eps=pgrad.eps)
+    data, _ = updater.sample(wf, initial_guess(mol, 200))
 
-    data, coords = sample_minsr_data(
-        wf, coords, pgrad.transform, pgrad.enacc, pgrad.nodal_cutoff
-    )
-    dppsi, eloc = data["dppsi"], data["total"]
-    tstep = 0.1
-
-    dp_minsr, _ = minsr_update(dppsi, eloc, tstep, eps=pgrad.eps)
-    # pgrad is only built here to compare against; minsr itself never needs one
-    sr_averages = {
-        "total": np.mean(eloc),
-        "dppsi": np.mean(dppsi, axis=0),
-        "dpH": np.mean(eloc[:, np.newaxis] * dppsi, axis=0),
-        "dpidpj": np.einsum("ij,ik->jk", dppsi, dppsi) / dppsi.shape[0],
-    }
-    dp_sr = pgrad.delta_p([tstep], sr_averages)[0][0]
-    assert np.allclose(dp_sr, dp_minsr, atol=1e-8), np.abs(dp_sr - dp_minsr).max()
+    v_minsr, _ = updater.solve(data)
+    v_sr, _ = sr_direction(sr_averages({"total": data["total"]}, data["dppsi"]), pgrad.eps)
+    assert np.allclose(v_sr, v_minsr, atol=1e-8), np.abs(v_sr - v_minsr).max()
 
 
 if __name__ == "__main__":

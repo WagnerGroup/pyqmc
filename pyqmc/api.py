@@ -14,14 +14,13 @@
 
 from pyqmc.recipes import OPTIMIZE, ENSEMBLE_OPTIMIZE, VMC, DMC, read_mc_output, read_opt
 from pyqmc.pbc.supercell import get_supercell
-from pyqmc.observables.accumulators import EnergyAccumulator, gradient_generator
+from pyqmc.observables.accumulators import EnergyAccumulator, LinearTransform, gradient_generator
 from pyqmc.observables.s2_accumulator import S2Accumulator
 from pyqmc.method.mc import vmc, initial_guess
 from pyqmc.method.dmc import rundmc
 from pyqmc.method.optvariance import optvariance
+from pyqmc.method.optimize import optimize, SRUpdate, MinSRUpdate, CGSRUpdate, LineSearch
 from pyqmc.method.linemin import line_minimization
-from pyqmc.method.minsr import minsr_optimization
-from pyqmc.method.cgsr import cgsr_optimization
 from pyqmc.reblock import reblock as avg_reblock
 from pyqmc.wftools import generate_wf, read_wf, generate_jastrow, generate_slater
 from pyqmc.pyscftools import recover_pyscf

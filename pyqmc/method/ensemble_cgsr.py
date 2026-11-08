@@ -121,7 +121,7 @@ class CGSRWfbyWf(MinSRWfbyWf):
         conjugate gradient. The gradient convention matches
         :class:`pyqmc.method.ensemble_optimization.StochasticReconfigurationWfbyWf`
         -- in particular the energy gradient carries no factor of two here,
-        unlike the standalone :func:`pyqmc.method.cgsr.cgsr_update` -- so `steps`
+        unlike the standalone :func:`pyqmc.method.cgsr.cgsr_direction` -- so `steps`
         and `overlap_penalty` mean the same thing they do there.
 
         :parameter steps: list of timesteps

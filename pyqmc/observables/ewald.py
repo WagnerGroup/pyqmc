@@ -13,9 +13,9 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
+from scipy.special import erfc
 import pyqmc
 import pyqmc.observables.energy
-import pyqmc.gpu as gpu
 
 
 class Ewald:
@@ -100,7 +100,7 @@ class Ewald:
         """
         self.nelec = np.array(cell.nelec)
         self.atom_coords = cell.atom_coords()
-        self.atom_charges = gpu.cp.asarray(cell.atom_charges())
+        self.atom_charges = np.asarray(cell.atom_charges())
         self.latvec = cell.lattice_vectors()
         self.set_lattice_displacements(nlatvec)
         self.set_up_reciprocal_ewald_sum(ewald_gmax)
@@ -113,7 +113,7 @@ class Ewald:
         """
         XYZ = np.meshgrid(*[np.arange(-nlatvec, nlatvec + 1)] * 3, indexing="ij")
         xyz = np.stack(XYZ, axis=-1).reshape((-1, 3))
-        self.lattice_displacements = gpu.cp.asarray(np.dot(xyz, self.latvec))
+        self.lattice_displacements = np.asarray(np.dot(xyz, self.latvec))
 
     def set_up_reciprocal_ewald_sum(self, ewald_gmax):
         r"""
@@ -219,18 +219,18 @@ class Ewald:
         else:
             dist = pyqmc.configurations.distance.MinimalImageDistance(self.latvec)
             ion_distances, ion_inds = dist.dist_matrix(self.atom_coords[np.newaxis])
-            ion_distances = gpu.cp.asarray(ion_distances)
+            ion_distances = np.asarray(ion_distances)
             rvec = ion_distances[:, :, np.newaxis, :] + self.lattice_displacements
-            r = gpu.cp.linalg.norm(rvec, axis=-1)
-            charge_ij = gpu.cp.prod(self.atom_charges[np.asarray(ion_inds)], axis=1)
-            ion_ion_real = gpu.cp.einsum(
-                "j,ijk->", charge_ij, gpu.erfc(self.alpha * r) / r
+            r = np.linalg.norm(rvec, axis=-1)
+            charge_ij = np.prod(self.atom_charges[np.asarray(ion_inds)], axis=1)
+            ion_ion_real = np.einsum(
+                "j,ijk->", charge_ij, erfc(self.alpha * r) / r
             )
 
         # Reciprocal space part
-        GdotR = gpu.cp.dot(self.gpoints, gpu.cp.asarray(self.atom_coords.T))
-        self.ion_exp = gpu.cp.dot(gpu.cp.exp(1j * GdotR), self.atom_charges)
-        ion_ion_rec = gpu.cp.dot(self.gweight, gpu.cp.abs(self.ion_exp) ** 2)
+        GdotR = np.dot(self.gpoints, np.asarray(self.atom_coords.T))
+        self.ion_exp = np.dot(np.exp(1j * GdotR), self.atom_charges)
+        ion_ion_rec = np.dot(self.gweight, np.abs(self.ion_exp) ** 2)
 
         ion_ion = ion_ion_real + ion_ion_rec
         return ion_ion
@@ -272,10 +272,10 @@ class Ewald:
             self.atom_coords[np.newaxis], configs.configs
         )
         ei_cij = real_cij(ei_distances, self.lattice_displacements, self.alpha)
-        ei_real_separated = gpu.cp.einsum("a,cae->ce", -self.atom_charges, ei_cij)
+        ei_real_separated = np.einsum("a,cae->ce", -self.atom_charges, ei_cij)
 
         # Real space electron-electron part
-        ee_real_separated = gpu.cp.zeros((nconf, nelec))
+        ee_real_separated = np.zeros((nconf, nelec))
         if nelec > 1:
             ee_distances, ee_inds = configs.dist.dist_matrix(configs.configs)
             ee_cij = real_cij(ee_distances, self.lattice_displacements, self.alpha)
@@ -292,20 +292,20 @@ class Ewald:
 
     def reciprocal_space_electron(self, configs):
         # Reciprocal space electron-electron part
-        e_GdotR = gpu.cp.einsum(
-            "hik,jk->hij", gpu.cp.asarray(configs), self.gpoints, optimize="greedy"
+        e_GdotR = np.einsum(
+            "hik,jk->hij", np.asarray(configs), self.gpoints, optimize="greedy"
         )
-        sum_e_sin = gpu.cp.sin(e_GdotR).sum(axis=1)
-        sum_e_cos = gpu.cp.cos(e_GdotR).sum(axis=1)
-        ee_recip = gpu.cp.dot(sum_e_sin**2 + sum_e_cos**2, self.gweight)
+        sum_e_sin = np.sin(e_GdotR).sum(axis=1)
+        sum_e_cos = np.cos(e_GdotR).sum(axis=1)
+        ee_recip = np.dot(sum_e_sin**2 + sum_e_cos**2, self.gweight)
         # Reciprocal space electron-ion part
         coscos_sinsin = -self.ion_exp.real * sum_e_cos - self.ion_exp.imag * sum_e_sin
-        ei_recip = 2 * gpu.cp.dot(coscos_sinsin, self.gweight)
+        ei_recip = 2 * np.dot(coscos_sinsin, self.gweight)
         return ee_recip, ei_recip
 
     def reciprocal_space_electron_separated(self, configs):
         # Reciprocal space electron-electron part
-        e_GdotR = np.einsum("hik,jk->hij", gpu.cp.asarray(configs), self.gpoints)
+        e_GdotR = np.einsum("hik,jk->hij", np.asarray(configs), self.gpoints)
         e_sin = np.sin(e_GdotR)
         e_cos = np.cos(e_GdotR)
         sinsin = e_sin.sum(axis=1, keepdims=True) * e_sin
@@ -351,7 +351,7 @@ class Ewald:
         ee += self.ee_const(nelec)
         ei += self.ei_const(nelec)
         ii = self.ion_ion + self.ii_const
-        return gpu.asnumpy(ee), gpu.asnumpy(ei), gpu.asnumpy(ii)
+        return ee, ei, ii
 
     def energy_separated(self, configs):
         """
@@ -370,29 +370,29 @@ class Ewald:
 
 
 def select_big(gpoints, cellvolume, alpha):
-    gsquared = gpu.cp.einsum("jk,jk->j", gpoints, gpoints)
-    gweight = 4 * np.pi * gpu.cp.exp(-gsquared / (4 * alpha**2))
+    gsquared = np.einsum("jk,jk->j", gpoints, gpoints)
+    gweight = 4 * np.pi * np.exp(-gsquared / (4 * alpha**2))
     gweight /= cellvolume * gsquared
     bigweight = gweight > 1e-10
     return gpoints[bigweight], gweight[bigweight]
 
 
 def generate_positive_gpoints(gmax, recvec):
-    gXpos = gpu.cp.mgrid[1 : gmax + 1, -gmax : gmax + 1, -gmax : gmax + 1].reshape(
+    gXpos = np.mgrid[1 : gmax + 1, -gmax : gmax + 1, -gmax : gmax + 1].reshape(
         3, -1
     )
-    gX0Ypos = gpu.cp.mgrid[0:1, 1 : gmax + 1, -gmax : gmax + 1].reshape(3, -1)
-    gX0Y0Zpos = gpu.cp.mgrid[0:1, 0:1, 1 : gmax + 1].reshape(3, -1)
-    gpts = gpu.cp.concatenate([gXpos, gX0Ypos, gX0Y0Zpos], axis=1)
-    gpoints = gpu.cp.einsum("ji,jk->ik", gpts, gpu.cp.asarray(recvec) * 2 * np.pi)
+    gX0Ypos = np.mgrid[0:1, 1 : gmax + 1, -gmax : gmax + 1].reshape(3, -1)
+    gX0Y0Zpos = np.mgrid[0:1, 0:1, 1 : gmax + 1].reshape(3, -1)
+    gpts = np.concatenate([gXpos, gX0Ypos, gX0Y0Zpos], axis=1)
+    gpoints = np.einsum("ji,jk->ik", gpts, np.asarray(recvec) * 2 * np.pi)
     return gpoints
 
 
 def real_cij(dists, lattice_displacements, alpha):
-    dists = gpu.cp.asarray(dists)
-    r = gpu.cp.zeros(dists.shape[:-1])
-    cij = gpu.cp.zeros(r.shape)
+    dists = np.asarray(dists)
+    r = np.zeros(dists.shape[:-1])
+    cij = np.zeros(r.shape)
     for ld in lattice_displacements:
         r[:] = np.linalg.norm(dists + ld, axis=-1)
-        cij += gpu.erfc(alpha * r) / r
+        cij += erfc(alpha * r) / r
     return cij

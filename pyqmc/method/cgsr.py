@@ -99,7 +99,6 @@ import os
 import h5py
 import numpy as np
 
-import pyqmc.gpu as gpu
 import pyqmc.method.mc
 import pyqmc.rng
 from pyqmc.method.linemin import opt_hdf
@@ -451,7 +450,7 @@ def cgsr_optimization(
             if "wf" in hdf:
                 grp = hdf["wf"]
                 for k in grp:
-                    wf.parameters[k] = gpu.cp.asarray(grp[k])
+                    wf.parameters[k] = np.asarray(grp[k])
             if "iteration" in hdf:
                 # resume at the sub-iteration after the last one recorded
                 iteration_offset = np.max(hdf["iteration"][...])

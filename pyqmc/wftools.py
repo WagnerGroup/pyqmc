@@ -19,7 +19,6 @@ import pyqmc.wf.addwf as addwf
 import pyqmc.wf.jastrowspin as jastrowspin
 import pyqmc.wf.gps2 as gps2
 import pyqmc.wf.func3d as func3d
-import pyqmc.gpu as gpu
 import numpy as np
 import h5py
 
@@ -56,7 +55,7 @@ def generate_slater(
         for k in ["mo_coeff_alpha", "mo_coeff_beta"]:
             to_opt[k] = np.ones(wf.parameters[k].shape, dtype=bool)
             if not optimize_zeros:
-                to_opt[k][np.abs(gpu.asnumpy(wf.parameters[k])) < epsilon] = False
+                to_opt[k][np.abs(wf.parameters[k]) < epsilon] = False
 
     return wf, to_opt
 
@@ -141,8 +140,8 @@ def generate_jastrow(
         if len(ion_cusp) > 0:
             coefs = mol.atom_charges().copy()
             coefs[[l[0] not in ion_cusp for l in mol._atom]] = 0.0
-            jastrow.parameters["acoeff"][:, 0, :] = gpu.cp.asarray(coefs[:, None])
-        jastrow.parameters["bcoeff"][0, [0, 1, 2]] = gpu.cp.array([-0.25, -0.50, -0.25])
+            jastrow.parameters["acoeff"][:, 0, :] = np.asarray(coefs[:, None])
+        jastrow.parameters["bcoeff"][0, [0, 1, 2]] = np.array([-0.25, -0.50, -0.25])
 
     to_opt = {"acoeff": np.ones(jastrow.parameters["acoeff"].shape).astype(bool)}
     if len(ion_cusp) > 0:
@@ -263,7 +262,7 @@ def read_wf(wf, wf_file):
             raise Exception("Did not find wf in hdf file")
         grp = hdf["wf"]
         for k in grp.keys():
-            new_parms = gpu.cp.array(grp[k])
+            new_parms = np.array(grp[k])
             if wf.parameters[k].shape != new_parms.shape:
                 raise Exception(
                     f"For wave function parameter {k}, shape in {wf_file} is {new_parms.shape}, while current shape is {wf.parameters[k].shape}"

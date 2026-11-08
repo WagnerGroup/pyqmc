@@ -13,7 +13,6 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
-import pyqmc.gpu as gpu
 
 
 def binary_to_occ(S, ncore):
@@ -75,17 +74,17 @@ def compute_value(updets, dndets, det_coeffs):
     """
     Given the up and down determinant values, safely compute the total log wave function.
     """
-    upref = gpu.cp.amax(updets[1]).real
-    dnref = gpu.cp.amax(dndets[1]).real
+    upref = np.amax(updets[1]).real
+    dnref = np.amax(dndets[1]).real
     phases = updets[0] * dndets[0]
     logvals = updets[1] - upref + dndets[1] - dnref
 
     phases = updets[0] * dndets[0]
-    wf_val = gpu.cp.einsum("d,id->i", det_coeffs, phases * gpu.cp.exp(logvals))
+    wf_val = np.einsum("d,id->i", det_coeffs, phases * np.exp(logvals))
 
-    wf_sign = np.nan_to_num(wf_val / gpu.cp.abs(wf_val))
-    wf_logval = np.nan_to_num(gpu.cp.log(gpu.cp.abs(wf_val)) + upref + dnref)
-    return gpu.asnumpy(wf_sign), gpu.asnumpy(wf_logval)
+    wf_sign = np.nan_to_num(wf_val / np.abs(wf_val))
+    wf_logval = np.nan_to_num(np.log(np.abs(wf_val)) + upref + dnref)
+    return wf_sign, wf_logval
 
 
 def flatten_determinants(determinants, max_orb, kinds):

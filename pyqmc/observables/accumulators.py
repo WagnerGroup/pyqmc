@@ -13,7 +13,6 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
-import pyqmc.gpu as gpu
 import pyqmc.observables.energy as energy
 import pyqmc.observables.ewald as ewald
 import pyqmc.observables.eval_ecp as eval_ecp
@@ -111,7 +110,7 @@ class LinearTransform:
     """
 
     def __init__(self, parameters, to_opt=None):
-        parameters = {k: gpu.asnumpy(v) for k, v in parameters.items()}
+        parameters = dict(parameters)
         if to_opt is None:
             to_opt = {k: np.ones(p.shape, dtype=bool) for k, p in parameters.items()}
         self.to_opt = {k: o for k, o in to_opt.items() if np.any(o)}
@@ -137,7 +136,7 @@ class LinearTransform:
         if len(self.to_opt) == 0:
             return np.zeros((0))
         params = np.concatenate(
-            [gpu.asnumpy(parameters[k])[opt] for k, opt in self.to_opt.items()]
+            [parameters[k][opt] for k, opt in self.to_opt.items()]
         )
         return np.concatenate((params.real, params[self.complex_inds].imag))
 
@@ -166,7 +165,7 @@ class LinearTransform:
         m = self.nparams
         d = {}
         frozen_parms = {
-            k: gpu.asnumpy(wf.parameters[k])[~opt] for k, opt in self.to_opt.items()
+            k: wf.parameters[k][~opt] for k, opt in self.to_opt.items()
         }
 
         for k, opt in self.to_opt.items():
@@ -180,7 +179,7 @@ class LinearTransform:
                 m_p = self.nimag[k]
                 flat_parms[opt_] += parameters[m : m + m_p] * 1j
                 m += m_p
-            d[k] = gpu.cp.asarray(flat_parms.reshape(self.shapes[k]))
+            d[k] = np.asarray(flat_parms.reshape(self.shapes[k]))
             n += n_p
         return d
 

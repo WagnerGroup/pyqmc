@@ -13,7 +13,6 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
-import pyqmc.gpu as gpu
 import pyqmc.method.sample_many as sm
 import h5py
 import os
@@ -33,11 +32,11 @@ def opt_hdf(hdf_file, data, attr, configs, parameters):
                 configs.initialize_hdf(hdf)
                 hdf.create_group("wf")
                 for k, it in parameters.items():
-                    hdf.create_dataset("wf/" + k, data=gpu.asnumpy(it))
+                    hdf.create_dataset("wf/" + k, data=it)
             hdftools.append_hdf(hdf, data)
             configs.to_hdf(hdf)
             for k, it in parameters.items():
-                hdf["wf/" + k][...] = gpu.asnumpy(it.copy())
+                hdf["wf/" + k][...] = it.copy()
 
 
 def polyfit_relative(xfit, yfit, degree):
@@ -170,7 +169,7 @@ def line_minimization(
             if "wf" in hdf.keys():
                 grp = hdf["wf"]
                 for k in grp.keys():
-                    wf.parameters[k] = gpu.cp.asarray(grp[k])
+                    wf.parameters[k] = np.asarray(grp[k])
             if "iteration" in hdf.keys():
                 iteration_offset = np.max(hdf["iteration"][...])
             if "sub_iteration" in hdf.keys():

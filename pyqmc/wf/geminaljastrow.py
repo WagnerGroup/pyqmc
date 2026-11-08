@@ -23,7 +23,6 @@ same numbers to machine precision, and is tested against it method by method in
 """
 
 import numpy as np
-import pyqmc.gpu as gpu
 import pyqmc.wf.orbitals
 import pyqmc.pbc.supercell
 
@@ -76,7 +75,7 @@ class GeminalJastrowReference:
         else:
             self.orbitals = orbitals
         dim = mol.eval_gto("GTOval_sph", np.zeros((1, 3))).shape[-1]
-        self.parameters = {"gcoeff": gpu.cp.zeros(int(dim * (dim + 1) / 2))}
+        self.parameters = {"gcoeff": np.zeros(int(dim * (dim + 1) / 2))}
         self.dtype = float
         self.optimize = "greedy"
 
@@ -89,8 +88,8 @@ class GeminalJastrowReference:
         # ao_val: (nconf, nelec, nbasis)
         aos = self.orbitals.aos("GTOval_sph", configs)
         self.ao_val = aos.reshape(nconf, self.nelec, aos.shape[-1])
-        self.gcoeff = gpu.cp.zeros((aos.shape[-1], aos.shape[-1]))
-        triu_inds = gpu.cp.triu_indices(aos.shape[-1])
+        self.gcoeff = np.zeros((aos.shape[-1], aos.shape[-1]))
+        triu_inds = np.triu_indices(aos.shape[-1])
         if len(triu_inds[0]) != len(self.parameters["gcoeff"]):
             raise ValueError(
                 "Wrong number of parameters. Maybe the parameters are from an incompatible version."
@@ -118,8 +117,8 @@ class GeminalJastrowReference:
 
         :math:`g_{mn}` only has nonzero elements where :math:`m\le n`.
         """
-        mask = gpu.cp.tril(gpu.cp.ones((self.nelec, self.nelec)), -1)
-        vals = gpu.cp.einsum(
+        mask = np.tril(np.ones((self.nelec, self.nelec)), -1)
+        vals = np.einsum(
             "mn,cim, cjn, ij-> c",
             self.gcoeff,
             self.ao_val,
@@ -128,7 +127,7 @@ class GeminalJastrowReference:
             optimize=self.optimize,
         )
         signs = np.ones(len(vals))
-        return (signs, gpu.asnumpy(vals))
+        return (signs, vals)
 
     def _compute_value(self, ao_e, ao, e):
         r"""
@@ -149,14 +148,14 @@ class GeminalJastrowReference:
 
         """
         # `...` is for derivatives
-        curr_val = gpu.cp.einsum(
+        curr_val = np.einsum(
             "mn, ...cm, cjn -> ...c",
             self.gcoeff,
             ao_e,
             ao[:, :e, :],
             optimize=self.optimize,
         )
-        curr_val += gpu.cp.einsum(
+        curr_val += np.einsum(
             "mn, ...cn, cim -> ...c",
             self.gcoeff,
             ao_e,
@@ -169,8 +168,8 @@ class GeminalJastrowReference:
         ao = self.orbitals.aos("GTOval_sph_deriv1", epos)[0]
         deriv = self._compute_value(ao, self.ao_val, e)
         curr_val = self._compute_value(self.ao_val[:, e], self.ao_val, e)
-        val_ratio = gpu.cp.exp(deriv[0] - curr_val)
-        return gpu.asnumpy(deriv[1:]), gpu.asnumpy(val_ratio), ao[0]
+        val_ratio = np.exp(deriv[0] - curr_val)
+        return deriv[1:], val_ratio, ao[0]
 
     def gradient(self, e, epos):
         r"""
@@ -180,7 +179,7 @@ class GeminalJastrowReference:
 
         ao = self.orbitals.aos("GTOval_sph_deriv1", epos)[0]
         grad = self._compute_value(ao[1:], self.ao_val, e)
-        return gpu.asnumpy(grad)
+        return grad
 
 
     def gradient_laplacian(self, e, epos):
@@ -192,13 +191,13 @@ class GeminalJastrowReference:
         .. math:: \nabla_e^2 e^{J_G(\mathbf{R})} / e^{J_G(\mathbf{R})} = \nabla_e^2 J_G + |\nabla_e J_G|^2
         """
         ao = self.orbitals.aos("GTOval_sph_deriv2", epos)[0][1:]
-        # ao = gpu.cp.concatenate(
+        # ao = np.concatenate(
         #    [ao[1:4, ...], ao[[4, 7, 9], ...].sum(axis=0, keepdims=True)], axis=0
         # )
         deriv = self._compute_value(ao, self.ao_val, e)
         grad = deriv[:3]
-        lap3 = gpu.cp.einsum("dc,dc->c", grad, grad)
-        return gpu.asnumpy(grad), gpu.asnumpy(deriv[3] + lap3)
+        lap3 = np.einsum("dc,dc->c", grad, grad)
+        return grad, deriv[3] + lap3
 
     def pgradient(self):
         r"""
@@ -206,14 +205,14 @@ class GeminalJastrowReference:
 
         The upper triangular entries are extracted as a 1D array to match the shape of parameters["gcoeff"].
         """
-        mask = gpu.cp.tril(
-            gpu.cp.ones((self.nelec, self.nelec)), -1
+        mask = np.tril(
+            np.ones((self.nelec, self.nelec)), -1
         )  # to prevent double counting of electron pairs
-        coeff_grad = gpu.cp.einsum(
+        coeff_grad = np.einsum(
             "cim, cjn, ij-> cmn", self.ao_val, self.ao_val, mask, optimize=self.optimize
         )
         coeff_grad = coeff_grad + coeff_grad.transpose(0, 2, 1)
-        tui = gpu.cp.triu_indices(coeff_grad.shape[-1])  # select only m <= n
+        tui = np.triu_indices(coeff_grad.shape[-1])  # select only m <= n
         return {"gcoeff": coeff_grad[:, tui[0], tui[1]]}
 
     def testvalue(self, e, epos, mask=None):
@@ -232,21 +231,21 @@ class GeminalJastrowReference:
             len(curr_val), *epos.configs.shape[1:-1], aos.shape[-1]
         )
         # `...` is for extra dimension for ECP aux coordinates
-        new_val = gpu.cp.einsum(
+        new_val = np.einsum(
             "mn, c...m, cjn -> c...",
             self.gcoeff,
             new_ao_val,
             masked_ao_val[:, :e, :],
             optimize=self.optimize,
         )
-        new_val += gpu.cp.einsum(
+        new_val += np.einsum(
             "mn, c...n, cim -> c...",
             self.gcoeff,
             new_ao_val,
             masked_ao_val[:, e + 1 :, :],
             optimize=self.optimize,
         )
-        return gpu.asnumpy(gpu.cp.exp((new_val.T - curr_val).T)), new_ao_val
+        return np.exp((new_val.T - curr_val).T), new_ao_val
 
     def testvalue_many(self, e_, epos, mask=None):
         r"""
@@ -265,7 +264,7 @@ class GeminalJastrowReference:
         for i, e in enumerate(e_):
             curr_val = self._compute_value(masked_ao_val[:, e], masked_ao_val, e)
             new_val = self._compute_value(new_ao_val, masked_ao_val, e)
-            out[i] = gpu.asnumpy(gpu.cp.exp((new_val.T - curr_val).T))
+            out[i] = np.exp((new_val.T - curr_val).T)
         return out.T
 
 
@@ -362,7 +361,7 @@ class GeminalJastrow(GeminalJastrowReference):
         they pass the stored orbitals themselves.
         """
         t = self._tvec(e) if ao is self.ao_val else self._tvec_from(ao, e)
-        return gpu.cp.einsum("...cm,cm->...c", ao_e, t)
+        return np.einsum("...cm,cm->...c", ao_e, t)
 
     def recompute(self, configs):
         """Rebuild the stored orbitals, and with them the cached value."""
@@ -373,8 +372,8 @@ class GeminalJastrow(GeminalJastrowReference):
 
     def _full_value(self):
         """The double sum, from scratch. Only used to seed the cache."""
-        mask = gpu.cp.tril(gpu.cp.ones((self.nelec, self.nelec)), -1)
-        return gpu.cp.einsum(
+        mask = np.tril(np.ones((self.nelec, self.nelec)), -1)
+        return np.einsum(
             "mn,cim, cjn, ij-> c",
             self.gcoeff,
             self.ao_val,
@@ -388,12 +387,11 @@ class GeminalJastrow(GeminalJastrowReference):
 
         The result is copied out. The reference returns a freshly computed array
         every call, so callers hold on to it and expect to own it, while here it
-        would otherwise be the live cache that ``updateinternals`` mutates --
-        note that ``gpu.asnumpy`` is the identity on CPU.
+        would otherwise be the live cache that ``updateinternals`` mutates.
         """
         if self._value is None:
             self._value = self._full_value()
-        return (np.ones(len(self._value)), gpu.asnumpy(self._value).copy())
+        return (np.ones(len(self._value)), self._value.copy())
 
     def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
         r"""Move electron ``e`` and carry the value along with it.
@@ -416,7 +414,7 @@ class GeminalJastrow(GeminalJastrowReference):
         t = self._tvec(e)[mask]
         if self._value is None:
             self._value = self._full_value()
-        self._value[mask] += gpu.cp.einsum(
+        self._value[mask] += np.einsum(
             "cm,cm->c", aoval - self.ao_val[mask, e, :], t
         )
 
@@ -432,14 +430,14 @@ class GeminalJastrow(GeminalJastrowReference):
             mask = np.asarray(mask)
             masked_ao_val, t = self.ao_val[mask], t_full[mask]
 
-        curr_val = gpu.cp.einsum("cm,cm->c", masked_ao_val[:, e, :], t)
+        curr_val = np.einsum("cm,cm->c", masked_ao_val[:, e, :], t)
         aos = self.orbitals.aos("GTOval_sph", epos, mask=mask)[0]
         new_ao_val = aos.reshape(
             len(curr_val), *epos.configs.shape[1:-1], aos.shape[-1]
         )
         # `...` is for the extra dimension for ECP aux coordinates
-        new_val = gpu.cp.einsum("c...m,cm->c...", new_ao_val, t)
-        return gpu.asnumpy(gpu.cp.exp((new_val.T - curr_val).T)), new_ao_val
+        new_val = np.einsum("c...m,cm->c...", new_ao_val, t)
+        return np.exp((new_val.T - curr_val).T), new_ao_val
 
     def testvalue_many(self, e_, epos, mask=None):
         """Same as the reference; one T per electron in ``e_`` instead of two."""
@@ -452,9 +450,9 @@ class GeminalJastrow(GeminalJastrowReference):
         out = np.zeros((len(e_), aos.shape[0]))
         for i, e in enumerate(e_):
             t = self._tvec(e) if mask is None else self._tvec(e)[mask]
-            curr_val = gpu.cp.einsum("cm,cm->c", masked_ao_val[:, e, :], t)
-            new_val = gpu.cp.einsum("c...m,cm->c...", new_ao_val, t)
-            out[i] = gpu.asnumpy(gpu.cp.exp((new_val.T - curr_val).T))
+            curr_val = np.einsum("cm,cm->c", masked_ao_val[:, e, :], t)
+            new_val = np.einsum("c...m,cm->c...", new_ao_val, t)
+            out[i] = np.exp((new_val.T - curr_val).T)
         return out.T
 
 

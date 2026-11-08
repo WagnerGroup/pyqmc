@@ -17,7 +17,6 @@
 import pyqmc.wf.orbitals
 import numpy as np
 import pyqmc.method.mc as mc
-from pyqmc.gpu import cp, asnumpy
 from pyqmc.rng import get_rng
 
 import pyqmc.pbc.supercell as supercell
@@ -160,15 +159,15 @@ class OBDMAccumulator:
 
         for conf, assign in zip(extra_configs, auxassignments):
             conf.resample(assign)
-        borb_aux = cp.asarray(
+        borb_aux = np.asarray(
             [orb[assign, ...] for orb, assign in zip(borb_aux, auxassignments)]
         )
 
         borb_configs = self.evaluate_orbitals(configs.select_electrons(self._electrons))
         borb_configs = borb_configs.reshape(nconf, self.nelec, -1)
 
-        bauxsquared = cp.abs(borb_aux) ** 2
-        fsum = cp.sum(bauxsquared, axis=-1, keepdims=True) / self.norb
+        bauxsquared = np.abs(borb_aux) ** 2
+        fsum = np.sum(bauxsquared, axis=-1, keepdims=True) / self.norb
         norm = bauxsquared / fsum
         baux_f = borb_aux / fsum
 
@@ -184,8 +183,8 @@ class OBDMAccumulator:
                 optimize=True,
             )
 
-            results["value"] += asnumpy(ratio)
-            results["norm"] += asnumpy(norm[sweep, :])
+            results["value"] += ratio
+            results["norm"] += norm[sweep, :]
 
         results["value"] /= self._nstep
         results["norm"] = results["norm"] / self._nstep
@@ -222,7 +221,7 @@ def sample_onebody(configs, orbitals, spin, gtoval, nsamples=1, tstep=0.5):
     n = configs.configs.shape[0]
     ao = orbitals.aos(gtoval, configs)
     borb = orbitals.mos(ao, spin=spin)
-    fsum = (cp.abs(borb) ** 2).sum(axis=1)
+    fsum = (np.abs(borb) ** 2).sum(axis=1)
 
     allaccept = np.zeros((nsamples, n))
     allconfigs = []
@@ -232,8 +231,8 @@ def sample_onebody(configs, orbitals, spin, gtoval, nsamples=1, tstep=0.5):
         newconfigs = configs.make_irreducible(0, (configs.configs + shift)[:, 0])
         ao = orbitals.aos(gtoval, newconfigs)
         borbnew = orbitals.mos(ao, spin=spin)
-        fsumnew = (cp.abs(borbnew) ** 2).sum(axis=1)
-        accept = asnumpy(fsumnew / fsum) > get_rng().random(n)
+        fsumnew = (np.abs(borbnew) ** 2).sum(axis=1)
+        accept = (fsumnew / fsum) > get_rng().random(n)
         configs.move(0, newconfigs, accept)
         borb[accept] = borbnew[accept]
         fsum[accept] = fsumnew[accept]

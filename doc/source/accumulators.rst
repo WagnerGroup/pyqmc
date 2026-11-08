@@ -30,6 +30,11 @@ Ewald2D summation
 .. automodule:: pyqmc.obdm
    :members:
 
+Total spin S^2
+=============================
+.. automodule:: pyqmc.observables.s2_accumulator
+   :members:
+
 2-RDM
 =============================
 .. automodule:: pyqmc.tbdm

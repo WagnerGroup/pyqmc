@@ -14,7 +14,6 @@
 
 import numpy as np
 import pyqmc.wf.testwf as testwf
-from pyqmc.gpu import cp, asnumpy
 from pyqmc.wf.slater import Slater
 from pyqmc.wf.multiplywf import MultiplyWF
 from pyqmc.wf.addwf import AddWF

@@ -23,7 +23,6 @@ from pyqmc.method import hdftools
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import NamedTuple
 import time
-import pyqmc.gpu as gpu
 import pyqmc.rng
 import os
 from pyqmc.observables.stochastic_reconfiguration import StochasticReconfiguration
@@ -907,7 +906,7 @@ def optimize_ensemble(
                 for wfi, wf in enumerate(wfs):
                     grp = hdf[f"wf/{wfi}"]
                     for k in grp.keys():
-                        wf.parameters[k] = gpu.cp.asarray(grp[k])
+                        wf.parameters[k] = np.asarray(grp[k])
             if "iteration" in hdf.keys():
                 iteration_offset = np.max(hdf["iteration"][...]) + 1
             checkpoint_configs = load_all_configs(hdf, configs, updater)

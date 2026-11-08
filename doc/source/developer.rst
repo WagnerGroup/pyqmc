@@ -7,4 +7,3 @@ Developer information
    benchmarking
    random_numbers
    api_reference
-   gpu

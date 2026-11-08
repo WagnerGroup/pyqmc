@@ -15,6 +15,7 @@
 from pyqmc.recipes import OPTIMIZE, VMC, DMC, read_mc_output, read_opt
 from pyqmc.pbc.supercell import get_supercell
 from pyqmc.observables.accumulators import EnergyAccumulator, gradient_generator
+from pyqmc.observables.s2_accumulator import S2Accumulator
 from pyqmc.method.mc import vmc, initial_guess
 from pyqmc.method.dmc import rundmc
 from pyqmc.method.optvariance import optvariance

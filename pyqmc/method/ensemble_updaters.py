@@ -188,18 +188,14 @@ class EnsembleUpdater:
         :parameter overlap_weights: (nblocks, nwf, nwf) overlap from sample_overlap
         :returns: (avg, error)
         """
-        weight_avg = np.mean(overlap_weights, axis=0)
-        N = np.abs(weight_avg.diagonal())
-        Nij = np.sqrt(np.outer(N, N))
-        wfi = Nij.shape[0] - 1
         it = overlap_weighted["wtdp"]
         avg = {
-            "wtdp": np.mean(it, axis=0) / Nij[wfi],
-            "overlap": weight_avg,
+            "wtdp": np.mean(it, axis=0),
+            "overlap": np.mean(overlap_weights, axis=0),
             "energy": energy_data["energy"],
             "energy_data": energy_data,
         }
-        error = {"wtdp": _block_sem(it) / Nij[wfi], "energy": energy_data["energy_error"]}
+        error = {"wtdp": _block_sem(it), "energy": energy_data["energy_error"]}
         return avg, error
 
     def delta_p(self, steps, data, overlap_penalty, verbose=False):
@@ -210,24 +206,24 @@ class EnsembleUpdater:
         :parameter overlap_penalty: (nwf, nwf) penalty matrix
         :returns: (list of parameter changes, report dictionary)
         """
-        nwf = data["overlap"].shape[0]
-        wfi = nwf - 1
-        N = np.abs(data["overlap"].diagonal())
-        Nij = np.sqrt(np.outer(N, N))
-        overlap = data["overlap"] / Nij
-        # derivative of the normalized overlaps with respect to this state's parameters
-        fac = np.ones((nwf, nwf)) + np.identity(nwf)
-        dp_norm = 2.0 * np.real(data["wtdp"][:, wfi, wfi])
-        norm_part = np.einsum("i,p->pi", data["overlap"][wfi, :], dp_norm) / N
-        dp_overlap = fac[wfi] * (data["wtdp"][:, wfi, :] - 0.5 * norm_part) / Nij[wfi]
-
+        S = data["overlap"]
+        wtdp = data["wtdp"]
+        wfi = S.shape[0] - 1
+        N = np.abs(S.diagonal())
+        # wtdp[p, j, k] = <O_p psi_j^* psi_k / rho>, with O_p = d ln psi_wfi / dp,
+        # so for real parameters dS_{wfi,wfi} = 2 Re wtdp[:, wfi, wfi] and
+        # dS_{wfi,i} = conj(wtdp[:, i, wfi]).
+        dN = 2.0 * np.real(wtdp[:, wfi, wfi])
         overlap_cost = 0.0
-        ovlp = 0.0
+        ovlp = np.zeros(wtdp.shape[0])
         for i in range(wfi):
-            overlap_cost += overlap_penalty[wfi, i] * overlap[wfi, i]
-            ovlp += 2.0 * dp_overlap[:, i] * overlap_penalty[wfi, i] * overlap[wfi, i]
+            norm = np.sqrt(N[i] * N[wfi])
+            Sn = S[wfi, i] / norm  # normalized overlap
+            dSn = (np.conj(wtdp[:, i, wfi]) - 0.5 * S[wfi, i] * dN / N[wfi]) / norm
+            overlap_cost += overlap_penalty[wfi, i] * np.abs(Sn) ** 2
+            ovlp += 2.0 * overlap_penalty[wfi, i] * np.real(np.conj(Sn) * dSn)
 
-        g = None if wfi == 0 else np.real(ovlp)
+        g = None if wfi == 0 else ovlp
         v, report = self.single.solve(data["energy_data"], g=g)
         report["overlap_cost"] = overlap_cost
         if verbose:

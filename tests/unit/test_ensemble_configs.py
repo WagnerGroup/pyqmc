@@ -87,12 +87,12 @@ def test_all_configs_round_trip(tmp_path, periodic):
             assert not np.array_equal(a.configs, b.configs)
 
 
-def test_legacy_checkpoint_returns_none(tmp_path):
-    """A file without the all_configs group is a legacy checkpoint; the driver
-    falls back to the single stored population rather than failing."""
+def test_checkpoint_without_all_configs_returns_none(tmp_path):
+    """A file without the all_configs group has no optimizer configs to restore;
+    the driver then keeps the stored parameters and warms up fresh configs."""
     rng = np.random.default_rng(seed=12)
     configs = make_configs(rng, periodic=False)
-    hdf_file = str(tmp_path / "legacy.hdf5")
+    hdf_file = str(tmp_path / "no_all_configs.hdf5")
     with h5py.File(hdf_file, "a") as hdf:
         configs.initialize_hdf(hdf)
         configs.to_hdf(hdf)

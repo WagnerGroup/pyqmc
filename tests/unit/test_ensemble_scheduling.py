@@ -19,9 +19,9 @@ import numpy as np
 import pytest
 
 from pyqmc.method.ensemble_updaters import _block_sem
-from pyqmc.method.ensemble_optimization import (
+from pyqmc.method.ensemble_optimization import _format_step_report
+from pyqmc.method.ensemble_sampling import (
     _build_sampling_jobs,
-    _format_step_report,
     _sweeps,
     round_to_fixed_sum,
 )
@@ -148,3 +148,14 @@ def test_block_sem_matches_scipy_for_several_blocks():
     rng = np.random.default_rng(0)
     blocks = rng.normal(size=(5, 3, 2))
     assert np.allclose(_block_sem(blocks), scipy.stats.sem(blocks, axis=0))
+
+
+def test_empty_kwargs_skip_warmup_but_not_measurement():
+    """An empty dict disables a warmup, but a measurement must still sample,
+    with the sampler's defaults."""
+    configs = configs_for(2)
+    assert _build_sampling_jobs(configs, {}, {}) == []
+    jobs = _build_sampling_jobs(configs, {}, {}, measure=True)
+    assert sorted((job.kind, job.wfi) for job in jobs) == [
+        ("energy", 0), ("energy", 1), ("overlap", 0), ("overlap", 1)
+    ]

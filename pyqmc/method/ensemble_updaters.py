@@ -184,10 +184,20 @@ class EnsembleUpdater:
         """Combine the two samplings.
 
         :parameter energy_data: output of sample_energy
-        :parameter overlap_weighted: weighted output of sample_overlap
-        :parameter overlap_weights: (nblocks, nwf, nwf) overlap from sample_overlap
+        :parameter overlap_weighted: weighted output of sample_overlap, or None
+            for the lowest state, which has no overlap penalty
+        :parameter overlap_weights: (nblocks, nwf, nwf) overlap from sample_overlap, or None
         :returns: (avg, error)
         """
+        if overlap_weighted is None:
+            # a single wave function's normalized overlap with itself
+            avg = {
+                "wtdp": None,
+                "overlap": np.ones((1, 1)),
+                "energy": energy_data["energy"],
+                "energy_data": energy_data,
+            }
+            return avg, {"wtdp": None, "energy": energy_data["energy_error"]}
         it = overlap_weighted["wtdp"]
         avg = {
             "wtdp": np.mean(it, axis=0),
@@ -207,8 +217,12 @@ class EnsembleUpdater:
         :returns: (list of parameter changes, report dictionary)
         """
         S = data["overlap"]
-        wtdp = data["wtdp"]
         wfi = S.shape[0] - 1
+        if wfi == 0:  # no lower states, so no penalty
+            v, report = self.single.solve(data["energy_data"])
+            report["overlap_cost"] = 0.0
+            return [-step * v for step in steps], report
+        wtdp = data["wtdp"]
         N = np.abs(S.diagonal())
         # wtdp[p, j, k] = <O_p psi_j^* psi_k / rho>, with O_p = d ln psi_wfi / dp,
         # so for real parameters dS_{wfi,wfi} = 2 Re wtdp[:, wfi, wfi] and
@@ -223,8 +237,7 @@ class EnsembleUpdater:
             overlap_cost += overlap_penalty[wfi, i] * np.abs(Sn) ** 2
             ovlp += 2.0 * overlap_penalty[wfi, i] * np.real(np.conj(Sn) * dSn)
 
-        g = None if wfi == 0 else ovlp
-        v, report = self.single.solve(data["energy_data"], g=g)
+        v, report = self.single.solve(data["energy_data"], g=ovlp)
         report["overlap_cost"] = overlap_cost
         if verbose:
             print("Overlap cost", overlap_cost)

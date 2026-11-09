@@ -24,6 +24,7 @@ import pyqmc.method.sample_many
 import pyqmc.rng
 from pyqmc.method import hdftools
 from pyqmc.method.ensemble_sampling import (
+    sampling_kinds,
     warmup_overlap,
     evaluate_gradients_threaded,
     sample_gradient_configs_threaded,
@@ -50,7 +51,7 @@ def load_all_configs(hdf, configs, updater):
     Return:
         norm_configs: configs used for normalization sampling
         gradient_configs (list[list[dict]]): nested list of configs used for gradient sampling,
-            indexed by state, sub-iteration, then kind ("energy" or "overlap")
+            indexed by state, sub-iteration, then kind (see sampling_kinds)
     """
     if "all_configs" not in hdf:
         return None
@@ -62,7 +63,7 @@ def load_all_configs(hdf, configs, updater):
         state_configs = []
         for sub_iteration in range(len(transform_list)):
             configs_by_kind = {}
-            for kind in ("energy", "overlap"):
+            for kind in sampling_kinds(wfi):
                 cfg = configs.copy()
                 cfg.load_hdf(
                     hdf[f"all_configs/gradient/{wfi}/{sub_iteration}/{kind}"]
@@ -175,8 +176,8 @@ def _initial_configs(wfs, configs, updater, all_configs, vmc_warmup_kwargs, over
     if all_configs is None:
         norm_configs = configs.copy()
         gradient_configs = [
-            [{"energy": configs.copy(), "overlap": configs.copy()} for _ in state]
-            for state in updater
+            [{kind: configs.copy() for kind in sampling_kinds(wfi)} for _ in state]
+            for wfi, state in enumerate(updater)
         ]
     else:
         norm_configs, gradient_configs = all_configs
@@ -231,7 +232,8 @@ def _update_state(wf, wfi, updater, energy_data, overlap_weighted, overlap_unwei
 
     :returns: (avg, error, report)
     """
-    avg, error = updater.block_average(energy_data, overlap_weighted, overlap_unweighted["overlap"])
+    overlap = None if overlap_unweighted is None else overlap_unweighted["overlap"]
+    avg, error = updater.block_average(energy_data, overlap_weighted, overlap)
     start = time.perf_counter()
     dp, report = updater.delta_p([tau], avg, overlap_penalty, verbose=False)
     # the solve does not parallelize the way the sampling does, so it is worth

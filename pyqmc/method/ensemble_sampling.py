@@ -15,9 +15,10 @@
 
 r"""Scheduling the samplings of one ensemble optimization round.
 
-Each round samples two distributions per state and sub-iteration: the state on
-its own (an "energy" job) and the overlap distribution of the state with the
-states below it (an "overlap" job). The jobs are independent, so they run at the
+Each round samples the state on its own (an "energy" job) for every state and
+sub-iteration, and the overlap distribution of the state with the states below
+it (an "overlap" job) for every state but the lowest, which has no overlap
+penalty. The jobs are independent, so they run at the
 same time on threads, each submitting its own partitions to the client. The
 partitions are divided among the jobs by weight (:func:`round_to_fixed_sum`),
 jobs are submitted longest first (:func:`_build_sampling_jobs`), and each job
@@ -92,6 +93,11 @@ def warmup_overlap(wfs, configs, client, npartitions, kwargs, rng):
     return configs
 
 
+def sampling_kinds(wfi):
+    """The samplings state `wfi` needs: state 0 has no lower states to overlap."""
+    return ("energy",) if wfi == 0 else ("energy", "overlap")
+
+
 def _sampling_requested(kwargs):
     return bool(kwargs) and kwargs.get("nblocks", 1) > 0
 
@@ -149,6 +155,8 @@ def _build_sampling_jobs(
     if measure or _sampling_requested(overlap_kwargs):
         sweeps = _sweeps(overlap_kwargs)
         for wfi, state_configs in enumerate(gradient_configs):
+            if "overlap" not in sampling_kinds(wfi):
+                continue
             for sub_iteration in range(len(state_configs)):
                 if overlap_thread_weight is None:
                     weight = (1 + wfi) / 2.0
@@ -341,13 +349,15 @@ def evaluate_gradients_threaded(
     Samplings get parallelized using weighted partitions, which can be overridden by `overlap_thread_weight`.
 
     Args:
-        gradient_configs (list[list[dict]]): nested list of configs indexed by state, sub-iteration, then kind ("energy" or "overlap")
+        gradient_configs (list[list[dict]]): nested list of configs indexed by state, sub-iteration, then kind
+            ("energy", and "overlap" for states above 0; see sampling_kinds)
         See ``optimize_ensemble`` for details of other parameters.
 
     Return:
         energy_data (list): nested list of vmc outputs indexed by state then by sub-iteration
-        overlap_data_weighted (list): nested list of weighted sample_overlap outputs indexed by state then by sub-iteration
-        overlap_data_unweighted (list): nested list of unweighted sample_overlap outputs indexed by state then by sub-iteration
+        overlap_data_weighted (list): nested list of weighted sample_overlap outputs indexed by state then by
+            sub-iteration; None for state 0
+        overlap_data_unweighted (list): the same for the unweighted outputs
         gradient_configs (list): updated configurations with the same structure
     """
     rng = pyqmc.rng.get_rng(rng)

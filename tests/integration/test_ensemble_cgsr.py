@@ -146,7 +146,7 @@ def test_verbose_reports_solve_cost_and_error_bars(H2_casci, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "=== Iteration 0 ===" in out
     assert "delta_p = " in out
-    assert "sampling: 4 jobs" in out
+    assert "sampling: 3 jobs" in out  # two energy, one overlap (state 1)
     # the per-block progress characters interleave unreadably across threads
     assert "----" not in out
 

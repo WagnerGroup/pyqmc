@@ -42,8 +42,8 @@ def test_longest_job_is_submitted_first():
     assert (jobs[0].kind, jobs[0].wfi) == ("overlap", 2)
     # overlap jobs descend by state, and the cheap energy jobs come after
     kinds = [(j.kind, j.wfi) for j in jobs]
-    assert kinds[:3] == [("overlap", 2), ("overlap", 1), ("overlap", 0)]
-    assert all(kind == "energy" for kind, _ in kinds[3:])
+    assert kinds[:2] == [("overlap", 2), ("overlap", 1)]
+    assert all(kind == "energy" for kind, _ in kinds[2:])
 
 
 def test_jobs_are_sorted_by_descending_cost():
@@ -57,14 +57,16 @@ def test_every_job_is_present_exactly_once():
     nstates, nsub = 3, 2
     jobs = _build_sampling_jobs(configs_for(nstates, nsub), VMC, OVERLAP)
     seen = {(j.kind, j.wfi, j.sub_iteration) for j in jobs}
-    assert len(jobs) == 2 * nstates * nsub == len(seen)
+    # an energy job for every state, an overlap job for every state but 0
+    assert len(jobs) == (2 * nstates - 1) * nsub == len(seen)
+    assert not any(j.kind == "overlap" and j.wfi == 0 for j in jobs)
 
 
 def test_cost_counts_the_wave_functions_propagated():
     """Overlap sampling for state wfi moves wfi+1 wave functions at once."""
     jobs = _build_sampling_jobs(configs_for(3), VMC, {"nblocks": 2, "nsteps_per_block": 5})
     overlap = {j.wfi: j.cost for j in jobs if j.kind == "overlap"}
-    assert overlap == {0: 10, 1: 20, 2: 30}
+    assert overlap == {1: 20, 2: 30}
     energy = {j.cost for j in jobs if j.kind == "energy"}
     assert energy == {_sweeps(VMC)}
 
@@ -94,13 +96,13 @@ def test_partitions_follow_the_weights_in_submission_order():
     assert sum(partitions) == 12
     by_job = {(j.kind, j.wfi): p for j, p in zip(jobs, partitions)}
     # overlap weight rises with the state, so its partition count must not fall
-    assert by_job[("overlap", 0)] <= by_job[("overlap", 1)] <= by_job[("overlap", 2)]
+    assert by_job[("overlap", 1)] <= by_job[("overlap", 2)]
 
 
 def test_overlap_thread_weight_overrides_the_partition_share():
-    jobs = _build_sampling_jobs(configs_for(3), VMC, OVERLAP, overlap_thread_weight=[5.0, 1.0, 1.0])
+    jobs = _build_sampling_jobs(configs_for(3), VMC, OVERLAP, overlap_thread_weight=[5.0, 1.0, 3.0])
     weights = {j.wfi: j.weight for j in jobs if j.kind == "overlap"}
-    assert weights == {0: 5.0, 1: 1.0, 2: 1.0}
+    assert weights == {1: 1.0, 2: 3.0}
     # it changes partitions, not the ordering, which still follows cost
     assert (jobs[0].kind, jobs[0].wfi) == ("overlap", 2)
 
@@ -157,5 +159,5 @@ def test_empty_kwargs_skip_warmup_but_not_measurement():
     assert _build_sampling_jobs(configs, {}, {}) == []
     jobs = _build_sampling_jobs(configs, {}, {}, measure=True)
     assert sorted((job.kind, job.wfi) for job in jobs) == [
-        ("energy", 0), ("energy", 1), ("overlap", 0), ("overlap", 1)
+        ("energy", 0), ("energy", 1), ("overlap", 1)
     ]

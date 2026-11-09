@@ -25,6 +25,7 @@ import pyqmc.rng
 import pytest
 
 import pyqmc.api as pyq
+from pyqmc.method.ensemble_sampling import sampling_kinds
 from pyqmc.method.ensemble_optimization import (
     load_all_configs,
     make_updater,
@@ -101,9 +102,9 @@ def test_ensemble_minsr(H2_casci, tmp_path):
     populations = [norm_configs.configs] + [
         gradient_configs[wfi][0][kind].configs
         for wfi in range(2)
-        for kind in ("energy", "overlap")
+        for kind in sampling_kinds(wfi)
     ]
-    assert len(populations) == 5
+    assert len(populations) == 4  # state 0 has no overlap sampling
     for i, a in enumerate(populations):
         for b in populations[i + 1 :]:
             assert not np.array_equal(a, b)

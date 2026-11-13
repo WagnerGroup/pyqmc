@@ -16,6 +16,11 @@ import numpy as np
 import pyqmc.wf.func3d as func3d
 
 
+def _common_rcut(basis):
+    """The cutoff shared by the functions of a basis; an empty basis has none."""
+    return basis[0].parameters["rcut"] if len(basis) > 0 else np.inf
+
+
 class JastrowSpin:
     r"""
     1 body and 2 body jastrow factor
@@ -33,17 +38,13 @@ class JastrowSpin:
 
         mol : a pyscf molecule object
 
-        a_basis : list of func3d objects that comprise the electron-ion basis
+        a_basis : list of func3d objects that comprise the electron-ion basis (may be empty)
 
-        b_basis : list of func3d objects that comprise the electron-electron basis
+        b_basis : list of func3d objects that comprise the electron-electron basis (may be empty)
 
         """
-        self.a_basis = func3d.CutoffFunc3dEvaluator(
-            a_basis, a_basis[0].parameters["rcut"]
-        )
-        self.b_basis = func3d.CutoffFunc3dEvaluator(
-            b_basis, b_basis[0].parameters["rcut"]
-        )
+        self.a_basis = func3d.CutoffFunc3dEvaluator(a_basis, _common_rcut(a_basis))
+        self.b_basis = func3d.CutoffFunc3dEvaluator(b_basis, _common_rcut(b_basis))
         self.parameters = {}
         self._nelec = np.sum(mol.nelec)
         self._mol = mol
@@ -457,10 +458,8 @@ class JastrowSpin:
         """Given the b sums, this is pretty trivial for the coefficient derivatives.
         For the derivatives of basis functions, we will have to compute the derivative
         of all the b's and redo the sums, similar to recompute()"""
-        return {
-            "bcoeff": self._bvalues,
-            "acoeff": self._avalues,
-        }
+        grads = {"bcoeff": self._bvalues, "acoeff": self._avalues}
+        return {k: v for k, v in grads.items() if v.size > 0}  # an empty basis has no gradient
 
     def u_components(self, rvec, r):
         """Given positions rvec and their magnitudes r, returns

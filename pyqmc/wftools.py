@@ -151,6 +151,30 @@ def generate_jastrow(
     return jastrow, to_opt
 
 
+def generate_plane_wave_jastrow(cell, gindices):
+    r"""Long-range two-body Jastrow with basis functions :math:`\cos(\vec{q}\cdot\vec{r}_{ij})`.
+
+    :math:`\vec{q} = 2\pi \sum_j n_j \vec{b}_j` for each row :math:`n` of `gindices`, with
+    :math:`\vec{b}_j` the reciprocal lattice vectors of `cell`. The basis functions are periodic
+    in the cell and have no cutoff; see :class:`pyqmc.wf.func3d.PlaneWaveFunction`. Multiply this
+    with a short-range Jastrow, as in ``MultiplyWF(slater, jastrow, plane_wave_jastrow)``.
+
+    :parameter cell: the simulation cell (supercell)
+    :parameter gindices: (nq, 3) integers. Since the basis functions are even in q, list only one
+        of each pair q, -q.
+    :returns: jastrow (all coefficients zero), to_opt (all bcoeff)
+    """
+    gindices = np.atleast_2d(np.asarray(gindices))
+    if not np.issubdtype(gindices.dtype, np.integer):
+        raise ValueError("gindices must be integers")
+    recvec = np.linalg.inv(cell.lattice_vectors()).T
+    qvecs = 2 * np.pi * gindices @ recvec
+    bbasis = [func3d.PlaneWaveFunction(q) for q in qvecs]
+    jastrow = jastrowspin.JastrowSpin(cell, a_basis=[], b_basis=bbasis)
+    to_opt = {"bcoeff": np.ones(jastrow.parameters["bcoeff"].shape, dtype=bool)}
+    return jastrow, to_opt
+
+
 def generate_jastrow3(mol, na=4, nb=3, rcut=None, jax=False):
     if jax is True:
         raise NotImplementedError("JAX 3-body Jastrow not yet implemented")

@@ -22,7 +22,13 @@ from pyqmc.method.optvariance import optvariance
 from pyqmc.method.optimize import optimize, SRUpdate, MinSRUpdate, CGSRUpdate, LineSearch
 from pyqmc.method.linemin import line_minimization
 from pyqmc.reblock import reblock as avg_reblock
-from pyqmc.wftools import generate_wf, read_wf, generate_jastrow, generate_slater
+from pyqmc.wftools import (
+    generate_wf,
+    read_wf,
+    generate_jastrow,
+    generate_slater,
+    generate_plane_wave_jastrow,
+)
 from pyqmc.pyscftools import recover_pyscf
 from pyqmc.wf.slater import Slater
 from pyqmc.wf.jastrowspin import JastrowSpin

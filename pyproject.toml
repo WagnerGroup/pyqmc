@@ -15,6 +15,12 @@ dependencies = [
     "pandas (>=2.2.3,<3.0.0)"
 ]
 
+[project.optional-dependencies]
+numba = ["numba"]
+test = ["pytest", "pytest-rerunfailures", "numba"]
+
+[project.urls]
+Homepage = "https://github.com/WagnerGroup/pyqmc"
 
 [build-system]
 requires = ["flit_core >=3.2,<4"]

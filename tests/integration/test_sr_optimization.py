@@ -18,21 +18,22 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 import pandas as pd
-from pyqmc.api import generate_wf, line_minimization, initial_guess, gradient_generator
+from pyqmc.api import generate_wf, optimize, SRUpdate, initial_guess, EnergyAccumulator
+from pyqmc.observables.accumulators import LinearTransform
 import pytest
 
 
 @pytest.mark.slow
-def test_linemin(H2_ccecp_uhf):
-    """Optimize a Slater-Jastrow wave function and check that it's better than Hartree-Fock"""
+def test_sr(H2_ccecp_uhf):
+    """Optimize a Slater-Jastrow wave function with the default fixed step and
+    check that it's better than Hartree-Fock"""
     mol, mf = H2_ccecp_uhf
     mol.output, mol.stdout = None, None
 
     wf, to_opt = generate_wf(mol, mf)
     nconf = 1000
-    wf, dfgrad = line_minimization(
-        wf, initial_guess(mol, nconf), gradient_generator(mol, wf, to_opt), verbose=True
-    )
+    updater = SRUpdate(EnergyAccumulator(mol), LinearTransform(wf.parameters, to_opt))
+    wf, dfgrad = optimize(wf, initial_guess(mol, nconf), updater, verbose=True)
 
     dfgrad = pd.DataFrame(dfgrad)
     mfen = mf.energy_tot()
@@ -42,4 +43,4 @@ def test_linemin(H2_ccecp_uhf):
 
 
 if __name__ == "__main__":
-    test_linemin()
+    test_sr()

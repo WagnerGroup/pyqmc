@@ -13,7 +13,6 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
-import pyqmc.gpu as gpu
 import pyscf.pbc.gto.eval_gto
 import pyscf.pbc.gto.cell
 import pyqmc.configurations.distance
@@ -54,11 +53,11 @@ def mol_eval_gto(mol, evalstr, primcoords):
 class MoleculeOrbitalEvaluator:
     def __init__(self, mol, mo_coeff, evaluate_orbitals_with="pyscf"):
         self.parameters = {
-            "mo_coeff_alpha": gpu.cp.asarray(mo_coeff[0]),
-            "mo_coeff_beta": gpu.cp.asarray(mo_coeff[1]),
+            "mo_coeff_alpha": np.asarray(mo_coeff[0]),
+            "mo_coeff_beta": np.asarray(mo_coeff[1]),
         }
         self.parm_names = ["mo_coeff_alpha", "mo_coeff_beta"]
-        iscomplex = bool(sum(map(gpu.cp.iscomplexobj, self.parameters.values())))
+        iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
 
         self._mol = mol
         self.ao_dtype = float  # evaluator.dtype
@@ -86,7 +85,7 @@ class MoleculeOrbitalEvaluator:
         """"""
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
-        aos = gpu.cp.asarray(self.eval_gto(eval_str, mycoords))[np.newaxis]
+        aos = np.asarray(self.eval_gto(eval_str, mycoords))[np.newaxis]
         if len(aos.shape) == 4:  # if derivatives are included
             return aos.reshape((1, aos.shape[1], *mycoords.shape[:-1], aos.shape[-1]))
         else:
@@ -97,7 +96,7 @@ class MoleculeOrbitalEvaluator:
 
     def pgradient(self, ao, spin):
         nelec = [self.parameters[self.parm_names[spin]].shape[1]]
-        return (gpu.cp.array(nelec), ao)
+        return (np.array(nelec), ao)
 
 
 def cell_eval_gto(orb_evaluator, evalstr, primcoords):
@@ -154,10 +153,10 @@ class PBCOrbitalEvaluatorKpoints:
             self.param_split = [np.cumsum(nelec_per_kpt[spin]) for spin in [0, 1]]
             self.parm_names = ["mo_coeff_alpha", "mo_coeff_beta"]
             self.parameters = {
-                "mo_coeff_alpha": gpu.cp.asarray(np.concatenate(mo_coeff[0], axis=1)),
-                "mo_coeff_beta": gpu.cp.asarray(np.concatenate(mo_coeff[1], axis=1)),
+                "mo_coeff_alpha": np.asarray(np.concatenate(mo_coeff[0], axis=1)),
+                "mo_coeff_beta": np.asarray(np.concatenate(mo_coeff[1], axis=1)),
             }
-            iscomplex = bool(sum(map(gpu.cp.iscomplexobj, self.parameters.values())))
+            iscomplex = bool(sum(map(np.iscomplexobj, self.parameters.values())))
         else:
             iscomplex = False  # Is this right??
 
@@ -200,7 +199,7 @@ class PBCOrbitalEvaluatorKpoints:
         mycoords = configs.configs if mask is None else configs.configs[mask]
         mycoords = mycoords.reshape((-1, mycoords.shape[-1]))
         primcoords, primwrap = pyqmc.pbc.pbc.enforce_pbc(self.Lprim, mycoords)
-        ao = gpu.cp.asarray(self.eval_gto(eval_str, primcoords))
+        ao = np.asarray(self.eval_gto(eval_str, primcoords))
         if not self.isgamma:
             wrap = configs.wrap if mask is None else configs.wrap[mask]
             wrap = np.dot(wrap, self.S)
@@ -210,7 +209,7 @@ class PBCOrbitalEvaluatorKpoints:
             )
             # k, coordinate
             wrap_phase = self.get_wrapphase(kdotR)
-            ao = gpu.cp.einsum("k...,k...a->k...a", wrap_phase, ao)
+            ao = np.einsum("k...,k...a->k...a", wrap_phase, ao)
         if len(ao.shape) == 4:  # if derivatives are included
             return ao.reshape(
                 (ao.shape[0], ao.shape[1], *mycoords.shape[:-1], ao.shape[-1])
@@ -231,9 +230,9 @@ class PBCOrbitalEvaluatorKpoints:
         )
         ps = [0] + list(self.param_split[spin])
         nelec = self.parameters[self.parm_names[spin]].shape[1]
-        out = gpu.cp.zeros([nelec, *ao[0].shape[:-1]], dtype=self.mo_dtype)
+        out = np.zeros([nelec, *ao[0].shape[:-1]], dtype=self.mo_dtype)
         for i, ak, mok in zip(range(len(ao)), ao, p[:-1]):
-            gpu.cp.einsum(
+            np.einsum(
                 "...a,an->n...", ak, mok, out=out[ps[i] : ps[i + 1]], optimize="greedy"
             )
         return out.transpose([*np.arange(1, len(out.shape)), 0])

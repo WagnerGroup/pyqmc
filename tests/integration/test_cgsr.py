@@ -24,10 +24,11 @@ import pytest
 
 from pyqmc.api import (
     EnergyAccumulator,
-    cgsr_optimization,
+    CGSRUpdate,
+    MinSRUpdate,
     generate_wf,
     initial_guess,
-    minsr_optimization,
+    optimize,
 )
 from pyqmc.observables.accumulators import LinearTransform
 
@@ -41,11 +42,10 @@ def test_cgsr(H2_ccecp_uhf):
 
     pyqmc.rng.seed(0)
     wf, to_opt = generate_wf(mol, mf)
-    wf, df = cgsr_optimization(
+    wf, df = optimize(
         wf,
         initial_guess(mol, 1000),
-        LinearTransform(wf.parameters, to_opt),
-        EnergyAccumulator(mol),
+        CGSRUpdate(EnergyAccumulator(mol), LinearTransform(wf.parameters, to_opt)),
         tstep=0.1,
         max_iterations=20,
         verbose=False,
@@ -68,26 +68,19 @@ def test_cgsr_matches_minsr_trajectory(H2_ccecp_uhf):
 
     kws = dict(
         tstep=0.05,
-        eps=1e-2,
         max_iterations=6,
-        vmcoptions={"nsteps_per_block": 5},
+        vmc_kwargs={"nsteps_per_block": 5},
         verbose=False,
     )
     energies = {}
-    for name, optimize, extra in [
-        ("minsr", minsr_optimization, {}),
-        ("cgsr", cgsr_optimization, dict(rtol=1e-10)),
+    for name, cls, extra in [
+        ("minsr", MinSRUpdate, {}),
+        ("cgsr", CGSRUpdate, dict(rtol=1e-10)),
     ]:
         pyqmc.rng.seed(0)
         wf, to_opt = generate_wf(mol, mf)
-        _, df = optimize(
-            wf,
-            initial_guess(mol, 400),
-            LinearTransform(wf.parameters, to_opt),
-            EnergyAccumulator(mol),
-            **kws,
-            **extra,
-        )
+        updater = cls(EnergyAccumulator(mol), LinearTransform(wf.parameters, to_opt), eps=1e-2, **extra)
+        _, df = optimize(wf, initial_guess(mol, 400), updater, **kws)
         energies[name] = np.array([d["energy"] for d in df])
 
     assert np.abs(energies["cgsr"] - energies["minsr"]).max() < 1e-8
@@ -106,15 +99,15 @@ def test_cgsr_sub_iterations_and_restart(H2_ccecp_uhf, tmp_path):
     pyqmc.rng.seed(0)
     wf, to_opt = generate_wf(mol, mf)
     groups = ["wf2acoeff", "wf2bcoeff"]
-    transforms = [LinearTransform(wf.parameters, {k: to_opt[k]}) for k in groups]
+    updaters = [
+        CGSRUpdate(EnergyAccumulator(mol), LinearTransform(wf.parameters, {k: to_opt[k]}))
+        for k in groups
+    ]
     frozen = [k for k in wf.parameters if k not in groups]
     start = {k: np.array(v) for k, v in wf.parameters.items()}
 
-    kws = dict(tstep=0.1, vmcoptions={"nsteps_per_block": 5}, hdf_file=hdf_file)
-    wf, df = cgsr_optimization(
-        wf, initial_guess(mol, 400), transforms, EnergyAccumulator(mol),
-        max_iterations=4, **kws
-    )
+    kws = dict(tstep=0.1, vmc_kwargs={"nsteps_per_block": 5}, hdf_file=hdf_file)
+    wf, df = optimize(wf, initial_guess(mol, 400), updaters, max_iterations=4, **kws)
     assert [d["sub_iteration"] for d in df] == [0, 1] * 4
     # parameters outside the transforms are untouched
     for k in frozen:
@@ -126,10 +119,10 @@ def test_cgsr_sub_iterations_and_restart(H2_ccecp_uhf, tmp_path):
 
     # restarting continues rather than starting over
     wf2, to_opt2 = generate_wf(mol, mf)
-    transforms2 = [LinearTransform(wf2.parameters, {k: to_opt2[k]}) for k in groups]
-    cgsr_optimization(
-        wf2, initial_guess(mol, 400), transforms2, EnergyAccumulator(mol),
-        max_iterations=6, **kws
-    )
+    updaters2 = [
+        CGSRUpdate(EnergyAccumulator(mol), LinearTransform(wf2.parameters, {k: to_opt2[k]}))
+        for k in groups
+    ]
+    optimize(wf2, initial_guess(mol, 400), updaters2, max_iterations=6, **kws)
     with h5py.File(hdf_file, "r") as hdf:
         assert len(hdf["energy"][()]) > 8

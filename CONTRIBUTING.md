@@ -65,7 +65,7 @@ Note the rebase here; it prevents the commit history from getting too messed up.
 2. Keep functions small and with one responsibility. You may need to revise your first implementation to do this; it's worth it. That is, each function should do one thing. [Related](https://en.wikipedia.org/wiki/Single-responsibility_principle)
 3. As much as possible, avoid looping in Python. `numpy` calls should, as much as possible, be called on all walkers in the ensemble to avoid Python's poor performance.
 4. As much as possible, avoid repeatedly calling functions in a loop, again for performance reasons. Prefer having functions operate in batches.
-5. Try to avoid using libraries that are not in `requirements.txt`. If it is absolutely necessary, discuss with the maintainers. 
+5. Try to avoid using libraries that are not in the `dependencies` of `pyproject.toml`. If it is absolutely necessary, discuss with the maintainers. 
 
 
 ### Documentation requirements

@@ -14,8 +14,6 @@
 
 import numpy as np
 import h5py
-from pyqmc.observables.accumulators_multiwf import invert_list_of_dicts
-import scipy.stats
 
 
 def _weighted_average(arr, weights, wsum):
@@ -55,11 +53,79 @@ def nodal_regularization(grad2, nodal_cutoff=1e-3):
     return mask, f
 
 
+def local_derivatives(wf, configs, enacc, transform, nodal_cutoff=1e-3):
+    """Local energy and regularized parameter derivatives of log(psi) for every
+    configuration.
+
+    Every SR solver (explicit S, minSR, CG) builds its equations from these, so
+    they all regularize the same way: the derivatives are multiplied by the
+    nodal regularization f, which enters the gradient once and S as f^2.
+
+    :returns: (energy dictionary from enacc, (nconf, nparameters) regularized derivatives)
+    """
+    den = enacc(configs, wf)
+    dp = transform.serialize_gradients(wf.pgradient())
+    _, f = nodal_regularization(den["grad2"], nodal_cutoff)
+    return den, dp * f[:, np.newaxis]
+
+
+def sr_averages(den, dppsi, weights=None):
+    """Averages that define the SR equations.
+
+    :parameter den: energy dictionary, each entry (nconf,)
+    :parameter dppsi: (nconf, nparameters) regularized derivatives
+    :parameter weights: (nconf,) weights, or None for equal weights
+    :returns: dictionary with the averaged energy terms and
+        dppsi = <O>, dpH = <E O*>, dpidpj = <O_i* O_j>
+    """
+    nconf = dppsi.shape[0]
+    weights = np.ones(nconf) / nconf if weights is None else weights / np.sum(weights)
+    wsum = np.sum(weights)
+    d = {k: _weighted_average(it, weights, wsum) for k, it in den.items()}
+    if dppsi.shape[1] > 0:
+        # dpH and dpidpj share this (nconf, nparams) temporary; build it once.
+        w_dp = weights[:, np.newaxis] * dppsi
+        d["dpH"] = den["total"] @ np.conj(w_dp)
+        d["dppsi"] = _weighted_average(dppsi, weights, wsum)
+        d["dpidpj"] = np.einsum("ij,ik->jk", np.conj(dppsi), w_dp, optimize=True)
+    return d
+
+
+def sr_direction(data, eps, inverse_strategy="regularized_inverse", g=None):
+    """Solve the SR equations with the explicit (nparameters, nparameters) S matrix.
+
+    :parameter data: output of :func:`sr_averages`, averaged over blocks
+    :parameter float eps: regularization
+    :parameter str inverse_strategy: 'regularized_inverse' or 'pseudo_inverse'
+    :parameter g: (nparameters,) gradient term to add to the energy gradient, or None
+    :returns: (v, report), where v = (S + eps)^-1 (f + g) and f is the energy gradient
+    """
+    pgrad = 2 * np.real(data["dpH"] - data["total"] * np.conj(data["dppsi"]))
+    if g is not None:
+        pgrad = pgrad + g
+    Sij = np.real(
+        data["dpidpj"] - np.einsum("i,j->ij", np.conj(data["dppsi"]), data["dppsi"])
+    )
+    if inverse_strategy == "pseudo_inverse":
+        invSij = np.linalg.pinv(Sij, rcond=eps)
+    elif inverse_strategy == "regularized_inverse":
+        invSij = np.linalg.inv(Sij + eps * np.eye(Sij.shape[0]))
+    else:
+        raise ValueError(
+            "Invalid inverse strategy. Valid options are pseudo_inverse and regularized_inverse."
+        )
+    v = np.einsum("ij,j->i", invSij, pgrad)
+    report = {
+        "pgrad": np.linalg.norm(pgrad),
+        "SRdot": np.dot(pgrad, v) / (np.linalg.norm(v) * np.linalg.norm(pgrad)),
+    }
+    return v, report
+
+
 class StochasticReconfiguration:
     """
-    This class works as an accumulator, but has an extra method
-    that computes the change in parameters
-    given the averages given by avg() and __call__.
+    Accumulator for the averages that define the SR equations; see
+    :func:`sr_averages`. :meth:`delta_p` solves them.
     """
 
     def __init__(
@@ -69,7 +135,7 @@ class StochasticReconfiguration:
         nodal_cutoff=1e-3,
         eps=1e-1,
         inverse_strategy="pseudo_inverse",
-        verbose = False
+        verbose=False,
     ):
         """
         eps here is the regularization for SR.
@@ -82,51 +148,17 @@ class StochasticReconfiguration:
         self.verbose = verbose
 
     def __call__(self, configs, wf):
-        pgrad = wf.pgradient()
-        d = self.enacc(configs, wf)
-        energy = d["total"]
-        dp = self.transform.serialize_gradients(pgrad)
-
-        node_cut, f = nodal_regularization(d["grad2"], self.nodal_cutoff)
-        dp_regularized = dp * f[:, np.newaxis]
-
-        d["dpH"] = np.einsum("i,ij->ij", energy, dp_regularized)
-        d["dppsi"] = dp_regularized
-        d["dpidpj"] = np.einsum("ij,ik->ijk", dp, dp_regularized)
-
+        """Per-configuration values of the quantities avg() averages."""
+        d, dppsi = local_derivatives(wf, configs, self.enacc, self.transform, self.nodal_cutoff)
+        d["dpH"] = d["total"][:, np.newaxis] * np.conj(dppsi)
+        d["dppsi"] = dppsi
+        d["dpidpj"] = np.einsum("ij,ik->ijk", np.conj(dppsi), dppsi)
         return d
 
     def avg(self, configs, wf, weights=None):
-        """
-        Compute (weightsd) average
-        """
-
-        nconf = configs.configs.shape[0]
-        if weights is None:
-            weights = np.ones(nconf)
-        weights = weights / np.sum(weights)
-
-        pgrad = wf.pgradient()
-        den = self.enacc(configs, wf)
-        energy = den["total"]
-        dp = self.transform.serialize_gradients(pgrad)
-
-        node_cut, f = nodal_regularization(den["grad2"])
-
-        dp_regularized = dp * f[:, np.newaxis]
-
-        wsum = np.sum(weights)
-        d = {k: _weighted_average(it, weights, wsum) for k, it in den.items()}
-        if self.transform.nparams > 0:
-            # dpH and dpidpj share this (nconf, nparams) temporary; build it once.
-            w_dp_regularized = weights[:, np.newaxis] * dp_regularized
-            d["dpH"] = energy @ w_dp_regularized
-            d["dppsi"] = _weighted_average(dp_regularized, weights, wsum)
-            d["dpidpj"] = np.einsum(
-                "ij,ik->jk", dp, w_dp_regularized, optimize=True
-            )
-
-        return d
+        """(Weighted) average over configurations."""
+        den, dppsi = local_derivatives(wf, configs, self.enacc, self.transform, self.nodal_cutoff)
+        return sr_averages(den, dppsi, weights)
 
     def keys(self):
         return self.enacc.keys().union(["dpH", "dppsi", "dpidpj"])
@@ -147,234 +179,12 @@ class StochasticReconfiguration:
         pass
 
     def delta_p(self, steps, data: dict, verbose=False):
+        """Parameter changes -step * v for each step, with v from :func:`sr_direction`.
+
+        data: averaged data from avg(), with the keys returned by keys().
         """
-        steps: a list/numpy array of timesteps
-        data: averaged data from avg() or __call__. Note that if you use VMC to compute this with
-        an accumulator with a name, you'll need to remove that name from the keys.
-        That is, the keys should be equal to the ones returned by keys().
-
-        Compute the change in parameters given the data from a stochastic reconfiguration step.
-        Return the change in parameters, and data that we may want to use for diagnostics.
-        """
-
-        pgrad = 2 * np.real(data["dpH"] - data["total"] * data["dppsi"])
-        Sij = np.real(
-            data["dpidpj"] - np.einsum("i,j->ij", data["dppsi"], data["dppsi"])
-        )
-
-        if self.inverse_strategy == "pseudo_inverse":
-            invSij = np.linalg.pinv(Sij, rcond=self.eps)
-        elif self.inverse_strategy == "regularized_inverse":
-            invSij = np.linalg.inv(Sij + self.eps * np.eye(Sij.shape[0]))
-        else:
-            raise ValueError(
-                "Invalid inverse strategy. Valid options are pseudo_inverse and regularized_inverse."
-            )
-        v = np.einsum("ij,j->i", invSij, pgrad)
-        dp = [-step * v for step in steps]
-        report = {
-            "pgrad": np.linalg.norm(pgrad),
-            "SRdot": np.dot(pgrad, v) / (np.linalg.norm(v) * np.linalg.norm(pgrad)),
-        }
-
+        v, report = sr_direction(data, self.eps, self.inverse_strategy)
         if verbose or self.verbose:
-            eigvals = np.linalg.eigvals(Sij)
-            print("eigenvalues of Sij", eigvals)
-            print("Gradient norm: ", np.linalg.norm(pgrad))
+            print("Gradient norm: ", report["pgrad"])
             print("Dot product between gradient and SR step: ", report["SRdot"])
-            print("gradient", pgrad)
-            print("v", v)
-        return dp, report
-
-
-class StochasticReconfigurationMultipleWF:
-    """
-    This class works as an accumulator, but has an extra method that computes the change in parameters
-    given the averages given by avg()
-    """
-
-    def __init__(self, enacc, transforms, eps=1e-1):
-        """
-        eps here is the regularization for SR.
-        Note that we don't need the nodal cutoff here, because we are sampling the sum of squares which
-        doesn't have the nodal divergence.
-        """
-        self.enacc = enacc
-        self.transforms = transforms
-        self.eps = eps
-
-    def avg(self, configs, wfs, weights=None):
-        """
-        Compute (weighted) average
-        """
-
-        energies = invert_list_of_dicts([self.enacc(configs, wf) for wf in wfs])
-        dppsi = [
-            transform.serialize_gradients(wf.pgradient())
-            for transform, wf in zip(self.transforms, wfs)
-        ]
-        d = {}
-        for k, en in energies.items():
-            d[k] = np.einsum("jc,ijc->ij", np.asarray(en), weights / weights.shape[-1])
-
-        nconfig = weights.shape[-1]
-        for wfi, dp in enumerate(dppsi):
-            if self.transforms[wfi].nparams == 0:
-                continue
-            d[("dp", wfi)] = (
-                np.einsum("cp,jc->pj", dp, weights[wfi, :, :], optimize=True) / nconfig
-            )
-
-            d[("dpipj", wfi)] = (
-                np.einsum("cp,cq,c->pq", dp, dp, weights[wfi, wfi, :], optimize=True)
-                / nconfig
-            )
-
-            d[("dpH", wfi)] = (
-                np.einsum("jc,cp,jc->pj", energies["total"], dp, weights[wfi, :, :])
-                / nconfig
-            )
-
-        return d
-
-    def keys(self):
-        return self.enacc.keys().union(["dpH", "dppsi", "dpidpj"])
-
-    def shapes(self):
-        nparms = np.sum([np.sum(opt) for opt in self.transform.to_opt.values()])
-        d = {"dpH": (nparms,), "dppsi": (nparms,), "dpidpj": (nparms, nparms)}
-        d.update(self.enacc.shapes())
-        return d
-
-    def update_state(self, hdf_file: h5py.File):
-        """
-        Update the state of the accumulator from a restart file.
-        StochasticReconfiguration does not keep a state.
-
-        hdf_file: h5py.File object
-        """
-        pass
-
-    def block_average(self, data, weights):
-        """
-        This is meant to be called to create correctly weighted average after a number of blocks have
-        been performed.
-        weights are block, wf, wf
-        data is a dictionary, with each entry being a numpy array of shape (block, ...) (i.e., block is added to the front of what's returned from avg())
-        """
-        weight_avg = np.mean(weights, axis=0)
-
-        N = np.abs(weight_avg.diagonal())
-        Nij = np.sqrt(np.outer(N, N))
-
-        avg = {}
-        error = {}
-        for k in ["total"]:
-            it = data[k]
-            avg[k] = np.mean(it, axis=0) / Nij
-            error[k] = scipy.stats.sem(it, axis=0) / Nij
-
-        nwf = weights.shape[1]
-        for k in ["dp", "dpH"]:
-            for w in range(nwf):
-                if self.transforms[w].nparams == 0:
-                    continue
-                it = data[(k, w)]
-                avg[(k, w)] = np.mean(it, axis=0) / Nij[w]
-                error[(k, w)] = scipy.stats.sem(it, axis=0) / Nij[w]
-
-        for k in ["dpipj"]:
-            for w in range(nwf):
-                if self.transforms[w].nparams == 0:
-                    continue
-                it = data[(k, w)]
-                avg[(k, w)] = np.mean(it, axis=0) / Nij[w, w]
-                error[(k, w)] = scipy.stats.sem(it, axis=0) / Nij[w, w]
-        avg["overlap"] = weight_avg
-        return avg, error
-
-    def _collect_terms(self, avg, error):
-        ret = {}
-        nwf = avg["total"].shape[0]
-        N = np.abs(avg["overlap"].diagonal())
-        Nij = np.sqrt(np.outer(N, N))
-
-        ret["norm"] = N
-        ret["overlap"] = avg["overlap"] / Nij
-        fac = np.ones((nwf, nwf)) + np.identity(nwf)
-        for wfi in range(nwf):
-            if self.transforms[wfi].nparams == 0:
-                continue
-            ret[("dp_energy", wfi)] = fac[wfi] * np.real(
-                avg[("dpH", wfi)] - avg["total"][wfi] * avg[("dp", wfi)]
-            )
-            ret[("dp_norm", wfi)] = 2.0 * np.real(avg[("dp", wfi)][:, wfi])
-
-            norm_part = (
-                np.einsum("i,p->pi", avg["overlap"][wfi, :], ret[("dp_norm", wfi)])
-                / N[wfi]
-            )
-            ret[("dp_overlap", wfi)] = (
-                fac[wfi] * (avg[("dp", wfi)] - 0.5 * norm_part) / Nij[wfi]
-            )
-            ret[("dpipj", wfi)] = np.real(
-                avg[("dpipj", wfi)]
-                - np.einsum(
-                    "i,j->ij", avg[("dp", wfi)][:, wfi], avg[("dp", wfi)][:, wfi]
-                )
-            )
-        ret["energy"] = avg["total"]
-        return ret
-
-    def delta_p(
-        self, steps: np.ndarray, data: dict, overlap_penalty: np.ndarray, verbose=False
-    ):
-        """
-        steps: a list/numpy array of timesteps
-        data: averaged data from avg() or __call__. Note that if you use VMC to compute this with
-        an accumulator with a name, you'll need to remove that name from the keys.
-        That is, the keys should be equal to the ones returned by keys().
-
-
-        Compute the change in parameters given the data from a stochastic reconfiguration step.
-        Return the change in parameters, and data that we may want to use for diagnostics.
-        """
-        data = self._collect_terms(data, None)
-        nwf = data["energy"].shape[0]
-        dp_all = []
-        for wf in range(nwf):
-            overlap_cost = 0.0
-            for i in range(wf):
-                overlap_cost += overlap_penalty[wf, i] * data["overlap"][wf, i]
-            if verbose:
-                print("wave function", wf)
-                print("Overlap cost", overlap_cost)
-
-            if self.transforms[wf].nparams == 0:
-                dp_all.append([np.zeros((0)) for step in steps])
-                continue
-
-            Sij = np.real(data[("dpipj", wf)])
-            ovlp = 0.0
-            for i in range(wf):
-                ovlp += (
-                    2.0
-                    * data[("dp_overlap", wf)][:, i]
-                    * overlap_penalty[wf, i]
-                    * data["overlap"][wf, i]
-                )
-            pgrad = data[("dp_energy", wf)][:, wf] + ovlp
-
-            invSij = np.linalg.inv(Sij + self.eps * np.eye(Sij.shape[0]))
-            v = np.einsum("ij,j->i", invSij, pgrad)
-            dp = [-step * v for step in steps]
-            dp_all.append(dp)
-            report = {
-                "pgrad": np.linalg.norm(pgrad),
-                "SRdot": np.dot(pgrad, v) / (np.linalg.norm(v) * np.linalg.norm(pgrad)),
-            }
-            if verbose:
-                print("overlap gradient norm", np.linalg.norm(ovlp))
-                print("Gradient norm: ", np.linalg.norm(pgrad))
-                print("Dot product between gradient and SR step: ", report["SRdot"])
-        return dp_all, report
+        return [-step * v for step in steps], report

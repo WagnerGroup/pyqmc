@@ -16,7 +16,7 @@ import pickle
 import numpy as np
 import pyqmc.api as pyq
 import pyqmc.rng
-from pyqmc.method.linemin import correlated_compute_worker
+from pyqmc.method.optimize import correlated_compute_worker
 
 
 class PickleClient:
@@ -93,6 +93,6 @@ def test_correlated_sampling_replays_ecp(H2_ccecp_rhf):
     acc = pyq.gradient_generator(mol, wf, to_opt)
     x = acc.transform.serialize_parameters(wf.parameters)
     configs = pyq.initial_guess(mol, 20, rng=0)
-    data = correlated_compute_worker(wf, configs, [x, x, x], acc, [0, 1], rng=0)
+    data = correlated_compute_worker(wf, configs, [x, x, x], acc.transform, acc.enacc, [0, 1], rng=0)
     assert np.array_equal(data["total"][0], data["total"][1])
     assert np.array_equal(data["total"][0], data["total"][2])

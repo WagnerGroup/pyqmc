@@ -61,8 +61,8 @@ same equations: it forms the :math:`N_{\rm conf}\times N_{\rm conf}` Gram matrix
 sampled derivatives (the push-through/Woodbury identity). CG never forms even
 :math:`T`. So: minSR when the sample count is modest and a one-shot
 :math:`N_{\rm conf}^2` solve is cheap, CG when it is large. Both avoid
-:math:`N_{\rm param}^2`. :func:`cgsr_update` and
-:func:`pyqmc.method.minsr.minsr_update` agree to solver tolerance wherever both
+:math:`N_{\rm param}^2`. :func:`cgsr_direction` and
+:func:`pyqmc.method.minsr.minsr_direction` agree to solver tolerance wherever both
 are affordable, which is what ``tests/unit/test_cgsr_update.py`` checks.
 
 **Practicalities.** :math:`\epsilon` regularizes and conditions the system, and
@@ -91,23 +91,13 @@ space. That large eigenvalue cluster is something plain CG exploits, converging
 in about :math:`N_{\rm conf}` iterations, and Jacobi breaks it up -- 15
 iterations against 43 for 25 samples and 200 parameters. That is minSR's regime
 rather than this solver's, but if you run CG there, turn the preconditioner off.
+
+Use it through :class:`pyqmc.method.optimize.CGSRUpdate`.
 """
 
 import logging
-import os
 
-import h5py
 import numpy as np
-
-import pyqmc.gpu as gpu
-import pyqmc.method.mc
-import pyqmc.rng
-from pyqmc.method.linemin import opt_hdf
-from pyqmc.method.minsr import (
-    local_energy_error,
-    sample_minsr_data,
-    set_wf_params,
-)
 
 #: rows of the derivative matrix touched at once when accumulating diag(S)
 _DIAG_CHUNK = 4096
@@ -256,58 +246,46 @@ def preconditioned_conjugate_gradient(
     }
 
 
-def cgsr_update(
+def cgsr_direction(
     dppsi,
     eloc,
-    tstep,
     eps=1e-2,
     rtol=1e-6,
     max_cg_iterations=None,
     x0=None,
     precondition=True,
-    max_norm=None,
-    verbose=False,
+    g=None,
 ):
-    r"""Compute the SR parameter change without ever forming S.
-
-    Solves :math:`(S+\epsilon I) v = f` by conjugate gradient and returns
-    :math:`\delta p = -\tau v`, the same update
-    :func:`pyqmc.method.minsr.minsr_update` and the regularized inverse in
-    :class:`pyqmc.observables.stochastic_reconfiguration.StochasticReconfiguration`
-    produce for the same eps, to within the CG tolerance.
+    r"""The SR direction :math:`v = (S+\epsilon I)^{-1} (f + g)`, solved by
+    conjugate gradient without ever forming S. Agrees with
+    :func:`pyqmc.method.minsr.minsr_direction` and
+    :func:`pyqmc.observables.stochastic_reconfiguration.sr_direction` to within
+    the CG tolerance.
 
     :parameter dppsi: (nsamples, nparameters) derivatives of log(psi)
     :parameter eloc: (nsamples,) local energies
-    :parameter float tstep: step size along the update direction
     :parameter float eps: regularization of the SR matrix
     :parameter float rtol: relative residual at which CG stops
     :parameter int max_cg_iterations: iteration cap for CG
     :parameter x0: starting guess for the solve, normally the previous step's `v`
     :parameter boolean precondition: use the Jacobi preconditioner diag(S)+eps
-    :parameter float max_norm: if not None, rescale the update so that its 2-norm
-        is at most max_norm
-    :parameter boolean verbose: print diagnostics
-    :returns: (dp, report, v) -- the parameter change, a dictionary of
-        diagnostics, and the solution vector to warm-start the next step from
+    :parameter g: (nparameters,) gradient term to add to the energy gradient, or None
+    :returns: (v, report)
     """
     if dppsi.shape[1] == 0:  # nothing to optimize in this transform
-        zero = np.zeros(0)
-        return (
-            zero,
-            {
-                "pgrad": 0.0,
-                "SRdot": 0.0,
-                "step_norm": 0.0,
-                "clipped": False,
-                "cg_iterations": 0,
-                "cg_residual": 0.0,
-                "cg_converged": True,
-            },
-            zero,
-        )
+        return np.zeros(0), {
+            "pgrad": 0.0,
+            "SRdot": 0.0,
+            "nsamples": dppsi.shape[0],
+            "cg_iterations": 0,
+            "cg_residual": 0.0,
+            "cg_converged": True,
+        }
 
     operator = SROperator(dppsi, eps=eps)
     pgrad = sr_gradient(dppsi, eloc)
+    if g is not None:
+        pgrad = pgrad + g
     minv = 1.0 / (operator.diagonal() + eps) if precondition else None
 
     v, info = preconditioned_conjugate_gradient(
@@ -318,240 +296,19 @@ def cgsr_update(
         rtol=rtol,
         maxiter=max_cg_iterations,
     )
-    dp = -tstep * v
-
-    norm = np.linalg.norm(dp)
     vnorm = np.linalg.norm(v)
     gnorm = np.linalg.norm(pgrad)
     report = {
         "pgrad": gnorm,
         "SRdot": np.dot(pgrad, v) / (vnorm * gnorm) if vnorm * gnorm > 0 else 0.0,
-        "step_norm": norm,
+        "nsamples": dppsi.shape[0],
         "cg_iterations": info["iterations"],
         "cg_residual": info["residual"],
         "cg_converged": info["converged"],
     }
-    if max_norm is not None and norm > max_norm:
-        dp = dp * (max_norm / norm)
-        report["step_norm"] = max_norm
-    report["clipped"] = max_norm is not None and norm > max_norm
-
     if not info["converged"]:
         logging.warning(
             f"CG stopped at relative residual {info['residual']:.2e} after "
             f"{info['iterations']} iterations without reaching rtol={rtol:.1e}"
         )
-    if verbose:
-        print(
-            "CG iterations",
-            info["iterations"],
-            "relative residual",
-            f"{info['residual']:.2e}",
-        )
-        print("Number of samples", dppsi.shape[0], "number of parameters", dppsi.shape[1])
-        print("Gradient norm:", report["pgrad"])
-        print("Dot product between gradient and SR step:", report["SRdot"])
-        print("Step norm:", report["step_norm"])
-    return dp, report, v
-
-
-def cgsr_optimization(
-    wf,
-    coords,
-    transform,
-    enacc,
-    tstep=0.02,
-    eps=1e-2,
-    nodal_cutoff=1e-3,
-    rtol=1e-6,
-    max_cg_iterations=None,
-    precondition=True,
-    warm_start=True,
-    max_iterations=30,
-    warmup_options=None,
-    vmcoptions=None,
-    max_norm=None,
-    verbose=False,
-    hdf_file=None,
-    client=None,
-    npartitions=None,
-    rng=None,
-):
-    """Optimize the energy with conjugate-gradient stochastic reconfiguration.
-
-    The same optimizer as :func:`pyqmc.method.minsr.minsr_optimization` -- same
-    sampling, same equations, same fixed `tstep` with no line minimization --
-    solved iteratively instead of in closed form. Use this one when the number of
-    samples is large, since minSR's kernel is square in the sample count and its
-    solve is cubic in it, while CG's cost is the number of iterations times the
-    cost of the derivative gather.
-
-    Like :func:`pyqmc.method.minsr.minsr_optimization`, this takes the parameter
-    transform and the energy accumulator directly rather than a
-    StochasticReconfiguration object, since the S matrix that object builds is
-    exactly what is being avoided::
-
-        transform = LinearTransform(wf.parameters, to_opt)
-        enacc = EnergyAccumulator(mol)
-        wf, df = cgsr_optimization(wf, coords, transform, enacc)
-
-    `transform` may also be a list of transforms, in which case each iteration
-    runs one sub-iteration per transform, optimizing that subset of the
-    parameters while holding the rest fixed. Each sub-iteration keeps its own
-    warm start.
-
-    :parameter wf: initial wave function
-    :parameter coords: initial configurations
-    :parameter transform: a LinearTransform object defining the parameters to
-        optimize, or a list of them to optimize in alternating sub-iterations
-    :parameter enacc: an EnergyAccumulator-like object
-    :parameter float tstep: step size in parameter space
-    :parameter float eps: regularization of the SR matrix
-    :parameter float nodal_cutoff: regularization distance for the nodal
-        divergence of the derivatives
-    :parameter float rtol: relative residual at which CG stops
-    :parameter int max_cg_iterations: iteration cap for CG
-    :parameter boolean precondition: use the Jacobi preconditioner
-    :parameter boolean warm_start: start each solve from the previous step's
-        solution. Exact either way; see the module docstring for why the saving
-        is small when every step resamples.
-    :parameter int max_iterations: total number of optimization steps, including
-        any read from hdf_file
-    :parameter dict warmup_options: kwargs for the initial vmc warmup
-    :parameter dict vmcoptions: kwargs for sampling; nblocks, nsteps_per_block,
-        and tstep are passed to sample_minsr_data
-    :parameter float max_norm: if not None, the maximum 2-norm of a parameter change
-    :parameter boolean verbose: print output if True
-    :parameter str hdf_file: hdf file to store output; the format matches
-        line_minimization
-    :parameter client: an object with submit() functions that return futures
-    :parameter int npartitions: the number of workers to submit at a time
-    :parameter rng: anything accepted by :func:`pyqmc.rng.get_rng`; None uses pyqmc's module generator
-    :return: optimized wave function, optimization data
-    """
-    transforms = list(transform) if isinstance(transform, (list, tuple)) else [transform]
-    for t in transforms:
-        if hasattr(t, "transform"):
-            raise ValueError(
-                "cgsr_optimization takes a transform and an energy accumulator, not a "
-                "StochasticReconfiguration object; pass acc.transform and acc.enacc."
-            )
-    rng = pyqmc.rng.get_rng(rng)
-    if vmcoptions is None:
-        vmcoptions = {}
-    if warmup_options is None:
-        warmup_options = {"nblocks": 1, "nsteps_per_block": 100}
-    if "tstep" not in warmup_options and "tstep" in vmcoptions:
-        warmup_options["tstep"] = vmcoptions["tstep"]
-
-    iteration_offset = 0
-    sub_iteration_offset = 0
-    if hdf_file is not None and os.path.isfile(hdf_file):  # restarting -- read in data
-        with h5py.File(hdf_file, "r") as hdf:
-            if "wf" in hdf:
-                grp = hdf["wf"]
-                for k in grp:
-                    wf.parameters[k] = gpu.cp.asarray(grp[k])
-            if "iteration" in hdf:
-                # resume at the sub-iteration after the last one recorded
-                iteration_offset = np.max(hdf["iteration"][...])
-            if "sub_iteration" in hdf:
-                sub_iteration_offset = hdf["sub_iteration"][-1] + 1
-            coords.load_hdf(hdf)
-    else:  # not restarting -- VMC warm up period
-        if verbose:
-            print("starting warmup")
-        _, coords = pyqmc.method.mc.vmc(
-            wf,
-            coords,
-            accumulators={},
-            client=client,
-            npartitions=npartitions,
-            verbose=verbose,
-            rng=rng,
-            **warmup_options,
-        )
-        if verbose:
-            print("finished warmup", flush=True)
-
-    if iteration_offset >= max_iterations:
-        logging.warning(
-            f"iteration_offset {iteration_offset} >= max_iterations {max_iterations}; no steps will be run."
-        )
-
-    attr = {
-        "max_iterations": max_iterations,
-        "tstep": tstep,
-        "eps": eps,
-        "rtol": rtol,
-        "precondition": precondition,
-        "warm_start": warm_start,
-    }
-
-    # one warm start per sub-iteration, since each has its own parameter set
-    previous_v = [None] * len(transforms)
-
-    df = []
-    for it in range(iteration_offset, max_iterations):
-        for sub_it in range(sub_iteration_offset, len(transforms)):
-            if verbose:
-                print(
-                    "#############################\nStarting iteration",
-                    it,
-                    "sub iteration",
-                    sub_it,
-                )
-            sub_transform = transforms[sub_it]
-            x0 = sub_transform.serialize_parameters(wf.parameters)
-
-            data, coords = sample_minsr_data(
-                wf,
-                coords,
-                sub_transform,
-                enacc,
-                nodal_cutoff,
-                client=client,
-                npartitions=npartitions,
-                rng=rng,
-                **vmcoptions,
-            )
-            if np.isnan(data["total"]).any():
-                raise ValueError(
-                    "NaN in optimization. Try reducing the step size or increasing eps."
-                )
-
-            energy = np.mean(data["total"]).real
-            nsamples = data["total"].shape[0]
-            energy_error = local_energy_error(data["total"])
-            if verbose:
-                print("Current energy", energy, energy_error)
-
-            dp, report, v = cgsr_update(
-                data["dppsi"],
-                data["total"],
-                tstep,
-                eps=eps,
-                rtol=rtol,
-                max_cg_iterations=max_cg_iterations,
-                x0=previous_v[sub_it] if warm_start else None,
-                precondition=precondition,
-                max_norm=max_norm,
-                verbose=verbose,
-            )
-            previous_v[sub_it] = v
-
-            step_data = dict(report)
-            step_data["energy"] = energy
-            step_data["energy_error"] = energy_error
-            step_data["iteration"] = it
-            step_data["sub_iteration"] = sub_it
-            step_data["nconfig"] = coords.configs.shape[0]
-            step_data["nsamples"] = nsamples
-
-            set_wf_params(wf, x0 + dp, sub_transform)
-            opt_hdf(hdf_file, step_data, attr, coords, wf.parameters)
-            df.append(step_data)
-
-        sub_iteration_offset = 0
-
-    return wf, df
+    return v, report

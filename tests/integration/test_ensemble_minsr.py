@@ -25,6 +25,7 @@ import pyqmc.rng
 import pytest
 
 import pyqmc.api as pyq
+from pyqmc.method.ensemble_sampling import sampling_kinds
 from pyqmc.method.ensemble_optimization import (
     load_all_configs,
     make_updater,
@@ -73,12 +74,12 @@ def test_ensemble_minsr(H2_casci, tmp_path):
 
     wfs = optimize_ensemble(
         wfs, configs, transforms, hdf_file, enacc=pyq.EnergyAccumulator(mol),
-        method="minsr", tau=0.1, max_iterations=3, npartitions=1, verbose=False, **KWS
+        method="minsr", tau=0.05, max_iterations=3, npartitions=1, verbose=False, **KWS
     )
 
     with h5py.File(hdf_file, "r") as hdf:
         assert {"energy0", "energy1", "overlap0", "overlap1", "iteration"} <= set(hdf)
-        assert hdf.attrs["tau"] == 0.1
+        assert hdf.attrs["tau"] == 0.05
         assert list(hdf["wavefunction"][()]) == [0, 1] * 3
         assert list(hdf["iteration"][()]) == [0, 0, 1, 1, 2, 2]
         # energy{i} is only written on the rows belonging to state i
@@ -101,9 +102,9 @@ def test_ensemble_minsr(H2_casci, tmp_path):
     populations = [norm_configs.configs] + [
         gradient_configs[wfi][0][kind].configs
         for wfi in range(2)
-        for kind in ("energy", "overlap")
+        for kind in sampling_kinds(wfi)
     ]
-    assert len(populations) == 5
+    assert len(populations) == 4  # state 0 has no overlap sampling
     for i, a in enumerate(populations):
         for b in populations[i + 1 :]:
             assert not np.array_equal(a, b)
@@ -111,7 +112,7 @@ def test_ensemble_minsr(H2_casci, tmp_path):
     # restarting continues from the recorded iteration
     optimize_ensemble(
         wfs2, fresh, transforms2, hdf_file, enacc=pyq.EnergyAccumulator(mol),
-        method="minsr", tau=0.1, max_iterations=4, npartitions=1, verbose=False, **KWS
+        method="minsr", tau=0.05, max_iterations=4, npartitions=1, verbose=False, **KWS
     )
     with h5py.File(hdf_file, "r") as hdf:
         assert list(hdf["iteration"][()]) == [0, 0, 1, 1, 2, 2, 3, 3]
@@ -132,7 +133,7 @@ def test_ensemble_minsr_with_client(H2_casci, tmp_path):
     with ProcessPoolExecutor(max_workers=ncore) as client:
         optimize_ensemble(
             wfs, pyq.initial_guess(mol, 200), transforms, hdf_file,
-            enacc=pyq.EnergyAccumulator(mol), method="minsr", tau=0.1,
+            enacc=pyq.EnergyAccumulator(mol), method="minsr", tau=0.05,
             max_iterations=2, client=client, npartitions=ncore, verbose=False, **KWS
         )
     with h5py.File(hdf_file, "r") as hdf:
@@ -145,40 +146,29 @@ def test_ensemble_minsr_with_client(H2_casci, tmp_path):
 def test_ensemble_minsr_matches_sr(H2_casci):
     """The ensemble minSR step reproduces the ensemble SR step on real sampled
     data, including the overlap penalty."""
-    from pyqmc.method.ensemble_optimization import StochasticReconfigurationWfbyWf
+    from pyqmc.method.ensemble_updaters import EnsembleUpdater
+    from pyqmc.method.optimize import SRUpdate
+    from pyqmc.observables.stochastic_reconfiguration import sr_averages
 
     mol, mf, mc = H2_casci
     pyqmc.rng.seed(0)
     wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
     configs = pyq.initial_guess(mol, 300)
     wfi = 1  # the excited state, which carries the overlap penalty
-    up = make_updater(transforms[wfi], pyq.EnergyAccumulator(mol), method="minsr")
-    eps, tau = 1e-2, 0.1
-    penalty = np.ones((2, 2)) * 0.5
+    up = make_updater(transforms[wfi], pyq.EnergyAccumulator(mol), method="minsr", eps=1e-2)
+    penalty = np.ones((2, 2))
 
     # one energy sample and one overlap sample, shared by both updates
     sample1, configs = up.sample_energy(wfs[wfi], configs, nsteps_per_block=3)
-    weighted, unweighted, _ = up.sample_overlap(
-        wfs, configs, nblocks=2, nsteps_per_block=3
-    )
-
-    up.eps = eps
+    weighted, unweighted, _ = up.sample_overlap(wfs, configs, nblocks=2, nsteps_per_block=3)
     avg, _ = up.block_average(sample1, weighted, unweighted["overlap"])
-    dp_minsr = up.delta_p([tau], avg, penalty)[0][0]
+    dp_minsr = up.delta_p([0.05], avg, penalty)[0][0]
 
     # the same data, averaged the way the SR accumulator would have
-    dppsi, eloc = sample1["dppsi"], sample1["total"]
-    sr = StochasticReconfigurationWfbyWf(up.enacc, up.transform, eps=eps)
-    sr_sample1 = {
-        "total": np.array([np.mean(eloc)] * 2),
-        "dppsi": np.array([np.mean(dppsi, axis=0)] * 2),
-        "dpH": np.array([np.mean(eloc[:, np.newaxis] * dppsi, axis=0)] * 2),
-        "dpidpj": np.array(
-            [np.einsum("ij,ik->jk", dppsi, dppsi) / dppsi.shape[0]] * 2
-        ),
-    }
-    sr_avg, _ = sr.block_average(sr_sample1, weighted, unweighted["overlap"])
-    dp_sr = sr.delta_p([tau], sr_avg, penalty)[0][0]
+    sr = EnsembleUpdater(SRUpdate(up.enacc, up.transform, eps=1e-2))
+    sr_data = {**sr_averages({"total": sample1["total"]}, sample1["dppsi"]), "energy": 0.0, "energy_error": 0.0}
+    sr_avg, _ = sr.block_average(sr_data, weighted, unweighted["overlap"])
+    dp_sr = sr.delta_p([0.05], sr_avg, penalty)[0][0]
 
     assert np.allclose(dp_sr, dp_minsr, atol=1e-8), np.abs(dp_sr - dp_minsr).max()
 
@@ -186,18 +176,12 @@ def test_ensemble_minsr_matches_sr(H2_casci):
 @pytest.mark.slow
 def test_overlap_derivatives_match_accumulator(H2_casci):
     """The snapshot estimator of the overlap gradient computes exactly the
-    quantity the every-step accumulator averages.
-
-    minSR evaluates the weighted derivatives once per block instead of at every
-    Metropolis step, which is the same unbiased average of the same
-    per-configuration quantity -- just far fewer pgradient calls. On a fixed set
-    of configurations the two must agree to machine precision.
-    """
-    from pyqmc.method.ensemble_minsr import (
-        MinSRWfbyWf,
+    quantity the every-step accumulator averages, so on a fixed set of
+    configurations the two agree to machine precision."""
+    from pyqmc.method.ensemble_updaters import (
+        _OverlapDerivativeAccumulator,
         overlap_derivatives_worker,
     )
-    from pyqmc.method.ensemble_optimization import StochasticReconfigurationWfbyWf
     from pyqmc.method.sample_many import compute_weights
 
     mol, mf, mc = H2_casci
@@ -205,31 +189,25 @@ def test_overlap_derivatives_match_accumulator(H2_casci):
     wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
     configs = pyq.initial_guess(mol, 50)
 
-    enacc = pyq.EnergyAccumulator(mol)
-    up = MinSRWfbyWf(enacc, transforms[-1])
-    sr = StochasticReconfigurationWfbyWf(enacc, transforms[-1])
-
     for wf in wfs:
         wf.recompute(configs)
-    accumulated = sr.avg(configs, wfs, compute_weights(wfs))["wtdp"]
+    accumulated = _OverlapDerivativeAccumulator(transforms[-1]).avg(configs, wfs, compute_weights(wfs))["wtdp"]
 
-    total, nconfig = overlap_derivatives_worker(wfs, configs, up.transform)
+    total, nconfig = overlap_derivatives_worker(wfs, configs, transforms[-1])
     assert nconfig == configs.configs.shape[0]
     assert np.allclose(total / nconfig, accumulated, atol=1e-12)
 
 
 @pytest.mark.slow
 def test_sample_overlap_shapes(H2_casci):
-    """MinSRWfbyWf.sample_overlap returns what block_average expects: one wtdp
-    per block, and the overlap matrix still accumulated at every step."""
-    from pyqmc.method.ensemble_minsr import MinSRWfbyWf
-
+    """With a per-sample updater, sample_overlap returns one wtdp per block,
+    with the overlap matrix still accumulated at every step."""
     mol, mf, mc = H2_casci
     pyqmc.rng.seed(0)
     wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
     configs = pyq.initial_guess(mol, 50)
 
-    up = MinSRWfbyWf(pyq.EnergyAccumulator(mol), transforms[-1])
+    up = make_updater(transforms[-1], pyq.EnergyAccumulator(mol), method="minsr")
     nblocks = 3
     weighted, unweighted, configs = up.sample_overlap(
         wfs, configs, nblocks=nblocks, nsteps_per_block=2

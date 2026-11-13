@@ -182,7 +182,7 @@ def test_gcoeff_is_symmetric(h2o):
 
 def test_value_result_is_owned_by_the_caller(h2o):
     """value() must not hand out the live cache: callers hold the array across
-    updateinternals and compare against it, and gpu.asnumpy is a no-op on CPU."""
+    updateinternals and compare against it."""
     _, new, configs, rng = make_pair(h2o)
     before = new.value()[1].copy()
     held = new.value()[1]

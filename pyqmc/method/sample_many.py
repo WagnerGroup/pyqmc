@@ -16,7 +16,6 @@ import numpy as np
 import pyqmc.method.mc as mc
 import scipy.stats
 #import pyqmc.method.linemin as linemin
-#import pyqmc.gpu as gpu
 import os
 import h5py
 import pyqmc.method.hdftools as hdftools

@@ -5,8 +5,8 @@ import pyqmc.observables.accumulators
 
 def test_transform_consistent_with_wf(H2_casci):
     """Test that evaluate_gradient_threaded works when given states with different numbers of determinants"""
-    from pyqmc.method.ensemble_optimization import StochasticReconfigurationWfbyWf
-    from pyqmc.method.ensemble_optimization import evaluate_gradients_threaded
+    from pyqmc.method.ensemble_updaters import make_updater
+    from pyqmc.method.ensemble_sampling import evaluate_gradients_threaded
     mol, mf, mc = H2_casci
     mcs = [copy.copy(mc) for i in range(2)]
     for i in range(2):
@@ -21,11 +21,12 @@ def test_transform_consistent_with_wf(H2_casci):
         wfs.append(wf)
         sr_accumulator.append(
             [
-                StochasticReconfigurationWfbyWf(
-                    energy,
+                make_updater(
                     pyqmc.observables.accumulators.LinearTransform(
                         wf.parameters, to_opt
                     ),
+                    energy,
+                    "sr",
                 )
             ]
         )

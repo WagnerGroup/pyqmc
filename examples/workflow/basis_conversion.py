@@ -87,12 +87,12 @@ def run_optimization(mol, mf, mc):
     }
     wf, to_opt = pyq.generate_wf(mol, mf, mc=mc, slater_kws=slater_kws, jax=True)
     configs = pyq.initial_guess(mol, nconfig=1000)
-    acc = pyq.gradient_generator(mol, wf, to_opt, use_old_ecp=False)
+    updater = pyq.SRUpdate(pyq.EnergyAccumulator(mol, ecp_sampling="fixed"), pyq.LinearTransform(wf.parameters, to_opt))
 
-    pyq.line_minimization(
-        wf, 
-        configs, 
-        acc, 
+    pyq.optimize(
+        wf,
+        configs,
+        updater,
         hdf_file="h2o_sj.hdf5",
         max_iterations=10
     )

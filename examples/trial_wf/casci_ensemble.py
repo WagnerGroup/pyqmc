@@ -26,11 +26,8 @@ what you want when there are more parameters than samples.
 from pyscf import gto, scf, mcscf
 import h5py
 import pyqmc.api as pyq
-import pyqmc.observables.accumulators
-from pyqmc.method.ensemble_optimization import optimize_ensemble
 from rich import print
 import os
-import copy
 from concurrent.futures import ProcessPoolExecutor
 
 
@@ -72,46 +69,24 @@ def run_ensemble(
     client=None,
     npartitions=None,
     nstates=3,
-    tau=0.1,
+    tau=0.05,
     nconfig=800,
     method="sr",
 ):
-    """ """
-    mol, mf, mc = pyq.recover_pyscf(scf_checkfile, ci_checkfile, cancel_outputs=False)
-
-    mcs = [copy.copy(mc) for i in range(nstates)]
-    for i in range(nstates):
-        mcs[i].ci = mc.ci[i]
-
-    wfs = []
-    transforms = []
-
-    for i in range(nstates):
-        wf, to_opt = pyq.generate_wf(
-            mol, mf, mc=mcs[i], slater_kws=dict(optimize_determinants=True)
-        )
-        with h5py.File(jastrow_checkfile, "r") as f:
-            for k in wf.parameters.keys():
-                if "wf2" in k:
-                    wf.parameters[k] = f["wf"][k][()]
-        wfs.append(wf)
-        transforms.append(
-            pyqmc.observables.accumulators.LinearTransform(wf.parameters, to_opt)
-        )
-
-    configs = pyq.initial_guess(mol, nconfig)
-
+    """State i starts from CASCI root i with the ground-state Jastrow. Read a
+    state back with pyq.VMC(..., load_parameters=hdf_file, target_root=i)."""
     # minSR solves in sample space, and the kernel it solves is square in the
     # number of samples, nconfig * nblocks, so take a single block there. SR
     # averages over blocks instead, and its cost does not depend on the count.
     vmc_kwargs = {"nblocks": 1} if method == "minsr" else None
 
-    return optimize_ensemble(
-        wfs,
-        configs,
-        transforms,
-        hdf_file=hdf_file,
-        enacc=pyq.EnergyAccumulator(mol),
+    return pyq.ENSEMBLE_OPTIMIZE(
+        scf_checkfile,
+        hdf_file,
+        ci_checkfile,
+        nstates=nstates,
+        nconfig=nconfig,
+        load_parameters=jastrow_checkfile,
         method=method,
         vmc_kwargs=vmc_kwargs,
         max_iterations=max_iterations,

@@ -14,7 +14,7 @@ Variational Monte Carlo
 Wave function optimization
 --------------------------
 
-.. automodule:: pyqmc.linemin
+.. automodule:: pyqmc.method.optimize
    :members:
 
 ----------------------

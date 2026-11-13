@@ -17,7 +17,6 @@
 import numpy as np
 import pyqmc.method.mc as mc
 import pyqmc.observables.obdm as obdm
-import pyqmc.gpu as gpu
 from pyqmc.rng import get_rng
 import pyqmc.wf.orbitals
 import pyqmc.pbc.supercell as supercell
@@ -219,11 +218,11 @@ class TBDMAccumulator:
         )
         for sweep in range(self._nsweeps):
             fsum = [
-                gpu.cp.sum(gpu.cp.abs(aux["orbs"][spin][sweep]) ** 2, axis=1)
+                np.sum(np.abs(aux["orbs"][spin][sweep]) ** 2, axis=1)
                 for spin in [0, 1]
             ]
             norm = [
-                gpu.cp.abs(aux["orbs"][spin][sweep]) ** 2 / fsum[spin][:, np.newaxis]
+                np.abs(aux["orbs"][spin][sweep]) ** 2 / fsum[spin][:, np.newaxis]
                 for spin in [0, 1]
             ]
 
@@ -254,7 +253,7 @@ class TBDMAccumulator:
             phi_l_r2p = aux["orbs"][1][sweep][..., self._ijkl[3]]
             rho1rho2 = 1.0 / (fsum[0] * fsum[1])
             # n is the walker number, i is the electron pair index, o is the orbital
-            orbratio = gpu.cp.einsum(
+            orbratio = np.einsum(
                 "nio,nio,no,no,n ->nio",
                 orb_configs[0][:, electrons_a_ind, :],  # phi_i(r1)
                 orb_configs[1][:, electrons_b_ind, :],  # phi_k(r2)
@@ -263,11 +262,9 @@ class TBDMAccumulator:
                 rho1rho2,
             )
 
-            results["value"] += gpu.asnumpy(
-                gpu.cp.einsum("in,inj->ij", wfratio, orbratio)
-            )
-            results["norm_a"] += gpu.asnumpy(norm[0])
-            results["norm_b"] += gpu.asnumpy(norm[1])
+            results["value"] += np.einsum("in,inj->ij", wfratio, orbratio)
+            results["norm_a"] += norm[0]
+            results["norm_b"] += norm[1]
 
         results["value"] /= self._nsweeps
         for e in ["a", "b"]:

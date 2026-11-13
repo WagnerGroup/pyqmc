@@ -2,8 +2,8 @@
 
 `recommend_optimizer` estimates -- and, when cheap enough, directly benchmarks
 -- the peak memory and solve time of the three mathematically equivalent
-stochastic-reconfiguration solvers: StochasticReconfigurationWfbyWf (SR),
-MinSRWfbyWf (minSR), and CGSRWfbyWf (CG-SR). They solve the same linear system
+stochastic-reconfiguration solvers: SRUpdate (SR), MinSRUpdate (minSR), and
+CGSRUpdate (CG-SR). The ensemble updaters use the same solves. They solve the same linear system
 and produce the same optimization step; they differ only in cost, so the choice
 is made on memory and time at your (nparam, nconfig).
 """
@@ -14,51 +14,37 @@ import tracemalloc
 import numpy as np
 import pandas as pd
 
-from pyqmc.method.ensemble_cgsr import CGSRWfbyWf
-from pyqmc.method.ensemble_minsr import MinSRWfbyWf
-from pyqmc.method.ensemble_optimization import StochasticReconfigurationWfbyWf
+from pyqmc.method.optimize import CGSRUpdate, MinSRUpdate, SRUpdate
+from pyqmc.observables.stochastic_reconfiguration import sr_averages
 
 from ._util import get_true_size
 
 _UPDATERS = {
-    "sr": StochasticReconfigurationWfbyWf,   # builds the (nparam, nparam) S matrix
-    "minsr": MinSRWfbyWf,                     # inverts the (nconfig, nconfig) kernel
-    "cgsr": CGSRWfbyWf,                       # matrix-free conjugate gradient
+    "sr": SRUpdate,          # builds the (nparam, nparam) S matrix
+    "minsr": MinSRUpdate,    # inverts the (nconfig, nconfig) kernel
+    "cgsr": CGSRUpdate,      # matrix-free conjugate gradient
 }
 
 _BYTES_PER = 8  # float64
 
 
-def _fake_block_average(method, nconfig, nparam, seed=0):
-    """A stand-in for one state's block_average() output, holding only the keys
-    that `method`'s delta_p actually reads -- and, crucially, only the large
-    array that method keeps resident (the nparam^2 S-matrix for sr, the
-    nconfig x nparam per-sample derivatives for minsr/cgsr).
+def _fake_sample_data(method, nconfig, nparam, seed=0):
+    """A stand-in for one sampling's output, holding only what `method`'s solve
+    reads -- and, crucially, only the large array that method keeps resident
+    (the nparam^2 S-matrix for sr, the nconfig x nparam per-sample derivatives
+    for minsr/cgsr).
 
-    Single state (nwf=1), so there is no overlap penalty and the overlap pieces
-    are trivial. The parameters are real (LinearTransform serializes complex wf
-    parameters into real components), so the fake derivatives are real too,
-    which keeps the SR covariance S = <O_i O_j> - <O_i><O_j> real symmetric PSD
-    and the regularized inverse well posed.
+    The parameters are real (LinearTransform serializes complex wf parameters
+    into real components), so the fake derivatives are real too, which keeps S
+    real symmetric PSD and the regularized inverse well posed.
     """
     rng = np.random.default_rng(seed)
     O = rng.standard_normal((nconfig, nparam))          # log-derivatives O_si
     eloc = -67.0 + 0.3 * rng.standard_normal(nconfig)   # local energies
-    common = {
-        "overlap": np.array([[1.0]]),
-        "wtdp": np.zeros((nparam, 1, 1)),
-        "total": float(eloc.mean()),
-    }
     if method == "sr":
         # sr keeps the averaged matrices; the per-sample O is discarded upstream
-        common.update(
-            dppsi=O.mean(axis=0),
-            dpH=(O * eloc[:, None]).mean(axis=0),
-            dpidpj=(O.T @ O) / nconfig,                 # (nparam, nparam)
-        )
-    else:  # minsr, cgsr keep the per-sample derivatives instead
-        common.update(dppsi_samples=O, eloc_samples=eloc)
-    return common
+        return sr_averages({"total": eloc}, O)
+    return {"dppsi": O, "total": eloc}  # minsr, cgsr keep the per-sample derivatives
 
 
 def _estimate_elements(method, nparam, nconfig):
@@ -87,23 +73,21 @@ def _estimate_mb(method, nparam, nconfig):
 
 
 def _benchmark(cls, method, nparam, nconfig, ntime):
-    """Actually build fake data and run delta_p, measuring memory and time."""
-    steps = [0.02]
-    penalty = np.zeros((1, 1))
-    data = _fake_block_average(method, nconfig, nparam)
+    """Actually build fake data and run the solve, measuring memory and time."""
+    data = _fake_sample_data(method, nconfig, nparam)
     held_mb = get_true_size(data) / 1024**2
-    updater = cls(None, None)                  # delta_p ignores enacc/transform
+    updater = cls(None, None)                  # solve ignores enacc/transform
     # each real optimization step resamples, so warm-starting cgsr from the
     # previous solution is not representative -- measure the cold solve.
     if hasattr(updater, "warm_start"):
         updater.warm_start = False
-    updater.delta_p(steps, data, penalty)      # warmup (first-touch / BLAS init)
+    updater.solve(data)                        # warmup (first-touch / BLAS init)
 
     gc.collect()
     tracemalloc.start()
     base = tracemalloc.get_traced_memory()[0]
     tracemalloc.reset_peak()
-    _, report = updater.delta_p(steps, data, penalty)
+    _, report = updater.solve(data)
     peak = tracemalloc.get_traced_memory()[1]
     tracemalloc.stop()
     solve_mb = max(peak - base, 0) / 1024**2
@@ -111,7 +95,7 @@ def _benchmark(cls, method, nparam, nconfig, ntime):
     best = np.inf
     for _ in range(ntime):
         t0 = time.perf_counter()
-        updater.delta_p(steps, data, penalty)
+        updater.solve(data)
         best = min(best, time.perf_counter() - t0)
     return held_mb, solve_mb, best * 1e3, report.get("cg_iterations", np.nan)
 
@@ -129,7 +113,7 @@ def recommend_optimizer(to_opt, nconfig, max_memory=1.0, ntime=3):
     2 nconfig^2 for minsr, nconfig*nparam for cgsr). If that estimate *exceeds*
     ``max_memory`` (in GB) the method's benchmark is skipped -- it would
     allocate more than the budget -- and only the estimate is reported.
-    Otherwise it is safe to allocate, so a real ``delta_p`` benchmark runs on
+    Otherwise it is safe to allocate, so a real benchmark of the solve runs on
     synthetic data of the right shape and measures:
 
       * ``held_MB``    -- resident input footprint (get_true_size).

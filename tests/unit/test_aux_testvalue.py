@@ -23,7 +23,6 @@ from pyqmc.api import (
     generate_jastrow,
     initial_guess,
 )
-from pyqmc.gpu import cp, asnumpy
 import pyqmc.wf.testwf as testwf
 import pytest
 from pyqmc.wf.slater import Slater
@@ -54,7 +53,7 @@ def test_testvalue_aux(LiH_ccecp_rhf, epsilon=1e-5, nconf=10):
     ]:
         for k in wf.parameters:
             if k != "mo_coeff":
-                wf.parameters[k] = cp.asarray(np.random.rand(*wf.parameters[k].shape))
+                wf.parameters[k] = np.asarray(np.random.rand(*wf.parameters[k].shape))
 
         naux = 6
         nelec = sum(mol.nelec)

@@ -4,7 +4,7 @@ import pyscf
 import pyqmc.api as pyq
 import pyscf.pbc
 import numpy as np
-import pyqmc.observables.eval_ecp
+import pyqmc.observables.ecp
 np.random.seed(1234)
 
 class SiSuite:
@@ -31,9 +31,10 @@ class SiSuite:
         self.configs = pyq.initial_guess(self.cell, 500)
         self.jastrow, self.jastrow_to_opt =  pyq.generate_jastrow(self.cell)
         self.jastrow.recompute(self.configs)
+        self.ecp = pyqmc.observables.ecp.ThresholdECP(self.cell, threshold=10)
 
     def time_ecp_jastrow(self):
-        pyqmc.observables.eval_ecp.ecp(self.cell,self.configs,self.jastrow, 10)
+        self.ecp(self.configs, self.jastrow)
         
     def time_jastrow_recompute(self):
         self.jastrow.recompute(self.configs)

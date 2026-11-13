@@ -25,7 +25,8 @@ import pyqmc.rng
 import pytest
 
 import pyqmc.api as pyq
-from pyqmc.method.ensemble_cgsr import CGSRWfbyWf
+from pyqmc.method.ensemble_updaters import EnsembleUpdater
+from pyqmc.method.optimize import CGSRUpdate
 from pyqmc.method.ensemble_optimization import optimize_ensemble
 from pyqmc.observables.accumulators import LinearTransform
 
@@ -64,7 +65,7 @@ def test_ensemble_cgsr(H2_casci, tmp_path):
     wfs, transforms = make_ensemble(mol, mf, mc, nstates=2)
     optimize_ensemble(
         wfs, pyq.initial_guess(mol, 200), transforms, hdf_file,
-        enacc=pyq.EnergyAccumulator(mol), method="cgsr", tau=0.1,
+        enacc=pyq.EnergyAccumulator(mol), method="cgsr", tau=0.05,
         max_iterations=3, npartitions=1, verbose=False, **KWS
     )
 
@@ -91,13 +92,13 @@ def test_ensemble_cgsr_matches_minsr(H2_casci, tmp_path):
         updaters = transforms
         if method == "cgsr":  # tighten CG so the comparison is not solver-limited
             updaters = [
-                [CGSRWfbyWf(pyq.EnergyAccumulator(mol), t, eps=1e-2, rtol=1e-11)]
+                [EnsembleUpdater(CGSRUpdate(pyq.EnergyAccumulator(mol), t, eps=1e-2, rtol=1e-11))]
                 for t in transforms
             ]
         hdf_file = str(tmp_path / f"ensemble_{method}.hdf5")
         optimize_ensemble(
             wfs, pyq.initial_guess(mol, 200), updaters, hdf_file,
-            enacc=pyq.EnergyAccumulator(mol), method=method, tau=0.1,
+            enacc=pyq.EnergyAccumulator(mol), method=method, tau=0.05,
             max_iterations=3, npartitions=1, verbose=False, **KWS
         )
         with h5py.File(hdf_file, "r") as hdf:
@@ -120,7 +121,7 @@ def test_ensemble_cgsr_with_client(H2_casci, tmp_path):
     with ProcessPoolExecutor(max_workers=2) as client:
         optimize_ensemble(
             wfs, pyq.initial_guess(mol, 200), transforms, hdf_file,
-            enacc=pyq.EnergyAccumulator(mol), method="cgsr", tau=0.1,
+            enacc=pyq.EnergyAccumulator(mol), method="cgsr", tau=0.05,
             max_iterations=2, client=client, npartitions=2, verbose=False, **KWS
         )
     with h5py.File(hdf_file, "r") as hdf:
@@ -139,13 +140,13 @@ def test_verbose_reports_solve_cost_and_error_bars(H2_casci, tmp_path, capsys):
     optimize_ensemble(
         wfs, pyq.initial_guess(mol, 200), transforms,
         str(tmp_path / "verbose.hdf5"), enacc=pyq.EnergyAccumulator(mol),
-        method="cgsr", tau=0.1, max_iterations=2, npartitions=1, verbose=True,
+        method="cgsr", tau=0.05, max_iterations=2, npartitions=1, verbose=True,
         **KWS
     )
     out = capsys.readouterr().out
     assert "=== Iteration 0 ===" in out
     assert "delta_p = " in out
-    assert "sampling: 4 jobs" in out
+    assert "sampling: 3 jobs" in out  # two energy, one overlap (state 1)
     # the per-block progress characters interleave unreadably across threads
     assert "----" not in out
 
@@ -165,7 +166,7 @@ def test_error_bars_from_a_single_block(H2_casci, tmp_path):
     hdf_file = str(tmp_path / "oneblock.hdf5")
     optimize_ensemble(
         wfs, pyq.initial_guess(mol, 300), transforms, hdf_file,
-        enacc=pyq.EnergyAccumulator(mol), method="cgsr", tau=0.1,
+        enacc=pyq.EnergyAccumulator(mol), method="cgsr", tau=0.05,
         max_iterations=2, npartitions=1, verbose=False,
         vmc_kwargs={"nblocks": 1, "nsteps_per_block": 3},
         overlap_kwargs={"nblocks": 1, "nsteps_per_block": 3},

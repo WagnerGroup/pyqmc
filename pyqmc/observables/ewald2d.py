@@ -13,10 +13,10 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
+from scipy.special import erf, erfc
 import pyqmc
 from pyqmc.configurations.coord import PeriodicConfigs
 import pyqmc.observables.energy
-import pyqmc.gpu as gpu
 from pyscf.pbc.gto.cell import Cell
 from typing import Tuple
 import pyqmc.observables.ewald as ewald
@@ -40,10 +40,10 @@ class Ewald:
         """
         self.latvec = cell.lattice_vectors()
         self.atom_coords = cell.atom_coords()[np.newaxis]
-        self.atom_charges = gpu.cp.asarray(cell.atom_charges())
+        self.atom_charges = np.asarray(cell.atom_charges())
         self.dist = pyqmc.configurations.distance.MinimalImageDistance(self.latvec)
-        self.cell_area = gpu.cp.linalg.det(self.latvec[:2, :2])
-        self.recvec = gpu.cp.linalg.inv(self.latvec).T
+        self.cell_area = np.linalg.det(self.latvec[:2, :2])
+        self.recvec = np.linalg.inv(self.latvec).T
         self.set_alpha(alpha_scaling)
         self.set_lattice_displacements(nlatvec)
         self.set_gpoints(gmax)
@@ -53,8 +53,8 @@ class Ewald:
         """
         Define the partitioning of the real and reciprocal-space parts.
         """
-        smallest_height = gpu.cp.amin(
-            1 / gpu.cp.linalg.norm(self.recvec[:2, :2], axis=1)
+        smallest_height = np.amin(
+            1 / np.linalg.norm(self.recvec[:2, :2], axis=1)
         )
         self.alpha = alpha_scaling / smallest_height
 
@@ -64,25 +64,25 @@ class Ewald:
 
         :parameter int nlatvec: sum goes from `-nlatvec` to `nlatvec` in each lattice direction.
         """
-        space = [gpu.cp.arange(-nlatvec, nlatvec + 1)] * 2
-        XYZ = gpu.cp.meshgrid(*space, indexing="ij")
-        xyz = gpu.cp.stack(XYZ, axis=-1).reshape((-1, 2))
-        z_zeros = gpu.cp.zeros((xyz.shape[0], 1))
-        xyz = gpu.cp.concatenate([xyz, z_zeros], axis=1)
-        self.lattice_displacements = gpu.cp.asarray(gpu.cp.dot(xyz, self.latvec))
+        space = [np.arange(-nlatvec, nlatvec + 1)] * 2
+        XYZ = np.meshgrid(*space, indexing="ij")
+        xyz = np.stack(XYZ, axis=-1).reshape((-1, 2))
+        z_zeros = np.zeros((xyz.shape[0], 1))
+        xyz = np.concatenate([xyz, z_zeros], axis=1)
+        self.lattice_displacements = np.asarray(np.dot(xyz, self.latvec))
 
-    def generate_positive_gpoints(self, gmax: int) -> gpu.cp.ndarray:
+    def generate_positive_gpoints(self, gmax: int) -> np.ndarray:
         """
         Generate a list of points in the reciprocal space to add together for reciprocal-space sum.
 
         :parameter gmax: max number of reciprocal lattice vectors to check away from 0
         :return: reciprocal-space points (nk, 3)
         """
-        gXpos = gpu.cp.mgrid[1 : gmax + 1, -gmax : gmax + 1, 0:1].reshape(3, -1)
-        gX0Ypos = gpu.cp.mgrid[0:1, 1 : gmax + 1, 0:1].reshape(3, -1)
-        gpts = gpu.cp.concatenate([gXpos, gX0Ypos], axis=1)
-        gpoints = gpu.cp.einsum(
-            "ji,jk->ik", gpts, gpu.cp.asarray(self.recvec) * 2 * gpu.cp.pi
+        gXpos = np.mgrid[1 : gmax + 1, -gmax : gmax + 1, 0:1].reshape(3, -1)
+        gX0Ypos = np.mgrid[0:1, 1 : gmax + 1, 0:1].reshape(3, -1)
+        gpts = np.concatenate([gXpos, gX0Ypos], axis=1)
+        gpoints = np.einsum(
+            "ji,jk->ik", gpts, np.asarray(self.recvec) * 2 * np.pi
         )
         return gpoints
 
@@ -94,14 +94,14 @@ class Ewald:
         :parameter tol: tolerance for the cutoff weight
         """
         candidate_gpoints = self.generate_positive_gpoints(gmax)
-        gnorm = gpu.cp.linalg.norm(candidate_gpoints, axis=-1)
-        gweight = gpu.cp.pi * gpu.erfc(gnorm / (2 * self.alpha)) * 2
+        gnorm = np.linalg.norm(candidate_gpoints, axis=-1)
+        gweight = np.pi * erfc(gnorm / (2 * self.alpha)) * 2
         gweight /= self.cell_area * gnorm
         mask_bigweight = gweight > tol
         self.gpoints = candidate_gpoints[mask_bigweight]
         self.gweight = gweight[mask_bigweight]
         self.gnorm = gnorm[mask_bigweight]
-        self.sum_gweight = gpu.cp.sum(self.gweight)
+        self.sum_gweight = np.sum(self.gweight)
 
     def set_ewald_ion_ion(self):
         r"""
@@ -130,27 +130,27 @@ class Ewald:
         ion_ion_cij = ewald.real_cij(
             ion_ion_dist, self.lattice_displacements, self.alpha
         )  # (nconf, npairs=choose(natoms, 2))
-        pair_charges = self.atom_charges[gpu.cp.asarray(ion_ion_idxs)]
-        ion_ion_charge_ij = gpu.cp.prod(pair_charges, axis=1)  # (npairs,)
-        ion_ion_real_cross = gpu.cp.einsum(
+        pair_charges = self.atom_charges[np.asarray(ion_ion_idxs)]
+        ion_ion_charge_ij = np.prod(pair_charges, axis=1)  # (npairs,)
+        ion_ion_real_cross = np.einsum(
             "j,ij->i", ion_ion_charge_ij, ion_ion_cij
         )  # (nconf,)
 
         # reciprocal term
-        g_dot_r = gpu.cp.einsum(
+        g_dot_r = np.einsum(
             "kd,ijd->ijk", self.gpoints, ion_ion_dist
         )  # (1, npairs, nk)
         gweight = self.ewald_recip_weight(ion_ion_dist)  # (1, npairs, nk)
         ion_ion_recip = (
             2
-            * gpu.cp.einsum(
-                "j,ijk,ijk->", ion_ion_charge_ij, gpu.cp.exp(1j * g_dot_r), gweight
+            * np.einsum(
+                "j,ijk,ijk->", ion_ion_charge_ij, np.exp(1j * g_dot_r), gweight
             ).real
         )
 
         # charge term
         weight = self.ewald_recip_weight_charge(ion_ion_dist)
-        ion_ion_charge = 2 * gpu.cp.einsum("j,ij->", ion_ion_charge_ij, weight)
+        ion_ion_charge = 2 * np.einsum("j,ij->", ion_ion_charge_ij, weight)
 
         self.ewald_ion_ion = (
             ion_ion_real_cross
@@ -185,20 +185,20 @@ class Ewald:
         ei_cij = ewald.real_cij(
             ei_dist, self.lattice_displacements, self.alpha
         )  # (nconf, nelec, natoms)
-        ei_real = gpu.cp.einsum("k,ijk->i", -self.atom_charges, ei_cij)  # (nconf,)
+        ei_real = np.einsum("k,ijk->i", -self.atom_charges, ei_cij)  # (nconf,)
 
         # reciprocal term
-        g_dot_r = gpu.cp.einsum(
+        g_dot_r = np.einsum(
             "kd,cijd->cijk", self.gpoints, ei_dist
         )  # (nconf, natoms, nelec, nk)
         gweight = self.ewald_recip_weight(ei_dist)  # (nconf, natoms, nelec, nk)
-        ei_recip = -2 * gpu.cp.einsum(
-            "i,cijk,cijk->c", self.atom_charges, gpu.cp.cos(g_dot_r), gweight
+        ei_recip = -2 * np.einsum(
+            "i,cijk,cijk->c", self.atom_charges, np.cos(g_dot_r), gweight
         )
 
         # charge term
         weight = self.ewald_recip_weight_charge(ei_dist)
-        ei_charge = -2 * gpu.cp.einsum("i,cij->c", self.atom_charges, weight)
+        ei_charge = -2 * np.einsum("i,cij->c", self.atom_charges, weight)
 
         return ei_real + ei_recip + ei_charge
 
@@ -229,20 +229,20 @@ class Ewald:
             configs.configs
         )  # (nconf, npairs, ndim)
         ee_cij = ewald.real_cij(ee_dist, self.lattice_displacements, self.alpha)
-        ee_real = gpu.cp.sum(ee_cij, axis=-1)
+        ee_real = np.sum(ee_cij, axis=-1)
 
         # reciprocal term
-        g_dot_r = gpu.cp.einsum(
+        g_dot_r = np.einsum(
             "kd,cid->cik", self.gpoints, ee_dist
         )  # (nconf, npairs, nk)
         gweight = self.ewald_recip_weight(ee_dist)  # (nconf, npairs, nk)
         ee_recip = (
-            2 * gpu.cp.einsum("cik,cik->c", gpu.cp.exp(1j * g_dot_r), gweight).real
+            2 * np.einsum("cik,cik->c", np.exp(1j * g_dot_r), gweight).real
         )
 
         # charge term
         weight = self.ewald_recip_weight_charge(ee_dist)
-        ee_charge = 2 * gpu.cp.sum(weight, axis=1)
+        ee_charge = 2 * np.sum(weight, axis=1)
 
         return ee_real + ee_recip + ee_charge + self.ewald_self(nelec)
 
@@ -255,13 +255,13 @@ class Ewald:
         :parameter sum_charge_squared: sum of squared atom charges or nelec
         :return: self contribution
         """
-        sqrt_pi = gpu.cp.sqrt(gpu.cp.pi)
+        sqrt_pi = np.sqrt(np.pi)
         real_self = -self.alpha / sqrt_pi
         recip_self = self.sum_gweight
         charge_self = -sqrt_pi / (self.cell_area * self.alpha)
         return (real_self + recip_self + charge_self) * sum_charge_squared
 
-    def ewald_recip_weight(self, dist: gpu.cp.ndarray) -> gpu.cp.ndarray:
+    def ewald_recip_weight(self, dist: np.ndarray) -> np.ndarray:
         r"""
         Compute the weight for the reciprocal-space sum
 
@@ -278,12 +278,12 @@ class Ewald:
         z = dist[..., 2][..., np.newaxis]
         gnorm = self.gnorm
         alpha = self.alpha
-        w1 = gpu.cp.exp(gnorm * z) * gpu.erfc(gnorm / (2 * alpha) + alpha * z)
-        w2 = gpu.cp.exp(-gnorm * z) * gpu.erfc(gnorm / (2 * alpha) - alpha * z)
-        gweight = gpu.cp.pi / (self.cell_area * gnorm) * (w1 + w2)
+        w1 = np.exp(gnorm * z) * erfc(gnorm / (2 * alpha) + alpha * z)
+        w2 = np.exp(-gnorm * z) * erfc(gnorm / (2 * alpha) - alpha * z)
+        gweight = np.pi / (self.cell_area * gnorm) * (w1 + w2)
         return gweight
 
-    def ewald_recip_weight_charge(self, dist: gpu.cp.ndarray) -> gpu.cp.ndarray:
+    def ewald_recip_weight_charge(self, dist: np.ndarray) -> np.ndarray:
         r"""
         Compute the weight for the charge terms (k = 0 terms) in reciprocal space sum
 
@@ -294,13 +294,13 @@ class Ewald:
         :return: weight for reciprocal-space sum when k = 0. Shape: (num_particles_m, num_particles_n) or (nconf, num_particles_m, num_particles_n)
         """
         z = dist[..., 2]  # ([nconf,] npairs)
-        w1 = z * gpu.erf(self.alpha * z)
+        w1 = z * erf(self.alpha * z)
         w2 = (
             1
-            / (self.alpha * gpu.cp.sqrt(gpu.cp.pi))
-            * gpu.cp.exp(-(self.alpha**2) * z**2)
+            / (self.alpha * np.sqrt(np.pi))
+            * np.exp(-(self.alpha**2) * z**2)
         )
-        w = -gpu.cp.pi / self.cell_area * (w1 + w2)
+        w = -np.pi / self.cell_area * (w1 + w2)
         return w
 
     def energy(self, configs: PeriodicConfigs) -> Tuple[float, float, float]:

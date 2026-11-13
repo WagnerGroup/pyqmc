@@ -169,6 +169,27 @@ if __name__ == "__main__":
     wf, _ = pyq.generate_wf(mol, mf, mc=mc)
 ```
 
+### Optimize excited states with an ensemble
+
+`ENSEMBLE_OPTIMIZE` optimizes the lowest `nstates` states together, starting state `i` from CI root `i`.
+The CI checkfile must hold several roots, for example from a CASCI with `mc.fcisolver.nroots` set.
+Only the Jastrow is read from `load_parameters`; the Slater part of each state, including orbital coefficients, comes from its CI root.
+By default the determinant coefficients of each state are optimized.
+`VMC` and `DMC` read state `i` back with `target_root=i`. Use the same `ci_checkfile` and determinant cutoff `tol` as the optimization, so that the determinant list matches.
+
+```
+pyq.OPTIMIZE("mf.chk", "opt.chk", ci_checkfile="cas.chk")
+pyq.ENSEMBLE_OPTIMIZE("mf.chk", "ensemble.chk", "cas.chk", nstates=3, load_parameters="opt.chk")
+for i in range(3):
+    pyq.VMC(
+        "mf.chk",
+        f"vmc_{i}.chk",
+        ci_checkfile="cas.chk",
+        load_parameters="ensemble.chk",
+        target_root=i,
+    )
+```
+
 ### Create a wavefunction with 3 body Jastrow factor.
 
 ```
@@ -176,17 +197,15 @@ import pyscf.gto as gto
 import pyscf.scf as scf
 import pyqmc.api as pyq
 import pyqmc.wftools as wftools
-import pyqmc.mc as mc
 
-def linemin(mol,mf):
+def optimize(mol,mf):
     #create wavefunction object. note jastrow_kws have to be passed even if empty
     wf, to_opt = wftools.generate_wf(mol, mf,jastrow=[wftools.generate_jastrow,wftools.generate_jastrow3],jastrow_kws=[{},{}]
 )                   
     nconf = 100
-    configs = mc.initial_guess(mol, nconf)
-    wf, dfgrad = pyq.line_minimization(
-        wf, configs, pyq.gradient_generator(mol, wf, to_opt),max_iterations=50,verbose=True,hdf_file='3_jastrow.chk'
-    )
+    configs = pyq.initial_guess(mol, nconf)
+    updater = pyq.SRUpdate(pyq.EnergyAccumulator(mol), pyq.LinearTransform(wf.parameters, to_opt))
+    wf, df = pyq.optimize(wf, configs, updater, max_iterations=50, verbose=True, hdf_file='3_jastrow.chk')
 
   
 def H2_ccecp_uhf():
@@ -204,7 +223,7 @@ def H2_ccecp_uhf():
 
 if __name__ == "__main__":
     mol,mf = H2_ccecp_uhf()
-    linemin(mol,mf)
+    optimize(mol,mf)
 ```
 
 

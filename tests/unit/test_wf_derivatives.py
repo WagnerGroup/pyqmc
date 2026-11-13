@@ -14,7 +14,6 @@
 
 import numpy as np
 import pyqmc.wf.testwf as testwf
-from pyqmc.gpu import cp, asnumpy
 from pyqmc.wf.slater import Slater
 from pyqmc.wf.multiplywf import MultiplyWF
 from pyqmc.wf.addwf import AddWF
@@ -104,7 +103,7 @@ def test_obc_wfs(LiH_sto3g_rhf, epsilon=1e-5, nconf=11):
     for wf in wfs:
         for k in wf.parameters.keys():
             if k != "mo_coeff":
-                wf.parameters[k] = cp.asarray(np.random.rand(*wf.parameters[k].shape))
+                wf.parameters[k] = np.asarray(np.random.rand(*wf.parameters[k].shape))
 
         epos = pyq.initial_guess(mol, nconf)
         print(type(wf))
@@ -132,7 +131,7 @@ def test_pbc_wfs(H_pbc_sto3g_krks, epsilon=1e-5, nconf=10):
     ]:
         for k in wf.parameters:
             if "mo_coeff" not in k and k != "det_coeff":
-                wf.parameters[k] = cp.asarray(np.random.rand(*wf.parameters[k].shape))
+                wf.parameters[k] = np.asarray(np.random.rand(*wf.parameters[k].shape))
 
         _, epos = pyq.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node
         run_tests(wf, epos, epsilon)
@@ -153,7 +152,7 @@ def test_pbc_wfs_triplet(h_noncubic_sto3g_triplet, epsilon=1e-5, nconf=10):
     ]:
         for k in wf.parameters:
             if "mo_coeff" not in k and k != "det_coeff":
-                wf.parameters[k] = cp.asarray(np.random.rand(*wf.parameters[k].shape))
+                wf.parameters[k] = np.asarray(np.random.rand(*wf.parameters[k].shape))
 
         _, epos = pyq.vmc(wf, epos, nblocks=1, nsteps=2, tstep=1)  # move off node
         run_tests(wf, epos, epsilon)

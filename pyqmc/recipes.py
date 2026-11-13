@@ -16,8 +16,8 @@ import pyqmc.observables.obdm as obdm
 import pyqmc.wftools as wftools
 import pyqmc.pyscftools as pyscftools
 import pyqmc.pbc.supercell as supercell
-import pyqmc.method.linemin as linemin
-import pyqmc.method.minsr as minsr
+import pyqmc.method.optimize as optimize
+import pyqmc.method.ensemble_optimization as ensemble_optimization
 import pyqmc.method.dmc as dmc
 import pyqmc.method.mc
 import pyqmc.rng
@@ -39,27 +39,29 @@ def OPTIMIZE(
     S=None,
     jastrow_kws=None,
     slater_kws=None,
-    target_root=None,
     nodal_cutoff=1e-3,
-    optimizer="linemin",
+    method="sr",
+    updater_kws=None,
     rng=None,
-    **linemin_kws,
+    **optimize_kws,
 ):
-    """optimizer selects the optimization driver: 'linemin' for stochastic
-    reconfiguration with a correlated-sampling line minimization, or 'minsr' for
-    the minimum-step SR algorithm, which computes the same update without
-    forming the S matrix. Remaining keyword arguments are passed to the driver.
-    rng is anything accepted by pyqmc.rng.get_rng; it seeds the initial
-    configurations and the driver."""
+    """Optimize a ground-state wave function. If ci_checkfile holds several
+    roots, the first is used; use ENSEMBLE_OPTIMIZE for excited states.
+
+    method selects how the SR equations are solved: 'sr' with the explicit S
+    matrix, 'minsr' in sample space, or 'cgsr' by conjugate gradient; see
+    :mod:`pyqmc.method.optimize`. updater_kws are passed to the updater, for
+    example eps. Remaining keyword arguments are passed to
+    :func:`pyqmc.method.optimize.optimize`, for example tstep, line_search,
+    max_iterations, and vmc_kwargs. rng is anything accepted by
+    pyqmc.rng.get_rng; it seeds the initial configurations and the driver."""
     rng = pyqmc.rng.get_rng(rng)
-    linemin_kws["hdf_file"] = output
     if load_parameters is not None and output is not None and os.path.isfile(output):
         raise RuntimeError(
             "load_parameters is not None and output={0} already exists! Delete or rename {0} and try again.".format(
                 output
             )
         )
-    target_root = 0
 
     wf, configs, acc = initialize_qmc_objects(
         dft_checkfile,
@@ -70,26 +72,95 @@ def OPTIMIZE(
         S=S,
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
-        target_root=target_root,
         nodal_cutoff=nodal_cutoff,
         rng=rng,
     )
-    if optimizer == "linemin":
-        linemin.line_minimization(wf, configs, acc, rng=rng, **linemin_kws)
-    elif optimizer == "minsr":
-        # minsr works directly with the transform and the energy accumulator; the
-        # S matrix that acc would build is exactly what it avoids.
-        minsr.minsr_optimization(
-            wf,
-            configs,
-            acc.transform,
-            acc.enacc,
+    updater = optimize.make_updater(
+        acc.transform, acc.enacc, method, nodal_cutoff=nodal_cutoff, **(updater_kws or {})
+    )
+    return optimize.optimize(wf, configs, updater, hdf_file=output, rng=rng, **optimize_kws)
+
+
+def ENSEMBLE_OPTIMIZE(
+    dft_checkfile,
+    output,
+    ci_checkfile,
+    nstates,
+    nconfig=1000,
+    load_parameters=None,
+    S=None,
+    jastrow_kws=None,
+    slater_kws=None,
+    nodal_cutoff=1e-3,
+    method="sr",
+    client=None,
+    npartitions=None,
+    rng=None,
+    **ensemble_kws,
+):
+    """Optimize the lowest nstates states together with ensemble VMC.
+
+    State i starts from CI root i in ci_checkfile. Each state is written to
+    output under wf/{i}/; read it back with VMC or DMC by passing
+    load_parameters=output and target_root=i. Use the same ci_checkfile and
+    determinant cutoff (slater_kws tol) so that the determinant list matches.
+
+    load_parameters is usually the output of a ground-state OPTIMIZE. Only its
+    Jastrow parameters are read, and every state starts from that Jastrow. The
+    Slater part of each state, including any orbital coefficients optimized in
+    the ground-state run, comes from its CI root.
+
+    slater_kws defaults to optimize_determinants=True, so the determinant
+    coefficients of each state are optimized; pass
+    slater_kws=dict(optimize_determinants=False) to keep them fixed.
+
+    method selects the update: 'sr', 'minsr', or 'cgsr'. Remaining keyword
+    arguments are passed to optimize_ensemble. If output already exists, the
+    optimization restarts from it.
+    """
+    rng = pyqmc.rng.get_rng(rng)
+    if load_parameters is not None and output is not None and os.path.isfile(output):
+        raise RuntimeError(
+            "load_parameters is not None and output={0} already exists! Delete or rename {0} and try again.".format(
+                output
+            )
+        )
+    slater_kws = {"optimize_determinants": True, **(slater_kws or {})}
+
+    wfs, transforms = [], []
+    for i in range(nstates):
+        wf, state_configs, acc = initialize_qmc_objects(
+            dft_checkfile,
+            opt_wf=True,
+            nconfig=nconfig,
+            ci_checkfile=ci_checkfile,
+            load_parameters=load_parameters,
+            S=S,
+            jastrow_kws=jastrow_kws,
+            slater_kws=slater_kws,
+            target_root=i,
+            load_jastrow_only=True,
             nodal_cutoff=nodal_cutoff,
             rng=rng,
-            **linemin_kws,
         )
-    else:
-        raise ValueError(f"Unknown optimizer {optimizer}; use 'linemin' or 'minsr'.")
+        if i == 0:
+            configs, enacc = state_configs, acc.enacc
+        wfs.append(wf)
+        transforms.append(acc.transform)
+
+    return ensemble_optimization.optimize_ensemble(
+        wfs,
+        configs,
+        transforms,
+        hdf_file=output,
+        enacc=enacc,
+        method=method,
+        nodal_cutoff=nodal_cutoff,
+        client=client,
+        npartitions=npartitions,
+        rng=rng,
+        **ensemble_kws,
+    )
 
 
 def generate_accumulators(
@@ -145,9 +216,12 @@ def VMC(
     jastrow_kws=None,
     slater_kws=None,
     accumulators=None,
+    target_root=0,
     rng=None,
     **vmc_kws,
 ):
+    """target_root selects the CI root in ci_checkfile. If load_parameters came
+    from ENSEMBLE_OPTIMIZE, it also selects which state's parameters are read."""
     rng = pyqmc.rng.get_rng(rng)
     vmc_kws["hdf_file"] = output
     wf, configs, acc = initialize_qmc_objects(
@@ -159,6 +233,7 @@ def VMC(
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
         accumulators=accumulators,
+        target_root=target_root,
         rng=rng,
     )
 
@@ -175,9 +250,12 @@ def DMC(
     jastrow_kws=None,
     slater_kws=None,
     accumulators=None,
+    target_root=0,
     rng=None,
     **dmc_kws,
 ):
+    """target_root selects the CI root in ci_checkfile. If load_parameters came
+    from ENSEMBLE_OPTIMIZE, it also selects which state's parameters are read."""
     rng = pyqmc.rng.get_rng(rng)
     dmc_kws["hdf_file"] = output
     wf, configs, acc = initialize_qmc_objects(
@@ -189,6 +267,7 @@ def DMC(
         jastrow_kws=jastrow_kws,
         slater_kws=slater_kws,
         accumulators=accumulators,
+        target_root=target_root,
         rng=rng,
     )
 
@@ -206,16 +285,29 @@ def initialize_qmc_objects(
     accumulators=None,
     opt_wf=False,
     target_root=0,
+    load_jastrow_only=False,
     nodal_cutoff=1e-3,
     rng=None,
 ):
+    """Build the wave function, initial configurations, and accumulators.
+
+    target_root selects the CI root that sets the determinant expansion, and the
+    state read from load_parameters if that file came from ensemble optimization.
+    If load_jastrow_only is True, the Slater parameters from load_parameters are
+    not read, so the determinant expansion stays as given by the CI root."""
     if ci_checkfile is None:
+        if target_root != 0:
+            raise ValueError("target_root requires a ci_checkfile with several roots.")
         mol, mf = pyscftools.recover_pyscf(dft_checkfile)
         mc = None
     else:
         mol, mf, mc = pyscftools.recover_pyscf(dft_checkfile, ci_checkfile=ci_checkfile)
         if not hasattr(mc.ci, "shape") or len(mc.ci.shape) == 3:
+            if target_root >= len(mc.ci):
+                raise ValueError(f"{ci_checkfile} holds {len(mc.ci)} CI roots, so it has no root {target_root}.")
             mc.ci = mc.ci[target_root]
+        elif target_root != 0:
+            raise ValueError(f"{ci_checkfile} holds a single CI root, so it has no root {target_root}.")
 
     if S is not None:
         mol = supercell.get_supercell(mol, np.asarray(S))
@@ -224,7 +316,11 @@ def initialize_qmc_objects(
         mol, mf, mc=mc, jastrow_kws=jastrow_kws, slater_kws=slater_kws
     )
     if load_parameters is not None:
-        wftools.read_wf(wf, load_parameters)
+        if load_jastrow_only:
+            # generate_wf puts the Slater determinant first, under the wf1 prefix.
+            wftools.read_wf(wf, load_parameters, skip_prefixes=("wf1",))
+        else:
+            wftools.read_wf(wf, load_parameters, state=target_root)
 
     configs = pyqmc.method.mc.initial_guess(mol, nconfig, rng=rng)
     if opt_wf:

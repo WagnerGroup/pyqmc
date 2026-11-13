@@ -39,6 +39,6 @@ if __name__ == "__main__":
     wf = pyq.MultiplyWF(slater, cusp, geminal)
 
     #  Optimize Jastrow
-    pgrad = pyq.gradient_generator(mol, wf, to_opt, eps=1e-3)
+    updater = pyq.SRUpdate(pyq.EnergyAccumulator(mol), pyq.LinearTransform(wf.parameters, to_opt))
     coords = pyq.initial_guess(mol, nconfig=1000)
-    pyq.line_minimization(wf, coords, pgrad, verbose=True, hdf_file=f"{__file__}.hdf5")
+    pyq.optimize(wf, coords, updater, verbose=True, hdf_file=f"{__file__}.hdf5")

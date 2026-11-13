@@ -12,7 +12,7 @@ Energy
 
 Effective Core Potential (ECP)
 ==============================
-.. automodule:: pyqmc.eval_ecp
+.. automodule:: pyqmc.observables.ecp
    :members:
 
 Ewald summation
@@ -28,6 +28,11 @@ Ewald2D summation
 1-RDM
 =============================
 .. automodule:: pyqmc.obdm
+   :members:
+
+Total spin S^2
+=============================
+.. automodule:: pyqmc.observables.s2_accumulator
    :members:
 
 2-RDM

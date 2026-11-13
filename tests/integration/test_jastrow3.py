@@ -21,16 +21,18 @@ import pandas as pd
 from pyqmc.api import (
     generate_wf,
     generate_jastrow,
-    line_minimization,
+    optimize,
+    SRUpdate,
     initial_guess,
-    gradient_generator,
+    EnergyAccumulator,
 )
+from pyqmc.observables.accumulators import LinearTransform
 import pyqmc.wftools as wftools
 import pytest
 
 
 @pytest.mark.slow
-def test_linemin_three_body(H2_ccecp_uhf):
+def test_sr_three_body(H2_ccecp_uhf):
     """Optimize a Slater-3bodyJastrow wave function and check that it's better than Hartree-Fock"""
     mol, mf = H2_ccecp_uhf
     mol.stdout = None
@@ -42,9 +44,8 @@ def test_linemin_three_body(H2_ccecp_uhf):
         jastrow_kws=[{}, {}],
     )
     nconf = 100
-    wf, dfgrad = line_minimization(
-        wf, initial_guess(mol, nconf), gradient_generator(mol, wf, to_opt)
-    )
+    updater = SRUpdate(EnergyAccumulator(mol), LinearTransform(wf.parameters, to_opt))
+    wf, dfgrad = optimize(wf, initial_guess(mol, nconf), updater)
 
     dfgrad = pd.DataFrame(dfgrad)
     mfen = mf.energy_tot()
@@ -54,4 +55,4 @@ def test_linemin_three_body(H2_ccecp_uhf):
 
 
 if __name__ == "__main__":
-    test_linemin_three_body()
+    test_sr_three_body()

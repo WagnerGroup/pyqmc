@@ -66,15 +66,15 @@ def run_optimizer(n_s=2, alpha_s=0.2,
     wf = pyq.MultiplyWF(slater, cusp, geminal)
 
     #  Optimize Jastrow
-    pgrad = pyq.gradient_generator(mol, wf, to_opt, eps=1e-3)
+    updater = pyq.SRUpdate(pyq.EnergyAccumulator(mol), pyq.LinearTransform(wf.parameters, to_opt))
     coords = pyq.initial_guess(mol, nconfig=4000)
     hdf_file = f"data/slater_geminal_etb_{n_s}_{alpha_s}_{n_p}_{alpha_p}_{n_d}.hdf5"
     start = time.perf_counter()
-    pyq.line_minimization(wf, coords, pgrad,
-                          max_iterations=100,
-                          verbose=False,
-                          hdf_file=hdf_file,
-                          client=pool, npartitions=workers)
+    pyq.optimize(wf, coords, updater,
+                 max_iterations=100,
+                 verbose=False,
+                 hdf_file=hdf_file,
+                 client=pool, npartitions=workers)
     end = time.perf_counter()
     with h5py.File(hdf_file, "a") as f:
         f['time'] = end-start

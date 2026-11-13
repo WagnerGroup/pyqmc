@@ -282,6 +282,47 @@ def test_func3d_pgradient(bf, delta=1e-5):
     return maxerror
 
 
+class PlaneWaveFunction:
+    r"""
+
+    .. math:: b(\vec{r}) = \cos(\vec{q}\cdot\vec{r})
+
+    With :math:`\vec{q}` a reciprocal lattice vector of the simulation cell, b is periodic in the
+    cell, so the minimum-image displacement gives its exact value and there is no cutoff
+    (rcut is infinite). As an electron-electron basis function in JastrowSpin, the pair sum is
+    the collective-coordinate (RPA) Jastrow,
+    :math:`\sum_{i<j} \cos(\vec{q}\cdot\vec{r}_{ij}) = (|\rho_q|^2 - N_e)/2` with
+    :math:`\rho_q = \sum_i e^{i\vec{q}\cdot\vec{r}_i}`. Since all functions in one basis share a
+    cutoff, these go in their own JastrowSpin; see :func:`pyqmc.wftools.generate_plane_wave_jastrow`.
+    """
+
+    def __init__(self, qvec):
+        self.qvec = np.asarray(qvec, dtype=float)
+        self.parameters = {"rcut": np.inf}
+
+    def value(self, rvec, r):
+        return np.cos(rvec @ self.qvec)
+
+    def gradient_value(self, rvec, r):
+        qr = rvec @ self.qvec
+        return -np.sin(qr)[..., np.newaxis] * self.qvec, np.cos(qr)
+
+    def gradient_laplacian(self, rvec, r):
+        qr = rvec @ self.qvec
+        grad = -np.sin(qr)[..., np.newaxis] * self.qvec
+        return grad, -np.dot(self.qvec, self.qvec) * np.cos(qr)
+
+    def gradient(self, rvec, r):
+        return self.gradient_value(rvec, r)[0]
+
+    def laplacian(self, rvec, r):
+        return self.gradient_laplacian(rvec, r)[1]
+
+    def pgradient(self, rvec, r):
+        """No optimizable parameters."""
+        return {}
+
+
 class CutoffFunc3dEvaluator:
     def __init__(self, basis_functions, rcut):
         for b in basis_functions:

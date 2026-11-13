@@ -121,6 +121,12 @@ def test_pbc_wfs(H_pbc_sto3g_krks, epsilon=1e-5, nconf=10):
     epos = pyq.initial_guess(supercell, nconf)
     for wf in [
         MultiplyWF(Slater(supercell, mf, eval_gto_precision=1e-6), generate_gps_jastrow(supercell)[0]),
+        pyq.generate_plane_wave_jastrow(supercell, [[1, 0, 0], [0, 1, 0], [1, 1, -1]])[0],
+        MultiplyWF(
+            Slater(supercell, mf, eval_gto_precision=1e-6),
+            generate_jastrow(supercell)[0],
+            pyq.generate_plane_wave_jastrow(supercell, [[1, 0, 0], [0, 0, 2]])[0],
+        ),
         MultiplyWF(Slater(supercell, mf, eval_gto_precision=1e-6), generate_jastrow(supercell)[0]),
         MultiplyWF(
             Slater(supercell, mf, eval_gto_precision=1e-6),

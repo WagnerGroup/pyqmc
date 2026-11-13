@@ -22,6 +22,7 @@ import pyqmc.wf.func3d as func3d
     [
         func3d.PolyPadeFunction(2.0, 1.5),
         func3d.CutoffCuspFunction(2.0, 1.5),
+        func3d.PlaneWaveFunction([0.4, -0.9, 1.3]),
     ],
 )
 def test_func3d(func, delta=1e-6, epsilon=1e-5):

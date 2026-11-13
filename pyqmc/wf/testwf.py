@@ -258,6 +258,8 @@ def compare_nested_saved_vals(saved1, saved2):
         assert saved2 is None
         return 0.0
     if hasattr(saved1, "shape"):
+        if saved1.size == 0:
+            return 0.0
         return np.amax(np.abs(saved1 - saved2))
     else:
         a = [compare_nested_saved_vals(s1, s2) for s1, s2 in zip(saved1, saved2)]

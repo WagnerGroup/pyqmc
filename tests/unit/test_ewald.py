@@ -12,6 +12,7 @@
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
+import pytest
 import numpy as np
 import pyqmc.observables.ewald
 import pyqmc.observables.ewald2d
@@ -199,3 +200,31 @@ def test_ewald_shifted():
     d = [compute_ewald_shifted(x, np.array([0.1, 0.2, 0.1])) for x in xvals]
     d = np.asarray(d)
     assert np.linalg.norm(d[1] - d[0]) < 1e-14
+
+
+@pytest.mark.parametrize(
+    "latvec",
+    [
+        np.eye(3) * 4.0,
+        (np.ones((3, 3)) - np.eye(3)) * 3.5,  # fcc
+        np.array([[5.0, 0.0, 0.0], [2.5, 4.0, 0.0], [1.0, 1.5, 9.0]]),  # skewed
+        np.diag([30.0, 30.0, 5.55]),  # chain in a box
+    ],
+)
+def test_gpoint_range_matches_cube(latvec):
+    """The tolerance-bounded range selects the same G points as a large cube."""
+    import pyqmc.observables.ewald as ewald
+
+    recvec = np.linalg.inv(latvec).T
+    volume = abs(np.linalg.det(latvec))
+    alpha = 5.0 / np.amin(1 / np.linalg.norm(recvec, axis=1))
+    nmax = ewald.gpoint_range(latvec, volume, alpha)
+    g_new, w_new = ewald.select_big(ewald.generate_positive_gpoints(nmax, recvec), volume, alpha)
+
+    ncube = int(np.max(nmax)) + 3
+    g_cube, w_cube = ewald.select_big(ewald.generate_positive_gpoints(ncube, recvec), volume, alpha)
+    order_new = np.lexsort(np.round(g_new, 8).T)
+    order_cube = np.lexsort(np.round(g_cube, 8).T)
+    assert len(g_new) == len(g_cube)
+    assert np.allclose(g_new[order_new], g_cube[order_cube])
+    assert np.allclose(w_new[order_new], w_cube[order_cube])

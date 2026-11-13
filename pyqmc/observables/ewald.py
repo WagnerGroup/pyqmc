@@ -95,7 +95,9 @@ class Ewald:
     def __init__(self, cell, ewald_gmax=200, nlatvec=1):
         """
         :parameter cell: pyscf Cell object (simulation cell)
-        :parameter int ewald_gmax: how far to take reciprocal sum; probably never needs to be changed.
+        :parameter int ewald_gmax: largest reciprocal lattice index considered in each direction.
+            The range actually generated is set by the weight tolerance (see
+            :func:`gpoint_range`); this is only an upper bound.
         :parameter int nlatvec: how far to take real-space sum; probably never needs to be changed.
         """
         self.nelec = np.array(cell.nelec)
@@ -125,7 +127,7 @@ class Ewald:
 
         .. math:: W_G = \frac{4\pi}{V |\vec{G}|^2} e^{- \frac{|\vec{G}|^2}{ 4\alpha^2}}
 
-        :parameter int ewald_gmax: max number of reciprocal lattice vectors to check away from 0
+        :parameter int ewald_gmax: upper bound on the reciprocal lattice index in each direction
         """
         cellvolume = np.linalg.det(self.latvec)
         recvec = np.linalg.inv(self.latvec).T
@@ -135,7 +137,8 @@ class Ewald:
         self.alpha = 5.0 / smallestheight
 
         # Determine G points to include in reciprocal Ewald sum
-        gpoints = generate_positive_gpoints(ewald_gmax, recvec)
+        nmax = np.minimum(gpoint_range(self.latvec, cellvolume, self.alpha), ewald_gmax)
+        gpoints = generate_positive_gpoints(nmax, recvec)
         self.gpoints, self.gweight = select_big(gpoints, cellvolume, self.alpha)
         self.set_ewald_constants(cellvolume)
 
@@ -369,20 +372,51 @@ class Ewald:
         return self.e_single(nelec) + self.ewalde_separated
 
 
-def select_big(gpoints, cellvolume, alpha):
+def _gweight(gsquared, cellvolume, alpha):
+    return 4 * np.pi * np.exp(-gsquared / (4 * alpha**2)) / (cellvolume * gsquared)
+
+
+def select_big(gpoints, cellvolume, alpha, tol=1e-10):
     gsquared = np.einsum("jk,jk->j", gpoints, gpoints)
-    gweight = 4 * np.pi * np.exp(-gsquared / (4 * alpha**2))
-    gweight /= cellvolume * gsquared
-    bigweight = gweight > 1e-10
+    gweight = _gweight(gsquared, cellvolume, alpha)
+    bigweight = gweight > tol
     return gpoints[bigweight], gweight[bigweight]
 
 
+def gpoint_range(latvec, cellvolume, alpha, tol=1e-10):
+    r"""Largest reciprocal lattice index in each direction that can have weight above `tol`.
+
+    The weight :math:`W_G` decreases with :math:`|G|`, so every selected G lies within
+    :math:`|G| \le G_{\rm cut}`, where :math:`W(G_{\rm cut}) = {\rm tol}`. The index of
+    :math:`G = 2\pi \sum_j n_j \vec{b}_j` along direction i is
+    :math:`n_i = \vec{G}\cdot\vec{a}_i / 2\pi`, so :math:`|n_i| \le G_{\rm cut} |\vec{a}_i| / 2\pi`.
+
+    :returns: (3,) int array
+    """
+    gsq_hi = 4 * alpha**2
+    while _gweight(gsq_hi, cellvolume, alpha) > tol:
+        gsq_hi *= 2
+    gsq_lo = 0.0
+    for _ in range(100):
+        gsq = 0.5 * (gsq_lo + gsq_hi)
+        if _gweight(gsq, cellvolume, alpha) > tol:
+            gsq_lo = gsq
+        else:
+            gsq_hi = gsq
+    gcut = np.sqrt(gsq_hi)
+    return np.ceil(gcut * np.linalg.norm(latvec, axis=1) / (2 * np.pi)).astype(int)
+
+
 def generate_positive_gpoints(gmax, recvec):
-    gXpos = np.mgrid[1 : gmax + 1, -gmax : gmax + 1, -gmax : gmax + 1].reshape(
-        3, -1
-    )
-    gX0Ypos = np.mgrid[0:1, 1 : gmax + 1, -gmax : gmax + 1].reshape(3, -1)
-    gX0Y0Zpos = np.mgrid[0:1, 0:1, 1 : gmax + 1].reshape(3, -1)
+    """Half of the reciprocal lattice points with index up to `gmax` in each direction,
+    excluding G = 0; the other half is -G.
+
+    :parameter gmax: int, or (3,) ints for a different range in each direction
+    """
+    gx, gy, gz = np.broadcast_to(np.asarray(gmax, dtype=int), (3,))
+    gXpos = np.mgrid[1 : gx + 1, -gy : gy + 1, -gz : gz + 1].reshape(3, -1)
+    gX0Ypos = np.mgrid[0:1, 1 : gy + 1, -gz : gz + 1].reshape(3, -1)
+    gX0Y0Zpos = np.mgrid[0:1, 0:1, 1 : gz + 1].reshape(3, -1)
     gpts = np.concatenate([gXpos, gX0Ypos, gX0Y0Zpos], axis=1)
     gpoints = np.einsum("ji,jk->ik", gpts, np.asarray(recvec) * 2 * np.pi)
     return gpoints

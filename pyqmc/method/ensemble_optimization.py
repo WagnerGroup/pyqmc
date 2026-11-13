@@ -110,10 +110,12 @@ def renormalize(wfs, norms, pivot=0, N=1):
     for i, wf in enumerate(wfs):
         if i == pivot:
             continue
-        renorm = np.sqrt(norms[pivot] / norms[i] * N)
-        if "wf1det_coeff" in wfs[-1].parameters.keys():
+        # The overlap diagonal is real and positive, but has complex dtype for complex
+        # orbitals. A complex factor would make a real det_coeff complex.
+        renorm = np.sqrt(np.real(norms[pivot] / norms[i]) * N)
+        if "wf1det_coeff" in wf.parameters.keys():
             wf.parameters["wf1det_coeff"] = wf.parameters["wf1det_coeff"] * renorm
-        elif "det_coeff" in wfs[-1].parameters.keys():
+        elif "det_coeff" in wf.parameters.keys():
             wf.parameters["det_coeff"] = wf.parameters["det_coeff"] * renorm
         else:
             raise NotImplementedError("need wf1det_coeff or det_coeff in parameters")

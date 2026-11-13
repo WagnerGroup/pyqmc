@@ -83,10 +83,10 @@ class AdaptSingleAccumulator:
         return weighted_dat
 
     def keys(self):
-        return self.enacc.keys()
+        return self.acc.keys()
 
     def shapes(self):
         """
         Note that the shapes here do not include the number of wave functions.
         """
-        return self.enacc.shapes()
+        return self.acc.shapes()

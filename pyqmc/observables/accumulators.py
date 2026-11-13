@@ -15,6 +15,7 @@
 import numpy as np
 import pyqmc.observables.energy as energy
 import pyqmc.observables.ewald as ewald
+import pyqmc.observables.ewald2d as ewald2d
 import pyqmc.observables.ecp as ecp
 from pyqmc.observables.stochastic_reconfiguration import StochasticReconfiguration
 import copy
@@ -40,6 +41,20 @@ def gradient_generator(
     )
 
 
+def default_coulomb(mol, **kwargs):
+    """The Coulomb evaluator for a molecule, or the Ewald sum for a cell's periodicity."""
+    if not hasattr(mol, "a"):
+        return energy.OpenCoulomb(mol, **kwargs)
+    dimension = getattr(mol, "dimension", 3)
+    if dimension == 3:
+        return ewald.Ewald(mol, **kwargs)
+    if dimension == 2:
+        if "ewald_gmax" in kwargs:
+            kwargs["gmax"] = kwargs.pop("ewald_gmax")
+        return ewald2d.Ewald(mol, **kwargs)
+    raise NotImplementedError(f"no Ewald sum for a cell with dimension {dimension}")
+
+
 class EnergyAccumulator:
     """Returns local energy of each configuration in a dictionary.
 
@@ -52,17 +67,28 @@ class EnergyAccumulator:
         :func:`pyqmc.observables.ecp.default_naip`.
     :parameter ecp_kws: further keyword arguments for the ECP evaluator, such as
         nselect_deterministic and nselect_random for 'fixed' sampling.
-    :parameter kwargs: passed to the Coulomb (Ewald) evaluator.
+    :parameter coulomb: an object with ``energy(configs) -> (ee, ei, ii)``. If None, it is
+        built from `mol`: :class:`pyqmc.observables.energy.OpenCoulomb` for a molecule, and for
+        a cell the Ewald sum that matches ``mol.dimension`` (3:
+        :class:`pyqmc.observables.ewald.Ewald`, 2: :class:`pyqmc.observables.ewald2d.Ewald`).
+    :parameter kwargs: passed to the Coulomb (Ewald) evaluator when `coulomb` is None.
     """
 
     def __init__(
-        self, mol, threshold=10, naip=None, ecp_sampling="threshold", ecp_kws=None, **kwargs
+        self,
+        mol,
+        threshold=10,
+        naip=None,
+        ecp_sampling="threshold",
+        ecp_kws=None,
+        coulomb=None,
+        **kwargs,
     ):
         self.mol = mol
-        if hasattr(mol, "a"):
-            self.coulomb = ewald.Ewald(mol, **kwargs)
+        if coulomb is not None:
+            self.coulomb = coulomb
         else:
-            self.coulomb = energy.OpenCoulomb(mol, **kwargs)
+            self.coulomb = default_coulomb(mol, **kwargs)
         self.ecp = ecp.make_ecp(
             mol, ecp_sampling, threshold=threshold, naip=naip, **(ecp_kws or {})
         )

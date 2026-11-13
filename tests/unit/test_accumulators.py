@@ -86,3 +86,39 @@ def info_functions(mol, wf, accumulators):
 if __name__ == "__main__":
     test_info_functions_mol()
     test_info_functions_pbc()
+
+
+def _hchain_cell(dimension):
+    import pyscf.pbc.gto
+
+    cell = pyscf.pbc.gto.Cell()
+    cell.atom = "H 0 0 0; H 0 0 1.4"
+    cell.a = np.diag([4.0, 4.0, 12.0])
+    cell.basis = "sto-3g"
+    cell.unit = "bohr"
+    cell.dimension = dimension
+    cell.verbose = 0
+    cell.build()
+    return cell
+
+
+def test_energy_accumulator_coulomb_argument(monkeypatch):
+    """A supplied Coulomb object is used and no Ewald sum is built."""
+    import pyqmc.observables.ewald as ewald
+
+    def fail(*args, **kwargs):
+        raise AssertionError("Ewald should not be built")
+
+    monkeypatch.setattr(ewald, "Ewald", fail)
+    coulomb = object()
+    acc = pyq.EnergyAccumulator(_hchain_cell(3), coulomb=coulomb)
+    assert acc.coulomb is coulomb
+
+
+def test_energy_accumulator_dimension():
+    import pyqmc.observables.ewald as ewald
+    import pyqmc.observables.ewald2d as ewald2d
+
+    assert type(pyq.EnergyAccumulator(_hchain_cell(3)).coulomb) is ewald.Ewald
+    acc2 = pyq.EnergyAccumulator(_hchain_cell(2), ewald_gmax=50)
+    assert type(acc2.coulomb) is ewald2d.Ewald

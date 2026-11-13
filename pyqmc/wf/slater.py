@@ -230,14 +230,17 @@ class Slater:
         (phase,logdet). If the wf is real, phase will be +/- 1."""
 
         nconf, nelec, ndim = configs.configs.shape
+        # Keep the electron positions, not the AO values: pgradient() recomputes the AOs from
+        # them, which costs far less memory, (nconf, nelec, 3) instead of (n_k, nconf, nelec, n_ao).
+        self._configs = configs.copy()
         aos = self.orbitals.aos(self._gtoval, configs)
-        self._aovals = aos.reshape(-1, nconf, nelec, aos.shape[-1])
+        aos = aos.reshape(-1, nconf, nelec, aos.shape[-1])
         self._dets = []
         self._inverse = []
         for s in [0, 1]:
             begin = self._nelec[0] * s
             end = self._nelec[0] + self._nelec[1] * s
-            mo = self.orbitals.mos(self._aovals[:, :, begin:end, :], s)
+            mo = self.orbitals.mos(aos[:, :, begin:end, :], s)
             mo_vals = np.swapaxes(mo[:, :, self._det_occup[s]], 1, 2)
             assert mo_vals.shape[-2] == mo_vals.shape[-1], f"disagreement between number of electrons and number of orbitals: {mo_vals.shape[-2]} electrons and {mo_vals.shape[-1]} orbitals"
             self._dets.append(
@@ -277,13 +280,12 @@ class Slater:
             return
 
         eeff = e - s * self._nelec[0]
+        self._configs.move(e, epos, mask)
         if saved_values is None:
             ao = self.orbitals.aos(self._gtoval, epos, mask)
-            self._aovals[:, mask, e, :] = ao
             mo = self.orbitals.mos(ao, s)
         else:
             ao, mo = saved_values
-            self._aovals[:, mask, e, :] = ao[:, mask]
             mo = mo[mask]
         mo_vals = mo[:, self._det_occup[s]]
         det_ratio, self._inverse[s][mask, :, :, :] = sherman_morrison_ms(
@@ -516,10 +518,11 @@ class Slater:
             / np.array(curr_val[0][nonzero, np.newaxis])
         )
 
+        nconf, nelec, _ = self._configs.configs.shape
+        aovals = self.orbitals.aos(self._gtoval, self._configs)
+        aovals = aovals.reshape(-1, nconf, nelec, aovals.shape[-1])
         for s, parm in zip([0, 1], ["mo_coeff_alpha", "mo_coeff_beta"]):
-            ao = self._aovals[
-                :, :, s * self._nelec[0] : self._nelec[s] + s * self._nelec[0], :
-            ]
+            ao = aovals[:, :, s * self._nelec[0] : self._nelec[s] + s * self._nelec[0], :]
 
             split, aos = self.orbitals.pgradient(ao, s)
             mos = np.split(np.arange(split[-1]), split.astype(int))

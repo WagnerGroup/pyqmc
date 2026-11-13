@@ -298,9 +298,10 @@ class CutoffFunc3dEvaluator:
         select = r < self.rcut
         out = np.zeros((self.nbas, *r.shape))
         rselect = r[select]
+        dselect = None if d is None else d[select]
         tmp = np.zeros(r.shape)
         for l, b in enumerate(self.basis_functions):
-            tmp[select] = b.value(None, rselect)
+            tmp[select] = b.value(dselect, rselect)
             out[l] = tmp
 
         return np.moveaxis(out, 0, -1)

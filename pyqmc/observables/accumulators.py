@@ -16,6 +16,7 @@ import numpy as np
 import pyqmc.observables.energy as energy
 import pyqmc.observables.ewald as ewald
 import pyqmc.observables.ewald2d as ewald2d
+import pyqmc.observables.ewald1d as ewald1d
 import pyqmc.observables.ecp as ecp
 from pyqmc.observables.stochastic_reconfiguration import StochasticReconfiguration
 import copy
@@ -52,6 +53,9 @@ def default_coulomb(mol, **kwargs):
         if "ewald_gmax" in kwargs:
             kwargs["gmax"] = kwargs.pop("ewald_gmax")
         return ewald2d.Ewald(mol, **kwargs)
+    if dimension == 1:
+        kwargs.pop("ewald_gmax", None)  # the 1D sum has no reciprocal lattice cutoff to set
+        return ewald1d.Ewald(mol, axis=0, **kwargs)
     raise NotImplementedError(f"no Ewald sum for a cell with dimension {dimension}")
 
 
@@ -70,7 +74,8 @@ class EnergyAccumulator:
     :parameter coulomb: an object with ``energy(configs) -> (ee, ei, ii)``. If None, it is
         built from `mol`: :class:`pyqmc.observables.energy.OpenCoulomb` for a molecule, and for
         a cell the Ewald sum that matches ``mol.dimension`` (3:
-        :class:`pyqmc.observables.ewald.Ewald`, 2: :class:`pyqmc.observables.ewald2d.Ewald`).
+        :class:`pyqmc.observables.ewald.Ewald`, 2: :class:`pyqmc.observables.ewald2d.Ewald`,
+        1: :class:`pyqmc.observables.ewald1d.Ewald`, periodic along the first lattice vector).
     :parameter kwargs: passed to the Coulomb (Ewald) evaluator when `coulomb` is None.
     """
 

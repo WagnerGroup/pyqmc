@@ -68,9 +68,10 @@ import pyqmc.recipes
 
 if __name__ == "__main___":
     npartitions = 4
-    with mpi4py.futures.MPIPoolExecutor(max_workers=npartitions) as client:
+    with mpi4py.futures.MPIPoolExecutor(max_workers=npartitions, backoff=0) as client:
         pyqmc.recipes.OPTIMIZE("he_dft.hdf5", "he_sj.hdf5", client=client, npartitions=npartitions)
 ```
+Note the `backoff=0` argument; in older versions of mpi4py this improves the data transfer speed significantly.
 
 Run with: `mpiexec -n 5 python -m mpi4py.futures script.py`
 

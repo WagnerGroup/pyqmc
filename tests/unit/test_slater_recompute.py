@@ -38,11 +38,13 @@ def _reference_logdets(wf, configs):
 
 
 def _check(wf, configs):
-    value = wf.recompute(configs)
     reference = _reference_logdets(wf, configs)
-    for s in [0, 1]:
-        assert np.allclose(wf._dets[s], reference[s], atol=1e-12)
-    assert np.all(np.isfinite(value[1]))
+    for block in [None, 1, 3]:  # whole spin, one electron, blocks that do not divide nelec
+        wf._ao_block = block
+        value = wf.recompute(configs)
+        for s in [0, 1]:
+            assert np.allclose(wf._dets[s], reference[s], atol=1e-12), block
+        assert np.all(np.isfinite(value[1]))
 
 
 def test_recompute_pbc(H_pbc_sto3g_krks):
@@ -51,6 +53,19 @@ def test_recompute_pbc(H_pbc_sto3g_krks):
     wf = Slater(supercell, mf, eval_gto_precision=1e-8)
     assert wf.dtype == complex
     _check(wf, pyq.initial_guess(supercell, 10))
+
+
+def test_recompute_pbc_numba(H_pbc_sto3g_krks):
+    """The numba AO evaluator, whose output also gets the wrap phase in place."""
+    mol, mf = H_pbc_sto3g_krks
+    supercell = pyq.get_supercell(mol, S=(np.ones((3, 3)) - 2 * np.eye(3)))
+    configs = pyq.initial_guess(supercell, 10)
+    wf = Slater(supercell, mf, eval_gto_precision=1e-8, evaluate_orbitals_with="numba")
+    reference = Slater(supercell, mf, eval_gto_precision=1e-8)
+    wf.recompute(configs)
+    reference.recompute(configs)
+    for s in [0, 1]:
+        assert np.allclose(wf._dets[s], reference._dets[s], atol=1e-8)
 
 
 def test_recompute_open(LiH_sto3g_rhf):

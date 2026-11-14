@@ -224,6 +224,32 @@ class Slater:
             self._gtoval_deriv2 = "GTOval_sph_deriv2"
 
         self._det_array = None
+        # Electrons per AO evaluation in recompute(); None evaluates a whole spin at once.
+        # Blocks of 16 keep the AO memory near that of one electron at a time, at about 2%
+        # extra time for 216 electrons and none for small systems (one block per spin).
+        self._ao_block = 16
+
+    def _mo_values(self, configs, s):
+        """MO values (nconf, nelec_s, nmo) of the electrons of spin s, evaluating the AOs of
+        self._ao_block electrons at a time to bound the memory."""
+        nconf = configs.configs.shape[0]
+        electrons = np.arange(self._nelec[0] * s, self._nelec[0] + self._nelec[1] * s)
+        block = len(electrons) if self._ao_block is None else self._ao_block
+        starts = range(0, len(electrons), block) if len(electrons) > 0 else [0]
+        mo = None
+        for start in starts:
+            es = electrons[start : start + block]
+            ao = self.orbitals.aos(self._gtoval, configs.select_electrons(es))
+            # (n_k, npts, n_ao); explicit shape so that a block with no electrons also works
+            ao = ao.reshape(ao.shape[0], nconf, len(es), ao.shape[-1])
+            mo_block = self.orbitals.mos(ao, s)
+            del ao
+            if block >= len(electrons):
+                return mo_block
+            if mo is None:
+                mo = np.empty((nconf, len(electrons), mo_block.shape[-1]), dtype=mo_block.dtype)
+            mo[:, start : start + block] = mo_block
+        return mo
 
     def recompute(self, configs):
         """This computes the value from scratch. Returns the logarithm of the wave function as
@@ -236,13 +262,7 @@ class Slater:
         self._dets = []
         self._inverse = []
         for s in [0, 1]:
-            # The AOs of one spin at a time, to halve the peak memory.
-            electrons = np.arange(self._nelec[0] * s, self._nelec[0] + self._nelec[1] * s)
-            ao = self.orbitals.aos(self._gtoval, configs.select_electrons(electrons))
-            # (n_k, npts, n_ao); explicit shape so that a spin with no electrons also works
-            ao = ao.reshape(ao.shape[0], nconf, len(electrons), ao.shape[-1])
-            mo = self.orbitals.mos(ao, s)
-            del ao
+            mo = self._mo_values(configs, s)
             mo_vals = np.swapaxes(mo[:, :, self._det_occup[s]], 1, 2)
             assert mo_vals.shape[-2] == mo_vals.shape[-1], f"disagreement between number of electrons and number of orbitals: {mo_vals.shape[-2]} electrons and {mo_vals.shape[-1]} orbitals"
             self._dets.append(

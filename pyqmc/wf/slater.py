@@ -475,7 +475,7 @@ class Slater:
 
         return ratios
 
-    def pgradient(self):
+    def pgradient(self, keys=None):
         r"""Compute the parameter gradient of Psi.
         Returns :math:`\partial_p \Psi/\Psi` as a dictionary of numpy arrays,
         which correspond to the parameter dictionary.
@@ -493,6 +493,10 @@ class Slater:
         Let's suppose that j corresponds to an up orbital coefficient. Then
         dj (Dui Ddi) = (dj Dui)/Dui Dui Ddi/psi = (dj Dui)/Dui di psi/psi
         where di psi/psi is the derivative defined above.
+
+        :parameter keys: the parameter names whose gradients are needed, or None for all. The
+            orbital-coefficient derivatives, which require evaluating the AOs of every electron,
+            are computed only if requested.
         """
         d = {}
 
@@ -518,11 +522,21 @@ class Slater:
             / np.array(curr_val[0][nonzero, np.newaxis])
         )
 
-        nconf, nelec, _ = self._configs.configs.shape
-        aovals = self.orbitals.aos(self._gtoval, self._configs)
-        aovals = aovals.reshape(-1, nconf, nelec, aovals.shape[-1])
+        orbital_keys = ["mo_coeff_alpha", "mo_coeff_beta"]
+        if keys is not None:
+            keys = set(keys)
+            orbital_keys = [k for k in orbital_keys if k in keys]
+        if len(orbital_keys) == 0:
+            return {k: v for k, v in d.items() if np.prod(v.shape) > 0}
+
+        nconf = self._configs.configs.shape[0]
         for s, parm in zip([0, 1], ["mo_coeff_alpha", "mo_coeff_beta"]):
-            ao = aovals[:, :, s * self._nelec[0] : self._nelec[s] + s * self._nelec[0], :]
+            if parm not in orbital_keys:
+                continue
+            electrons = np.arange(s * self._nelec[0], self._nelec[s] + s * self._nelec[0])
+            ao = self.orbitals.aos(self._gtoval, self._configs.select_electrons(electrons))
+            # (n_k, npts, n_ao); explicit shape so that a spin with no electrons also works
+            ao = ao.reshape(ao.shape[0], nconf, len(electrons), ao.shape[-1])
 
             split, aos = self.orbitals.pgradient(ao, s)
             mos = np.split(np.arange(split[-1]), split.astype(int))

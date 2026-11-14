@@ -199,7 +199,7 @@ class GeminalJastrowReference:
         lap3 = np.einsum("dc,dc->c", grad, grad)
         return grad, deriv[3] + lap3
 
-    def pgradient(self):
+    def pgradient(self, keys=None):
         r"""
         .. math:: \frac{\partial J_G}{\partial g_{mn}} = \sum_{i<j} \chi_m(\mathbf{r}_i) \chi_n(\mathbf{r}_j)
 

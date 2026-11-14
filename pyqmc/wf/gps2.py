@@ -136,7 +136,7 @@ class GPSJastrow:
         return grad, lap
 
     # configs shape nconfig,nelec,3
-    def pgradient(self):
+    def pgradient(self, keys=None):
         configs = self._configscurrent
         A = (self.e_cs - np.sum(self.e_cs, axis=2, keepdims=True))[:, :, :, ::-1]
         alphader = np.einsum("csi,csi->cs", self.e_cs[:, :, :, 0], -A[:, :, :, 0])

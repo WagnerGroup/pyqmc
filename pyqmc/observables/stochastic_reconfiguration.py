@@ -64,7 +64,7 @@ def local_derivatives(wf, configs, enacc, transform, nodal_cutoff=1e-3):
     :returns: (energy dictionary from enacc, (nconf, nparameters) regularized derivatives)
     """
     den = enacc(configs, wf)
-    dp = transform.serialize_gradients(wf.pgradient())
+    dp = transform.serialize_pgradient(wf)
     _, f = nodal_regularization(den["grad2"], nodal_cutoff)
     return den, dp * f[:, np.newaxis]
 

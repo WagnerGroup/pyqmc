@@ -225,9 +225,9 @@ class Slater:
 
         self._det_array = None
         # Electrons per AO evaluation in recompute(); None evaluates a whole spin at once.
-        # Blocks of 16 keep the AO memory near that of one electron at a time, at about 2%
-        # extra time for 216 electrons and none for small systems (one block per spin).
-        self._ao_block = 16
+        # Blocks of 8 keep the peak memory at that of one electron at a time with no measurable
+        # extra time (216 electrons, 27 k-points); small systems use one block per spin.
+        self._ao_block = 8
 
     def _mo_values(self, configs, s):
         """MO values (nconf, nelec_s, nmo) of the electrons of spin s, evaluating the AOs of
@@ -264,6 +264,7 @@ class Slater:
         for s in [0, 1]:
             mo = self._mo_values(configs, s)
             mo_vals = np.swapaxes(mo[:, :, self._det_occup[s]], 1, 2)
+            del mo  # only the occupied columns are needed from here on
             assert mo_vals.shape[-2] == mo_vals.shape[-1], f"disagreement between number of electrons and number of orbitals: {mo_vals.shape[-2]} electrons and {mo_vals.shape[-1]} orbitals"
             self._dets.append(
                 np.asarray(np.linalg.slogdet(mo_vals))
@@ -277,11 +278,17 @@ class Slater:
                 )
                 # print(configs.configs[])
                 print(f"zero {is_zero / np.prod(compute.shape)}")
-            self._inverse.append(np.zeros(mo_vals.shape, dtype=mo_vals.dtype))
-            for d in range(compute.shape[1]):
-                self._inverse[s][compute[:, d], d, :, :] = np.linalg.inv(
-                    mo_vals[compute[:, d], d, :, :]
-                )
+            if np.all(compute):
+                # The usual case: invert in one call, with no buffer and no masked copies.
+                self._inverse.append(np.linalg.inv(mo_vals))
+            else:
+                # Leave the inverse zero for determinants that are zero.
+                self._inverse.append(np.zeros(mo_vals.shape, dtype=mo_vals.dtype))
+                for d in range(compute.shape[1]):
+                    self._inverse[s][compute[:, d], d, :, :] = np.linalg.inv(
+                        mo_vals[compute[:, d], d, :, :]
+                    )
+            del mo_vals  # otherwise it stays alive through the next spin
             # spin, Nconf, [ndet_up, ndet_dn], nelec, nelec
         self._det_array = None
         return self.value()

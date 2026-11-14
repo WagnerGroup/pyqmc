@@ -81,3 +81,29 @@ def test_recompute_empty_spin():
     wf = Slater(mol, mf)
     assert wf._nelec[1] == 0
     _check(wf, pyq.initial_guess(mol, 10))
+
+
+def test_recompute_zero_determinant(LiH_sto3g_rhf):
+    """A walker whose determinant is zero (two same-spin electrons at one point) takes the
+    masked path: its inverse is left zero and the other walkers are unaffected."""
+    import warnings
+
+    mol, mf = LiH_sto3g_rhf
+    wf = Slater(mol, mf)
+    configs = pyq.initial_guess(mol, 6)
+    configs.configs[0, 1] = configs.configs[0, 0]  # electrons 0 and 1 are both spin up
+    reference = _reference_logdets(wf, configs)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        value = wf.recompute(configs)
+    assert not np.isfinite(value[1][0]) or value[0][0] == 0
+    assert np.all(wf._inverse[0][0] == 0)
+    assert np.all(np.isfinite(value[1][1:]))
+    for s in [0, 1]:
+        assert np.allclose(wf._dets[s][:, 1:], reference[s][:, 1:], atol=1e-12)
+    # the inverses of the other walkers are still inverses
+    nup = wf._nelec[0]
+    aos = wf.orbitals.aos(wf._gtoval, configs.select_electrons(np.arange(nup)))
+    mo = wf.orbitals.mos(aos.reshape(aos.shape[0], 6, nup, -1), 0)[:, :, wf._det_occup[0][0]]
+    identity = np.einsum("cij,cjk->cik", mo[1:], wf._inverse[0][1:, 0])
+    assert np.allclose(identity, np.eye(nup), atol=1e-10)

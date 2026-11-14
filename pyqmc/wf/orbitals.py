@@ -209,7 +209,14 @@ class PBCOrbitalEvaluatorKpoints:
             )
             # k, coordinate
             wrap_phase = self.get_wrapphase(kdotR)
-            ao = np.einsum("k...,k...a->k...a", wrap_phase, ao)
+            # ao is (k, [d,] coordinate, orbital); broadcast the phase over d and orbital
+            wrap_phase = wrap_phase.reshape(
+                (wrap_phase.shape[0],) + (1,) * (ao.ndim - 3) + (wrap_phase.shape[1], 1)
+            )
+            if np.iscomplexobj(ao) or not np.iscomplexobj(wrap_phase):
+                ao *= wrap_phase  # in place: ao is a fresh array from eval_gto
+            else:
+                ao = ao * wrap_phase
         if len(ao.shape) == 4:  # if derivatives are included
             return ao.reshape(
                 (ao.shape[0], ao.shape[1], *mycoords.shape[:-1], ao.shape[-1])

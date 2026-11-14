@@ -233,14 +233,16 @@ class Slater:
         # Keep the electron positions, not the AO values: pgradient() recomputes the AOs from
         # them, which costs far less memory, (nconf, nelec, 3) instead of (n_k, nconf, nelec, n_ao).
         self._configs = configs.copy()
-        aos = self.orbitals.aos(self._gtoval, configs)
-        aos = aos.reshape(-1, nconf, nelec, aos.shape[-1])
         self._dets = []
         self._inverse = []
         for s in [0, 1]:
-            begin = self._nelec[0] * s
-            end = self._nelec[0] + self._nelec[1] * s
-            mo = self.orbitals.mos(aos[:, :, begin:end, :], s)
+            # The AOs of one spin at a time, to halve the peak memory.
+            electrons = np.arange(self._nelec[0] * s, self._nelec[0] + self._nelec[1] * s)
+            ao = self.orbitals.aos(self._gtoval, configs.select_electrons(electrons))
+            # (n_k, npts, n_ao); explicit shape so that a spin with no electrons also works
+            ao = ao.reshape(ao.shape[0], nconf, len(electrons), ao.shape[-1])
+            mo = self.orbitals.mos(ao, s)
+            del ao
             mo_vals = np.swapaxes(mo[:, :, self._det_occup[s]], 1, 2)
             assert mo_vals.shape[-2] == mo_vals.shape[-1], f"disagreement between number of electrons and number of orbitals: {mo_vals.shape[-2]} electrons and {mo_vals.shape[-1]} orbitals"
             self._dets.append(

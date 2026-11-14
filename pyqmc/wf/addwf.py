@@ -13,7 +13,7 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
-from pyqmc.wf.multiplywf import Parameters
+from pyqmc.wf.multiplywf import Parameters, split_keys
 
 
 class AddWF:
@@ -186,15 +186,19 @@ class AddWF:
         ratio = self.ratio(e, epos)
         return np.einsum("ijk,ik->jk", grads, ratio), np.einsum("ij,ij->j", laps, ratio)
 
-    def pgradient(self):
+    def pgradient(self, keys=None):
         """
         Compute the gradient of the parameters
+
+        :parameter keys: the (prefixed) parameter names whose gradients are needed, or None
+            for all. Components may still return gradients that were not requested.
         """
         ratio = self.ratio_current_config()
+        split = split_keys(keys, len(self.wf_components))
         pgrad = []
-        for iwf, wf in enumerate(self.wf_components):
-            pgrad_tmp = wf.pgradient()
-            for k in wf.pgradient().keys():
-                pgrad_tmp[k] = np.einsum("i...,i->i...", pgrad_tmp[k], ratio[iwf, :])
+        for iwf, (wf, k) in enumerate(zip(self.wf_components, split)):
+            pgrad_tmp = wf.pgradient(k)
+            for name in pgrad_tmp.keys():
+                pgrad_tmp[name] = np.einsum("i...,i->i...", pgrad_tmp[name], ratio[iwf, :])
             pgrad.append(pgrad_tmp)
         return Parameters(pgrad)

@@ -61,7 +61,7 @@ class _OverlapDerivativeAccumulator:
         self.transform = transform
 
     def avg(self, configs, wfs, weights):
-        dp = self.transform.serialize_gradients(wfs[-1].pgradient())
+        dp = self.transform.serialize_pgradient(wfs[-1])
         nconfig = weights.shape[-1]
         return {"wtdp": np.einsum("cp,jkc->pjk", dp, weights, optimize=True) / nconfig}
 
@@ -74,7 +74,7 @@ def overlap_derivatives_worker(wfs, configs, transform):
     """
     for wf in wfs:
         wf.recompute(configs)
-    dp = transform.serialize_gradients(wfs[-1].pgradient())
+    dp = transform.serialize_pgradient(wfs[-1])
     weights = pyqmc.method.sample_many.compute_weights(wfs)
     return np.einsum("cp,jkc->pjk", dp, weights, optimize=True), weights.shape[-1]
 

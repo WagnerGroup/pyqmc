@@ -174,6 +174,12 @@ class LinearTransform:
         )
         return np.concatenate((params.real, params[self.complex_inds].imag))
 
+    def serialize_pgradient(self, wf):
+        """The parameter gradients of `wf` in the current configurations, serialized. Only the
+        gradients of optimized parameters are requested, so that, for example, a Slater
+        determinant whose orbitals are not optimized skips the orbital derivatives."""
+        return self.serialize_gradients(wf.pgradient(self.to_opt.keys()))
+
     def serialize_gradients(self, pgrad):
         """Convert the dictionary to a linear list of gradients, mask allows for certain fixed parameters"""
         grads = []

@@ -15,6 +15,17 @@
 import numpy as np
 
 
+def split_keys(keys, nwf):
+    """Split parameter names prefixed as by :class:`Parameters` ("wf1...", "wf2...") into the
+    names for each of the nwf wave functions. None (all parameters) stays None for each."""
+    if keys is None:
+        return [None] * nwf
+    split = [set() for _ in range(nwf)]
+    for k in keys:
+        split[int(k[2]) - 1].add(k[3:])
+    return split
+
+
 class Parameters:
     def __init__(self, dicts):
         self.data = {}
@@ -128,8 +139,11 @@ class MultiplyWF:
                 cross_term += np.sum(grads[i] * grads[j], axis=0)
         return np.sum(grads, axis=0), np.sum(laps, axis=0) + cross_term * 2
 
-    def pgradient(self):
-        return Parameters([wf.pgradient() for wf in self.wf_factors])
+    def pgradient(self, keys=None):
+        """:parameter keys: the (prefixed) parameter names whose gradients are needed, or None
+        for all. Factors may still return gradients that were not requested."""
+        split = split_keys(keys, len(self.wf_factors))
+        return Parameters([wf.pgradient(k) for wf, k in zip(self.wf_factors, split)])
 
 
 def test_parameters():

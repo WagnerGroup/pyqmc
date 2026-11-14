@@ -697,7 +697,7 @@ class JAXSlater:
         )
         return lap[:, 4].T / lap[:, 0]
 
-    def pgradient(self):
+    def pgradient(self, keys=None):
         xyz = jnp.array(self.xyz)
         grads = self._pgradient(
             self.parameters.jax_parameters, xyz

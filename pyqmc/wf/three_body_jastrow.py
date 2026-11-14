@@ -654,7 +654,7 @@ class ThreeBodyJastrow:
         )
         return grad, lap + np.sum(grad**2, axis=0)
 
-    def pgradient(self):
+    def pgradient(self, keys=None):
         r"""
         computes the parameter gradients, given by
 

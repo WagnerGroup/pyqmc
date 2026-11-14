@@ -779,7 +779,7 @@ class JAXJastrowSpin:
         """
         return self.gradient_laplacian(e, epos)[1]
 
-    def pgradient(self):
+    def pgradient(self, keys=None):
         _configs = jnp.array(self._configscurrent.configs)
         a_pgrad, b_pgrad = self._pgradient(self.parameters.jax_parameters, _configs)
         if self.has_ion_cusp:

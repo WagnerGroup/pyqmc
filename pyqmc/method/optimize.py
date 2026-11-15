@@ -52,9 +52,16 @@ import pyqmc.method.sample_many as sm
 import pyqmc.rng
 import pyqmc.wftools
 from pyqmc.method.cgsr import cgsr_direction
-from pyqmc.method.minsr import local_energy_error, minsr_direction, sample_minsr_data
+from pyqmc.method.minsr import (
+    local_energy_error,
+    minsr_direction,
+    real_design_matrix,
+    sample_minsr_data,
+    sr_solve,
+)
 from pyqmc.observables.stochastic_reconfiguration import (
     StochasticReconfiguration,
+    sr_apply_inverse,
     sr_direction,
 )
 
@@ -109,6 +116,14 @@ class SRUpdate:
         """:returns: (v, report) with v = (S + eps)^-1 (f + g)"""
         return sr_direction(data, self.eps, self.inverse_strategy, g=g)
 
+    def norm_gradient(self, data):
+        """:returns: a = 2 Re <O>, the derivative of ln <psi|psi> with respect to the parameters"""
+        return 2 * np.real(data["dppsi"])
+
+    def apply_inverse(self, data, b):
+        """:returns: (S + eps)^-1 b"""
+        return sr_apply_inverse(data, b, self.eps, self.inverse_strategy)
+
 
 class MinSRUpdate:
     """Keeps the derivatives per sample and solves the SR equations in sample
@@ -161,6 +176,15 @@ class MinSRUpdate:
         """:returns: (v, report) with v = (S + eps)^-1 (f + g)"""
         return minsr_direction(data["dppsi"], data["total"], self.eps, self.inverse_strategy, g=g)
 
+    def norm_gradient(self, data):
+        """:returns: a = 2 Re <O>, the derivative of ln <psi|psi> with respect to the parameters"""
+        return 2 * np.real(np.mean(data["dppsi"], axis=0))
+
+    def apply_inverse(self, data, b):
+        """:returns: (S + eps)^-1 b, solved in sample space"""
+        A, _ = real_design_matrix(data["dppsi"], data["total"])
+        return sr_solve(A, np.zeros(A.shape[0]), g=b, eps=self.eps, inverse_strategy=self.inverse_strategy)
+
 
 class CGSRUpdate(MinSRUpdate):
     """Same sampling as :class:`MinSRUpdate`, solved by preconditioned conjugate
@@ -189,6 +213,7 @@ class CGSRUpdate(MinSRUpdate):
         self.precondition = precondition
         self.warm_start = warm_start
         self._previous_v = None
+        self._previous_w = None
 
     def attrs(self):
         return {
@@ -213,6 +238,21 @@ class CGSRUpdate(MinSRUpdate):
         )
         self._previous_v = v
         return v, report
+
+    def apply_inverse(self, data, b):
+        """:returns: (S + eps)^-1 b by conjugate gradient, warm started from the previous call"""
+        w, _ = cgsr_direction(
+            data["dppsi"],
+            np.zeros(data["dppsi"].shape[0]),  # constant local energy: no energy gradient
+            eps=self.eps,
+            rtol=self.rtol,
+            max_cg_iterations=self.max_cg_iterations,
+            x0=self._previous_w if self.warm_start else None,
+            precondition=self.precondition,
+            g=b,
+        )
+        self._previous_w = w
+        return w
 
 
 UPDATERS = {"sr": SRUpdate, "minsr": MinSRUpdate, "cgsr": CGSRUpdate}

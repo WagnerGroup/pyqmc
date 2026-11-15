@@ -137,14 +137,17 @@ class EnsembleUpdater:
 
     :parameter single: a single-state updater (SRUpdate, MinSRUpdate, or
         CGSRUpdate) that samples the energy and solves the SR equations
+    :parameter boolean conserve_norm: constrain each step so that, to first order,
+        it does not change ln <psi|psi>; see :meth:`_conserve_norm`
 
     With SRUpdate, the overlap derivatives are accumulated at every step of the
     overlap sampling, as SRUpdate does for the energy. With the per-sample
     updaters, they are evaluated on one snapshot per block.
     """
 
-    def __init__(self, single):
+    def __init__(self, single, conserve_norm=True):
         self.single = single
+        self.conserve_norm = conserve_norm
 
     @property
     def transform(self):
@@ -208,6 +211,32 @@ class EnsembleUpdater:
         error = {"wtdp": _block_sem(it), "energy": energy_data["energy_error"]}
         return avg, error
 
+    def _conserve_norm(self, energy_data, v, report):
+        r"""Remove from v its first-order effect on the norm.
+
+        A step :math:`dp` changes :math:`\ln\langle\psi|\psi\rangle` by
+        :math:`a \cdot dp` to first order, with :math:`a = 2{\rm Re}\langle O\rangle`.
+        Minimizing the SR objective subject to :math:`a \cdot v = 0` gives
+
+        .. math:: v - (S + \epsilon)^{-1} a \, \frac{a \cdot v}{a \cdot (S + \epsilon)^{-1} a}.
+
+        The Jastrow parameters dominate a: their derivatives are sums over electron
+        pairs, so for a large system an unconstrained step changes the norm of one
+        state by much more than another's, and the renormalization has to put the
+        difference into the determinant coefficients. Costs one more solve.
+        """
+        if not self.conserve_norm:
+            return v
+        a = self.single.norm_gradient(energy_data)
+        report["dlnN_per_tau"] = -float(a @ v)  # the norm change the step would have made
+        if len(a) == 0:
+            return v
+        w = self.single.apply_inverse(energy_data, a)
+        aw = a @ w
+        if not aw > 0:  # a is zero, or not resolved by the solve
+            return v
+        return v - w * (a @ v) / aw
+
     def delta_p(self, steps, data, overlap_penalty, verbose=False):
         """Parameter changes -step * v for each step.
 
@@ -220,6 +249,7 @@ class EnsembleUpdater:
         wfi = S.shape[0] - 1
         if wfi == 0:  # no lower states, so no penalty
             v, report = self.single.solve(data["energy_data"])
+            v = self._conserve_norm(data["energy_data"], v, report)
             report["overlap_cost"] = 0.0
             return [-step * v for step in steps], report
         wtdp = data["wtdp"]
@@ -238,6 +268,7 @@ class EnsembleUpdater:
             ovlp += 2.0 * overlap_penalty[wfi, i] * np.real(np.conj(Sn) * dSn)
 
         v, report = self.single.solve(data["energy_data"], g=ovlp)
+        v = self._conserve_norm(data["energy_data"], v, report)
         report["overlap_cost"] = overlap_cost
         if verbose:
             print("Overlap cost", overlap_cost)
@@ -256,7 +287,7 @@ UPDATERS = {
 }
 
 
-def make_updater(transform, enacc, method="sr", eps=None, nodal_cutoff=1e-3):
+def make_updater(transform, enacc, method="sr", eps=None, nodal_cutoff=1e-3, conserve_norm=True):
     """Build the per-state updater for one algorithm.
 
     :parameter transform: a LinearTransform for this state's parameters
@@ -266,16 +297,18 @@ def make_updater(transform, enacc, method="sr", eps=None, nodal_cutoff=1e-3):
     :parameter float eps: regularization of the solve; defaults to 1e-3 for sr
         and 1e-2 for minsr and cgsr
     :parameter float nodal_cutoff: regularization distance for the nodal divergence of the derivatives
+    :parameter boolean conserve_norm: see :class:`EnsembleUpdater`
     """
     if method not in UPDATERS:
         raise ValueError(f"Unknown method {method!r}; choose one of {sorted(UPDATERS)}.")
     cls, default_eps = UPDATERS[method]
     return EnsembleUpdater(
-        cls(enacc, transform, eps=default_eps if eps is None else eps, nodal_cutoff=nodal_cutoff)
+        cls(enacc, transform, eps=default_eps if eps is None else eps, nodal_cutoff=nodal_cutoff),
+        conserve_norm=conserve_norm,
     )
 
 
-def build_updaters(transforms, enacc=None, method="sr", eps=None, nodal_cutoff=1e-3):
+def build_updaters(transforms, enacc=None, method="sr", eps=None, nodal_cutoff=1e-3, conserve_norm=True):
     """Turn parameter transforms into the nested list of updaters the driver uses.
 
     :parameter transforms: one transform per state, or a nested list indexed by
@@ -297,6 +330,6 @@ def build_updaters(transforms, enacc=None, method="sr", eps=None, nodal_cutoff=1
     if len(enaccs) != len(nested):
         raise ValueError(f"got {len(enaccs)} energy accumulators for {len(nested)} states")
     return [
-        [make_updater(t, e, method, eps, nodal_cutoff) for t in state]
+        [make_updater(t, e, method, eps, nodal_cutoff, conserve_norm) for t in state]
         for state, e in zip(nested, enaccs)
     ]

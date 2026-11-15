@@ -13,6 +13,7 @@
 # copies or substantial portions of the Software.
 
 import numpy as np
+from pyqmc.wf.norm import can_set_norm
 
 
 def split_keys(keys, nwf):
@@ -84,11 +85,33 @@ class MultiplyWF:
     A general representation of a wavefunction as a product of multiple wf_factors
     """
 
-    def __init__(self, *wf_factors):
+    def __init__(self, *wf_factors, norm_factor=None):
+        """
+        :parameter wf_factors: the wave functions to multiply
+        :parameter int norm_factor: index of the factor that sets the norm of the
+            product (see pyqmc.wf.norm). Defaults to the first factor that can.
+        """
         self.wf_factors = [*wf_factors]
         self.parameters = Parameters([wf.parameters for wf in wf_factors])
         iscomplex = bool(sum(wf.dtype == complex for wf in wf_factors))
         self.dtype = complex if iscomplex else float
+        if norm_factor is None:
+            norm_factor = next((i for i, wf in enumerate(wf_factors) if can_set_norm(wf)), None)
+        elif not can_set_norm(wf_factors[norm_factor]):
+            raise ValueError(f"factor {norm_factor} cannot set its norm")
+        self.norm_factor = norm_factor
+
+    def can_set_norm(self):
+        return self.norm_factor is not None
+
+    def log_norm(self):
+        """The sum of the factors' log_norm values."""
+        return sum(wf.log_norm() for wf in self.wf_factors if can_set_norm(wf))
+
+    def set_log_norm(self, log_norm):
+        """Set the total log_norm through the norm factor, leaving the others."""
+        setter = self.wf_factors[self.norm_factor]
+        setter.set_log_norm(setter.log_norm() + log_norm - self.log_norm())
 
     def recompute(self, configs):
         signs = np.ones(len(configs.configs))

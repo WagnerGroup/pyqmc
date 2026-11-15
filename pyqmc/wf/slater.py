@@ -17,6 +17,7 @@ import pyqmc.wf.determinant_tools as determinant_tools
 import pyqmc.wf.orbitals
 import pyqmc.pyscftools
 import warnings
+from pyqmc.wf.norm import NORM_KEY, SettableNorm, new_norm_parameter
 
 
 def sherman_morrison_row(e, inv, vec):
@@ -93,7 +94,7 @@ def sherman_morrison_ms(e, inv, vec):
     return ratio, invnew
 
 
-class Slater:
+class Slater(SettableNorm):
     r"""
     A multi-determinant wave function object initialized
     via an SCF calculation.
@@ -206,6 +207,7 @@ class Slater:
             evaluate_orbitals_with=evaluate_orbitals_with,
         )
 
+        self.myparameters[NORM_KEY] = new_norm_parameter()  # see pyqmc.wf.norm
         self.parameters = JoinParameters([self.myparameters, self.orbitals.parameters])
 
         iscomplex = self.orbitals.mo_dtype == complex or bool(
@@ -325,7 +327,12 @@ class Slater:
         self._det_array = None
 
     def value(self):
-        """Return logarithm of the wave function as noted in recompute()"""
+        """Return logarithm of the wave function as noted in recompute(), divided by
+        exp(log_norm); see pyqmc.wf.norm"""
+        sign, logval = self._unnormalized_value()
+        return sign, logval - self.parameters[NORM_KEY][0]
+
+    def _unnormalized_value(self):
         updets = self._dets[0][:, :, self._det_map[0]]
         dndets = self._dets[1][:, :, self._det_map[1]]
         return determinant_tools.compute_value(
@@ -530,7 +537,7 @@ class Slater:
         d = {}
 
         # Det coeff
-        curr_val = self.value()
+        curr_val = self._unnormalized_value()
         nonzero = curr_val[0] != 0.0
 
         # dets[spin][ (phase,log), configuration, determinant]

@@ -15,6 +15,7 @@
 import numpy as np
 import scipy.optimize
 import pyqmc.observables.energy
+from pyqmc.wf.norm import is_norm_key
 
 
 def optvariance(energy, wf, coords, params=None, **kwargs):
@@ -36,7 +37,7 @@ def optvariance(energy, wf, coords, params=None, **kwargs):
 
     """
     if params is None:
-        params = list(wf.parameters.keys())
+        params = [k for k in wf.parameters.keys() if not is_norm_key(k)]
 
     # scipy.minimize() needs 1d argument
     x0 = np.concatenate([wf.parameters[k].flatten() for k in params])

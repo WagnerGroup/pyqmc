@@ -82,7 +82,7 @@ def test_overlap_gradient_finite_difference(H2_casci, complex_orbitals):
     weights = pyqmc.method.sample_many.compute_weights(wfs)
     dp = transform.serialize_gradients(wfs[-1].pgradient())
     wtdp = np.einsum("cp,jkc->pjk", dp, weights) / weights.shape[-1]
-    up = EnsembleUpdater(_GradientOnly())
+    up = EnsembleUpdater(_GradientOnly(), conserve_norm=False)  # the raw penalty gradient
     energy_data = {"energy": 0.0, "energy_error": 0.0}
     avg, _ = up.block_average(energy_data, {"wtdp": wtdp[None]}, weights.mean(axis=-1)[None])
     penalty = np.full((2, 2), 0.7)

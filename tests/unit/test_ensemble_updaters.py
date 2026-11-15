@@ -45,9 +45,9 @@ def energy_data(single, dppsi, eloc):
     return {**data, "energy": np.mean(eloc), "energy_error": 0.0}
 
 
-def step(single, data, penalty, tau=0.1):
+def step(single, data, penalty, tau=0.1, conserve_norm=True):
     dppsi, eloc, overlap_blocks, wtdp_blocks = data
-    up = EnsembleUpdater(single)
+    up = EnsembleUpdater(single, conserve_norm=conserve_norm)
     avg, _ = up.block_average(energy_data(single, dppsi, eloc), {"wtdp": wtdp_blocks}, overlap_blocks)
     return up.delta_p([tau], avg, penalty)
 
@@ -71,12 +71,14 @@ def test_solvers_agree(nsamples, nparams, nwf):
 
 
 def test_single_state_matches_optimize():
-    """With one state there is no penalty, so the ensemble step is the
-    single-state step: the energy gradient carries the same factor of two."""
+    """With one state there is no penalty, so without the norm constraint the
+    ensemble step is the single-state step: the energy gradient carries the same
+    factor of two."""
     dppsi, eloc, overlap_blocks, wtdp_blocks = make_data(1, 40, 10, 1)
     single = MinSRUpdate(None, None, eps=1e-2)
     v, _ = single.solve({"dppsi": dppsi, "total": eloc})
-    dp = step(single, (dppsi, eloc, overlap_blocks, wtdp_blocks), np.ones((1, 1)), tau=0.1)[0][0]
+    data = (dppsi, eloc, overlap_blocks, wtdp_blocks)
+    dp = step(single, data, np.ones((1, 1)), tau=0.1, conserve_norm=False)[0][0]
     assert np.allclose(dp, -0.1 * v)
 
 
@@ -147,3 +149,42 @@ def test_method_selection():
         build_updaters([transform, transform], [enacc], "sr")
     with pytest.raises(ValueError, match="enacc is required"):
         build_updaters([transform], None, "sr")
+
+
+def offset_data(seed, nsamples, nparams, nwf):
+    """make_data with derivatives of nonzero mean, as for Jastrow parameters,
+    whose derivatives are sums over electron pairs."""
+    dppsi, *rest = make_data(seed, nsamples, nparams, nwf)
+    offset = np.random.default_rng(seed + 1).normal(size=nparams)
+    return (dppsi + 3.0 * offset, *rest)
+
+
+@pytest.mark.parametrize("method", list(SOLVERS))
+@pytest.mark.parametrize("nwf", [1, 3])
+def test_conserve_norm_removes_first_order_change(method, nwf):
+    """a . dp = 0, with a = 2 Re <O> the derivative of ln <psi|psi>."""
+    data = offset_data(7, 30, 12, nwf)
+    single = SOLVERS[method](1e-2)
+    a = single.norm_gradient(energy_data(single, data[0], data[1]))
+    assert np.allclose(a, 2 * np.mean(data[0], axis=0))
+    penalty = np.ones((nwf, nwf))
+    dp0 = step(single, data, penalty, conserve_norm=False)[0][0]
+    dp, report = step(single, data, penalty)
+    assert abs(a @ dp0) > 1e-2 * np.linalg.norm(a) * np.linalg.norm(dp0)  # the test has teeth
+    assert abs(a @ dp[0]) < 1e-8 * np.linalg.norm(a) * np.linalg.norm(dp[0])
+    assert np.isclose(report["dlnN_per_tau"], a @ dp0 / 0.1)
+
+
+@pytest.mark.parametrize("nwf", [1, 3])
+def test_conserve_norm_is_the_constrained_minimum(nwf):
+    """The step minimizes the SR quadratic form v (S + eps) v / 2 - v . (f + g)
+    on the plane a . v = 0: it is v_0 - w (a . v_0) / (a . w), w = (S + eps)^-1 a."""
+    eps = 1e-2
+    dppsi, eloc, overlap_blocks, wtdp_blocks = data = offset_data(11, 40, 10, nwf)
+    S = np.cov(dppsi.T, bias=True) + eps * np.eye(dppsi.shape[1])
+    a = 2 * np.mean(dppsi, axis=0)
+    w = np.linalg.solve(S, a)
+    penalty = np.ones((nwf, nwf))
+    dp0 = step(SOLVERS["sr"](eps), data, penalty, conserve_norm=False)[0][0]
+    dp = step(SOLVERS["sr"](eps), data, penalty)[0][0]
+    assert np.allclose(dp, dp0 - w * (a @ dp0) / (a @ w))

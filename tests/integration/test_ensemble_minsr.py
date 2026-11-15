@@ -93,6 +93,9 @@ def test_ensemble_minsr(H2_casci, tmp_path):
         assert e1[-1] > e0[-1]  # the excited state stays above the ground state
         norm = np.sqrt(np.abs(overlap1[-1][0, 0] * overlap1[-1][1, 1]))
         assert np.abs(overlap1[-1][1, 0]) / norm < 0.5  # states stay distinct
+        # the sampled norms, before rescaling, are on every row
+        norms = hdf["normalization"][()]
+        assert norms.shape == (6, 2) and np.all(norms > 0)
 
     # every walker population is checkpointed, and they are genuinely different
     wfs2, transforms2 = make_ensemble(mol, mf, mc, nstates=2)

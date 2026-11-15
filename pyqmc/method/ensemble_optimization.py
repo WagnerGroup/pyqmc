@@ -31,6 +31,7 @@ from pyqmc.method.ensemble_sampling import (
 )
 from pyqmc.method.ensemble_updaters import EnsembleUpdater, build_updaters, make_updater  # noqa: F401
 from pyqmc.method.optimize import set_wf_params
+from pyqmc.wf.norm import can_set_norm
 
 
 def _configs_to_hdf(hdf, configs):
@@ -102,23 +103,27 @@ def hdf_save(hdf_file, data, attr, wfs, norm_configs, gradient_configs):
 
 def renormalize(wfs, norms, pivot=0, N=1):
     """
-    Renormalize the wave functions so that they have the same normalization as the pivot wave function.
+    Rescale the wave functions so that each has N times the norm of the pivot wave function.
 
-    .. math::
+    A wave function that can set its norm (see pyqmc.wf.norm) is rescaled through its
+    log_norm; otherwise its determinant coefficients are scaled.
 
+    :parameter norms: the sampled norms <psi_i|psi_i>, in any common units
     """
     for i, wf in enumerate(wfs):
         if i == pivot:
             continue
         # The overlap diagonal is real and positive, but has complex dtype for complex
         # orbitals. A complex factor would make a real det_coeff complex.
-        renorm = np.sqrt(np.real(norms[pivot] / norms[i]) * N)
-        if "wf1det_coeff" in wf.parameters.keys():
-            wf.parameters["wf1det_coeff"] = wf.parameters["wf1det_coeff"] * renorm
+        ratio = np.real(norms[i] / norms[pivot]) / N  # the factor to divide <psi_i|psi_i> by
+        if can_set_norm(wf):
+            wf.set_log_norm(wf.log_norm() + 0.5 * np.log(ratio))
+        elif "wf1det_coeff" in wf.parameters.keys():
+            wf.parameters["wf1det_coeff"] = wf.parameters["wf1det_coeff"] / np.sqrt(ratio)
         elif "det_coeff" in wf.parameters.keys():
-            wf.parameters["det_coeff"] = wf.parameters["det_coeff"] * renorm
+            wf.parameters["det_coeff"] = wf.parameters["det_coeff"] / np.sqrt(ratio)
         else:
-            raise NotImplementedError("need wf1det_coeff or det_coeff in parameters")
+            raise NotImplementedError("need a settable norm, or wf1det_coeff or det_coeff in parameters")
 
 
 def _format_step_report(report):

@@ -20,6 +20,7 @@ import pyqmc.observables.ewald1d as ewald1d
 import pyqmc.observables.ecp as ecp
 from pyqmc.observables.stochastic_reconfiguration import StochasticReconfiguration
 import copy
+from pyqmc.wf.norm import is_norm_key
 import time
 from pyqmc.pbc.pbc import enforce_pbc
 
@@ -133,7 +134,7 @@ class LinearTransform:
     Linearize a dictionary of wf parameters.
 
     :parameter dict parameters: the wave function parameters
-    :parameter dict to_opt: is a dictionary with the keys to optimize, and its values are boolean arrays indicating which specific elements to optimize
+    :parameter dict to_opt: is a dictionary with the keys to optimize, and its values are boolean arrays indicating which specific elements to optimize. None optimizes every parameter except log_norm (see pyqmc.wf.norm).
 
     Note:
 
@@ -145,8 +146,10 @@ class LinearTransform:
 
     def __init__(self, parameters, to_opt=None):
         parameters = dict(parameters)
-        if to_opt is None:
-            to_opt = {k: np.ones(p.shape, dtype=bool) for k, p in parameters.items()}
+        if to_opt is None:  # every parameter but log_norm, which is not optimized
+            to_opt = {
+                k: np.ones(p.shape, dtype=bool) for k, p in parameters.items() if not is_norm_key(k)
+            }
         self.to_opt = {k: o for k, o in to_opt.items() if np.any(o)}
 
         self.shapes = {k: parameters[k].shape for k in self.to_opt}

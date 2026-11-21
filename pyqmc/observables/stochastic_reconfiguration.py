@@ -91,6 +91,25 @@ def sr_averages(den, dppsi, weights=None):
     return d
 
 
+def sr_matrix(data):
+    """The SR overlap matrix S = Re(<O_i* O_j> - <O_i*><O_j>) from :func:`sr_averages`."""
+    return np.real(
+        data["dpidpj"] - np.einsum("i,j->ij", np.conj(data["dppsi"]), data["dppsi"])
+    )
+
+
+def sr_apply_inverse(data, b, eps, inverse_strategy="regularized_inverse"):
+    """(S + eps)^-1 b, or the pseudo-inverse of S applied to b, with S from :func:`sr_matrix`."""
+    Sij = sr_matrix(data)
+    if inverse_strategy == "pseudo_inverse":
+        return np.linalg.pinv(Sij, rcond=eps) @ b
+    if inverse_strategy == "regularized_inverse":
+        return np.linalg.solve(Sij + eps * np.eye(Sij.shape[0]), b)
+    raise ValueError(
+        "Invalid inverse strategy. Valid options are pseudo_inverse and regularized_inverse."
+    )
+
+
 def sr_direction(data, eps, inverse_strategy="regularized_inverse", g=None):
     """Solve the SR equations with the explicit (nparameters, nparameters) S matrix.
 
@@ -103,9 +122,7 @@ def sr_direction(data, eps, inverse_strategy="regularized_inverse", g=None):
     pgrad = 2 * np.real(data["dpH"] - data["total"] * np.conj(data["dppsi"]))
     if g is not None:
         pgrad = pgrad + g
-    Sij = np.real(
-        data["dpidpj"] - np.einsum("i,j->ij", np.conj(data["dppsi"]), data["dppsi"])
-    )
+    Sij = sr_matrix(data)
     if inverse_strategy == "pseudo_inverse":
         invSij = np.linalg.pinv(Sij, rcond=eps)
     elif inverse_strategy == "regularized_inverse":

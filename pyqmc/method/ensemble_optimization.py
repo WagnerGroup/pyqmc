@@ -31,6 +31,7 @@ from pyqmc.method.ensemble_sampling import (
 )
 from pyqmc.method.ensemble_updaters import EnsembleUpdater, build_updaters, make_updater  # noqa: F401
 from pyqmc.method.optimize import set_wf_params
+from pyqmc.wf.norm import can_set_norm
 
 
 def _configs_to_hdf(hdf, configs):
@@ -102,23 +103,27 @@ def hdf_save(hdf_file, data, attr, wfs, norm_configs, gradient_configs):
 
 def renormalize(wfs, norms, pivot=0, N=1):
     """
-    Renormalize the wave functions so that they have the same normalization as the pivot wave function.
+    Rescale the wave functions so that each has N times the norm of the pivot wave function.
 
-    .. math::
+    A wave function that can set its norm (see pyqmc.wf.norm) is rescaled through its
+    log_norm; otherwise its determinant coefficients are scaled.
 
+    :parameter norms: the sampled norms <psi_i|psi_i>, in any common units
     """
     for i, wf in enumerate(wfs):
         if i == pivot:
             continue
         # The overlap diagonal is real and positive, but has complex dtype for complex
         # orbitals. A complex factor would make a real det_coeff complex.
-        renorm = np.sqrt(np.real(norms[pivot] / norms[i]) * N)
-        if "wf1det_coeff" in wf.parameters.keys():
-            wf.parameters["wf1det_coeff"] = wf.parameters["wf1det_coeff"] * renorm
+        ratio = np.real(norms[i] / norms[pivot]) / N  # the factor to divide <psi_i|psi_i> by
+        if can_set_norm(wf):
+            wf.set_log_norm(wf.log_norm() + 0.5 * np.log(ratio))
+        elif "wf1det_coeff" in wf.parameters.keys():
+            wf.parameters["wf1det_coeff"] = wf.parameters["wf1det_coeff"] / np.sqrt(ratio)
         elif "det_coeff" in wf.parameters.keys():
-            wf.parameters["det_coeff"] = wf.parameters["det_coeff"] * renorm
+            wf.parameters["det_coeff"] = wf.parameters["det_coeff"] / np.sqrt(ratio)
         else:
-            raise NotImplementedError("need wf1det_coeff or det_coeff in parameters")
+            raise NotImplementedError("need a settable norm, or wf1det_coeff or det_coeff in parameters")
 
 
 def _format_step_report(report):
@@ -203,7 +208,7 @@ def _normalize(wfs, norm_configs, refresh_kwargs, norm_kwargs, client, npartitio
     The norms only set a rescaling of the wave functions, so a couple of blocks
     is plenty; see norm_kwargs in optimize_ensemble.
 
-    :returns: norm_configs
+    :returns: (norm_configs, the sampled norms before rescaling, (nwf,))
     """
     norm_configs = warmup_overlap(wfs, norm_configs, client, npartitions, refresh_kwargs, rng)
     _, data_unweighted, norm_configs = pyqmc.method.sample_many.sample_overlap(
@@ -214,7 +219,7 @@ def _normalize(wfs, norm_configs, refresh_kwargs, norm_kwargs, client, npartitio
         diag = np.array2string(np.real(norm.diagonal()), precision=4, suppress_small=True)
         print(f"  normalization: {diag}", flush=True)
     renormalize(wfs, norm.diagonal(), pivot=0)
-    return norm_configs
+    return norm_configs, np.real(norm.diagonal())
 
 
 def _print_state(label, wfi, avg, error, report):
@@ -255,6 +260,7 @@ def optimize_ensemble(
     method="sr",
     eps=None,
     nodal_cutoff=1e-3,
+    conserve_norm=True,
     tau=0.01,
     max_iterations=100,
     overlap_penalty=None,
@@ -292,7 +298,8 @@ def optimize_ensemble(
         configs: initial configs before warmup if not loaded from a checkpoint
         transforms (list): one LinearTransform per state, or a nested list indexed
             by state then by sub-iteration. Already-built updaters are accepted
-            here too, in which case enacc, method, eps, and nodal_cutoff are unused.
+            here too, in which case enacc, method, eps, nodal_cutoff, and conserve_norm
+            are unused.
         hdf_file (str): path for the checkpoint file
         enacc: an EnergyAccumulator-like object shared by every state, or a list
             with one per state. Required unless transforms are already updaters.
@@ -313,6 +320,11 @@ def optimize_ensemble(
             wants, 1e-3 for sr and 1e-2 for minsr and cgsr
         nodal_cutoff (float): regularization distance for the nodal divergence of
             the parameter derivatives
+        conserve_norm (bool): constrain each state's step so that it leaves ln <psi|psi>
+            unchanged to first order. Without it, a Jastrow step in a large system can
+            change one state's norm by orders of magnitude more than another's, and the
+            renormalization puts the difference into the determinant coefficients.
+            Unused if transforms are already updaters.
         tau (float): step size along the SR direction, which uses the true
             gradient of the objective in pyqmc.method.ensemble_updaters
         max_iterations (int): maximum number of optimization iterations
@@ -356,7 +368,7 @@ def optimize_ensemble(
         overlap_kwargs = default_kwargs
     if norm_kwargs is None:
         norm_kwargs = dict(overlap_kwargs, nblocks=2)
-    updater = build_updaters(transforms, enacc, method, eps, nodal_cutoff)
+    updater = build_updaters(transforms, enacc, method, eps, nodal_cutoff, conserve_norm)
     if len(updater) != len(wfs):
         raise ValueError(f"got transforms for {len(updater)} states but {len(wfs)} wave functions")
     nwf = len(wfs)
@@ -384,7 +396,7 @@ def optimize_ensemble(
     for i in range(first_iteration, max_iterations):
         if verbose:
             print(f"\n=== Iteration {i} ===", flush=True)
-        norm_configs = _normalize(
+        norm_configs, norms = _normalize(
             wfs, norm_configs, refresh_overlap_warmup_kwargs, norm_kwargs, verbose=verbose, rng=rng, **parallel
         )
         energy_data, overlap_weighted, overlap_unweighted, gradient_configs = evaluate_gradients_threaded(
@@ -419,6 +431,7 @@ def optimize_ensemble(
                     f"energy{wfi}": avg["energy"],
                     f"energy_error{wfi}": error["energy"],
                     f"overlap{wfi}": avg["overlap"],
+                    "normalization": norms,
                     "iteration": i,
                     "wavefunction": wfi,
                     "sub_iteration": sub_iteration,

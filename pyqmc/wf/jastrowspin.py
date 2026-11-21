@@ -14,6 +14,7 @@
 
 import numpy as np
 import pyqmc.wf.func3d as func3d
+from pyqmc.wf.norm import NORM_KEY, SettableNorm, new_norm_parameter
 
 
 def _common_rcut(basis):
@@ -21,7 +22,7 @@ def _common_rcut(basis):
     return basis[0].parameters["rcut"] if len(basis) > 0 else np.inf
 
 
-class JastrowSpin:
+class JastrowSpin(SettableNorm):
     r"""
     1 body and 2 body jastrow factor
 
@@ -51,6 +52,7 @@ class JastrowSpin:
         self.atom_coords = mol.atom_coords()[np.newaxis]
         self.parameters["bcoeff"] = np.zeros((len(b_basis), 3))
         self.parameters["acoeff"] = np.zeros((self._mol.natm, len(a_basis), 2))
+        self.parameters[NORM_KEY] = new_norm_parameter()  # see pyqmc.wf.norm
         self.dtype = float
 
     def recompute(self, configs):
@@ -104,9 +106,7 @@ class JastrowSpin:
         self._avalues[:, :, :, 0] = np.sum(avals[:nup], axis=0)
         self._avalues[:, :, :, 1] = np.sum(avals[nup:], axis=0)
 
-        u = np.sum(self._bvalues * self.parameters["bcoeff"], axis=(2, 1))
-        u += np.einsum("ijkl,jkl->i", self._avalues, self.parameters["acoeff"])
-        return (np.ones(len(u)), u)
+        return self.value()
 
     def updateinternals(self, e, epos, configs, mask=None, saved_values=None):
         r"""Update a and b sums.
@@ -249,10 +249,11 @@ class JastrowSpin:
         self._b_partial[e, ..., 1][mask] = savedbvals[..., sep:, :].sum(axis=-2)
 
     def value(self):
-        """Compute the current log value of the wavefunction"""
+        """Compute the current log value of the wavefunction, divided by exp(log_norm);
+        see pyqmc.wf.norm"""
         u = np.sum(self._bvalues * self.parameters["bcoeff"], axis=(2, 1))
         u += np.einsum("ijkl,jkl->i", self._avalues, self.parameters["acoeff"])
-        return (np.ones(len(u)), u)
+        return (np.ones(len(u)), u - self.parameters[NORM_KEY][0])
 
     def gradient(self, e, epos):
         r"""We compute the gradient for electron e as
